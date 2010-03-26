@@ -132,7 +132,7 @@ static VALUE rb_mysql_result_fetch_rows(VALUE self) {
 }
 
 /* Ruby Extension initializer */
-void Init_mysql_ext() {
+void Init_mysql_duce_ext() {
   mMySQL = rb_define_module("MySQL");
 
   cMySQLClient = rb_define_class_under(mMySQL, "Client", rb_cObject);

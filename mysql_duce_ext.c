@@ -97,6 +97,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self) {
   fields = mysql_fetch_fields(result);
 
   rowHash = rb_hash_new();
+  // TODO: yield to a passed block
   for (i = 0; i < numFields; i++) {
     VALUE key = rb_str_new(fields[i].name, fields[i].name_length);
     if (row[i]) {

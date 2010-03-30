@@ -27,4 +27,4 @@ VALUE cMySQLResult;
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * res);
 void rb_mysql_result_free(void * result);
 static VALUE rb_mysql_result_fetch_row(VALUE self);
-static VALUE rb_mysql_result_fetch_rows(VALUE self);
+static VALUE rb_mysql_result_fetch_rows(int argc, VALUE * argv, VALUE self);

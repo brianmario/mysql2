@@ -97,7 +97,6 @@ static VALUE rb_mysql_result_fetch_row(VALUE self) {
   fields = mysql_fetch_fields(result);
 
   rowHash = rb_hash_new();
-  // TODO: yield to a passed block
   for (i = 0; i < numFields; i++) {
     VALUE key = rb_str_new(fields[i].name, fields[i].name_length);
     if (row[i]) {
@@ -109,27 +108,42 @@ static VALUE rb_mysql_result_fetch_row(VALUE self) {
   return rowHash;
 }
 
-static VALUE rb_mysql_result_fetch_rows(VALUE self) {
-  VALUE dataset;
+static VALUE rb_mysql_result_fetch_rows(int argc, VALUE * argv, VALUE self) {
+  VALUE dataset, block;
   MYSQL_RES * result;
   unsigned long numRows, i;
-  
+
   GetMySQLResult(self, result);
-  
+
+  rb_scan_args(argc, argv, "0&", &block);
+
   numRows = mysql_num_rows(result);
   if (numRows == 0) {
     return Qnil;
   }
-  
-  dataset = rb_ary_new2(numRows);
-  for (i = 0; i < numRows; i++) {
-    VALUE row = rb_mysql_result_fetch_row(self);
-    if (row == Qnil) {
-      return Qnil;
+
+  // TODO: allow yielding datasets of configurable size
+  // like find_in_batches from AR...
+  if (block != Qnil) {
+    for (i = 0; i < numRows; i++) {
+      VALUE row = rb_mysql_result_fetch_row(self);
+      if (row == Qnil) {
+        return Qnil;
+      }
+      rb_yield(row);
     }
-    rb_ary_store(dataset, i, row);
+  } else {
+    dataset = rb_ary_new2(numRows);
+    for (i = 0; i < numRows; i++) {
+      VALUE row = rb_mysql_result_fetch_row(self);
+      if (row == Qnil) {
+        return Qnil;
+      }
+      rb_ary_store(dataset, i, row);
+    }
+    return dataset;
   }
-  return dataset;
+  return Qnil;
 }
 
 /* Ruby Extension initializer */
@@ -143,7 +157,7 @@ void Init_mysql_duce_ext() {
 
   cMySQLResult = rb_define_class_under(mMySQL, "Result", rb_cObject);
   rb_define_method(cMySQLResult, "fetch_row", rb_mysql_result_fetch_row, 0);
-  rb_define_method(cMySQLResult, "fetch_rows", rb_mysql_result_fetch_rows, 0);
+  rb_define_method(cMySQLResult, "fetch_rows", rb_mysql_result_fetch_rows, -1);
 
 #ifdef HAVE_RUBY_ENCODING_H
   utf8Encoding = rb_enc_find_index("UTF-8");

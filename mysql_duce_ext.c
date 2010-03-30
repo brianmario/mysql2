@@ -1,4 +1,4 @@
-#include "mysql_ext.h"
+#include "mysql_duce_ext.h"
 
 /* MySQL::Client */
 static VALUE rb_mysql_client_new(VALUE klass) {

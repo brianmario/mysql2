@@ -51,11 +51,15 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
   query = mysql_real_query(client, RSTRING_PTR(sql), RSTRING_LEN(sql));
   if (query != 0) {
     // lookup error code and msg, raise exception
+    fprintf(stdout, "Error: %s\n", mysql_error(client));
+    return Qnil;
   }
 
   result = mysql_store_result(client);
   if (result == NULL) {
     // lookup error code and msg, raise exception
+    fprintf(stdout, "Error: %s\n", mysql_error(client));
+    return Qnil;
   }
   return rb_mysql_result_to_obj(result);
 }

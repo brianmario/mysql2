@@ -1,0 +1,5 @@
+*.dSYM
+*.o
+*.bundle
+*.so
+*.a

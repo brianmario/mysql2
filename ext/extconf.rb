@@ -13,7 +13,7 @@ if have_library('mysqlclient')
     $CFLAGS << ' -DRUBY_19_COMPATIBILITY'
   end
   
-  create_makefile('mysql_duce_ext')
+  create_makefile('mysql2_ext')
 else
   puts 'libmysql not found, maybe try manually specifying --with-mysql-lib to find it?'
 end

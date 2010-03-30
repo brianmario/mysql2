@@ -158,6 +158,7 @@ void Init_mysql_duce_ext() {
   cMySQLResult = rb_define_class_under(mMySQL, "Result", rb_cObject);
   rb_define_method(cMySQLResult, "fetch_row", rb_mysql_result_fetch_row, 0);
   rb_define_method(cMySQLResult, "fetch_rows", rb_mysql_result_fetch_rows, -1);
+  rb_define_method(cMySQLResult, "each", rb_mysql_result_fetch_rows, -1);
 
 #ifdef HAVE_RUBY_ENCODING_H
   utf8Encoding = rb_enc_find_index("UTF-8");

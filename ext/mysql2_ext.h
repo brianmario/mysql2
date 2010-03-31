@@ -5,6 +5,9 @@
 #include <mysql/errmsg.h>
 #include <mysql/mysqld_error.h>
 
+// VALUE cBigDecimal;
+// ID intern_new;
+
 /* Mysql2 */
 VALUE mMysql2;
 

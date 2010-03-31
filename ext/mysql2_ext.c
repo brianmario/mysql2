@@ -137,7 +137,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           } else {
             val = Qtrue;
           }
-          break; //infer_ruby_type
+          break;
         case MYSQL_TYPE_BIT:        // BIT field (MySQL 5.0.3 and up)
         case MYSQL_TYPE_SHORT:      // SMALLINT field
         case MYSQL_TYPE_LONG:       // INTEGER field
@@ -158,16 +158,16 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
         case MYSQL_TYPE_TIME:       // TIME field
         case MYSQL_TYPE_DATETIME:   // DATETIME field
           // if (memcmp("0000-00-00 00:00:00", row[i], 19) == 0) {
-            val = rb_str_new(row[i], fieldLengths[i]);
+            // val = rb_str_new(row[i], fieldLengths[i]);
           // } else {
             // val = rb_funcall(rb_cTime, intern_parse, 1, rb_str_new(row[i], fieldLengths[i]));
           // }
-          break;
+          // break;
         case MYSQL_TYPE_DATE:       // DATE field
         case MYSQL_TYPE_NEWDATE:    // Newer const used > 5.0
           // val = rb_funcall(cDate, intern_parse, 1, rb_str_new(row[i], fieldLengths[i]));
-          val = rb_str_new(row[i], fieldLengths[i]);
-          break;
+          // val = rb_str_new(row[i], fieldLengths[i]);
+          // break;
         case MYSQL_TYPE_SET:        // SET field
         case MYSQL_TYPE_ENUM:       // ENUM field
         case MYSQL_TYPE_GEOMETRY:   // Spatial fielda
@@ -175,7 +175,6 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           val = rb_str_new(row[i], fieldLengths[i]);
           break;
       }
-      // TODO: determine field type then inflate a new ruby object around it
       rb_hash_aset(rowHash, key, val);
     } else {
       rb_hash_aset(rowHash, key, Qnil);

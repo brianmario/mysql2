@@ -16,12 +16,12 @@ Benchmark.bmbm do |x|
     puts "Mysql"
     number_of.times do
       mysql_result = mysql.query sql
-      number = 0
+      # number = 0
       mysql_result.each_hash do |res|
-        number += 1
+        # number += 1
         # puts res.inspect
       end
-      puts "Processed #{number} results"
+      # puts "Processed #{number} results"
     end
   end
 
@@ -31,12 +31,12 @@ Benchmark.bmbm do |x|
     puts "Mysql2"
     number_of.times do
       mysql2_result = mysql2.query sql
-      number = 0
+      # number = 0
       mysql2_result.each(:symbolize_keys => true) do |res|
-        number += 1
+        # number += 1
         # puts res.inspect
       end
-      puts "Processed #{number} results"
+      # puts "Processed #{number} results"
     end
   end
 end

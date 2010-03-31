@@ -6,7 +6,7 @@ dir_config('mysql')
 have_header('mysql/mysql.h')
 
 $CFLAGS << ' -Wall -Wextra -funroll-loops'
-$CFLAGS << ' -O0 -ggdb3'
+# $CFLAGS << ' -O0 -ggdb3'
 
 if have_library('mysqlclient')
   if RUBY_VERSION =~ /1.9/

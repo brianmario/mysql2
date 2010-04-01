@@ -7,7 +7,7 @@ require 'mysql2_ext'
 
 number_of = 1
 database = 'nbb_1_production'
-sql = "SELECT * FROM account_transactions"
+sql = "SELECT * FROM account_entries"
 
 Benchmark.bmbm do |x|
   mysql = Mysql.new("localhost", "root")

@@ -43,13 +43,11 @@ void rb_mysql_client_free(void * client) {
 
 static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
   MYSQL * client;
-  MYSQL_RES * result = NULL;
-  int query;
+  MYSQL_RES * result;
   Check_Type(sql, T_STRING);
 
   GetMysql2Client(self, client);
-  query = mysql_real_query(client, RSTRING_PTR(sql), RSTRING_LEN(sql));
-  if (query != 0) {
+  if (mysql_real_query(client, RSTRING_PTR(sql), RSTRING_LEN(sql)) != 0) {
     // fprintf(stdout, "mysql_real_query error: %s\n", mysql_error(client));
     return Qnil;
   }
@@ -132,15 +130,6 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
     if (row[i]) {
       VALUE val;
       switch(fields[i].type) {
-        case MYSQL_TYPE_TINY_BLOB:
-        case MYSQL_TYPE_MEDIUM_BLOB:
-        case MYSQL_TYPE_LONG_BLOB:
-        case MYSQL_TYPE_BLOB:
-        case MYSQL_TYPE_VAR_STRING:
-        case MYSQL_TYPE_VARCHAR:
-        case MYSQL_TYPE_STRING:     // CHAR or BINARY field
-          val = rb_str_new(row[i], fieldLengths[i]);
-          break;
         case MYSQL_TYPE_NULL:       // NULL-type field
           val = Qnil;
           break;
@@ -181,6 +170,13 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           // val = rb_funcall(cDate, intern_parse, 1, rb_str_new(row[i], fieldLengths[i]));
           // val = rb_str_new(row[i], fieldLengths[i]);
           // break;
+        case MYSQL_TYPE_TINY_BLOB:
+        case MYSQL_TYPE_MEDIUM_BLOB:
+        case MYSQL_TYPE_LONG_BLOB:
+        case MYSQL_TYPE_BLOB:
+        case MYSQL_TYPE_VAR_STRING:
+        case MYSQL_TYPE_VARCHAR:
+        case MYSQL_TYPE_STRING:     // CHAR or BINARY field
         case MYSQL_TYPE_SET:        // SET field
         case MYSQL_TYPE_ENUM:       // ENUM field
         case MYSQL_TYPE_GEOMETRY:   // Spatial fielda

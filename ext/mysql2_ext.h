@@ -25,6 +25,6 @@ void rb_mysql_client_free(void * client);
 VALUE cMysql2Result;
 static ID sym_symbolize_keys;
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * res);
-void rb_mysql_result_free(void * result);
 static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_result_fetch_rows(int argc, VALUE * argv, VALUE self);
+void rb_mysql_result_free(void * result);

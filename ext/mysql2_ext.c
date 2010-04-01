@@ -75,7 +75,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 
   newStr = rb_str_new(query, mysql_real_escape_string(client, query + queryLen, query, queryLen));
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_enc_associate_index(newStr, utf8Encoding);
+    rb_enc_associate_index(newStr, utf8Encoding);
 #endif
   return newStr;
 }
@@ -191,7 +191,11 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
 #ifdef HAVE_RUBY_ENCODING_H
-          rb_enc_associate_index(val, utf8Encoding);
+          if (fields[i].flags & BINARY_FLAG) {
+            rb_enc_associate_index(val, binaryEncoding);
+          } else {
+            rb_enc_associate_index(val, utf8Encoding);
+          }
 #endif
           break;
       }
@@ -265,5 +269,6 @@ void Init_mysql2_ext() {
 
 #ifdef HAVE_RUBY_ENCODING_H
   utf8Encoding = rb_enc_find_index("UTF-8");
+  binaryEncoding = rb_enc_find_index("binary");
 #endif
 }

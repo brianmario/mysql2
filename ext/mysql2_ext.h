@@ -7,7 +7,7 @@
 
 #ifdef HAVE_RUBY_ENCODING_H
 #include <ruby/encoding.h>
-int utf8Encoding;
+int utf8Encoding, binaryEncoding;
 #endif
 
 // VALUE cBigDecimal;

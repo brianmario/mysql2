@@ -63,6 +63,19 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
   return rb_mysql_result_to_obj(result);
 }
 
+static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
+  MYSQL * client;
+  char * query;
+  unsigned long queryLen;
+
+  Check_Type(str, T_STRING);
+  queryLen = RSTRING_LEN(str);
+  query = RSTRING_PTR(str);
+
+  GetMysql2Client(self, client);
+
+  return rb_str_new(query, mysql_real_escape_string(client, query + queryLen, query, queryLen));
+}
 
 /* Mysql2::Result */
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
@@ -232,6 +245,7 @@ void Init_mysql2_ext() {
   rb_define_singleton_method(cMysql2Client, "new", rb_mysql_client_new, 0);
   rb_define_method(cMysql2Client, "initialize", rb_mysql_client_init, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, 1);
+  rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "fetch_row", rb_mysql_result_fetch_row, -1);

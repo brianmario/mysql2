@@ -17,6 +17,7 @@ VALUE cMysql2Client;
 static VALUE rb_mysql_client_new(VALUE klass);
 static VALUE rb_mysql_client_init(VALUE self);
 static VALUE rb_mysql_client_query(VALUE self, VALUE query);
+static VALUE rb_mysql_client_escape(VALUE self, VALUE str);
 void rb_mysql_client_free(void * client);
 
 /* Mysql2::Result */

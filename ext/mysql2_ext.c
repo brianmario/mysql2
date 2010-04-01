@@ -65,6 +65,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   MYSQL * client;
   char * query;
   unsigned long queryLen;
+  VALUE newStr;
 
   Check_Type(str, T_STRING);
   queryLen = RSTRING_LEN(str);
@@ -72,7 +73,11 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 
   GetMysql2Client(self, client);
 
-  return rb_str_new(query, mysql_real_escape_string(client, query + queryLen, query, queryLen));
+  newStr = rb_str_new(query, mysql_real_escape_string(client, query + queryLen, query, queryLen));
+#ifdef HAVE_RUBY_ENCODING_H
+    rb_enc_associate_index(newStr, utf8Encoding);
+#endif
+  return newStr;
 }
 
 /* Mysql2::Result */
@@ -126,6 +131,9 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
       key = ID2SYM(rb_intern(buf));
     } else {
       key = rb_str_new(fields[i].name, fields[i].name_length);
+#ifdef HAVE_RUBY_ENCODING_H
+      rb_enc_associate_index(key, utf8Encoding);
+#endif
     }
     if (row[i]) {
       VALUE val;
@@ -182,6 +190,9 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
         case MYSQL_TYPE_GEOMETRY:   // Spatial fielda
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
+#ifdef HAVE_RUBY_ENCODING_H
+          rb_enc_associate_index(val, utf8Encoding);
+#endif
           break;
       }
       rb_hash_aset(rowHash, key, val);

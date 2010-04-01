@@ -5,6 +5,11 @@
 #include <mysql/errmsg.h>
 #include <mysql/mysqld_error.h>
 
+#ifdef HAVE_RUBY_ENCODING_H
+#include <ruby/encoding.h>
+int utf8Encoding;
+#endif
+
 // VALUE cBigDecimal;
 // ID intern_new;
 

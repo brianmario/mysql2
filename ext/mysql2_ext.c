@@ -191,7 +191,8 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
 #ifdef HAVE_RUBY_ENCODING_H
-          if (fields[i].flags & BINARY_FLAG) {
+          // rudimentary check for binary content
+          if ((fields[i].flags & BINARY_FLAG) || fields[i].charsetnr == 63) {
             rb_enc_associate_index(val, binaryEncoding);
           } else {
             rb_enc_associate_index(val, utf8Encoding);

@@ -142,12 +142,6 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           val = Qnil;
           break;
         case MYSQL_TYPE_TINY:       // TINYINT field
-          if (row[i] == 0 || 0 == memcmp("0", row[i], fieldLengths[i])) {
-            val = Qfalse;
-          } else {
-            val = Qtrue;
-          }
-          break;
         case MYSQL_TYPE_BIT:        // BIT field (MySQL 5.0.3 and up)
         case MYSQL_TYPE_SHORT:      // SMALLINT field
         case MYSQL_TYPE_LONG:       // INTEGER field

@@ -208,7 +208,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
   return rowHash;
 }
 
-static VALUE rb_mysql_result_fetch_rows(int argc, VALUE * argv, VALUE self) {
+static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   VALUE dataset, opts, block;
   MYSQL_RES * result;
   unsigned long numRows, i;
@@ -216,6 +216,10 @@ static VALUE rb_mysql_result_fetch_rows(int argc, VALUE * argv, VALUE self) {
   GetMysql2Result(self, result);
 
   rb_scan_args(argc, argv, "01&", &opts, &block);
+
+  // force-start at the beginning of the result set for proper
+  // behavior of #each
+  mysql_data_seek(result, 0);
 
   numRows = mysql_num_rows(result);
   if (numRows == 0) {
@@ -262,7 +266,7 @@ void Init_mysql2_ext() {
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   // rb_define_method(cMysql2Result, "fetch_row", rb_mysql_result_fetch_row, -1);
   // rb_define_method(cMysql2Result, "fetch_rows", rb_mysql_result_fetch_rows, -1);
-  rb_define_method(cMysql2Result, "each", rb_mysql_result_fetch_rows, -1);
+  rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
 
   VALUE mEnumerable = rb_const_get(rb_cObject, rb_intern("Enumerable"));
   rb_include_module(cMysql2Result, mEnumerable);

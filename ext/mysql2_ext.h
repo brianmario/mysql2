@@ -13,12 +13,8 @@ int utf8Encoding, binaryEncoding;
 // VALUE cBigDecimal;
 // ID intern_new;
 
-/* Mysql2 */
-VALUE mMysql2;
-
 /* Mysql2::Client */
 #define GetMysql2Client(obj, sval) (sval = (MYSQL*)DATA_PTR(obj));
-VALUE cMysql2Client;
 static VALUE rb_mysql_client_new(VALUE klass);
 static VALUE rb_mysql_client_init(VALUE self);
 static VALUE rb_mysql_client_query(VALUE self, VALUE query);

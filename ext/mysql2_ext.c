@@ -255,17 +255,15 @@ void Init_mysql2_ext() {
   // rb_require("bigdecimal");
   // cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
 
-  mMysql2 = rb_define_module("Mysql2");
+  VALUE mMysql2 = rb_define_module("Mysql2");
 
-  cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
+  VALUE cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
   rb_define_singleton_method(cMysql2Client, "new", rb_mysql_client_new, 0);
   rb_define_method(cMysql2Client, "initialize", rb_mysql_client_init, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, 1);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
-  // rb_define_method(cMysql2Result, "fetch_row", rb_mysql_result_fetch_row, -1);
-  // rb_define_method(cMysql2Result, "fetch_rows", rb_mysql_result_fetch_rows, -1);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
 
   VALUE mEnumerable = rb_const_get(rb_cObject, rb_intern("Enumerable"));

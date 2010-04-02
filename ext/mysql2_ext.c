@@ -260,9 +260,12 @@ void Init_mysql2_ext() {
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
-  rb_define_method(cMysql2Result, "fetch_row", rb_mysql_result_fetch_row, -1);
-  rb_define_method(cMysql2Result, "fetch_rows", rb_mysql_result_fetch_rows, -1);
+  // rb_define_method(cMysql2Result, "fetch_row", rb_mysql_result_fetch_row, -1);
+  // rb_define_method(cMysql2Result, "fetch_rows", rb_mysql_result_fetch_rows, -1);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_fetch_rows, -1);
+
+  VALUE mEnumerable = rb_const_get(rb_cObject, rb_intern("Enumerable"));
+  rb_include_module(cMysql2Result, mEnumerable);
 
   // intern_new = rb_intern("new");
 

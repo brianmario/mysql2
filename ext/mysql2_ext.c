@@ -125,17 +125,25 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   MYSQL * client;
   VALUE newStr;
+  unsigned long newLen, oldLen;
 
   Check_Type(str, T_STRING);
-  char escaped[(RSTRING_LEN(str)*2)+1];
+  oldLen = RSTRING_LEN(str);
+  char escaped[(oldLen*2)+1];
 
   GetMysql2Client(self, client);
 
-  newStr = rb_str_new(escaped, mysql_real_escape_string(client, escaped, RSTRING_PTR(str), RSTRING_LEN(str)));
+  newLen = mysql_real_escape_string(client, escaped, RSTRING_PTR(str), RSTRING_LEN(str));
+  if (newLen == oldLen) {
+    // no need to return a new ruby string if nothing changed
+    return str;
+  } else {
+    newStr = rb_str_new(escaped, newLen);
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_enc_associate_index(newStr, utf8Encoding);
+    rb_enc_associate_index(newStr, utf8Encoding);
 #endif
-  return newStr;
+    return newStr;
+  }
 }
 
 /* Mysql2::Result */

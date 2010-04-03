@@ -18,8 +18,8 @@ Benchmark.bmbm do |x|
       mysql.escape_string str
     end
   end
-GC.start
-  mysql2 = Mysql2::Client.new
+
+  mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
   mysql2.query "USE #{database}"
   x.report do
     puts "Mysql2"

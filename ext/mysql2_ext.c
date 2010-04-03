@@ -113,19 +113,16 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
 
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   MYSQL * client;
-  char * query;
-  unsigned long queryLen;
   VALUE newStr;
 
   Check_Type(str, T_STRING);
-  queryLen = RSTRING_LEN(str);
-  query = RSTRING_PTR(str);
+  char escaped[(RSTRING_LEN(str)*2)+1];
 
   GetMysql2Client(self, client);
 
-  newStr = rb_str_new(query, mysql_real_escape_string(client, query + queryLen, query, queryLen));
+  newStr = rb_str_new(escaped, mysql_real_escape_string(client, escaped, RSTRING_PTR(str), RSTRING_LEN(str)));
 #ifdef HAVE_RUBY_ENCODING_H
-    rb_enc_associate_index(newStr, utf8Encoding);
+  rb_enc_associate_index(newStr, utf8Encoding);
 #endif
   return newStr;
 }

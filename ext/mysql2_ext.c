@@ -1,11 +1,55 @@
 #include "mysql2_ext.h"
 
 /* Mysql2::Client */
-static VALUE rb_mysql_client_new(VALUE klass) {
+static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   MYSQL * client;
-  VALUE obj;
+  VALUE obj, opts;
+  VALUE rb_host, rb_socket, rb_port, rb_database,
+        rb_username, rb_password, rb_reconnect;
+  char *host = "localhost", *socket = NULL, *username = NULL,
+       *password = NULL, *database = NULL;
+  unsigned int port = 3306;
+  my_bool reconnect = 0;
 
   obj = Data_Make_Struct(klass, MYSQL, NULL, rb_mysql_client_free, client);
+
+  if (rb_scan_args(argc, argv, "01", &opts) == 1) {
+    Check_Type(opts, T_HASH);
+
+    if ((rb_host = rb_hash_aref(opts, sym_host)) != Qnil) {
+      Check_Type(rb_host, T_STRING);
+      host = RSTRING_PTR(rb_host);
+    }
+    
+    if ((rb_socket = rb_hash_aref(opts, sym_socket)) != Qnil) {
+      Check_Type(rb_socket, T_STRING);
+      socket = RSTRING_PTR(rb_socket);
+    }
+    
+    if ((rb_port = rb_hash_aref(opts, sym_port)) != Qnil) {
+      Check_Type(rb_port, T_FIXNUM);
+      port = FIX2INT(rb_port);
+    }
+
+    if ((rb_username = rb_hash_aref(opts, sym_username)) != Qnil) {
+      Check_Type(rb_username, T_STRING);
+      username = RSTRING_PTR(rb_username);
+    }
+
+    if ((rb_password = rb_hash_aref(opts, sym_password)) != Qnil) {
+      Check_Type(rb_password, T_STRING);
+      password = RSTRING_PTR(rb_password);
+    }
+
+    if ((rb_database = rb_hash_aref(opts, sym_database)) != Qnil) {
+      Check_Type(rb_database, T_STRING);
+      database = RSTRING_PTR(rb_database);
+    }
+
+    if ((rb_reconnect = rb_hash_aref(opts, sym_reconnect)) != Qnil) {
+      reconnect = rb_reconnect == Qtrue ? 1 : 0;
+    }
+  }
 
   if (!mysql_init(client)) {
     // TODO: warning - not enough memory?
@@ -13,24 +57,30 @@ static VALUE rb_mysql_client_new(VALUE klass) {
     return Qnil;
   }
 
+  if (mysql_options(client, MYSQL_OPT_RECONNECT, &reconnect) != 0) {
+    // TODO: warning - unable to set charset
+    rb_warn("%s", mysql_error(client));
+  }
+
+  // force the encoding to utf8
   if (mysql_options(client, MYSQL_SET_CHARSET_NAME, "utf8") != 0) {
     // TODO: warning - unable to set charset
     rb_warn("%s", mysql_error(client));
   }
 
   // HACK
-  if (!mysql_real_connect(client, "localhost", "root", NULL, NULL, 0, NULL, 0)) {
+  if (!mysql_real_connect(client, host, username, password, database, port, socket, 0)) {
     // unable to connect
     rb_raise(rb_eStandardError, "%s", mysql_error(client));
     return Qnil;
   }
   // HACK
 
-  rb_obj_call_init(obj, 0, NULL);
+  rb_obj_call_init(obj, argc, argv);
   return obj;
 }
 
-static VALUE rb_mysql_client_init(VALUE self) {
+static VALUE rb_mysql_client_init(VALUE self, int argc, VALUE * argv) {
   return self;
 }
 
@@ -252,8 +302,8 @@ void Init_mysql2_ext() {
   VALUE mMysql2 = rb_define_module("Mysql2");
 
   VALUE cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
-  rb_define_singleton_method(cMysql2Client, "new", rb_mysql_client_new, 0);
-  rb_define_method(cMysql2Client, "initialize", rb_mysql_client_init, 0);
+  rb_define_singleton_method(cMysql2Client, "new", rb_mysql_client_new, -1);
+  rb_define_method(cMysql2Client, "initialize", rb_mysql_client_init, -1);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, 1);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
 
@@ -266,6 +316,13 @@ void Init_mysql2_ext() {
   // intern_new = rb_intern("new");
 
   sym_symbolize_keys = ID2SYM(rb_intern("symbolize_keys"));
+  sym_reconnect = ID2SYM(rb_intern("reconnect"));
+  sym_database = ID2SYM(rb_intern("database"));
+  sym_username = ID2SYM(rb_intern("username"));
+  sym_password = ID2SYM(rb_intern("password"));
+  sym_host = ID2SYM(rb_intern("host"));
+  sym_port = ID2SYM(rb_intern("port"));
+  sym_socket = ID2SYM(rb_intern("socket"));
 
 #ifdef HAVE_RUBY_ENCODING_H
   utf8Encoding = rb_enc_find_index("UTF-8");

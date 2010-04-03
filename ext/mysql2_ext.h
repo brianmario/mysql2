@@ -1,3 +1,4 @@
+#include <time.h>
 #include <ruby.h>
 
 #include <mysql/mysql.h>
@@ -10,8 +11,8 @@
 int utf8Encoding, binaryEncoding;
 #endif
 
-// VALUE cBigDecimal;
-// ID intern_new;
+static VALUE cBigDecimal, cDate, cDateTime;
+ID intern_new, intern_local;
 
 /* Mysql2::Client */
 #define GetMysql2Client(obj, sval) (sval = (MYSQL*)DATA_PTR(obj));

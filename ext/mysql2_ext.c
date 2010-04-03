@@ -184,6 +184,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
   MYSQL_RES * result;
   MYSQL_ROW row;
   MYSQL_FIELD * fields;
+  struct tm parsedTime;
   unsigned int i = 0, numFields = 0, symbolizeKeys = 0;
   unsigned long * fieldLengths;
 
@@ -236,26 +237,38 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           break;
         case MYSQL_TYPE_DECIMAL:    // DECIMAL or NUMERIC field
         case MYSQL_TYPE_NEWDECIMAL: // Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up)
-          // val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
-          // break;
+          val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
+          break;
         case MYSQL_TYPE_FLOAT:      // FLOAT field
         case MYSQL_TYPE_DOUBLE:     // DOUBLE or REAL field
           val = rb_float_new(strtod(row[i], NULL));
           break;
-        case MYSQL_TYPE_TIMESTAMP:  // TIMESTAMP field
         case MYSQL_TYPE_TIME:       // TIME field
+          if (memcmp("00:00:00", row[i], 10) == 0) {
+            val = rb_str_new(row[i], fieldLengths[i]);
+          } else {
+            strptime(row[i], "%T", &parsedTime);
+            val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday), INT2NUM(parsedTime.tm_hour), INT2NUM(parsedTime.tm_min), INT2NUM(parsedTime.tm_sec));
+          }
+          break;
+        case MYSQL_TYPE_TIMESTAMP:  // TIMESTAMP field
         case MYSQL_TYPE_DATETIME:   // DATETIME field
-          // if (memcmp("0000-00-00 00:00:00", row[i], 19) == 0) {
-            // val = rb_str_new(row[i], fieldLengths[i]);
-          // } else {
-            // val = rb_funcall(rb_cTime, intern_parse, 1, rb_str_new(row[i], fieldLengths[i]));
-          // }
-          // break;
+          if (memcmp("0000-00-00 00:00:00", row[i], 19) == 0) {
+            val = Qnil;
+          } else {
+            strptime(row[i], "%F %T", &parsedTime);
+            val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday), INT2NUM(parsedTime.tm_hour), INT2NUM(parsedTime.tm_min), INT2NUM(parsedTime.tm_sec));
+          }
+          break;
         case MYSQL_TYPE_DATE:       // DATE field
         case MYSQL_TYPE_NEWDATE:    // Newer const used > 5.0
-          // val = rb_funcall(cDate, intern_parse, 1, rb_str_new(row[i], fieldLengths[i]));
-          // val = rb_str_new(row[i], fieldLengths[i]);
-          // break;
+          if (memcmp("0000-00-00", row[i], 10) == 0) {
+            val = Qnil;
+          } else {
+            strptime(row[i], "%F", &parsedTime);
+            val = rb_funcall(rb_cTime, intern_local, 3, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday));
+          }
+          break;
         case MYSQL_TYPE_TINY_BLOB:
         case MYSQL_TYPE_MEDIUM_BLOB:
         case MYSQL_TYPE_LONG_BLOB:
@@ -330,8 +343,11 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
 /* Ruby Extension initializer */
 void Init_mysql2_ext() {
-  // rb_require("bigdecimal");
-  // cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
+  rb_require("date");
+  rb_require("bigdecimal");
+  cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
+  cDate = rb_const_get(rb_cObject, rb_intern("Date"));
+  cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
 
   VALUE mMysql2 = rb_define_module("Mysql2");
 
@@ -349,7 +365,8 @@ void Init_mysql2_ext() {
   VALUE mEnumerable = rb_const_get(rb_cObject, rb_intern("Enumerable"));
   rb_include_module(cMysql2Result, mEnumerable);
 
-  // intern_new = rb_intern("new");
+  intern_new = rb_intern("new");
+  intern_local = rb_intern("local");
 
   sym_symbolize_keys = ID2SYM(rb_intern("symbolize_keys"));
   sym_reconnect = ID2SYM(rb_intern("reconnect"));

@@ -22,7 +22,7 @@ Benchmark.bmbm do |x|
     end
   end
 
-  mysql2 = Mysql2::Client.new
+  mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
   mysql2.query "USE #{database}"
   x.report do
     puts "Mysql2"

@@ -69,7 +69,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   }
 
   // HACK
-  if (!mysql_real_connect(client, host, username, password, database, port, socket, 0)) {
+  if (mysql_real_connect(client, host, username, password, database, port, socket, 0) == NULL) {
     // unable to connect
     rb_raise(rb_eStandardError, "%s", mysql_error(client));
     return Qnil;
@@ -98,14 +98,14 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
 
   GetMysql2Client(self, client);
   if (mysql_real_query(client, RSTRING_PTR(sql), RSTRING_LEN(sql)) != 0) {
-    // fprintf(stdout, "mysql_real_query error: %s\n", mysql_error(client));
+    fprintf(stdout, "mysql_real_query error: %s\n", mysql_error(client));
     return Qnil;
   }
 
   result = mysql_store_result(client);
   if (result == NULL) {
     // lookup error code and msg, raise exception
-    // fprintf(stdout, "mysql_store_result error: %s\n", mysql_error(client));
+    fprintf(stdout, "mysql_store_result error: %s\n", mysql_error(client));
     return Qnil;
   }
   return rb_mysql_result_to_obj(result);

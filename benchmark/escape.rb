@@ -15,6 +15,8 @@ Benchmark.bmbm do |x|
   x.report do
     puts "Mysql"
     number_of.times do
+      # NOTE: this uses mysql_escape_string in C
+      # which is *not* encoding aware
       mysql.escape_string str
     end
   end
@@ -24,6 +26,8 @@ Benchmark.bmbm do |x|
   x.report do
     puts "Mysql2"
     number_of.times do
+      # NOTE: this uses mysql_real_escape_string in C
+      # which takes into account the encoding set on the connection
       mysql2.escape str
     end
   end

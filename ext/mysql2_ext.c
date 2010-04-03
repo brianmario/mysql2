@@ -5,10 +5,11 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   MYSQL * client;
   VALUE obj, opts;
   VALUE rb_host, rb_socket, rb_port, rb_database,
-        rb_username, rb_password, rb_reconnect;
+        rb_username, rb_password, rb_reconnect,
+        rb_connect_timeout;
   char *host = "localhost", *socket = NULL, *username = NULL,
        *password = NULL, *database = NULL;
-  unsigned int port = 3306;
+  unsigned int port = 3306, connect_timeout = 0;
   my_bool reconnect = 0;
 
   obj = Data_Make_Struct(klass, MYSQL, NULL, rb_mysql_client_free, client);
@@ -20,12 +21,12 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
       Check_Type(rb_host, T_STRING);
       host = RSTRING_PTR(rb_host);
     }
-    
+
     if ((rb_socket = rb_hash_aref(opts, sym_socket)) != Qnil) {
       Check_Type(rb_socket, T_STRING);
       socket = RSTRING_PTR(rb_socket);
     }
-    
+
     if ((rb_port = rb_hash_aref(opts, sym_port)) != Qnil) {
       Check_Type(rb_port, T_FIXNUM);
       port = FIX2INT(rb_port);
@@ -49,6 +50,11 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
     if ((rb_reconnect = rb_hash_aref(opts, sym_reconnect)) != Qnil) {
       reconnect = rb_reconnect == Qtrue ? 1 : 0;
     }
+
+    if ((rb_connect_timeout = rb_hash_aref(opts, sym_connect_timeout)) != Qnil) {
+      Check_Type(rb_connect_timeout, T_FIXNUM);
+      connect_timeout = FIX2INT(rb_connect_timeout);
+    }
   }
 
   if (!mysql_init(client)) {
@@ -57,8 +63,15 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
     return Qnil;
   }
 
+  // set default reconnect behavior
   if (mysql_options(client, MYSQL_OPT_RECONNECT, &reconnect) != 0) {
-    // TODO: warning - unable to set charset
+    // TODO: warning - unable to set reconnect behavior
+    rb_warn("%s", mysql_error(client));
+  }
+
+  // set default connection timeout behavior
+  if (connect_timeout != 0 && mysql_options(client, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout) != 0) {
+    // TODO: warning - unable to set connection timeout
     rb_warn("%s", mysql_error(client));
   }
 
@@ -68,13 +81,11 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
     rb_warn("%s", mysql_error(client));
   }
 
-  // HACK
   if (mysql_real_connect(client, host, username, password, database, port, socket, 0) == NULL) {
     // unable to connect
     rb_raise(rb_eStandardError, "%s", mysql_error(client));
     return Qnil;
   }
-  // HACK
 
   rb_obj_call_init(obj, argc, argv);
   return obj;
@@ -320,6 +331,7 @@ void Init_mysql2_ext() {
   sym_host = ID2SYM(rb_intern("host"));
   sym_port = ID2SYM(rb_intern("port"));
   sym_socket = ID2SYM(rb_intern("socket"));
+  sym_connect_timeout = ID2SYM(rb_intern("connect_timeout"));
 
 #ifdef HAVE_RUBY_ENCODING_H
   utf8Encoding = rb_enc_find_index("UTF-8");

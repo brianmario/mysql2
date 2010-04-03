@@ -24,7 +24,8 @@ void rb_mysql_client_free(void * client);
 /* Mysql2::Result */
 #define GetMysql2Result(obj, sval) (sval = (MYSQL_RES*)DATA_PTR(obj));
 VALUE cMysql2Result;
-static ID sym_symbolize_keys, sym_socket, sym_host, sym_port, sym_username, sym_password, sym_database, sym_reconnect;
+static ID sym_symbolize_keys, sym_socket, sym_host, sym_port, sym_username,
+          sym_password, sym_database, sym_reconnect, sym_connect_timeout;
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * res);
 static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self);

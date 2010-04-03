@@ -146,6 +146,24 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   }
 }
 
+static VALUE rb_mysql_client_info(VALUE self) {
+  VALUE version = rb_hash_new();
+  rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_client_version()));
+  rb_hash_aset(version, sym_version, rb_str_new2(mysql_get_client_info()));
+  return version;
+}
+
+static VALUE rb_mysql_client_server_info(VALUE self) {
+  MYSQL * client;
+  VALUE version;
+
+  GetMysql2Client(self, client);
+  version = rb_hash_new();
+  rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_server_version(client)));
+  rb_hash_aset(version, sym_version, rb_str_new2(mysql_get_server_info(client)));
+  return version;
+}
+
 /* Mysql2::Result */
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   VALUE obj;
@@ -322,6 +340,8 @@ void Init_mysql2_ext() {
   rb_define_method(cMysql2Client, "initialize", rb_mysql_client_init, -1);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, 1);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
+  rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
+  rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
@@ -340,6 +360,8 @@ void Init_mysql2_ext() {
   sym_port = ID2SYM(rb_intern("port"));
   sym_socket = ID2SYM(rb_intern("socket"));
   sym_connect_timeout = ID2SYM(rb_intern("connect_timeout"));
+  sym_id = ID2SYM(rb_intern("id"));
+  sym_version = ID2SYM(rb_intern("version"));
 
 #ifdef HAVE_RUBY_ENCODING_H
   utf8Encoding = rb_enc_find_index("UTF-8");

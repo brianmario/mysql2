@@ -115,8 +115,10 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
 
   result = mysql_store_result(client);
   if (result == NULL) {
-    // lookup error code and msg, raise exception
-    fprintf(stdout, "mysql_store_result error: %s\n", mysql_error(client));
+    if (mysql_field_count(client) != 0) {
+      // lookup error code and msg, raise exception
+      fprintf(stdout, "mysql_store_result error: (%d) %s\n", mysql_errno(client), mysql_error(client));
+    }
     return Qnil;
   }
   return rb_mysql_result_to_obj(result);

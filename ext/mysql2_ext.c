@@ -345,6 +345,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 void Init_mysql2_ext() {
   rb_require("date");
   rb_require("bigdecimal");
+
   cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));

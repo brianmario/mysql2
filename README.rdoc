@@ -1,0 +1,2 @@
+= Mysql2 - A simple, fast Mysql library for Ruby, binding to libmysql
+

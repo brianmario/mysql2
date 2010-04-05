@@ -57,4 +57,14 @@ describe Mysql2::Client do
     @client.socket.class.should eql(Fixnum)
     @client.socket.should_not eql(0)
   end
+
+  it "should raise a Mysql2::Error exception upon connection failure" do
+    lambda {
+      bad_client = Mysql2::Client.new :host => "dfjhdi9wrhw", :username => 'asdfasdf8d2h'
+    }.should raise_error(Mysql2::Error)
+
+    lambda {
+      good_client = Mysql2::Client.new
+    }.should_not raise_error(Mysql2::Error)
+  end
 end

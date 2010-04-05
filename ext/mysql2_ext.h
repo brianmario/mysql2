@@ -14,6 +14,9 @@ int utf8Encoding, binaryEncoding;
 static VALUE cBigDecimal, cDate, cDateTime;
 ID intern_new, intern_local;
 
+/* Mysql2::Error */
+VALUE cMysql2Error;
+
 /* Mysql2::Client */
 #define GetMysql2Client(obj, sval) (sval = (MYSQL*)DATA_PTR(obj));
 static ID sym_socket, sym_host, sym_port, sym_username, sym_password,

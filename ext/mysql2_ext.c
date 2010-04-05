@@ -59,31 +59,31 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
 
   if (!mysql_init(client)) {
     // TODO: warning - not enough memory?
-    rb_raise(rb_eStandardError, "%s", mysql_error(client));
+    rb_raise(cMysql2Error, "%s", mysql_error(client));
     return Qnil;
   }
 
   // set default reconnect behavior
   if (mysql_options(client, MYSQL_OPT_RECONNECT, &reconnect) != 0) {
     // TODO: warning - unable to set reconnect behavior
-    rb_warn("%s", mysql_error(client));
+    rb_warn("%s\n", mysql_error(client));
   }
 
   // set default connection timeout behavior
   if (connect_timeout != 0 && mysql_options(client, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout) != 0) {
     // TODO: warning - unable to set connection timeout
-    rb_warn("%s", mysql_error(client));
+    rb_warn("%s\n", mysql_error(client));
   }
 
   // force the encoding to utf8
   if (mysql_options(client, MYSQL_SET_CHARSET_NAME, "utf8") != 0) {
     // TODO: warning - unable to set charset
-    rb_warn("%s", mysql_error(client));
+    rb_warn("%s\n", mysql_error(client));
   }
 
   if (mysql_real_connect(client, host, username, password, database, port, socket, 0) == NULL) {
     // unable to connect
-    rb_raise(rb_eStandardError, "%s", mysql_error(client));
+    rb_raise(cMysql2Error, "%s", mysql_error(client));
     return Qnil;
   }
 
@@ -109,15 +109,14 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
 
   GetMysql2Client(self, client);
   if (mysql_real_query(client, RSTRING_PTR(sql), RSTRING_LEN(sql)) != 0) {
-    fprintf(stdout, "mysql_real_query error: %s\n", mysql_error(client));
+    rb_raise(cMysql2Error, "%s", mysql_error(client));
     return Qnil;
   }
 
   result = mysql_store_result(client);
   if (result == NULL) {
     if (mysql_field_count(client) != 0) {
-      // lookup error code and msg, raise exception
-      fprintf(stdout, "mysql_store_result error: (%d) %s\n", mysql_errno(client), mysql_error(client));
+      rb_raise(cMysql2Error, "%s", mysql_error(client));
     }
     return Qnil;
   }
@@ -367,6 +366,8 @@ void Init_mysql2_ext() {
   rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
   rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);
+
+  cMysql2Error = rb_define_class_under(mMysql2, "Error", rb_eStandardError);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);

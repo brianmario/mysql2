@@ -18,6 +18,16 @@ describe Mysql2::Result do
     @result.should respond_to :each
   end
 
+  it "should raise a Mysql2::Error exception upon a bad query" do
+    lambda {
+      @client.query "bad sql"
+    }.should raise_error(Mysql2::Error)
+
+    lambda {
+      @client.query "SELECT 1"
+    }.should_not raise_error(Mysql2::Error)
+  end
+
   context "#each" do
     it "should yield rows as hash's" do
       @result.each do |row|

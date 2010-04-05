@@ -52,9 +52,9 @@ How about with symbolized keys?
     # do something with row, it's ready to rock
   end
 
-== Cool, but why?
+== Yeah... but why?
 
-Someone: But dude, the Mysql gem works fiiiiiine.
+Someone: Dude, the Mysql gem works fiiiiiine.
 
 Me: It sure does, but it only hands you nil and strings for field values. Leaving you to convert
 them into proper Ruby types in Ruby-land - which is slow as balls.

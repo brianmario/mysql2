@@ -1,4 +1,4 @@
 # Changelog
 
-## 0.1.0 (April 4th, 2010)
+## 0.1.0 (???)
 * initial release - gemified

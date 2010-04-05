@@ -24,6 +24,7 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE query);
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str);
 static VALUE rb_mysql_client_info(VALUE self);
 static VALUE rb_mysql_client_server_info(VALUE self);
+static VALUE rb_mysql_client_socket(VALUE self);
 void rb_mysql_client_free(void * client);
 
 /* Mysql2::Result */

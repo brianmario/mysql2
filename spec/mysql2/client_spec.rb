@@ -48,4 +48,13 @@ describe Mysql2::Client do
     server_info.should have_key(:version)
     server_info[:version].class.should eql(String)
   end
+
+  it "should respond to #socket" do
+    @client.should respond_to :socket
+  end
+
+  it "#socket should return a Fixnum (file descriptor from C)" do
+    @client.socket.class.should eql(Fixnum)
+    @client.socket.should_not eql(0)
+  end
 end

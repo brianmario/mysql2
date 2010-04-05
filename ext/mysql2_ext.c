@@ -166,6 +166,11 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
   return version;
 }
 
+static VALUE rb_mysql_client_socket(VALUE self) {
+  MYSQL * client = GetMysql2Client(self, client);;
+  return INT2NUM(client->net.fd);
+}
+
 /* Mysql2::Result */
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   VALUE obj;
@@ -361,6 +366,7 @@ void Init_mysql2_ext() {
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
   rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
+  rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);

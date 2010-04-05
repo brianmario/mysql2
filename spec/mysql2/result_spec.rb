@@ -84,7 +84,7 @@ describe Mysql2::Result do
           10.3, 10.3, '2010-4-4', '2010-4-4 11:44:00', '2010-4-4 11:44:00', '11:44:00',
           2009, "test", "test", "test", "test", "test",
           "test", "test", "test", "test", "test",
-          "test", "test", 'val1', 'val1 val2'
+          "test", "test", 'val1', 'val1,val2'
         )
       ]
       @test_result = @client.query("SELECT * FROM mysql2_test LIMIT 1").first
@@ -95,8 +95,8 @@ describe Mysql2::Result do
     end
 
     it "should return nil for a NULL value" do
-      @test_result['null_test'].should eql(nil)
       @test_result['null_test'].class.should eql(NilClass)
+      @test_result['null_test'].should eql(nil)
     end
 
     {
@@ -147,7 +147,7 @@ describe Mysql2::Result do
       'long_blob_test' => 'LONGBLOB',
       'long_text_test' => 'LONGTEXT',
       'enum_test' => 'ENUM',
-      'set_test' => 'SET',
+      'set_test' => 'SET'
     }.each do |field, type|
       it "should return a String for #{type}" do
         @test_result[field].class.should eql(String)

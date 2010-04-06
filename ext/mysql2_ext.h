@@ -20,7 +20,8 @@ VALUE cMysql2Error;
 /* Mysql2::Client */
 #define GetMysql2Client(obj, sval) (sval = (MYSQL*)DATA_PTR(obj));
 static ID sym_socket, sym_host, sym_port, sym_username, sym_password,
-          sym_database, sym_reconnect, sym_connect_timeout, sym_id, sym_version;
+          sym_database, sym_reconnect, sym_connect_timeout, sym_id, sym_version,
+          sym_sslkey, sym_sslcert, sym_sslca, sym_sslcapath, sym_sslcipher;
 static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass);
 static VALUE rb_mysql_client_init(VALUE self, int argc, VALUE * argv);
 static VALUE rb_mysql_client_query(VALUE self, VALUE query);

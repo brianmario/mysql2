@@ -7,8 +7,12 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   VALUE rb_host, rb_socket, rb_port, rb_database,
         rb_username, rb_password, rb_reconnect,
         rb_connect_timeout;
+  VALUE rb_ssl_client_key, rb_ssl_client_cert, rb_ssl_ca_cert,
+        rb_ssl_ca_path, rb_ssl_cipher;
   char *host = "localhost", *socket = NULL, *username = NULL,
        *password = NULL, *database = NULL;
+  char *ssl_client_key = NULL, *ssl_client_cert = NULL, *ssl_ca_cert = NULL,
+       *ssl_ca_path = NULL, *ssl_cipher = NULL;
   unsigned int port = 3306, connect_timeout = 0;
   my_bool reconnect = 0;
 
@@ -55,6 +59,32 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
       Check_Type(rb_connect_timeout, T_FIXNUM);
       connect_timeout = FIX2INT(rb_connect_timeout);
     }
+
+    // SSL options
+    if ((rb_ssl_client_key = rb_hash_aref(opts, sym_sslkey)) != Qnil) {
+      Check_Type(rb_ssl_client_key, T_STRING);
+      ssl_client_key = RSTRING_PTR(rb_ssl_client_key);
+    }
+
+    if ((rb_ssl_client_cert = rb_hash_aref(opts, sym_sslcert)) != Qnil) {
+      Check_Type(rb_ssl_client_cert, T_STRING);
+      ssl_client_cert = RSTRING_PTR(rb_ssl_client_cert);
+    }
+
+    if ((rb_ssl_ca_cert = rb_hash_aref(opts, sym_sslca)) != Qnil) {
+      Check_Type(rb_ssl_ca_cert, T_STRING);
+      ssl_ca_cert = RSTRING_PTR(rb_ssl_ca_cert);
+    }
+
+    if ((rb_ssl_ca_path = rb_hash_aref(opts, sym_sslcapath)) != Qnil) {
+      Check_Type(rb_ssl_ca_path, T_STRING);
+      ssl_ca_path = RSTRING_PTR(rb_ssl_ca_path);
+    }
+
+    if ((rb_ssl_cipher = rb_hash_aref(opts, sym_sslcipher)) != Qnil) {
+      Check_Type(rb_ssl_cipher, T_STRING);
+      ssl_cipher = RSTRING_PTR(rb_ssl_cipher);
+    }
   }
 
   if (!mysql_init(client)) {
@@ -79,6 +109,10 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   if (mysql_options(client, MYSQL_SET_CHARSET_NAME, "utf8") != 0) {
     // TODO: warning - unable to set charset
     rb_warn("%s\n", mysql_error(client));
+  }
+
+  if (ssl_ca_cert != NULL || ssl_client_key != NULL) {
+    mysql_ssl_set(client, ssl_client_key, ssl_client_cert, ssl_ca_cert, ssl_ca_path, ssl_cipher);
   }
 
   if (mysql_real_connect(client, host, username, password, database, port, socket, 0) == NULL) {
@@ -414,6 +448,11 @@ void Init_mysql2_ext() {
   sym_connect_timeout = ID2SYM(rb_intern("connect_timeout"));
   sym_id = ID2SYM(rb_intern("id"));
   sym_version = ID2SYM(rb_intern("version"));
+  sym_sslkey = ID2SYM(rb_intern("sslkey"));
+  sym_sslcert = ID2SYM(rb_intern("sslcert"));
+  sym_sslca = ID2SYM(rb_intern("sslca"));
+  sym_sslcapath = ID2SYM(rb_intern("sslcapath"));
+  sym_sslcipher = ID2SYM(rb_intern("sslcipher"));
 
 #ifdef HAVE_RUBY_ENCODING_H
   utf8Encoding = rb_enc_find_index("UTF-8");

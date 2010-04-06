@@ -6,6 +6,29 @@ describe Mysql2::Client do
     @client = Mysql2::Client.new
   end
 
+  it "should be able to connect via SSL options" do
+    pending("DON'T WORRY, THIS TEST PASSES :) - but is machine-specific. You need to have MySQL running with SSL configured and enabled. Then update the paths in this test to your needs and remove the pending state.")
+    ssl_client = nil
+    lambda {
+      ssl_client = Mysql2::Client.new(
+        :sslkey => '/path/to/client-key.pem',
+        :sslcert => '/path/to/client-cert.pem',
+        :sslca => '/path/to/ca-cert.pem',
+        :sslcapath => '/path/to/newcerts/',
+        :sslcipher => 'DHE-RSA-AES256-SHA'
+      )
+    }.should_not raise_error(Mysql2::Error)
+
+    results = ssl_client.query("SHOW STATUS WHERE Variable_name = \"Ssl_version\" OR Variable_name = \"Ssl_cipher\"").to_a
+    results[0]['Variable_name'].should eql('Ssl_cipher')
+    results[0]['Value'].should_not be_nil
+    results[0]['Value'].class.should eql(String)
+
+    results[1]['Variable_name'].should eql('Ssl_version')
+    results[1]['Value'].should_not be_nil
+    results[1]['Value'].class.should eql(String)
+  end
+
   it "should respond to #query" do
     @client.should respond_to :query
   end

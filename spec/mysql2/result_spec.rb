@@ -45,10 +45,9 @@ describe Mysql2::Result do
 
   context "row data type mapping" do
     before(:all) do
-      @client.query "CREATE DATABASE mysql2_test_db"
-      @client.query "USE mysql2_test_db"
+      @client.query "USE test"
       @client.query %[
-        CREATE TABLE mysql2_test (
+        CREATE TABLE IF NOT EXISTS mysql2_test (
           null_test VARCHAR(10),
           bit_test BIT,
           tiny_int_test TINYINT,
@@ -66,7 +65,7 @@ describe Mysql2::Result do
           year_test YEAR(4),
           char_test CHAR(10),
           varchar_test VARCHAR(10),
-          binary_test BINARY,
+          binary_test BINARY(10),
           varbinary_test VARBINARY(10),
           tiny_blob_test TINYBLOB,
           tiny_text_test TINYTEXT,
@@ -83,7 +82,7 @@ describe Mysql2::Result do
       @client.query %[
         INSERT INTO mysql2_test (
           null_test, bit_test, tiny_int_test, small_int_test, medium_int_test, int_test, big_int_test,
-          float_test, double_test, date_test, date_time_test, timestamp_test, time_test,
+          float_test, double_test, decimal_test, date_test, date_time_test, timestamp_test, time_test,
           year_test, char_test, varchar_test, binary_test, varbinary_test, tiny_blob_test,
           tiny_text_test, blob_test, text_test, medium_blob_test, medium_text_test,
           long_blob_test, long_text_test, enum_test, set_test
@@ -91,7 +90,7 @@ describe Mysql2::Result do
 
         VALUES (
           NULL, 1, 1, 10, 10, 10, 10,
-          10.3, 10.3, '2010-4-4', '2010-4-4 11:44:00', '2010-4-4 11:44:00', '11:44:00',
+          10.3, 10.3, 10.3, '2010-4-4', '2010-4-4 11:44:00', '2010-4-4 11:44:00', '11:44:00',
           2009, "test", "test", "test", "test", "test",
           "test", "test", "test", "test", "test",
           "test", "test", 'val1', 'val1,val2'

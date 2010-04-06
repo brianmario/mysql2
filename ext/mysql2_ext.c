@@ -128,12 +128,8 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
         rb_sys_fail(0);
     }
 
-    if (retval == 0) {
-        continue;
-    }
-
-    if (client->status == MYSQL_STATUS_READY) {
-      break;
+    if (retval > 0) {
+        break;
     }
   }
 

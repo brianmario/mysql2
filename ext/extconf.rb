@@ -4,7 +4,7 @@ require 'mkmf'
 dir_config('mysql')
 
 if !have_header('mysql.h') && !have_header('mysql/mysql.h')
-  raise 'MySQL headers not found, maybe try manually specifying --with-mysql=/path/to/mysql/installation'
+  raise 'MySQL headers not found, maybe try manually specifying --with-mysql-dir=/path/to/mysql/installation'
 end
 
 $CFLAGS << ' -Wall -Wextra -funroll-loops'

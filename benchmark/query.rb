@@ -7,22 +7,10 @@ require 'mysql2_ext'
 require 'do_mysql'
 
 number_of = 1
-database = 'nbb_1_production'
-sql = "SELECT * FROM account_entries"
+database = 'test'
+sql = "SELECT * FROM mysql2_test"
 
 Benchmark.bmbm do |x|
-  mysql = Mysql.new("localhost", "root")
-  mysql.query "USE #{database}"
-  x.report do
-    puts "Mysql"
-    number_of.times do
-      mysql_result = mysql.query sql
-      mysql_result.each_hash do |res|
-        # puts res.inspect
-      end
-    end
-  end
-
   mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
   mysql2.query "USE #{database}"
   x.report do
@@ -30,6 +18,18 @@ Benchmark.bmbm do |x|
     number_of.times do
       mysql2_result = mysql2.query sql
       mysql2_result.each(:symbolize_keys => true) do |res|
+        # puts res.inspect
+      end
+    end
+  end
+
+  mysql = Mysql.new("localhost", "root")
+  mysql.query "USE #{database}"
+  x.report do
+    puts "Mysql"
+    number_of.times do
+      mysql_result = mysql.query sql
+      mysql_result.each_hash do |res|
         # puts res.inspect
       end
     end

@@ -76,18 +76,18 @@ them into proper Ruby types in Ruby-land - which is slow as balls.
 
 Someone: OK fine, but do_mysql can already give me back values with Ruby objects mapped to MySQL types.
 
-Me: Yep, but it's API is considerably more complex *and* is 3x slower.
+Me: Yep, but it's API is considerably more complex *and* is 2-3x slower.
 
 == Benchmarks
 
-Performing a basic "SELECT * FROM" query on a table with ~31k rows and fields of nearly every Ruby-representable data type,
+Performing a basic "SELECT * FROM" query on a table with 30k rows and fields of nearly every Ruby-representable data type,
 then iterating over every row using an #each like method yielding a block:
 
-  # The Mysql gem appears faster because it only gives back nil and strings.
-   user        system     total     real
-  Mysql
-   1.050000    0.090000   1.140000  (  1.441405)
+  # And remember, the Mysql gem only gives back nil and strings.
+   user       system     total     real
   Mysql2
-   3.660000    0.170000   3.830000  (  4.082238)
+   2.080000   0.790000   2.870000 (  3.418861)
+  Mysql
+   1.210000   0.790000   2.000000 (  4.527824)
   do_mysql
-   11.440000   0.260000   11.700000 ( 11.951023)
+   5.450000   0.980000   6.430000 (  7.001563)

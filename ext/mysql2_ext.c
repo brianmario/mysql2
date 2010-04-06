@@ -105,10 +105,38 @@ void rb_mysql_client_free(void * client) {
 static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
   MYSQL * client;
   MYSQL_RES * result;
+  fd_set fdset;
+  int fd, retval;
   Check_Type(sql, T_STRING);
 
   GetMysql2Client(self, client);
-  if (mysql_real_query(client, RSTRING_PTR(sql), RSTRING_LEN(sql)) != 0) {
+  if (mysql_send_query(client, RSTRING_PTR(sql), RSTRING_LEN(sql)) != 0) {
+    rb_raise(cMysql2Error, "%s", mysql_error(client));
+    return Qnil;
+  }
+
+  // the below code is largely from do_mysql
+  fd = client->net.fd;
+  for(;;) {
+    FD_ZERO(&fdset);
+    FD_SET(fd, &fdset);
+
+    retval = rb_thread_select(fd + 1, &fdset, NULL, NULL, NULL);
+
+    if (retval < 0) {
+        rb_sys_fail(0);
+    }
+
+    if (retval == 0) {
+        continue;
+    }
+
+    if (client->status == MYSQL_STATUS_READY) {
+      break;
+    }
+  }
+
+  if (mysql_read_query_result(client) != 0) {
     rb_raise(cMysql2Error, "%s", mysql_error(client));
     return Qnil;
   }

@@ -14,7 +14,9 @@ Mysql2::Result - returned from issuing a #query on the connection. It includes E
 
 == Installing
 
-I plan to release the initial gem version within the next day or so. Just wanted to tweak extconf to help find the libmysql binary easier, and add the ssl options.
+  gem install mysql2
+
+You may have to specify --with-mysql-lib=/usr/local/lib/mysql or your path to libmysql (I'll do my best to not require that)
 
 == Usage
 

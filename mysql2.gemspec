@@ -5,23 +5,31 @@
 
 Gem::Specification.new do |s|
   s.name = %q{mysql2}
-  s.version = "0.0.1"
+  s.version = "0.1.0"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Brian Lopez"]
-  s.date = %q{2010-04-04}
+  s.date = %q{2010-04-06}
   s.email = %q{seniorlopez@gmail.com}
   s.extensions = ["ext/extconf.rb"]
+  s.extra_rdoc_files = [
+    "README.rdoc"
+  ]
   s.files = [
     ".gitignore",
+     "CHANGELOG.md",
+     "MIT-LICENSE",
+     "README.rdoc",
      "Rakefile",
      "VERSION",
      "benchmark/escape.rb",
      "benchmark/query.rb",
+     "benchmark/setup_db.rb",
      "ext/extconf.rb",
      "ext/mysql2_ext.c",
      "ext/mysql2_ext.h",
      "lib/mysql2.rb",
+     "mysql2.gemspec",
      "spec/mysql2/client_spec.rb",
      "spec/mysql2/result_spec.rb",
      "spec/rcov.opts",

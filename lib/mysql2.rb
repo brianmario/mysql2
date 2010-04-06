@@ -5,5 +5,5 @@ require 'mysql2_ext'
 #
 # A modern MySQL client library for Ruby, binding to libmysql
 module Mysql2
-  VERSION = "0.0.1"
+  VERSION = "0.1.0"
 end

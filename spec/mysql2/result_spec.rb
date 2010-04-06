@@ -99,10 +99,6 @@ describe Mysql2::Result do
       @test_result = @client.query("SELECT * FROM mysql2_test LIMIT 1").first
     end
 
-    after(:all) do
-      @client.query "DROP DATABASE mysql2_test_db"
-    end
-
     it "should return nil for a NULL value" do
       @test_result['null_test'].class.should eql(NilClass)
       @test_result['null_test'].should eql(nil)
@@ -118,7 +114,15 @@ describe Mysql2::Result do
       'year_test' => 'YEAR'
     }.each do |field, type|
       it "should return a Fixnum for #{type}" do
-        @test_result[field].class.should eql(Fixnum)
+        [Fixnum, Bignum].should include(@test_result[field].class)
+      end
+    end
+
+    {
+      'decimal_test' => 'DECIMAL'
+    }.each do |field, type|
+      it "should return a Fixnum for #{type}" do
+        @test_result[field].class.should eql(BigDecimal)
       end
     end
 

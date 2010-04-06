@@ -116,6 +116,7 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
   }
 
   // the below code is largely from do_mysql
+  // http://github.com/datamapper/do
   fd = client->net.fd;
   for(;;) {
     FD_ZERO(&fdset);

@@ -116,4 +116,19 @@ describe Mysql2::Client do
     result = @client.async_result
     result.class.should eql(Mysql2::Result)
   end
+
+  it "should respond to #last_id" do
+    @client.should respond_to(:last_id)
+  end
+
+  it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
+    @client.last_id.should eql(0)
+    @client.query "USE test"
+    @client.query "CREATE TABLE lastIdTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
+    @client.last_id.should eql(0)
+    @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+    @client.last_id.should eql(1)
+    @client.query "DROP TABLE lastIdTest"
+    @client.last_id.should eql(0)
+  end
 end

@@ -71,8 +71,9 @@ like EventMachine or even IO.select. Once the socket becomes readable, you can d
   # result will be a Mysql2::Result instance
   result = client.async_result
 
-NOTE: Because of the way MySQL's query API works, this method will block until the result is ready no matter what.
+NOTE: Because of the way MySQL's query API works, this method will block until the result is ready.
 So if you really need things to stay async, it's best to just monitor the socket with something like EventMachine.
+If you need multiple query concurrency take a look at using a connection pool.
 
 == Compatibility
 

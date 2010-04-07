@@ -58,6 +58,22 @@ How about with symbolized keys?
     # do something with row, it's ready to rock
   end
 
+== Async
+
+Mysql2::Client takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.
+But, in order to take full advantage of it in your Ruby code, you can do:
+
+  client.query("SELECT sleep(5)", :async => true)
+
+Which will return nil immediately. At this point you'll probably want to use some socket monitoring mechanism
+like EventMachine or even IO.select. Once the socket becomes readable, you can do:
+
+  # result will be a Mysql2::Result instance
+  result = client.async_result
+
+NOTE: Because of the way MySQL's query API works, this method will block until the result is ready no matter what.
+So if you really need things to stay async, it's best to just monitor the socket with something like EventMachine.
+
 == Compatibility
 
 The specs pass on my system (SL 10.6.3, x86_64) in these rubies:

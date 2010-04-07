@@ -125,7 +125,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   return obj;
 }
 
-static VALUE rb_mysql_client_init(VALUE self, int argc, VALUE * argv) {
+static VALUE rb_mysql_client_init(int argc, VALUE * argv, VALUE self) {
   return self;
 }
 
@@ -136,11 +136,21 @@ void rb_mysql_client_free(void * client) {
   }
 }
 
-static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
+static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   MYSQL * client;
   MYSQL_RES * result;
   fd_set fdset;
   int fd, retval;
+  int async = 0;
+  VALUE sql, opts;
+  VALUE rb_async;
+
+  if (rb_scan_args(argc, argv, "11", &sql, &opts) == 2) {
+    if ((rb_async = rb_hash_aref(opts, sym_async)) != Qnil) {
+      async = rb_async == Qtrue ? 1 : 0;
+    }
+  }
+
   Check_Type(sql, T_STRING);
 
   GetMysql2Client(self, client);
@@ -149,37 +159,29 @@ static VALUE rb_mysql_client_query(VALUE self, VALUE sql) {
     return Qnil;
   }
 
-  // the below code is largely from do_mysql
-  // http://github.com/datamapper/do
-  fd = client->net.fd;
-  for(;;) {
-    FD_ZERO(&fdset);
-    FD_SET(fd, &fdset);
+  if (!async) {
+    // the below code is largely from do_mysql
+    // http://github.com/datamapper/do
+    fd = client->net.fd;
+    for(;;) {
+      FD_ZERO(&fdset);
+      FD_SET(fd, &fdset);
 
-    retval = rb_thread_select(fd + 1, &fdset, NULL, NULL, NULL);
+      retval = rb_thread_select(fd + 1, &fdset, NULL, NULL, NULL);
 
-    if (retval < 0) {
-        rb_sys_fail(0);
+      if (retval < 0) {
+          rb_sys_fail(0);
+      }
+
+      if (retval > 0) {
+          break;
+      }
     }
 
-    if (retval > 0) {
-        break;
-    }
-  }
-
-  if (mysql_read_query_result(client) != 0) {
-    rb_raise(cMysql2Error, "%s", mysql_error(client));
+    return rb_mysql_client_async_result(self);
+  } else {
     return Qnil;
   }
-
-  result = mysql_store_result(client);
-  if (result == NULL) {
-    if (mysql_field_count(client) != 0) {
-      rb_raise(cMysql2Error, "%s", mysql_error(client));
-    }
-    return Qnil;
-  }
-  return rb_mysql_result_to_obj(result);
 }
 
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
@@ -227,6 +229,27 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 static VALUE rb_mysql_client_socket(VALUE self) {
   MYSQL * client = GetMysql2Client(self, client);;
   return INT2NUM(client->net.fd);
+}
+
+static VALUE rb_mysql_client_async_result(VALUE self) {
+  MYSQL * client;
+  MYSQL_RES * result;
+  GetMysql2Client(self, client);
+
+  if (mysql_read_query_result(client) != 0) {
+    rb_raise(cMysql2Error, "%s", mysql_error(client));
+    return Qnil;
+  }
+
+  result = mysql_store_result(client);
+  if (result == NULL) {
+    if (mysql_field_count(client) != 0) {
+      rb_raise(cMysql2Error, "%s", mysql_error(client));
+    }
+    return Qnil;
+  }
+
+  return rb_mysql_result_to_obj(result);
 }
 
 /* Mysql2::Result */
@@ -420,11 +443,12 @@ void Init_mysql2_ext() {
   VALUE cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
   rb_define_singleton_method(cMysql2Client, "new", rb_mysql_client_new, -1);
   rb_define_method(cMysql2Client, "initialize", rb_mysql_client_init, -1);
-  rb_define_method(cMysql2Client, "query", rb_mysql_client_query, 1);
+  rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
   rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
   rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);
+  rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
 
   cMysql2Error = rb_define_class_under(mMysql2, "Error", rb_eStandardError);
 
@@ -453,6 +477,7 @@ void Init_mysql2_ext() {
   sym_sslca = ID2SYM(rb_intern("sslca"));
   sym_sslcapath = ID2SYM(rb_intern("sslcapath"));
   sym_sslcipher = ID2SYM(rb_intern("sslcipher"));
+  sym_async = ID2SYM(rb_intern("async"));
 
 #ifdef HAVE_RUBY_ENCODING_H
   utf8Encoding = rb_enc_find_index("UTF-8");

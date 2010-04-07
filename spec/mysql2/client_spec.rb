@@ -6,6 +6,11 @@ describe Mysql2::Client do
     @client = Mysql2::Client.new
   end
 
+  after(:each) do
+    # forcefully clean up old connections
+    GC.start
+  end
+
   it "should be able to connect via SSL options" do
     pending("DON'T WORRY, THIS TEST PASSES :) - but is machine-specific. You need to have MySQL running with SSL configured and enabled. Then update the paths in this test to your needs and remove the pending state.")
     ssl_client = nil
@@ -89,5 +94,26 @@ describe Mysql2::Client do
     lambda {
       good_client = Mysql2::Client.new
     }.should_not raise_error(Mysql2::Error)
+  end
+
+  it "evented async queries should be supported" do
+    # should immediately return nil
+    @client.query("SELECT sleep(0.1)", :async => true).should eql(nil)
+
+    io_wrapper = IO.for_fd(@client.socket)
+    loops = 0
+    loop do
+      if IO.select([io_wrapper], nil, nil, 0.05)
+        break
+      else
+        loops += 1
+      end
+    end
+
+    # make sure we waited some period of time
+    (loops >= 1).should be_true
+
+    result = @client.async_result
+    result.class.should eql(Mysql2::Result)
   end
 end

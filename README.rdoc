@@ -16,7 +16,7 @@ Mysql2::Result - returned from issuing a #query on the connection. It includes E
 
   gem install mysql2
 
-You may have to specify --with-mysql-lib=/usr/local/lib/mysql or your path to libmysql (I'll do my best to not require that)
+You may have to specify --with-mysql-config=/some/random/path/bin/mysql_config
 
 == Usage
 

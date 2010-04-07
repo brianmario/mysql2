@@ -254,11 +254,16 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
 static VALUE rb_mysql_client_last_id(VALUE self) {
   MYSQL * client;
-  my_ulonglong id;
   GetMysql2Client(self, client);
 
-  id = mysql_insert_id(client);
-  return ULL2NUM(id);
+  return ULL2NUM(mysql_insert_id(client));
+}
+
+static VALUE rb_mysql_client_affected_rows(VALUE self) {
+  MYSQL * client;
+  GetMysql2Client(self, client);
+
+  return ULL2NUM(mysql_affected_rows(client));
 }
 
 /* Mysql2::Result */
@@ -459,6 +464,7 @@ void Init_mysql2_ext() {
   rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
+  rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
 
   cMysql2Error = rb_define_class_under(mMysql2, "Error", rb_eStandardError);
 

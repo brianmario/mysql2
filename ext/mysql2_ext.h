@@ -39,6 +39,7 @@ static VALUE rb_mysql_client_server_info(VALUE self);
 static VALUE rb_mysql_client_socket(VALUE self);
 static VALUE rb_mysql_client_async_result(VALUE self);
 static VALUE rb_mysql_client_last_id(VALUE self);
+static VALUE rb_mysql_client_affected_rows(VALUE self);
 void rb_mysql_client_free(void * client);
 
 /* Mysql2::Result */

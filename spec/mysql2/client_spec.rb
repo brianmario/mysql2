@@ -117,18 +117,35 @@ describe Mysql2::Client do
     result.class.should eql(Mysql2::Result)
   end
 
-  it "should respond to #last_id" do
-    @client.should respond_to(:last_id)
-  end
+  context 'write operations api' do
+    before(:each) do
+      @client.query "USE test"
+      @client.query "CREATE TABLE lastIdTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
+    end
 
-  it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
-    @client.last_id.should eql(0)
-    @client.query "USE test"
-    @client.query "CREATE TABLE lastIdTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
-    @client.last_id.should eql(0)
-    @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
-    @client.last_id.should eql(1)
-    @client.query "DROP TABLE lastIdTest"
-    @client.last_id.should eql(0)
+    after(:each) do
+      @client.query "DROP TABLE lastIdTest"
+    end
+
+    it "should respond to #last_id" do
+      @client.should respond_to(:last_id)
+    end
+
+    it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
+      @client.last_id.should eql(0)
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+      @client.last_id.should eql(1)
+    end
+
+    it "should respond to #last_id" do
+      @client.should respond_to(:last_id)
+    end
+
+    it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+      @client.affected_rows.should eql(1)
+      @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
+      @client.affected_rows.should eql(1)
+    end
   end
 end

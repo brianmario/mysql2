@@ -14,7 +14,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   char *ssl_client_key = NULL, *ssl_client_cert = NULL, *ssl_ca_cert = NULL,
        *ssl_ca_path = NULL, *ssl_cipher = NULL;
   unsigned int port = 3306, connect_timeout = 0;
-  my_bool reconnect = 0;
+  my_bool reconnect = 1;
 
   obj = Data_Make_Struct(klass, MYSQL, NULL, rb_mysql_client_free, client);
 
@@ -52,7 +52,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
     }
 
     if ((rb_reconnect = rb_hash_aref(opts, sym_reconnect)) != Qnil) {
-      reconnect = rb_reconnect == Qtrue ? 1 : 0;
+      reconnect = rb_reconnect == Qfalse ? 0 : 1;
     }
 
     if ((rb_connect_timeout = rb_hash_aref(opts, sym_connect_timeout)) != Qnil) {

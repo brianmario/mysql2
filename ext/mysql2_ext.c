@@ -346,8 +346,8 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           val = rb_float_new(strtod(row[i], NULL));
           break;
         case MYSQL_TYPE_TIME:       // TIME field
-          if (memcmp("00:00:00", row[i], 10) == 0) {
-            val = rb_str_new(row[i], fieldLengths[i]);
+          if (memcmp("00:00:00", row[i], 8) == 0) {
+            val = Qnil;
           } else {
             strptime(row[i], "%T", &parsedTime);
             val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday), INT2NUM(parsedTime.tm_hour), INT2NUM(parsedTime.tm_min), INT2NUM(parsedTime.tm_sec));

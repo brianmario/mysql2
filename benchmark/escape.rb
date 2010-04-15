@@ -7,12 +7,10 @@ require 'mysql2_ext'
 require 'do_mysql'
 
 number_of = 1000
-database = 'nbb_1_production'
 str = "abc'def\"ghi\0jkl%mno"
 
 Benchmark.bmbm do |x|
   mysql = Mysql.new("localhost", "root")
-  mysql.query "USE #{database}"
   x.report do
     puts "Mysql"
     number_of.times do
@@ -21,7 +19,6 @@ Benchmark.bmbm do |x|
   end
 
   mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
-  mysql2.query "USE #{database}"
   x.report do
     puts "Mysql2"
     number_of.times do
@@ -29,7 +26,7 @@ Benchmark.bmbm do |x|
     end
   end
 
-  do_mysql = DataObjects::Connection.new("mysql://localhost/#{database}")
+  do_mysql = DataObjects::Connection.new("mysql://localhost/test")
   x.report do
     puts "do_mysql"
     number_of.times do

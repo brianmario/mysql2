@@ -45,6 +45,11 @@ module ActiveRecord
 
     class Mysql2Adapter < MysqlAdapter
       PRIMARY = "PRIMARY".freeze
+      ADAPTER_NAME = "Mysql2".freeze
+
+      def adapter_name
+        ADAPTER_NAME
+      end
 
       # QUOTING ==================================================
       def quote_string(string)

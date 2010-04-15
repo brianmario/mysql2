@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 (April 15th, 2010)
+* added an EventMachine Deferrable API
+* added an ActiveRecord connection adapter
+** should be compatible with 2.3.5 and 3.0 (including Arel)
+
 ## 0.1.2 (April 9th, 2010)
 * fix a bug (copy/paste fail) around checking for empty TIME values and returning nil (thanks @marius)
 

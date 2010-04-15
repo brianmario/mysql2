@@ -75,6 +75,32 @@ NOTE: Because of the way MySQL's query API works, this method will block until t
 So if you really need things to stay async, it's best to just monitor the socket with something like EventMachine.
 If you need multiple query concurrency take a look at using a connection pool.
 
+== ActiveRecord
+
+To use the ActiveRecord driver, all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
+That was easy right? :)
+
+== EventMachine
+
+The mysql2 EventMachine deferrable api allows you to make async queries using EventMachine,
+while specifying callbacks for success for failure. Here's a simple example:
+
+  require 'mysql2/em'
+
+  EM.run do
+    client1 = Mysql2::EM::Client.new
+    defer1 = client1.query "SELECT sleep(3) as first_query"
+    defer1.callback do |result|
+      puts "Result: #{result.to_a.inspect}"
+    end
+
+    client2 = Mysql2::EM::Client.new
+    defer2 = client2.query "SELECT sleep(1) second_query"
+    defer2.callback do |result|
+      puts "Result: #{result.to_a.inspect}"
+    end
+  end
+
 == Compatibility
 
 The specs pass on my system (SL 10.6.3, x86_64) in these rubies:
@@ -84,6 +110,8 @@ The specs pass on my system (SL 10.6.3, x86_64) in these rubies:
 * 1.9.1-p378
 * ruby-trunk
 * rbx-head
+
+The ActiveRecord driver should work on 2.3.5 and 3.0
 
 == Yeah... but why?
 

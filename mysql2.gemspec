@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{mysql2}
-  s.version = "0.1.2"
+  s.version = "0.1.3"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Brian Lopez"]
-  s.date = %q{2010-04-09}
+  s.date = %q{2010-04-15}
   s.email = %q{seniorlopez@gmail.com}
   s.extensions = ["ext/extconf.rb"]
   s.extra_rdoc_files = [
@@ -22,14 +22,21 @@ Gem::Specification.new do |s|
      "README.rdoc",
      "Rakefile",
      "VERSION",
+     "benchmark/active_record.rb",
      "benchmark/escape.rb",
      "benchmark/query.rb",
      "benchmark/setup_db.rb",
+     "examples/eventmachine.rb",
      "ext/extconf.rb",
      "ext/mysql2_ext.c",
      "ext/mysql2_ext.h",
+     "lib/active_record/connection_adapters/mysql2_adapter.rb",
+     "lib/arel/engines/sql/compilers/mysql2_compiler.rb",
      "lib/mysql2.rb",
+     "lib/mysql2/em.rb",
      "mysql2.gemspec",
+     "spec/active_record/active_record_spec.rb",
+     "spec/em/em_spec.rb",
      "spec/mysql2/client_spec.rb",
      "spec/mysql2/result_spec.rb",
      "spec/rcov.opts",
@@ -42,9 +49,12 @@ Gem::Specification.new do |s|
   s.rubygems_version = %q{1.3.6}
   s.summary = %q{A simple, fast Mysql library for Ruby, binding to libmysql}
   s.test_files = [
-    "spec/mysql2/client_spec.rb",
+    "spec/active_record/active_record_spec.rb",
+     "spec/em/em_spec.rb",
+     "spec/mysql2/client_spec.rb",
      "spec/mysql2/result_spec.rb",
-     "spec/spec_helper.rb"
+     "spec/spec_helper.rb",
+     "examples/eventmachine.rb"
   ]
 
   if s.respond_to? :specification_version then

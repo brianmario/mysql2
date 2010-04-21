@@ -140,13 +140,20 @@ describe Mysql2::Result do
     end
 
     {
-      'date_test' => 'DATE',
       'date_time_test' => 'DATETIME',
       'timestamp_test' => 'TIMESTAMP',
       'time_test' => 'TIME'
     }.each do |field, type|
       it "should return a Time for #{type}" do
         @test_result[field].class.should eql(Time)
+      end
+    end
+
+    {
+      'date_test' => 'DATE'
+    }.each do |field, type|
+      it "should return a Date for #{type}" do
+        @test_result[field].class.should eql(Date)
       end
     end
 

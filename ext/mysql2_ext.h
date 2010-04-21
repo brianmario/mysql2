@@ -43,9 +43,20 @@ static VALUE rb_mysql_client_affected_rows(VALUE self);
 void rb_mysql_client_free(void * client);
 
 /* Mysql2::Result */
-#define GetMysql2Result(obj, sval) (sval = (MYSQL_RES*)DATA_PTR(obj));
+typedef struct {
+    VALUE fieldList;
+    VALUE rows;
+    unsigned long numberOfFields;
+    int *types;
+    unsigned long numberOfRows;
+    unsigned long lastRow;
+    int resultFreed;
+    MYSQL_RES *result;
+} mysql2_result_wrapper;
+#define GetMysql2Result(obj, sval) (sval = (mysql2_result_wrapper*)DATA_PTR(obj));
 VALUE cMysql2Result;
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * res);
 static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self);
-void rb_mysql_result_free(void * result);
+void rb_mysql_result_free(void * wrapper);
+void rb_mysql_result_mark(void * wrapper);

@@ -269,28 +269,43 @@ static VALUE rb_mysql_client_affected_rows(VALUE self) {
 /* Mysql2::Result */
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   VALUE obj;
-  obj = Data_Wrap_Struct(cMysql2Result, 0, rb_mysql_result_free, r);
+  mysql2_result_wrapper * wrapper;
+  obj = Data_Make_Struct(cMysql2Result, mysql2_result_wrapper, rb_mysql_result_mark, rb_mysql_result_free, wrapper);
+  wrapper->numberOfFields = 0;
+  wrapper->numberOfRows = 0;
+  wrapper->lastRow = 0;
+  wrapper->resultFreed = 0;
+  wrapper->result = r;
   rb_obj_call_init(obj, 0, NULL);
   return obj;
 }
 
-void rb_mysql_result_free(void * result) {
-  MYSQL_RES * r = result;
-  if (r) {
-    mysql_free_result(r);
+void rb_mysql_result_free(void * wrapper) {
+  mysql2_result_wrapper * w = wrapper;
+  if (w && w->resultFreed != 1) {
+    mysql_free_result(w->result);
+    w->resultFreed = 1;
   }
+}
+
+void rb_mysql_result_mark(void * wrapper) {
+    mysql2_result_wrapper * w = wrapper;
+    if (w) {
+        rb_gc_mark(w->fieldList);
+        rb_gc_mark(w->rows);
+    }
 }
 
 static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
   VALUE rowHash, opts, block;
-  MYSQL_RES * result;
+  mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
   MYSQL_FIELD * fields;
   struct tm parsedTime;
   unsigned int i = 0, numFields = 0, symbolizeKeys = 0;
   unsigned long * fieldLengths;
 
-  GetMysql2Result(self, result);
+  GetMysql2Result(self, wrapper);
 
   if (rb_scan_args(argc, argv, "01&", &opts, &block) == 1) {
     Check_Type(opts, T_HASH);
@@ -299,14 +314,14 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
     }
   }
 
-  row = mysql_fetch_row(result);
+  row = mysql_fetch_row(wrapper->result);
   if (row == NULL) {
     return Qnil;
   }
 
-  numFields = mysql_num_fields(result);
-  fieldLengths = mysql_fetch_lengths(result);
-  fields = mysql_fetch_fields(result);
+  numFields = mysql_num_fields(wrapper->result);
+  fieldLengths = mysql_fetch_lengths(wrapper->result);
+  fields = mysql_fetch_fields(wrapper->result);
 
   rowHash = rb_hash_new();
   for (i = 0; i < numFields; i++) {
@@ -402,45 +417,58 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
 }
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
-  VALUE dataset, opts, block;
-  MYSQL_RES * result;
-  unsigned long numRows, i;
+  VALUE opts, block;
+  mysql2_result_wrapper * wrapper;
+  unsigned long i;
 
-  GetMysql2Result(self, result);
+  GetMysql2Result(self, wrapper);
 
   rb_scan_args(argc, argv, "01&", &opts, &block);
 
-  // force-start at the beginning of the result set for proper
-  // behavior of #each
-  mysql_data_seek(result, 0);
-
-  numRows = mysql_num_rows(result);
-  if (numRows == 0) {
-    return Qnil;
+  if (wrapper->lastRow == 0) {
+    wrapper->numberOfRows = mysql_num_rows(wrapper->result);
+    if (wrapper->numberOfRows == 0) {
+      return Qnil;
+    }
+    wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
   }
 
-  // TODO: allow yielding datasets of configurable size
-  // like find_in_batches from AR...
-  if (block != Qnil) {
-    for (i = 0; i < numRows; i++) {
-      VALUE row = rb_mysql_result_fetch_row(argc, argv, self);
-      if (row == Qnil) {
-        return Qnil;
-      }
-      rb_yield(row);
+  if (wrapper->lastRow == wrapper->numberOfRows) {
+    // we've already read the entire dataset from the C result into our
+    // internal array. Lets hand that over to the user since it's ready to go
+    for (i = 0; i < wrapper->numberOfRows; i++) {
+      rb_yield(rb_ary_entry(wrapper->rows, i));
     }
   } else {
-    dataset = rb_ary_new2(numRows);
-    for (i = 0; i < numRows; i++) {
-      VALUE row = rb_mysql_result_fetch_row(argc, argv, self);
+    unsigned long rowsProcessed = 0;
+    rowsProcessed = RARRAY_LEN(wrapper->rows);
+    for (i = 0; i < wrapper->numberOfRows; i++) {
+      VALUE row;
+      if (i < rowsProcessed) {
+        row = rb_ary_entry(wrapper->rows, i);
+      } else {
+        row = rb_mysql_result_fetch_row(argc, argv, self);
+        rb_ary_store(wrapper->rows, i, row);
+        wrapper->lastRow++;
+      }
+
       if (row == Qnil) {
+        // we don't need the mysql C dataset around anymore, peace it
+        rb_mysql_result_free(wrapper->result);
         return Qnil;
       }
-      rb_ary_store(dataset, i, row);
+
+      if (block != Qnil) {
+        rb_yield(row);
+      }
     }
-    return dataset;
+    if (wrapper->lastRow == wrapper->numberOfRows) {
+      // we don't need the mysql C dataset around anymore, peace it
+      rb_mysql_result_free(wrapper->result);
+    }
   }
-  return Qnil;
+
+  return wrapper->rows;
 }
 
 /* Ruby Extension initializer */

@@ -41,6 +41,10 @@ describe Mysql2::Result do
         row.keys.first.class.should eql(Symbol)
       end
     end
+
+    it "should cache previously yielded results" do
+      @result.first.should eql(@result.first)
+    end
   end
 
   context "row data type mapping" do

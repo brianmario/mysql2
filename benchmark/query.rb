@@ -6,9 +6,9 @@ require 'mysql'
 require 'mysql2_ext'
 require 'do_mysql'
 
-number_of = 1
+number_of = 100
 database = 'test'
-sql = "SELECT * FROM mysql2_test"
+sql = "SELECT * FROM mysql2_test LIMIT 100"
 
 Benchmark.bmbm do |x|
   mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")

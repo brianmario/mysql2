@@ -4,9 +4,8 @@ $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 require 'rubygems'
 require 'benchmark'
 require 'active_record'
-require 'ruby-debug'
 
-number_of = 1
+number_of = 10
 mysql2_opts = {
   :adapter => 'mysql2',
   :database => 'test'

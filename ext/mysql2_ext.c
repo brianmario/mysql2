@@ -393,7 +393,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
             val = Qnil;
           } else {
             strptime(row[i], "%F", &parsedTime);
-            val = rb_funcall(cDate, intern_new, 3, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday));
+            val = rb_funcall(rb_cTime, intern_local, 3, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday));
           }
           break;
         case MYSQL_TYPE_TINY_BLOB:

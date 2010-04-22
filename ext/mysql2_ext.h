@@ -44,12 +44,11 @@ void rb_mysql_client_free(void * client);
 
 /* Mysql2::Result */
 typedef struct {
-    VALUE fieldList;
+    VALUE fields;
     VALUE rows;
     unsigned long numberOfFields;
-    int *types;
     unsigned long numberOfRows;
-    unsigned long lastRow;
+    unsigned long lastRowProcessed;
     int resultFreed;
     MYSQL_RES *result;
 } mysql2_result_wrapper;

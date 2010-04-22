@@ -131,10 +131,10 @@ Performing a basic "SELECT * FROM" query on a table with 30k rows and fields of 
 then iterating over every row using an #each like method yielding a block:
 
   # And remember, the Mysql gem only gives back nil and strings.
-   user       system     total     real
+   user       system     total       real
   Mysql2
-   2.080000   0.790000   2.870000 (  3.418861)
+   0.610000   0.160000   0.770000 (  0.986967)
   Mysql
-   1.210000   0.790000   2.000000 (  4.527824)
+   0.350000   0.220000   0.570000 (  1.457889)
   do_mysql
-   5.450000   0.980000   6.430000 (  7.001563)
+   1.710000   0.180000   1.890000 (  2.124831)

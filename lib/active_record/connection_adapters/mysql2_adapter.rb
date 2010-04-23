@@ -1,7 +1,6 @@
 # encoding: utf-8
 
 require 'mysql2' unless defined? Mysql2
-require 'active_record/connection_adapters/mysql_adapter'
 
 module ActiveRecord
   class Base
@@ -13,7 +12,26 @@ module ActiveRecord
   end
 
   module ConnectionAdapters
-    class Mysql2Column < MysqlColumn
+    class Mysql2Column < Column
+      def extract_default(default)
+        if sql_type =~ /blob/i || type == :text
+          if default.blank?
+            return null ? nil : ''
+          else
+            raise ArgumentError, "#{type} columns cannot have a default value: #{default.inspect}"
+          end
+        elsif missing_default_forged_as_empty_string?(default)
+          nil
+        else
+          super
+        end
+      end
+
+      def has_default?
+        return false if sql_type =~ /blob/i || type == :text #mysql forbids defaults on blob and text columns
+        super
+      end
+
       # Returns the Ruby class that corresponds to the abstract data type.
       def klass
         case type
@@ -37,23 +55,152 @@ module ActiveRecord
           value
         end
       end
-      
+
       def type_cast_code(var_name)
         nil
       end
+
+      private
+        def simplified_type(field_type)
+          return :boolean if Mysql2Adapter.emulate_booleans && field_type.downcase.index("tinyint(1)")
+          return :string  if field_type =~ /enum/i
+          super
+        end
+
+        def extract_limit(sql_type)
+          case sql_type
+          when /blob|text/i
+            case sql_type
+            when /tiny/i
+              255
+            when /medium/i
+              16777215
+            when /long/i
+              2147483647 # mysql only allows 2^31-1, not 2^32-1, somewhat inconsistently with the tiny/medium/normal cases
+            else
+              super # we could return 65535 here, but we leave it undecorated by default
+            end
+          when /^bigint/i;    8
+          when /^int/i;       4
+          when /^mediumint/i; 3
+          when /^smallint/i;  2
+          when /^tinyint/i;   1
+          else
+            super
+          end
+        end
+
+        # MySQL misreports NOT NULL column default when none is given.
+        # We can't detect this for columns which may have a legitimate ''
+        # default (string) but we can for others (integer, datetime, boolean,
+        # and the rest).
+        #
+        # Test whether the column has default '', is not null, and is not
+        # a type allowing default ''.
+        def missing_default_forged_as_empty_string?(default)
+          type != :string && !null && default == ''
+        end
     end
 
-    class Mysql2Adapter < MysqlAdapter
-      PRIMARY = "PRIMARY".freeze
-      ADAPTER_NAME = "Mysql2".freeze
+    class Mysql2Adapter < AbstractAdapter
+      cattr_accessor :emulate_booleans
+      self.emulate_booleans = true
+
+      ADAPTER_NAME = 'MySQL'.freeze
+
+      LOST_CONNECTION_ERROR_MESSAGES = [
+        "Server shutdown in progress",
+        "Broken pipe",
+        "Lost connection to MySQL server during query",
+        "MySQL server has gone away" ]
+
+      QUOTED_TRUE, QUOTED_FALSE = '1'.freeze, '0'.freeze
+
+      NATIVE_DATABASE_TYPES = {
+        :primary_key => "int(11) DEFAULT NULL auto_increment PRIMARY KEY".freeze,
+        :string      => { :name => "varchar", :limit => 255 },
+        :text        => { :name => "text" },
+        :integer     => { :name => "int", :limit => 4 },
+        :float       => { :name => "float" },
+        :decimal     => { :name => "decimal" },
+        :datetime    => { :name => "datetime" },
+        :timestamp   => { :name => "datetime" },
+        :time        => { :name => "time" },
+        :date        => { :name => "date" },
+        :binary      => { :name => "blob" },
+        :boolean     => { :name => "tinyint", :limit => 1 }
+      }
+
+      def initialize(connection, logger, connection_options, config)
+        super(connection, logger)
+        @connection_options, @config = connection_options, config
+        @quoted_column_names, @quoted_table_names = {}, {}
+      end
 
       def adapter_name
         ADAPTER_NAME
       end
 
+      def supports_migrations?
+        true
+      end
+
+      def supports_primary_key?
+        true
+      end
+
+      def supports_savepoints?
+        true
+      end
+
+      def native_database_types
+        NATIVE_DATABASE_TYPES
+      end
+
       # QUOTING ==================================================
+
+      def quote(value, column = nil)
+        if value.kind_of?(String) && column && column.type == :binary && column.class.respond_to?(:string_to_binary)
+          s = column.class.string_to_binary(value).unpack("H*")[0]
+          "x'#{s}'"
+        elsif value.kind_of?(BigDecimal)
+          value.to_s("F")
+        else
+          super
+        end
+      end
+
+      def quote_column_name(name) #:nodoc:
+        @quoted_column_names[name] ||= "`#{name}`"
+      end
+
+      def quote_table_name(name) #:nodoc:
+        @quoted_table_names[name] ||= quote_column_name(name).gsub('.', '`.`')
+      end
+
       def quote_string(string)
         @connection.escape(string)
+      end
+
+      def quoted_true
+        QUOTED_TRUE
+      end
+
+      def quoted_false
+        QUOTED_FALSE
+      end
+
+      # REFERENTIAL INTEGRITY ====================================
+
+      def disable_referential_integrity(&block) #:nodoc:
+        old = select_value("SELECT @@FOREIGN_KEY_CHECKS")
+
+        begin
+          update("SET FOREIGN_KEY_CHECKS = 0")
+          yield
+        ensure
+          update("SET FOREIGN_KEY_CHECKS = #{old}")
+        end
       end
 
       # CONNECTION MANAGEMENT ====================================
@@ -88,13 +235,126 @@ module ActiveRecord
         select(sql, name)
       end
 
+      # Executes a SQL query and returns a MySQL::Result object. Note that you have to free the Result object after you're done using it.
+      def execute(sql, name = nil)
+        if name == :skip_logging
+          @connection.query(sql)
+        else
+          log(sql, name) { @connection.query(sql) }
+        end
+      rescue ActiveRecord::StatementInvalid => exception
+        if exception.message.split(":").first =~ /Packets out of order/
+          raise ActiveRecord::StatementInvalid, "'Packets out of order' error was received from the database. Please update your mysql bindings (gem install mysql) and read http://dev.mysql.com/doc/mysql/en/password-hashing.html for more information.  If you're on Windows, use the Instant Rails installer to get the updated mysql bindings."
+        else
+          raise
+        end
+      end
+
       def insert_sql(sql, name = nil, pk = nil, id_value = nil, sequence_name = nil)
         super sql, name
         id_value || @connection.last_id
       end
       alias :create :insert_sql
 
+      def update_sql(sql, name = nil)
+        super
+        @connection.affected_rows
+      end
+
+      def begin_db_transaction
+        execute "BEGIN"
+      rescue Exception
+        # Transactions aren't supported
+      end
+
+      def commit_db_transaction
+        execute "COMMIT"
+      rescue Exception
+        # Transactions aren't supported
+      end
+
+      def rollback_db_transaction
+        execute "ROLLBACK"
+      rescue Exception
+        # Transactions aren't supported
+      end
+
+      def create_savepoint
+        execute("SAVEPOINT #{current_savepoint_name}")
+      end
+
+      def rollback_to_savepoint
+        execute("ROLLBACK TO SAVEPOINT #{current_savepoint_name}")
+      end
+
+      def release_savepoint
+        execute("RELEASE SAVEPOINT #{current_savepoint_name}")
+      end
+
+      def add_limit_offset!(sql, options)
+        limit, offset = options[:limit], options[:offset]
+        if limit && offset
+          sql << " LIMIT #{offset.to_i}, #{sanitize_limit(limit)}"
+        elsif limit
+          sql << " LIMIT #{sanitize_limit(limit)}"
+        elsif offset
+          sql << " OFFSET #{offset.to_i}"
+        end
+        sql
+      end
+
       # SCHEMA STATEMENTS ========================================
+
+      def structure_dump
+        if supports_views?
+          sql = "SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'"
+        else
+          sql = "SHOW TABLES"
+        end
+
+        select_all(sql).inject("") do |structure, table|
+          table.delete('Table_type')
+          structure += select_one("SHOW CREATE TABLE #{quote_table_name(table.to_a.first.last)}")["Create Table"] + ";\n\n"
+        end
+      end
+
+      def recreate_database(name, options = {})
+        drop_database(name)
+        create_database(name, options)
+      end
+
+      # Create a new MySQL database with optional <tt>:charset</tt> and <tt>:collation</tt>.
+      # Charset defaults to utf8.
+      #
+      # Example:
+      #   create_database 'charset_test', :charset => 'latin1', :collation => 'latin1_bin'
+      #   create_database 'matt_development'
+      #   create_database 'matt_development', :charset => :big5
+      def create_database(name, options = {})
+        if options[:collation]
+          execute "CREATE DATABASE `#{name}` DEFAULT CHARACTER SET `#{options[:charset] || 'utf8'}` COLLATE `#{options[:collation]}`"
+        else
+          execute "CREATE DATABASE `#{name}` DEFAULT CHARACTER SET `#{options[:charset] || 'utf8'}`"
+        end
+      end
+
+      def drop_database(name) #:nodoc:
+        execute "DROP DATABASE IF EXISTS `#{name}`"
+      end
+
+      def current_database
+        select_value 'SELECT DATABASE() as db'
+      end
+
+      # Returns the database character set.
+      def charset
+        show_variable 'character_set_database'
+      end
+
+      # Returns the database collation strategy.
+      def collation
+        show_variable 'collation_database'
+      end
 
       def tables(name = nil)
         tables = []
@@ -102,6 +362,10 @@ module ActiveRecord
           tables << field.values.first
         end
         tables
+      end
+
+      def drop_table(table_name, options = {})
+        super(table_name, options)
       end
 
       def indexes(table_name, name = nil)
@@ -130,6 +394,89 @@ module ActiveRecord
         columns
       end
 
+      def create_table(table_name, options = {})
+        super(table_name, options.reverse_merge(:options => "ENGINE=InnoDB"))
+      end
+
+      def rename_table(table_name, new_name)
+        execute "RENAME TABLE #{quote_table_name(table_name)} TO #{quote_table_name(new_name)}"
+      end
+
+      def add_column(table_name, column_name, type, options = {})
+        add_column_sql = "ALTER TABLE #{quote_table_name(table_name)} ADD #{quote_column_name(column_name)} #{type_to_sql(type, options[:limit], options[:precision], options[:scale])}"
+        add_column_options!(add_column_sql, options)
+        add_column_position!(add_column_sql, options)
+        execute(add_column_sql)
+      end
+
+      def change_column_default(table_name, column_name, default)
+        column = column_for(table_name, column_name)
+        change_column table_name, column_name, column.sql_type, :default => default
+      end
+
+      def change_column_null(table_name, column_name, null, default = nil)
+        column = column_for(table_name, column_name)
+
+        unless null || default.nil?
+          execute("UPDATE #{quote_table_name(table_name)} SET #{quote_column_name(column_name)}=#{quote(default)} WHERE #{quote_column_name(column_name)} IS NULL")
+        end
+
+        change_column table_name, column_name, column.sql_type, :null => null
+      end
+
+      def change_column(table_name, column_name, type, options = {})
+        column = column_for(table_name, column_name)
+
+        unless options_include_default?(options)
+          options[:default] = column.default
+        end
+
+        unless options.has_key?(:null)
+          options[:null] = column.null
+        end
+
+        change_column_sql = "ALTER TABLE #{quote_table_name(table_name)} CHANGE #{quote_column_name(column_name)} #{quote_column_name(column_name)} #{type_to_sql(type, options[:limit], options[:precision], options[:scale])}"
+        add_column_options!(change_column_sql, options)
+        add_column_position!(change_column_sql, options)
+        execute(change_column_sql)
+      end
+
+      def rename_column(table_name, column_name, new_column_name)
+        options = {}
+        if column = columns(table_name).find { |c| c.name == column_name.to_s }
+          options[:default] = column.default
+          options[:null] = column.null
+        else
+          raise ActiveRecordError, "No such column: #{table_name}.#{column_name}"
+        end
+        current_type = select_one("SHOW COLUMNS FROM #{quote_table_name(table_name)} LIKE '#{column_name}'")["Type"]
+        rename_column_sql = "ALTER TABLE #{quote_table_name(table_name)} CHANGE #{quote_column_name(column_name)} #{quote_column_name(new_column_name)} #{current_type}"
+        add_column_options!(rename_column_sql, options)
+        execute(rename_column_sql)
+      end
+
+      # Maps logical Rails types to MySQL-specific data types.
+      def type_to_sql(type, limit = nil, precision = nil, scale = nil)
+        return super unless type.to_s == 'integer'
+
+        case limit
+        when 1; 'tinyint'
+        when 2; 'smallint'
+        when 3; 'mediumint'
+        when nil, 4, 11; 'int(11)'  # compatibility with MySQL default
+        when 5..8; 'bigint'
+        else raise(ActiveRecordError, "No integer type has byte size #{limit}")
+        end
+      end
+
+      def add_column_position!(sql, options)
+        if options[:first]
+          sql << " FIRST"
+        elsif options[:after]
+          sql << " AFTER #{quote_column_name(options[:after])}"
+        end
+      end
+
       def show_variable(name)
         variables = select_all("SHOW VARIABLES LIKE '#{name}'")
         variables.first[:Value] unless variables.empty?
@@ -138,15 +485,53 @@ module ActiveRecord
       def pk_and_sequence_for(table)
         keys = []
         result = execute("describe #{quote_table_name(table)}")
-        result.each(:symbolize_keys) do |row|
+        result.each(:symbolize_keys => true) do |row|
           keys << row[:Field] if row[:Key] == "PRI"
         end
         keys.length == 1 ? [keys.first, nil] : nil
       end
 
+      # Returns just a table's primary key
+      def primary_key(table)
+        pk_and_sequence = pk_and_sequence_for(table)
+        pk_and_sequence && pk_and_sequence.first
+      end
+
+      def case_sensitive_equality_operator
+        "= BINARY"
+      end
+
+      def limited_update_conditions(where_sql, quoted_table_name, quoted_primary_key)
+        where_sql
+      end
+
+      protected
+        # TODO: implement error_number method on Mysql2::Exception
+        def translate_exception(exception, message)
+          return super unless exception.respond_to?(:error_number)
+
+          case exception.error_number
+          when 1062
+            RecordNotUnique.new(message, exception)
+          when 1452
+            InvalidForeignKey.new(message, exception)
+          else
+            super
+          end
+        end
+
       private
         def connect
           # no-op
+        end
+
+        def configure_connection
+          encoding = @config[:encoding]
+          execute("SET NAMES '#{encoding}'", :skip_logging) if encoding
+
+          # By default, MySQL 'where id is null' selects the last inserted id.
+          # Turn this off. http://dev.rubyonrails.org/ticket/6778
+          execute("SET SQL_AUTO_IS_NULL=0", :skip_logging)
         end
 
         def select(sql, name = nil)
@@ -159,6 +544,13 @@ module ActiveRecord
 
         def version
           @version ||= @connection.info[:version].scan(/^(\d+)\.(\d+)\.(\d+)/).flatten.map { |v| v.to_i }
+        end
+
+        def column_for(table_name, column_name)
+          unless column = columns(table_name).find { |c| c.name == column_name.to_s }
+            raise "No such column: #{table_name}.#{column_name}"
+          end
+          column
         end
     end
   end

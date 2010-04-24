@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4 (April 23rd, 2010)
+* optimization: implemented a local cache for rows that are lazily created in ruby during iteration. The MySQL C result is freed as soon as all the results have been cached
+* optimization: implemented a local cache for field names so every row reuses the same objects as field names/keys
+* refactor the Mysql2 connection adapter for ActiveRecord to not extend the Mysql adapter - now being a free-standing connection adapter
+
 ## 0.1.3 (April 15th, 2010)
 * added an EventMachine Deferrable API
 * added an ActiveRecord connection adapter

@@ -39,7 +39,7 @@ module ActiveRecord
           when :float         then Float
           when :decimal       then BigDecimal
           when :datetime      then Time
-          when :date          then Time
+          when :date          then Date
           when :timestamp     then Time
           when :time          then Time
           when :text, :string then String

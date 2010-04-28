@@ -107,6 +107,7 @@ module ActiveRecord
       self.emulate_booleans = true
 
       ADAPTER_NAME = 'MySQL'.freeze
+      PRIMARY = "PRIMARY".freeze
 
       LOST_CONNECTION_ERROR_MESSAGES = [
         "Server shutdown in progress",

@@ -301,7 +301,6 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
   mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
   MYSQL_FIELD * fields = NULL;
-  struct tm parsedTime;
   unsigned int i = 0, symbolizeKeys = 0;
   unsigned long * fieldLengths;
 
@@ -370,32 +369,42 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
         case MYSQL_TYPE_DOUBLE:     // DOUBLE or REAL field
           val = rb_float_new(strtod(row[i], NULL));
           break;
-        case MYSQL_TYPE_TIME:       // TIME field
-          if (memcmp("00:00:00", row[i], 8) == 0) {
-            val = Qnil;
-          } else {
-            strptime(row[i], "%T", &parsedTime);
-            val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday), INT2NUM(parsedTime.tm_hour), INT2NUM(parsedTime.tm_min), INT2NUM(parsedTime.tm_sec));
-          }
+        case MYSQL_TYPE_TIME: {     // TIME field
+          int hour, min, sec, tokens;
+          tokens = sscanf(row[i], "%2d:%2d:%2d", &hour, &min, &sec);
+          val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(0), INT2NUM(1), INT2NUM(1), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
           break;
+        }
         case MYSQL_TYPE_TIMESTAMP:  // TIMESTAMP field
-        case MYSQL_TYPE_DATETIME:   // DATETIME field
-          if (memcmp("0000-00-00 00:00:00", row[i], 19) == 0) {
+        case MYSQL_TYPE_DATETIME: { // DATETIME field
+          int year, month, day, hour, min, sec, tokens;
+          tokens = sscanf(row[i], "%4d-%2d-%2d %2d:%2d:%2d", &year, &month, &day, &hour, &min, &sec);
+          if (year+month+day+hour+min+sec == 0) {
             val = Qnil;
           } else {
-            strptime(row[i], "%F %T", &parsedTime);
-            val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday), INT2NUM(parsedTime.tm_hour), INT2NUM(parsedTime.tm_min), INT2NUM(parsedTime.tm_sec));
+            if (month < 1 || day < 1) {
+              rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
+            } else {
+              val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(year), INT2NUM(month), INT2NUM(day), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
+            }
           }
           break;
+        }
         case MYSQL_TYPE_DATE:       // DATE field
-        case MYSQL_TYPE_NEWDATE:    // Newer const used > 5.0
-          if (memcmp("0000-00-00", row[i], 10) == 0) {
+        case MYSQL_TYPE_NEWDATE: {  // Newer const used > 5.0
+          int year, month, day, tokens;
+          tokens = sscanf(row[i], "%4d-%2d-%2d", &year, &month, &day);
+          if (year+month+day == 0) {
             val = Qnil;
           } else {
-            strptime(row[i], "%F", &parsedTime);
-            val = rb_funcall(cDate, intern_new, 3, INT2NUM(1900+parsedTime.tm_year), INT2NUM(parsedTime.tm_mon+1), INT2NUM(parsedTime.tm_mday));
+            if (month < 1 || day < 1) {
+              rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
+            } else {
+              val = rb_funcall(cDate, intern_new, 3, INT2NUM(year), INT2NUM(month), INT2NUM(day));
+            }
           }
           break;
+        }
         case MYSQL_TYPE_TINY_BLOB:
         case MYSQL_TYPE_MEDIUM_BLOB:
         case MYSQL_TYPE_LONG_BLOB:

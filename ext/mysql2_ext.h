@@ -1,4 +1,3 @@
-#include <time.h>
 #include <ruby.h>
 
 #ifdef HAVE_MYSQL_H

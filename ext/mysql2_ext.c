@@ -352,8 +352,10 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
         case MYSQL_TYPE_NULL:       // NULL-type field
           val = Qnil;
           break;
-        case MYSQL_TYPE_TINY:       // TINYINT field
         case MYSQL_TYPE_BIT:        // BIT field (MySQL 5.0.3 and up)
+          val = rb_str_new(row[i], fieldLengths[i]);
+          break;
+        case MYSQL_TYPE_TINY:       // TINYINT field
         case MYSQL_TYPE_SHORT:      // SMALLINT field
         case MYSQL_TYPE_LONG:       // INTEGER field
         case MYSQL_TYPE_INT24:      // MEDIUMINT field

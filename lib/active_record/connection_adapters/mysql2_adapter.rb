@@ -480,7 +480,7 @@ module ActiveRecord
 
       def show_variable(name)
         variables = select_all("SHOW VARIABLES LIKE '#{name}'")
-        variables.first[:Value] unless variables.empty?
+        variables.first['Value'] unless variables.empty?
       end
 
       def pk_and_sequence_for(table)

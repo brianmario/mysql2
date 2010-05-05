@@ -14,7 +14,7 @@
 
 #ifdef HAVE_RUBY_ENCODING_H
 #include <ruby/encoding.h>
-int utf8Encoding, binaryEncoding;
+static int utf8Encoding, binaryEncoding;
 #endif
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)
@@ -24,10 +24,10 @@ int utf8Encoding, binaryEncoding;
 #endif
 
 static VALUE cBigDecimal, cDate, cDateTime;
-ID intern_new, intern_local;
+static ID intern_new, intern_local;
 
 /* Mysql2::Error */
-VALUE cMysql2Error;
+static VALUE cMysql2Error;
 
 /* Mysql2::Client */
 #define GetMysql2Client(obj, sval) (sval = (MYSQL*)DATA_PTR(obj));
@@ -45,7 +45,7 @@ static VALUE rb_mysql_client_socket(VALUE self);
 static VALUE rb_mysql_client_async_result(VALUE self);
 static VALUE rb_mysql_client_last_id(VALUE self);
 static VALUE rb_mysql_client_affected_rows(VALUE self);
-void rb_mysql_client_free(void * client);
+static void rb_mysql_client_free(void * client);
 
 /* Mysql2::Result */
 typedef struct {
@@ -58,12 +58,12 @@ typedef struct {
     MYSQL_RES *result;
 } mysql2_result_wrapper;
 #define GetMysql2Result(obj, sval) (sval = (mysql2_result_wrapper*)DATA_PTR(obj));
-VALUE cMysql2Result;
+static VALUE cMysql2Result;
 static VALUE rb_mysql_result_to_obj(MYSQL_RES * res);
 static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self);
-void rb_mysql_result_free(void * wrapper);
-void rb_mysql_result_mark(void * wrapper);
+static void rb_mysql_result_free(void * wrapper);
+static void rb_mysql_result_mark(void * wrapper);
 
 /*
  * used to pass all arguments to mysql_real_connect while inside

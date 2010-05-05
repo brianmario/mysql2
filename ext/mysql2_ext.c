@@ -175,7 +175,7 @@ static VALUE rb_mysql_client_init(RB_MYSQL_UNUSED int argc, RB_MYSQL_UNUSED VALU
   return self;
 }
 
-void rb_mysql_client_free(void * client) {
+static void rb_mysql_client_free(void * client) {
   MYSQL * c = client;
   if (c) {
     /*
@@ -366,7 +366,7 @@ static VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   return obj;
 }
 
-void rb_mysql_result_free(void * wrapper) {
+static void rb_mysql_result_free(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w && w->resultFreed != 1) {
     /* FIXME: this may call flush_use_result, which can hit the socket */
@@ -375,7 +375,7 @@ void rb_mysql_result_free(void * wrapper) {
   }
 }
 
-void rb_mysql_result_mark(void * wrapper) {
+static void rb_mysql_result_mark(void * wrapper) {
     mysql2_result_wrapper * w = wrapper;
     if (w) {
         rb_gc_mark(w->fields);

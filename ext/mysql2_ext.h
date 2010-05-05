@@ -75,6 +75,15 @@ struct nogvl_connect_args {
 };
 
 /*
+ * used to pass all arguments to mysql_send_query while inside
+ * rb_thread_blocking_region
+ */
+struct nogvl_send_query_args {
+    MYSQL *mysql;
+    VALUE sql;
+};
+
+/*
  * partial emulation of the 1.9 rb_thread_blocking_region under 1.8,
  * this is enough for dealing with blocking I/O functions in the
  * presence of threads.

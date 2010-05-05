@@ -17,6 +17,12 @@
 int utf8Encoding, binaryEncoding;
 #endif
 
+#if defined(__GNUC__) && (__GNUC__ >= 3)
+#define RB_MYSQL_UNUSED __attribute__ ((unused))
+#else
+#define RB_MYSQL_UNUSED
+#endif
+
 static VALUE cBigDecimal, cDate, cDateTime;
 ID intern_new, intern_local;
 
@@ -96,7 +102,8 @@ typedef VALUE rb_blocking_function_t(void *);
 static VALUE
 rb_thread_blocking_region(
 	rb_blocking_function_t *func, void *data1,
-	rb_unblock_function_t *ubf, void *data2)
+	RB_MYSQL_UNUSED rb_unblock_function_t *ubf,
+	RB_MYSQL_UNUSED void *data2)
 {
 	VALUE rv;
 

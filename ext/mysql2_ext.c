@@ -146,7 +146,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   }
 
   // set default connection timeout behavior
-  if (connect_timeout != 0 && mysql_options(args.mysql, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout) != 0) {
+  if (connect_timeout != 0 && mysql_options(args.mysql, MYSQL_OPT_CONNECT_TIMEOUT, (const char *)&connect_timeout) != 0) {
     // TODO: warning - unable to set connection timeout
     rb_warn("%s\n", mysql_error(args.mysql));
   }
@@ -171,7 +171,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   return obj;
 }
 
-static VALUE rb_mysql_client_init(int argc, VALUE * argv, VALUE self) {
+static VALUE rb_mysql_client_init(RB_MYSQL_UNUSED int argc, RB_MYSQL_UNUSED VALUE * argv, VALUE self) {
   return self;
 }
 
@@ -205,7 +205,6 @@ static VALUE nogvl_send_query(void *ptr)
 
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   struct nogvl_send_query_args args;
-  MYSQL_RES * result;
   fd_set fdset;
   int fd, retval;
   int async = 0;
@@ -275,7 +274,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   }
 }
 
-static VALUE rb_mysql_client_info(VALUE self) {
+static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE self) {
   VALUE version = rb_hash_new();
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_client_version()));
   rb_hash_aset(version, sym_version, rb_str_new2(mysql_get_client_info()));

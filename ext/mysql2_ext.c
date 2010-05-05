@@ -1,54 +1,73 @@
 #include "mysql2_ext.h"
 
+static VALUE nogvl_connect(void *ptr)
+{
+  struct nogvl_connect_args *args = ptr;
+  MYSQL *client;
+
+  client = mysql_real_connect(args->mysql, args->host,
+                              args->user, args->passwd,
+                              args->db, args->port, args->unix_socket,
+                              args->client_flag);
+
+  return client ? Qtrue : Qfalse;
+}
+
 /* Mysql2::Client */
 static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
-  MYSQL * client;
+  struct nogvl_connect_args args = {
+    .host = "localhost",
+    .user = NULL,
+    .passwd = NULL,
+    .db = NULL,
+    .port = 3306,
+    .unix_socket = NULL,
+    .client_flag = 0
+  };
   VALUE obj, opts;
   VALUE rb_host, rb_socket, rb_port, rb_database,
         rb_username, rb_password, rb_reconnect,
         rb_connect_timeout;
   VALUE rb_ssl_client_key, rb_ssl_client_cert, rb_ssl_ca_cert,
         rb_ssl_ca_path, rb_ssl_cipher;
-  char *host = "localhost", *socket = NULL, *username = NULL,
-       *password = NULL, *database = NULL;
   char *ssl_client_key = NULL, *ssl_client_cert = NULL, *ssl_ca_cert = NULL,
        *ssl_ca_path = NULL, *ssl_cipher = NULL;
-  unsigned int port = 3306, connect_timeout = 0;
+  unsigned int connect_timeout = 0;
   my_bool reconnect = 1;
 
-  obj = Data_Make_Struct(klass, MYSQL, NULL, rb_mysql_client_free, client);
+  obj = Data_Make_Struct(klass, MYSQL, NULL, rb_mysql_client_free, args.mysql);
 
   if (rb_scan_args(argc, argv, "01", &opts) == 1) {
     Check_Type(opts, T_HASH);
 
     if ((rb_host = rb_hash_aref(opts, sym_host)) != Qnil) {
       Check_Type(rb_host, T_STRING);
-      host = RSTRING_PTR(rb_host);
+      args.host = RSTRING_PTR(rb_host);
     }
 
     if ((rb_socket = rb_hash_aref(opts, sym_socket)) != Qnil) {
       Check_Type(rb_socket, T_STRING);
-      socket = RSTRING_PTR(rb_socket);
+      args.unix_socket = RSTRING_PTR(rb_socket);
     }
 
     if ((rb_port = rb_hash_aref(opts, sym_port)) != Qnil) {
       Check_Type(rb_port, T_FIXNUM);
-      port = FIX2INT(rb_port);
+      args.port = FIX2INT(rb_port);
     }
 
     if ((rb_username = rb_hash_aref(opts, sym_username)) != Qnil) {
       Check_Type(rb_username, T_STRING);
-      username = RSTRING_PTR(rb_username);
+      args.user = RSTRING_PTR(rb_username);
     }
 
     if ((rb_password = rb_hash_aref(opts, sym_password)) != Qnil) {
       Check_Type(rb_password, T_STRING);
-      password = RSTRING_PTR(rb_password);
+      args.passwd = RSTRING_PTR(rb_password);
     }
 
     if ((rb_database = rb_hash_aref(opts, sym_database)) != Qnil) {
       Check_Type(rb_database, T_STRING);
-      database = RSTRING_PTR(rb_database);
+      args.db = RSTRING_PTR(rb_database);
     }
 
     if ((rb_reconnect = rb_hash_aref(opts, sym_reconnect)) != Qnil) {
@@ -87,37 +106,37 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
     }
   }
 
-  if (!mysql_init(client)) {
+  if (!mysql_init(args.mysql)) {
     // TODO: warning - not enough memory?
-    rb_raise(cMysql2Error, "%s", mysql_error(client));
+    rb_raise(cMysql2Error, "%s", mysql_error(args.mysql));
     return Qnil;
   }
 
   // set default reconnect behavior
-  if (mysql_options(client, MYSQL_OPT_RECONNECT, &reconnect) != 0) {
+  if (mysql_options(args.mysql, MYSQL_OPT_RECONNECT, &reconnect) != 0) {
     // TODO: warning - unable to set reconnect behavior
-    rb_warn("%s\n", mysql_error(client));
+    rb_warn("%s\n", mysql_error(args.mysql));
   }
 
   // set default connection timeout behavior
-  if (connect_timeout != 0 && mysql_options(client, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout) != 0) {
+  if (connect_timeout != 0 && mysql_options(args.mysql, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout) != 0) {
     // TODO: warning - unable to set connection timeout
-    rb_warn("%s\n", mysql_error(client));
+    rb_warn("%s\n", mysql_error(args.mysql));
   }
 
   // force the encoding to utf8
-  if (mysql_options(client, MYSQL_SET_CHARSET_NAME, "utf8") != 0) {
+  if (mysql_options(args.mysql, MYSQL_SET_CHARSET_NAME, "utf8") != 0) {
     // TODO: warning - unable to set charset
-    rb_warn("%s\n", mysql_error(client));
+    rb_warn("%s\n", mysql_error(args.mysql));
   }
 
   if (ssl_ca_cert != NULL || ssl_client_key != NULL) {
-    mysql_ssl_set(client, ssl_client_key, ssl_client_cert, ssl_ca_cert, ssl_ca_path, ssl_cipher);
+    mysql_ssl_set(args.mysql, ssl_client_key, ssl_client_cert, ssl_ca_cert, ssl_ca_path, ssl_cipher);
   }
 
-  if (mysql_real_connect(client, host, username, password, database, port, socket, 0) == NULL) {
+  if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
-    rb_raise(cMysql2Error, "%s", mysql_error(client));
+    rb_raise(cMysql2Error, "%s", mysql_error(args.mysql));
     return Qnil;
   }
 

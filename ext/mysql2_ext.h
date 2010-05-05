@@ -58,3 +58,43 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self);
 void rb_mysql_result_free(void * wrapper);
 void rb_mysql_result_mark(void * wrapper);
+
+/*
+ * used to pass all arguments to mysql_real_connect while inside
+ * rb_thread_blocking_region
+ */
+struct nogvl_connect_args {
+    MYSQL *mysql;
+    const char *host;
+    const char *user;
+    const char *passwd;
+    const char *db;
+    unsigned int port;
+    const char *unix_socket;
+    unsigned long client_flag;
+};
+
+/*
+ * partial emulation of the 1.9 rb_thread_blocking_region under 1.8,
+ * this is enough for dealing with blocking I/O functions in the
+ * presence of threads.
+ */
+#ifndef HAVE_RB_THREAD_BLOCKING_REGION
+#  include <rubysig.h>
+#  define RUBY_UBF_IO ((rb_unblock_function_t *)-1)
+typedef void rb_unblock_function_t(void *);
+typedef VALUE rb_blocking_function_t(void *);
+static VALUE
+rb_thread_blocking_region(
+	rb_blocking_function_t *func, void *data1,
+	rb_unblock_function_t *ubf, void *data2)
+{
+	VALUE rv;
+
+	TRAP_BEG;
+	rv = func(data1);
+	TRAP_END;
+
+	return rv;
+}
+#endif /* ! HAVE_RB_THREAD_BLOCKING_REGION */

@@ -67,6 +67,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self);
 static void rb_mysql_result_free(void * wrapper);
 static void rb_mysql_result_mark(void * wrapper);
+static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper);
 
 /*
  * used to pass all arguments to mysql_real_connect while inside

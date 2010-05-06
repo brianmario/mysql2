@@ -401,13 +401,20 @@ static VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   return obj;
 }
 
+/* this may be called manually or during GC */
+static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
+  if (wrapper && wrapper->resultFreed != 1) {
+    mysql_free_result(wrapper->result);
+    wrapper->resultFreed = 1;
+  }
+}
+
+/* this is called during GC */
 static void rb_mysql_result_free(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
-  if (w && w->resultFreed != 1) {
-    /* FIXME: this may call flush_use_result, which can hit the socket */
-    mysql_free_result(w->result);
-    w->resultFreed = 1;
-  }
+  /* FIXME: this may call flush_use_result, which can hit the socket */
+  rb_mysql_result_free_result(w);
+  xfree(wrapper);
 }
 
 static void rb_mysql_result_mark(void * wrapper) {
@@ -611,7 +618,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
       if (row == Qnil) {
         // we don't need the mysql C dataset around anymore, peace it
-        rb_mysql_result_free(wrapper);
+        rb_mysql_result_free_result(wrapper);
         return Qnil;
       }
 
@@ -621,7 +628,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     }
     if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
       // we don't need the mysql C dataset around anymore, peace it
-      rb_mysql_result_free(wrapper);
+      rb_mysql_result_free_result(wrapper);
     }
   }
 

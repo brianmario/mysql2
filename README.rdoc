@@ -130,11 +130,11 @@ Me: Yep, but it's API is considerably more complex *and* is 2-3x slower.
 Performing a basic "SELECT * FROM" query on a table with 30k rows and fields of nearly every Ruby-representable data type,
 then iterating over every row using an #each like method yielding a block:
 
-  # And remember, the Mysql gem only gives back nil and strings for values.
+# These results are from the query_with_mysql_casting.rb script in the benchmarks folder
    user       system     total       real
   Mysql2
-   0.610000   0.160000   0.770000 (  0.986967)
+   0.890000   0.190000   1.080000 (  2.028887)
   Mysql
-   0.350000   0.220000   0.570000 (  1.457889)
+   7.330000   0.350000   7.680000 (  8.013160)
   do_mysql
-   1.710000   0.180000   1.890000 (  2.124831)
+   1.740000   0.220000   1.960000 (  2.909290)

@@ -611,7 +611,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
       if (row == Qnil) {
         // we don't need the mysql C dataset around anymore, peace it
-        rb_mysql_result_free(wrapper->result);
+        rb_mysql_result_free(wrapper);
         return Qnil;
       }
 

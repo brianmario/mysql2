@@ -34,6 +34,21 @@ describe Mysql2::Client do
     results[1]['Value'].class.should eql(String)
   end
 
+  it "should respond to #close" do
+    @client.should respond_to :close
+  end
+
+  it "should be able to close properly" do
+    @client.close.should be_nil
+  end
+
+  it "should raise an exception when closed twice" do
+    @client.close.should be_nil
+    lambda {
+      @client.close
+    }.should raise_error(Mysql2::Error)
+  end
+
   it "should respond to #query" do
     @client.should respond_to :query
   end

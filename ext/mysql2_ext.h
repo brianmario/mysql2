@@ -30,7 +30,10 @@ static ID intern_new, intern_local;
 static VALUE cMysql2Error;
 
 /* Mysql2::Client */
-#define GetMysql2Client(obj, sval) (sval = (MYSQL*)DATA_PTR(obj));
+typedef struct {
+    MYSQL * client;
+} mysql2_client_wrapper;
+#define GetMysql2Client(obj, sval) (sval = ((mysql2_client_wrapper*)(DATA_PTR(obj)))->client);
 static ID sym_socket, sym_host, sym_port, sym_username, sym_password,
           sym_database, sym_reconnect, sym_connect_timeout, sym_id, sym_version,
           sym_sslkey, sym_sslcert, sym_sslca, sym_sslcapath, sym_sslcipher,

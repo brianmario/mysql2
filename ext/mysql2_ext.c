@@ -22,6 +22,15 @@
  * - mysql_ssl_set()
  */
 
+static VALUE nogvl_init(void *ptr) {
+  struct nogvl_connect_args *args = ptr;
+
+  /* may initialize embedded server and read /etc/services off disk */
+  args->mysql = mysql_init(NULL);
+
+  return args->mysql == NULL ? Qfalse : Qtrue;
+}
+
 static VALUE nogvl_connect(void *ptr)
 {
   struct nogvl_connect_args *args = ptr;
@@ -37,6 +46,7 @@ static VALUE nogvl_connect(void *ptr)
 
 /* Mysql2::Client */
 static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
+  mysql2_client_wrapper * client;
   struct nogvl_connect_args args = {
     .host = "localhost",
     .user = NULL,
@@ -57,7 +67,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   unsigned int connect_timeout = 0;
   my_bool reconnect = 1;
 
-  obj = Data_Make_Struct(klass, MYSQL, NULL, rb_mysql_client_free, args.mysql);
+  obj = Data_Make_Struct(klass, mysql2_client_wrapper, NULL, rb_mysql_client_free, client);
 
   if (rb_scan_args(argc, argv, "01", &opts) == 1) {
     Check_Type(opts, T_HASH);
@@ -128,12 +138,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
     }
   }
 
-  /*
-   * FIXME: mysql_init may initialize the embedded server and read
-   * /etc/services off disk (always blocking), so in those unlikely
-   * cases we should make this release the GVL
-   */
-  if (!mysql_init(args.mysql)) {
+  if (rb_thread_blocking_region(nogvl_init, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // TODO: warning - not enough memory?
     rb_raise(cMysql2Error, "%s", mysql_error(args.mysql));
     return Qnil;
@@ -167,6 +172,8 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
     return Qnil;
   }
 
+  client->client = args.mysql;
+
   rb_obj_call_init(obj, argc, argv);
   return obj;
 }
@@ -175,15 +182,43 @@ static VALUE rb_mysql_client_init(RB_MYSQL_UNUSED int argc, RB_MYSQL_UNUSED VALU
   return self;
 }
 
-static void rb_mysql_client_free(void * client) {
-  MYSQL * c = client;
-  if (c) {
+static void rb_mysql_client_free(void * ptr) {
+  mysql2_client_wrapper * client = ptr;
+
+  if (client->client) {
     /*
-     * FIXME: this may send a "QUIT" message to the server and thus block
-     * on the socket write)
+     * this may send a "QUIT" message to the server and thus block
+     * on the socket write, users are encouraged to close this manually
+     * to avoid this behavior
      */
-    mysql_close(client);
+    mysql_close(client->client);
   }
+  xfree(ptr);
+}
+
+static VALUE nogvl_close(void * ptr) {
+  mysql_close((MYSQL *)ptr);
+  return Qnil;
+}
+
+/*
+ * Immediately disconnect from the server, normally the garbage collector
+ * will disconnect automatically when a connection is no longer needed.
+ * Explicitly closing this can free up server resources sooner and is
+ * also 100% safe when faced with signals or running multithreaded
+ */
+static VALUE rb_mysql_client_close(VALUE self) {
+  mysql2_client_wrapper *client;
+
+	Data_Get_Struct(self, mysql2_client_wrapper, client);
+
+  if (client->client) {
+    rb_thread_blocking_region(nogvl_close, client->client, RUBY_UBF_IO, 0);
+    client->client = NULL;
+  } else {
+    rb_raise(cMysql2Error, "already closed MySQL connection");
+  }
+  return Qnil;
 }
 
 /*
@@ -607,6 +642,7 @@ void Init_mysql2_ext() {
   VALUE cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
   rb_define_singleton_method(cMysql2Client, "new", rb_mysql_client_new, -1);
   rb_define_method(cMysql2Client, "initialize", rb_mysql_client_init, -1);
+  rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
   rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);

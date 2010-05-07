@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Brian Lopez"]
-  s.date = %q{2010-04-23}
+  s.date = %q{2010-05-07}
   s.email = %q{seniorlopez@gmail.com}
   s.extensions = ["ext/extconf.rb"]
   s.extra_rdoc_files = [
@@ -24,7 +24,9 @@ Gem::Specification.new do |s|
      "VERSION",
      "benchmark/active_record.rb",
      "benchmark/escape.rb",
-     "benchmark/query.rb",
+     "benchmark/query_with_mysql_casting.rb",
+     "benchmark/query_without_mysql_casting.rb",
+     "benchmark/sequel.rb",
      "benchmark/setup_db.rb",
      "examples/eventmachine.rb",
      "ext/extconf.rb",
@@ -34,6 +36,7 @@ Gem::Specification.new do |s|
      "lib/arel/engines/sql/compilers/mysql2_compiler.rb",
      "lib/mysql2.rb",
      "lib/mysql2/em.rb",
+     "lib/sequel/adapters/mysql2.rb",
      "mysql2.gemspec",
      "spec/active_record/active_record_spec.rb",
      "spec/em/em_spec.rb",

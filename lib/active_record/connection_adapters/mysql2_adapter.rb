@@ -13,6 +13,7 @@ module ActiveRecord
 
   module ConnectionAdapters
     class Mysql2Column < Column
+      BOOL = "tinyint(1)".freeze
       def extract_default(default)
         if sql_type =~ /blob/i || type == :text
           if default.blank?
@@ -49,10 +50,20 @@ module ActiveRecord
       end
 
       def type_cast(value)
-        if type == :boolean
-          self.class.value_to_boolean(value)
-        else
-          value
+        return nil if value.nil?
+        case type
+          when :string    then value
+          when :text      then value
+          when :integer   then value.to_i rescue value ? 1 : 0 unless value.is_a?(Fixnum)
+          when :float     then value.to_f unless value.is_a?(Float)
+          when :decimal   then self.class.value_to_decimal(value) unless value.class == BigDecimal
+          when :datetime  then self.class.string_to_time(value) unless value.class == Time
+          when :timestamp then self.class.string_to_time(value) unless value.class == Time
+          when :time      then self.class.string_to_dummy_time(value) unless value.class == Time
+          when :date      then self.class.string_to_date(value) unless value.class == Date
+          when :binary    then value
+          when :boolean   then self.class.value_to_boolean(value)
+          else value
         end
       end
 
@@ -62,8 +73,9 @@ module ActiveRecord
 
       private
         def simplified_type(field_type)
-          return :boolean if Mysql2Adapter.emulate_booleans && field_type.downcase.index("tinyint(1)")
+          return :boolean if Mysql2Adapter.emulate_booleans && field_type.downcase.index(BOOL)
           return :string  if field_type =~ /enum/i
+          return :integer if field_type =~ /year/i
           super
         end
 

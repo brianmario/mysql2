@@ -68,7 +68,11 @@ module ActiveRecord
       end
 
       def type_cast_code(var_name)
-        nil
+        case type
+        when :boolean then "#{self.class.name}.value_to_boolean(#{var_name})"
+        else
+          nil
+        end
       end
 
       private

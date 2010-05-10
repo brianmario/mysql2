@@ -54,13 +54,13 @@ module ActiveRecord
         case type
           when :string    then value
           when :text      then value
-          when :integer   then value.to_i rescue value ? 1 : 0 unless value.is_a?(Fixnum)
-          when :float     then value.to_f unless value.is_a?(Float)
-          when :decimal   then self.class.value_to_decimal(value) unless value.class == BigDecimal
-          when :datetime  then self.class.string_to_time(value) unless value.class == Time
-          when :timestamp then self.class.string_to_time(value) unless value.class == Time
-          when :time      then self.class.string_to_dummy_time(value) unless value.class == Time
-          when :date      then self.class.string_to_date(value) unless value.class == Date
+          when :integer   then value.is_a?(Fixnum) ? value : (value.to_i rescue value ? 1 : 0)
+          when :float     then value.class == Float ? value : value.to_f
+          when :decimal   then value.class == BigDecimal ? value : self.class.value_to_decimal(value)
+          when :datetime  then value.class == Time ? value : self.class.string_to_time(value)
+          when :timestamp then value.class == Time ? value : self.class.string_to_time(value)
+          when :time      then value.class == Time ? value : self.class.string_to_dummy_time(value)
+          when :date      then value.class == Date ? value : self.class.string_to_date(value)
           when :binary    then value
           when :boolean   then self.class.value_to_boolean(value)
           else value

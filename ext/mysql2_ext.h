@@ -1,4 +1,5 @@
 #include <ruby.h>
+#include <fcntl.h>
 
 #ifdef HAVE_MYSQL_H
 #include <mysql.h>

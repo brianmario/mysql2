@@ -187,10 +187,23 @@ static void rb_mysql_client_free(void * ptr) {
 
   if (client->client) {
     /*
-     * this may send a "QUIT" message to the server and thus block
-     * on the socket write, users are encouraged to close this manually
-     * to avoid this behavior
+     * we'll send a QUIT message to the server, but that message is more of a
+     * formality than a hard requirement since the socket is getting shutdown
+     * anyways, so ensure the socket write does not block our interpreter
      */
+    int fd = client->client->net.fd;
+    int flags;
+
+    if (fd >= 0) {
+      /*
+       * if the socket is dead we have no chance of blocking,
+       * so ignore any potential fcntl errors since they don't matter
+       */
+      flags = fcntl(fd, F_GETFL);
+      if (flags > 0 && !(flags & O_NONBLOCK))
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    }
+
     mysql_close(client->client);
   }
   xfree(ptr);
@@ -204,8 +217,8 @@ static VALUE nogvl_close(void * ptr) {
 /*
  * Immediately disconnect from the server, normally the garbage collector
  * will disconnect automatically when a connection is no longer needed.
- * Explicitly closing this can free up server resources sooner and is
- * also 100% safe when faced with signals or running multithreaded
+ * Explicitly closing this will free up server resources sooner than waiting
+ * for the garbage collector.
  */
 static VALUE rb_mysql_client_close(VALUE self) {
   mysql2_client_wrapper *client;

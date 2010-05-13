@@ -6,11 +6,6 @@ describe Mysql2::Client do
     @client = Mysql2::Client.new
   end
 
-  after(:each) do
-    # forcefully clean up old connections
-    GC.start
-  end
-
   it "should be able to connect via SSL options" do
     pending("DON'T WORRY, THIS TEST PASSES :) - but is machine-specific. You need to have MySQL running with SSL configured and enabled. Then update the paths in this test to your needs and remove the pending state.")
     ssl_client = nil

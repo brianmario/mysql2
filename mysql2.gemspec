@@ -41,6 +41,7 @@ Gem::Specification.new do |s|
      "spec/active_record/active_record_spec.rb",
      "spec/em/em_spec.rb",
      "spec/mysql2/client_spec.rb",
+     "spec/mysql2/error_spec.rb",
      "spec/mysql2/result_spec.rb",
      "spec/rcov.opts",
      "spec/spec.opts",
@@ -55,6 +56,7 @@ Gem::Specification.new do |s|
     "spec/active_record/active_record_spec.rb",
      "spec/em/em_spec.rb",
      "spec/mysql2/client_spec.rb",
+     "spec/mysql2/error_spec.rb",
      "spec/mysql2/result_spec.rb",
      "spec/spec_helper.rb",
      "examples/eventmachine.rb"

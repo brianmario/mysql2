@@ -155,7 +155,7 @@ module Sequel
 
       # Convert tinyint(1) type to boolean if convert_tinyint_to_bool is true
       def schema_column_type(db_type)
-        Sequel::MySQL.convert_tinyint_to_bool && db_type == 'tinyint(1)' ? :boolean : super
+        Sequel::Mysql2.convert_tinyint_to_bool && db_type == 'tinyint(1)' ? :boolean : super
       end
     end
 
@@ -204,12 +204,12 @@ module Sequel
 
       # Insert a new value into this dataset
       def insert(*values)
-        execute_dui(insert_sql(*values)){|c| return c.insert_id}
+        execute_dui(insert_sql(*values)){|c| return c.last_id}
       end
 
       # Replace (update or insert) the matching row.
       def replace(*args)
-        execute_dui(replace_sql(*args)){|c| return c.insert_id}
+        execute_dui(replace_sql(*args)){|c| return c.last_id}
       end
 
       # Update the matching rows.
@@ -229,9 +229,9 @@ module Sequel
         super(sql, {:type=>:dui}.merge(opts), &block)
       end
 
-      # Handle correct quoting of strings using ::MySQL.quote.
+      # Handle correct quoting of strings using ::Mysql2#escape.
       def literal_string(v)
-        db.synchronize{|c| "'#{c.quote(v)}'"}
+        db.synchronize{|c| "'#{c.escape(v)}'"}
       end
     end
   end

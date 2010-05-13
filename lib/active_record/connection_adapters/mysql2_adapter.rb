@@ -244,7 +244,6 @@ module ActiveRecord
 
       def disconnect!
         @connection.close
-        @connection = nil
       end
 
       def reset!

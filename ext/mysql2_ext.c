@@ -268,6 +268,10 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   Check_Type(args.sql, T_STRING);
 
   GetMysql2Client(self, args.mysql);
+  if (!args.mysql) {
+    rb_raise(cMysql2Error, "closed MySQL connection");
+    return Qnil;
+  }
   if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
     rb_raise(cMysql2Error, "%s", mysql_error(args.mysql));
     return Qnil;
@@ -308,7 +312,10 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   char escaped[(oldLen*2)+1];
 
   GetMysql2Client(self, client);
-
+  if (!client) {
+    rb_raise(cMysql2Error, "closed MySQL connection");
+    return Qnil;
+  }
   newLen = mysql_real_escape_string(client, escaped, RSTRING_PTR(str), RSTRING_LEN(str));
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
@@ -334,6 +341,10 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
   VALUE version;
 
   GetMysql2Client(self, client);
+  if (!client) {
+    rb_raise(cMysql2Error, "closed MySQL connection");
+    return Qnil;
+  }
   version = rb_hash_new();
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_server_version(client)));
   rb_hash_aset(version, sym_version, rb_str_new2(mysql_get_server_info(client)));
@@ -341,7 +352,11 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 }
 
 static VALUE rb_mysql_client_socket(VALUE self) {
-  MYSQL * client = GetMysql2Client(self, client);;
+  MYSQL * client = GetMysql2Client(self, client);
+  if (!client) {
+    rb_raise(cMysql2Error, "closed MySQL connection");
+    return Qnil;
+  }
   return INT2NUM(client->net.fd);
 }
 
@@ -369,7 +384,10 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   MYSQL * client;
   MYSQL_RES * result;
   GetMysql2Client(self, client);
-
+  if (!client) {
+    rb_raise(cMysql2Error, "closed MySQL connection");
+    return Qnil;
+  }
   if (rb_thread_blocking_region(nogvl_read_query_result, client, RUBY_UBF_IO, 0) == Qfalse) {
     rb_raise(cMysql2Error, "%s", mysql_error(client));
     return Qnil;
@@ -389,14 +407,20 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 static VALUE rb_mysql_client_last_id(VALUE self) {
   MYSQL * client;
   GetMysql2Client(self, client);
-
+  if (!client) {
+    rb_raise(cMysql2Error, "closed MySQL connection");
+    return Qnil;
+  }
   return ULL2NUM(mysql_insert_id(client));
 }
 
 static VALUE rb_mysql_client_affected_rows(VALUE self) {
   MYSQL * client;
   GetMysql2Client(self, client);
-
+  if (!client) {
+    rb_raise(cMysql2Error, "closed MySQL connection");
+    return Qnil;
+  }
   return ULL2NUM(mysql_affected_rows(client));
 }
 

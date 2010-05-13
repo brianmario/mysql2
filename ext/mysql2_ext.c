@@ -566,6 +566,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           } else {
             if (month < 1 || day < 1) {
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
+              val = Qnil;
             } else {
               val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(year), INT2NUM(month), INT2NUM(day), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
             }
@@ -581,6 +582,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           } else {
             if (month < 1 || day < 1) {
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
+              val = Qnil;
             } else {
               val = rb_funcall(cDate, intern_new, 3, INT2NUM(year), INT2NUM(month), INT2NUM(day));
             }

@@ -534,6 +534,19 @@ module ActiveRecord
       end
 
       protected
+        def quoted_columns_for_index(column_names, options = {})
+          length = options[:length] if options.is_a?(Hash)
+
+          quoted_column_names = case length
+          when Hash
+            column_names.map {|name| length[name] ? "#{quote_column_name(name)}(#{length[name]})" : quote_column_name(name) }
+          when Fixnum
+            column_names.map {|name| "#{quote_column_name(name)}(#{length})"}
+          else
+            column_names.map {|name| quote_column_name(name) }
+          end
+        end
+
         # TODO: implement error_number method on Mysql2::Exception
         def translate_exception(exception, message)
           return super unless exception.respond_to?(:error_number)

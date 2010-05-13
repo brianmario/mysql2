@@ -243,10 +243,12 @@ module ActiveRecord
       end
 
       def disconnect!
+        @connection.close
         @connection = nil
       end
 
       def reset!
+        disconnect!
         @connection = Mysql2::Client.new(@config)
       end
 

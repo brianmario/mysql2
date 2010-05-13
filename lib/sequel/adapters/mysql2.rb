@@ -150,7 +150,7 @@ module Sequel
 
       # Closes given database connection.
       def disconnect_connection(c)
-        c = nil
+        c.close
       end
 
       # Convert tinyint(1) type to boolean if convert_tinyint_to_bool is true

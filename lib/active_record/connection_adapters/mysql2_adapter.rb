@@ -69,9 +69,18 @@ module ActiveRecord
 
       def type_cast_code(var_name)
         case type
-        when :boolean then "#{self.class.name}.value_to_boolean(#{var_name})"
-        else
-          nil
+          when :string    then nil
+          when :text      then nil
+          when :integer   then "(#{var_name}.is_a?(Fixnum) ? #{var_name} : (#{var_name}.to_i rescue value ? 1 : 0))"
+          when :float     then "#{var_name}.class == Float ? #{var_name} : #{var_name}.to_f"
+          when :decimal   then "#{var_name}.class == BigDecimal ? #{var_name} : #{self.class.name}.value_to_decimal(#{var_name})"
+          when :datetime  then "#{var_name}.class == Time ? #{var_name} : #{self.class.name}.string_to_time(#{var_name})"
+          when :timestamp then "#{var_name}.class == Time ? #{var_name} : #{self.class.name}.string_to_time(#{var_name})"
+          when :time      then "#{var_name}.class == Time ? #{var_name} : #{self.class.name}.string_to_dummy_time(#{var_name})"
+          when :date      then "#{var_name}.class == Date ? #{var_name} : #{self.class.name}.string_to_date(#{var_name})"
+          when :binary    then nil
+          when :boolean   then "#{self.class.name}.value_to_boolean(#{var_name})"
+          else nil
         end
       end
 

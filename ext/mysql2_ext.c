@@ -140,8 +140,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
 
   if (rb_thread_blocking_region(nogvl_init, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // TODO: warning - not enough memory?
-    rb_raise(cMysql2Error, "%s", mysql_error(args.mysql));
-    return Qnil;
+    return rb_raise_mysql2_error(args.mysql);
   }
 
   // set default reconnect behavior
@@ -168,8 +167,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
 
   if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
-    rb_raise(cMysql2Error, "%s", mysql_error(args.mysql));
-    return Qnil;
+    return rb_raise_mysql2_error(args.mysql);;
   }
 
   client->client = args.mysql;
@@ -273,8 +271,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     return Qnil;
   }
   if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
-    rb_raise(cMysql2Error, "%s", mysql_error(args.mysql));
-    return Qnil;
+    return rb_raise_mysql2_error(args.mysql);;
   }
 
   if (!async) {
@@ -389,14 +386,13 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
   if (rb_thread_blocking_region(nogvl_read_query_result, client, RUBY_UBF_IO, 0) == Qfalse) {
-    rb_raise(cMysql2Error, "%s", mysql_error(client));
-    return Qnil;
+    return rb_raise_mysql2_error(client);
   }
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, client, RUBY_UBF_IO, 0);
   if (result == NULL) {
     if (mysql_field_count(client) != 0) {
-      rb_raise(cMysql2Error, "%s", mysql_error(client));
+      rb_raise_mysql2_error(client);
     }
     return Qnil;
   }
@@ -674,6 +670,22 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   return wrapper->rows;
 }
 
+static VALUE rb_mysql_error_error_number(VALUE obj) {
+    return rb_iv_get(obj, "error_number");
+}
+
+static VALUE rb_mysql_error_sql_state(VALUE obj) {
+    return rb_iv_get(obj, "sql_state");
+}
+
+static VALUE rb_raise_mysql2_error(MYSQL *client) {
+  VALUE e = rb_exc_new2(cMysql2Error, mysql_error(client));
+  rb_iv_set(e, "error_number", INT2FIX(mysql_errno(client)));
+  rb_iv_set(e, "sql_state", rb_tainted_str_new2(mysql_sqlstate(client)));
+  rb_exc_raise(e);
+  return Qnil;
+}
+
 /* Ruby Extension initializer */
 void Init_mysql2_ext() {
   rb_require("date");
@@ -699,6 +711,8 @@ void Init_mysql2_ext() {
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
 
   cMysql2Error = rb_define_class_under(mMysql2, "Error", rb_eStandardError);
+  rb_define_method(cMysql2Error, "error_number", rb_mysql_error_error_number, 0);
+  rb_define_method(cMysql2Error, "sql_state", rb_mysql_error_sql_state, 0);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);

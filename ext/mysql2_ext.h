@@ -70,6 +70,11 @@ static void rb_mysql_result_free(void * wrapper);
 static void rb_mysql_result_mark(void * wrapper);
 static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper);
 
+/* Mysql2::Error */
+static VALUE rb_raise_mysql2_error(MYSQL *client);
+static VALUE rb_mysql_error_error_number(VALUE obj);
+static VALUE rb_mysql_error_sql_state(VALUE obj);
+
 /*
  * used to pass all arguments to mysql_real_connect while inside
  * rb_thread_blocking_region

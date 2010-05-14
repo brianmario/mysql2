@@ -24,7 +24,7 @@ module ActiveRecord
         elsif missing_default_forged_as_empty_string?(default)
           nil
         else
-          super
+          type_cast_default_value(default)
         end
       end
 
@@ -50,39 +50,37 @@ module ActiveRecord
       end
 
       def type_cast(value)
-        return nil if value.nil?
         case type
-          when :string                then value
-          when :text                  then value
-          when :integer               then value.to_i rescue value ? 1 : 0
-          when :float                 then value.to_f # returns self if it's already a Float
-          when :decimal               then self.class.value_to_decimal(value)
-          when :datetime, :timestamp  then value.class == Time ? value : self.class.string_to_time(value)
-          when :time                  then value.class == Time ? value : self.class.string_to_dummy_time(value)
-          when :date                  then value.class == Date ? value : self.class.string_to_date(value)
-          when :binary                then value
-          when :boolean               then self.class.value_to_boolean(value)
+          when :boolean then self.class.value_to_boolean(value)
           else value
         end
       end
 
       def type_cast_code(var_name)
         case type
-          when :string                then nil
-          when :text                  then nil
-          when :integer               then "#{var_name}.to_i rescue #{var_name} ? 1 : 0"
-          when :float                 then "#{var_name}.to_f"
-          when :decimal               then "#{self.class.name}.value_to_decimal(#{var_name})"
-          when :datetime, :timestamp  then "#{var_name}.class == Time ? #{var_name} : #{self.class.name}.string_to_time(#{var_name})"
-          when :time                  then "#{var_name}.class == Time ? #{var_name} : #{self.class.name}.string_to_dummy_time(#{var_name})"
-          when :date                  then "#{var_name}.class == Date ? #{var_name} : #{self.class.name}.string_to_date(#{var_name})"
-          when :binary                then nil
-          when :boolean               then "#{self.class.name}.value_to_boolean(#{var_name})"
+          when :boolean then "#{self.class.name}.value_to_boolean(#{var_name})"
           else nil
         end
       end
 
       private
+        def type_cast_default_value(value)
+          return nil if value.nil?
+          case type
+            when :string                then value
+            when :text                  then value
+            when :integer               then value.to_i rescue value ? 1 : 0
+            when :float                 then value.to_f
+            when :decimal               then self.class.value_to_decimal(value)
+            when :datetime, :timestamp  then self.class.string_to_time(value)
+            when :time                  then self.class.string_to_dummy_time(value)
+            when :date                  then self.class.string_to_date(value)
+            when :binary                then value
+            when :boolean               then self.class.value_to_boolean(value)
+            else value
+          end
+        end
+
         def simplified_type(field_type)
           return :boolean if Mysql2Adapter.emulate_booleans && field_type.downcase.index(BOOL)
           return :string  if field_type =~ /enum/i

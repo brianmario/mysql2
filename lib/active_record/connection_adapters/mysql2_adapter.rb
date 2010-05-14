@@ -70,7 +70,7 @@ module ActiveRecord
         case type
           when :string                then nil
           when :text                  then nil
-          when :integer               then "#{var_name}.to_i rescue value ? 1 : 0"
+          when :integer               then "#{var_name}.to_i rescue #{var_name} ? 1 : 0"
           when :float                 then "#{var_name}.to_f"
           when :decimal               then "#{self.class.name}.value_to_decimal(#{var_name})"
           when :datetime, :timestamp  then "#{var_name}.class == Time ? #{var_name} : #{self.class.name}.string_to_time(#{var_name})"

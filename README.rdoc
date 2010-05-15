@@ -109,7 +109,7 @@ The specs pass on my system (SL 10.6.3, x86_64) in these rubies:
 * ree-1.8.7-2010.01
 * 1.9.1-p378
 * ruby-trunk
-* rbx-head
+* rbx-head - broken at the moment, working with the rbx team for a solution
 
 The ActiveRecord driver should work on 2.3.5 and 3.0
 

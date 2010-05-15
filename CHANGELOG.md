@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6 (May 14th, 2010)
+* more fixes to the AR adapter related to casting
+* add missing index creation override method to AR adapter
+* added sql_state and error_number methods to the Mysql2::Error exception class
+
 ## 0.1.5 (May 12th, 2010)
 * quite a few patches from Eric Wong related to thread-safety, non-blocking I/O and general cleanup
 ** wrap mysql_real_connect with rb_thread_blocking_region

@@ -101,6 +101,17 @@ while specifying callbacks for success for failure. Here's a simple example:
     end
   end
 
+== Lazy Everything
+
+Well... almost ;)
+
+Field name strings/symbols are shared across all the rows so only one object is ever created to represent the field name for an entire dataset.
+
+Rows themselves are lazily created in ruby-land when an attempt to yield it is made via #each.
+For example, if you were to yield 4 rows from a 100 row dataset, only 4 hashes will be created. The rest will sit and wait in C-land until you want them (or when the GC goes to cleanup your Mysql2::Result instance).
+
+As for field values themselves, I'm workin on it - but expect that soon.
+
 == Compatibility
 
 The specs pass on my system (SL 10.6.3, x86_64) in these rubies:

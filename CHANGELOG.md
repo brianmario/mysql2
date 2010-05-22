@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.7 (May 22nd, 2010)
+* fix a bug when using the disconnect! method on a closed connection in the AR driver
+
 ## 0.1.6 (May 14th, 2010)
 * more fixes to the AR adapter related to casting
 * add missing index creation override method to AR adapter

@@ -550,7 +550,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
         case MYSQL_TYPE_TIME: {     // TIME field
           int hour, min, sec, tokens;
           tokens = sscanf(row[i], "%2d:%2d:%2d", &hour, &min, &sec);
-          val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(0), INT2NUM(1), INT2NUM(1), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
+          val = rb_funcall(rb_cTime, intern_utc, 6, INT2NUM(0), INT2NUM(1), INT2NUM(1), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
           break;
         }
         case MYSQL_TYPE_TIMESTAMP:  // TIMESTAMP field
@@ -564,7 +564,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
               val = Qnil;
             } else {
-              val = rb_funcall(rb_cTime, intern_local, 6, INT2NUM(year), INT2NUM(month), INT2NUM(day), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
+              val = rb_funcall(rb_cTime, intern_utc, 6, INT2NUM(year), INT2NUM(month), INT2NUM(day), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
             }
           }
           break;
@@ -721,7 +721,7 @@ void Init_mysql2_ext() {
   rb_include_module(cMysql2Result, mEnumerable);
 
   intern_new = rb_intern("new");
-  intern_local = rb_intern("local");
+  intern_utc = rb_intern("utc");
 
   sym_symbolize_keys = ID2SYM(rb_intern("symbolize_keys"));
   sym_reconnect = ID2SYM(rb_intern("reconnect"));

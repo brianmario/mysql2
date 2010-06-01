@@ -25,7 +25,7 @@ static int utf8Encoding, binaryEncoding;
 #endif
 
 static VALUE cBigDecimal, cDate, cDateTime;
-static ID intern_new, intern_local;
+static ID intern_new, intern_utc;
 
 /* Mysql2::Error */
 static VALUE cMysql2Error;

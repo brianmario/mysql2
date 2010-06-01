@@ -57,8 +57,8 @@ module ActiveRecord
           when :integer               then value.to_i rescue value ? 1 : 0
           when :float                 then value.to_f # returns self if it's already a Float
           when :decimal               then self.class.value_to_decimal(value)
-          when :datetime, :timestamp  then value.class == Time ? value.in_time_zone(Base.default_timezone) : self.class.string_to_time(value)
-          when :time                  then value.class == Time ? value.in_time_zone(Base.default_timezone) : self.class.string_to_dummy_time(value)
+          when :datetime, :timestamp  then value.class == Time ? value.in_time_zone : self.class.string_to_time(value)
+          when :time                  then value.class == Time ? value.in_time_zone : self.class.string_to_dummy_time(value)
           when :date                  then value.class == Date ? value : self.class.string_to_date(value)
           when :binary                then value
           when :boolean               then self.class.value_to_boolean(value)
@@ -73,8 +73,8 @@ module ActiveRecord
           when :integer               then "#{var_name}.to_i rescue #{var_name} ? 1 : 0"
           when :float                 then "#{var_name}.to_f"
           when :decimal               then "#{self.class.name}.value_to_decimal(#{var_name})"
-          when :datetime, :timestamp  then "#{var_name}.class == Time ? #{var_name}.in_time_zone(Base.default_timezone) : #{self.class.name}.string_to_time(#{var_name})"
-          when :time                  then "#{var_name}.class == Time ? #{var_name}.in_time_zone(Base.default_timezone) : #{self.class.name}.string_to_dummy_time(#{var_name})"
+          when :datetime, :timestamp  then "#{var_name}.class == Time ? #{var_name}.in_time_zone : #{self.class.name}.string_to_time(#{var_name})"
+          when :time                  then "#{var_name}.class == Time ? #{var_name}.in_time_zone : #{self.class.name}.string_to_dummy_time(#{var_name})"
           when :date                  then "#{var_name}.class == Date ? #{var_name} : #{self.class.name}.string_to_date(#{var_name})"
           when :binary                then nil
           when :boolean               then "#{self.class.name}.value_to_boolean(#{var_name})"

@@ -155,4 +155,4 @@ then iterating over every row using an #each like method yielding a block:
 == Special Thanks
 
 * Eric Wong - for the contribution (and informative explanations of) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude
-* Yury Korolev (http://github.com/yury) - for TONS of help testing on the ActiveRecord adapter
+* Yury Korolev (http://github.com/yury) - for TONS of help testing the ActiveRecord adapter

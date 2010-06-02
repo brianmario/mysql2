@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8 (June 2nd, 2010)
+* fixes for AR adapter for timezone juggling
+* fixes to be able to run benchmarks and specs under 1.9.2
+
 ## 0.1.7 (May 22nd, 2010)
 * fix a bug when using the disconnect! method on a closed connection in the AR driver
 

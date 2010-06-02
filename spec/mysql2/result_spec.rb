@@ -176,7 +176,11 @@ describe Mysql2::Result do
 
     it "should return Time for a TIME value" do
       @test_result['time_test'].class.should eql(Time)
-      @test_result['time_test'].strftime("%F %T").should eql('2000-01-01 11:44:00')
+      if RUBY_VERSION =~ /1.9.2/
+        @test_result['time_test'].strftime("%F %T").should eql('0000-01-01 11:44:00')
+      else
+        @test_result['time_test'].strftime("%F %T").should eql('2000-01-01 11:44:00')
+      end
     end
 
     it "should return Date for a DATE value" do

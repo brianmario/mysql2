@@ -1,4 +1,5 @@
 # encoding: UTF-8
+$LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/..')
 
 # This script is for generating psudo-random data into a single table consisting of nearly every
 # data type MySQL 5.1 supports.

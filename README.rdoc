@@ -136,7 +136,7 @@ them into proper Ruby types in Ruby-land - which is slow as balls.
 
 Someone: OK fine, but do_mysql can already give me back values with Ruby objects mapped to MySQL types.
 
-Me: Yep, but it's API is considerably more complex *and* is 2-3x slower.
+Me: Yep, but it's API is considerably more complex *and* can be ~2x slower.
 
 == Benchmarks
 

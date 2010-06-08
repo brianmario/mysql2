@@ -28,6 +28,7 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
   context "columns" do
     before(:all) do
       ActiveRecord::Base.default_timezone = 'Pacific Time (US & Canada)'
+      ActiveRecord::Base.time_zone_aware_attributes = true
       ActiveRecord::Base.establish_connection(:adapter => 'mysql2', :database => 'test')
       Mysql2Test2.connection.execute %[
         CREATE TABLE IF NOT EXISTS mysql2_test2 (
@@ -123,9 +124,9 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
       test.double_test.should eql('1.0000'.to_f)
       test.decimal_test.should eql(BigDecimal.new('1.0000'))
       test.date_test.should eql(Date.parse('2010-01-01'))
-      test.date_time_test.should eql(DateTime.parse('2010-01-01 00:00:00'))
+      test.date_time_test.should eql(Time.utc(2010,1,1,0,0,0))
       test.timestamp_test.class.should eql(ActiveSupport::TimeWithZone)
-      test.time_test.class.should eql(ActiveSupport::TimeWithZone)
+      test.time_test.class.should eql(Time)
       test.year_test.should eql(2010)
       test.char_test.should eql('abcdefghij')
       test.varchar_test.should eql('abcdefghij')

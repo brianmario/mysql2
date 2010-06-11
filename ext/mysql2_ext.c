@@ -31,8 +31,7 @@ static VALUE nogvl_init(void *ptr) {
   return args->mysql == NULL ? Qfalse : Qtrue;
 }
 
-static VALUE nogvl_connect(void *ptr)
-{
+static VALUE nogvl_connect(void *ptr) {
   struct nogvl_connect_args *args = ptr;
   MYSQL *client;
 
@@ -237,8 +236,7 @@ static VALUE rb_mysql_client_close(VALUE self) {
  * enough to fit in a socket buffer, but sometimes large UPDATE and
  * INSERTs will cause the process to block
  */
-static VALUE nogvl_send_query(void *ptr)
-{
+static VALUE nogvl_send_query(void *ptr) {
   struct nogvl_send_query_args *args = ptr;
   int rv;
   const char *sql = RSTRING_PTR(args->sql);
@@ -362,8 +360,7 @@ static VALUE rb_mysql_client_socket(VALUE self) {
  * response can overflow the socket buffers and cause us to eventually
  * block while calling mysql_read_query_result
  */
-static VALUE nogvl_read_query_result(void *ptr)
-{
+static VALUE nogvl_read_query_result(void *ptr) {
   MYSQL * client = ptr;
   my_bool res = mysql_read_query_result(client);
 
@@ -371,8 +368,7 @@ static VALUE nogvl_read_query_result(void *ptr)
 }
 
 /* mysql_store_result may (unlikely) read rows off the socket */
-static VALUE nogvl_store_result(void *ptr)
-{
+static VALUE nogvl_store_result(void *ptr) {
   MYSQL * client = ptr;
   return (VALUE)mysql_store_result(client);
 }
@@ -463,8 +459,7 @@ static void rb_mysql_result_mark(void * wrapper) {
  * reliable way for us to tell this so we'll always release the GVL
  * to be safe
  */
-static VALUE nogvl_fetch_row(void *ptr)
-{
+static VALUE nogvl_fetch_row(void *ptr) {
   MYSQL_RES *result = ptr;
 
   return (VALUE)mysql_fetch_row(result);

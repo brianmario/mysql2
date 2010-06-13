@@ -15,7 +15,7 @@
 
 #ifdef HAVE_RUBY_ENCODING_H
 #include <ruby/encoding.h>
-static int utf8Encoding, binaryEncoding;
+static rb_encoding *utf8Encoding, *binaryEncoding;
 #endif
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)

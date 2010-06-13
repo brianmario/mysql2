@@ -301,6 +301,9 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   MYSQL * client;
   VALUE newStr;
   unsigned long newLen, oldLen;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+#endif
 
   Check_Type(str, T_STRING);
   oldLen = RSTRING_LEN(str);
@@ -318,7 +321,10 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   } else {
     newStr = rb_str_new(escaped, newLen);
 #ifdef HAVE_RUBY_ENCODING_H
-    rb_enc_associate_index(newStr, utf8Encoding);
+    rb_enc_associate(newStr, utf8Encoding);
+    if (default_internal_enc) {
+      newStr = rb_str_export_to_enc(newStr, default_internal_enc);
+    }
 #endif
     return newStr;
   }
@@ -473,6 +479,9 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
   unsigned int i = 0, symbolizeKeys = 0;
   unsigned long * fieldLengths;
   void * ptr;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+#endif
 
   GetMysql2Result(self, wrapper);
 
@@ -511,7 +520,10 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
       } else {
         field = rb_str_new(fields[i].name, fields[i].name_length);
 #ifdef HAVE_RUBY_ENCODING_H
-        rb_enc_associate_index(field, utf8Encoding);
+        rb_enc_associate(field, utf8Encoding);
+        if (default_internal_enc) {
+          field = rb_str_export_to_enc(field, default_internal_enc);
+        }
 #endif
       }
       rb_ary_store(wrapper->fields, i, field);
@@ -595,9 +607,12 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
 #ifdef HAVE_RUBY_ENCODING_H
           // rudimentary check for binary content
           if ((fields[i].flags & BINARY_FLAG) || fields[i].charsetnr == 63) {
-            rb_enc_associate_index(val, binaryEncoding);
+            rb_enc_associate(val, binaryEncoding);
           } else {
-            rb_enc_associate_index(val, utf8Encoding);
+            rb_enc_associate(val, utf8Encoding);
+            if (default_internal_enc) {
+              val = rb_str_export_to_enc(val, default_internal_enc);
+            }
           }
 #endif
           break;
@@ -737,7 +752,7 @@ void Init_mysql2_ext() {
   sym_async = ID2SYM(rb_intern("async"));
 
 #ifdef HAVE_RUBY_ENCODING_H
-  utf8Encoding = rb_enc_find_index("UTF-8");
-  binaryEncoding = rb_enc_find_index("binary");
+  utf8Encoding = rb_utf8_encoding();
+  binaryEncoding = rb_enc_find("binary");
 #endif
 }

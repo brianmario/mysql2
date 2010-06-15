@@ -74,6 +74,22 @@ describe Mysql2::Client do
     info[:version].class.should eql(String)
   end
 
+  if RUBY_VERSION =~ /^1.9/
+    context "strings returned by #info" do
+      it "should default to utf-8 if Encoding.default_internal is nil" do
+        Encoding.default_internal = nil
+        @client.info[:version].encoding.should eql(Encoding.find('utf-8'))
+      end
+
+      it "should use Encoding.default_internal" do
+        Encoding.default_internal = Encoding.find('utf-8')
+        @client.info[:version].encoding.should eql(Encoding.default_internal)
+        Encoding.default_internal = Encoding.find('us-ascii')
+        @client.info[:version].encoding.should eql(Encoding.default_internal)
+      end
+    end
+  end
+
   it "should respond to #server_info" do
     @client.should respond_to :server_info
   end
@@ -85,6 +101,22 @@ describe Mysql2::Client do
     server_info[:id].class.should eql(Fixnum)
     server_info.should have_key(:version)
     server_info[:version].class.should eql(String)
+  end
+
+  if RUBY_VERSION =~ /^1.9/
+    context "strings returned by #server_info" do
+      it "should default to utf-8 if Encoding.default_internal is nil" do
+        Encoding.default_internal = nil
+        @client.server_info[:version].encoding.should eql(Encoding.find('utf-8'))
+      end
+
+      it "should use Encoding.default_internal" do
+        Encoding.default_internal = Encoding.find('utf-8')
+        @client.server_info[:version].encoding.should eql(Encoding.default_internal)
+        Encoding.default_internal = Encoding.find('us-ascii')
+        @client.server_info[:version].encoding.should eql(Encoding.default_internal)
+      end
+    end
   end
 
   it "should respond to #socket" do

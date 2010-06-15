@@ -331,15 +331,29 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 }
 
 static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE self) {
-  VALUE version = rb_hash_new();
+  VALUE version = rb_hash_new(), client_info;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+#endif
+
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_client_version()));
-  rb_hash_aset(version, sym_version, rb_str_new2(mysql_get_client_info()));
+  client_info = rb_str_new2(mysql_get_client_info());
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_enc_associate(client_info, utf8Encoding);
+  if (default_internal_enc) {
+    client_info = rb_str_export_to_enc(client_info, default_internal_enc);
+  }
+#endif
+  rb_hash_aset(version, sym_version, client_info);
   return version;
 }
 
 static VALUE rb_mysql_client_server_info(VALUE self) {
   MYSQL * client;
-  VALUE version;
+  VALUE version, server_info;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+#endif
 
   GetMysql2Client(self, client);
   if (!client) {
@@ -348,7 +362,14 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
   }
   version = rb_hash_new();
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_server_version(client)));
-  rb_hash_aset(version, sym_version, rb_str_new2(mysql_get_server_info(client)));
+  server_info = rb_str_new2(mysql_get_server_info(client));
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_enc_associate(server_info, utf8Encoding);
+  if (default_internal_enc) {
+    server_info = rb_str_export_to_enc(server_info, default_internal_enc);
+  }
+#endif
+  rb_hash_aset(version, sym_version, server_info);
   return version;
 }
 

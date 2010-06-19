@@ -47,6 +47,22 @@ describe Mysql2::Result do
     end
   end
 
+  context "#fields" do
+    before(:all) do
+      @client.query "USE test"
+      @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1")
+    end
+
+    it "method should exist" do
+      @test_result.should respond_to(:fields)
+    end
+
+    it "should return an array of field names in proper order" do
+      result = @client.query "SELECT 'a', 'b', 'c'"
+      result.fields.should eql(['a', 'b', 'c'])
+    end
+  end
+
   context "row data type mapping" do
     before(:all) do
       @client.query "USE test"

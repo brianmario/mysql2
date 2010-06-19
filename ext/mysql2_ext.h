@@ -55,10 +55,10 @@ static void rb_mysql_client_free(void * client);
 typedef struct {
     VALUE fields;
     VALUE rows;
-    unsigned long numberOfFields;
+    unsigned int numberOfFields;
     unsigned long numberOfRows;
     unsigned long lastRowProcessed;
-    int resultFreed;
+    short int resultFreed;
     MYSQL_RES *result;
 } mysql2_result_wrapper;
 #define GetMysql2Result(obj, sval) (sval = (mysql2_result_wrapper*)DATA_PTR(obj));

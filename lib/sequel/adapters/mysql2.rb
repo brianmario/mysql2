@@ -191,7 +191,7 @@ module Sequel
       # instead of yielding results for all statements as hashes.
       def fetch_rows(sql, &block)
         execute(sql) do |r|
-          r.each &block
+          r.each(:symbolize_keys => true, &block)
         end
         self
       end

@@ -5,6 +5,7 @@ require 'mysql2' unless defined? Mysql2
 module ActiveRecord
   class Base
     def self.mysql2_connection(config)
+      config[:username] = 'root' if config[:username].nil?
       client = Mysql2::Client.new(config.symbolize_keys)
       options = [config[:host], config[:username], config[:password], config[:database], config[:port], config[:socket], 0]
       ConnectionAdapters::Mysql2Adapter.new(client, logger, options, config)

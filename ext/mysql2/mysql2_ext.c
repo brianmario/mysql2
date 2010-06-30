@@ -736,18 +736,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   return wrapper->rows;
 }
 
-static VALUE rb_mysql_error_error_number(VALUE obj) {
-    return rb_iv_get(obj, "error_number");
-}
-
-static VALUE rb_mysql_error_sql_state(VALUE obj) {
-    return rb_iv_get(obj, "sql_state");
-}
-
 static VALUE rb_raise_mysql2_error(MYSQL *client) {
   VALUE e = rb_exc_new2(cMysql2Error, mysql_error(client));
-  rb_iv_set(e, "error_number", INT2FIX(mysql_errno(client)));
-  rb_iv_set(e, "sql_state", rb_tainted_str_new2(mysql_sqlstate(client)));
+  rb_funcall(e, rb_intern("error_number="), 1, INT2NUM(mysql_errno(client)));
+  rb_funcall(e, rb_intern("sql_state="), 1, rb_tainted_str_new2(mysql_sqlstate(client)));
   rb_exc_raise(e);
   return Qnil;
 }
@@ -773,9 +765,7 @@ void Init_mysql2() {
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
 
-  cMysql2Error = rb_define_class_under(mMysql2, "Error", rb_eStandardError);
-  rb_define_method(cMysql2Error, "error_number", rb_mysql_error_error_number, 0);
-  rb_define_method(cMysql2Error, "sql_state", rb_mysql_error_sql_state, 0);
+  cMysql2Error = rb_const_get(mMysql2, rb_intern("Error"));
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);

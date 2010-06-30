@@ -2,7 +2,8 @@
 require 'date'
 require 'bigdecimal'
 
-require 'mysql2.so'
+require 'mysql2/error'
+require 'mysql2/mysql2'
 
 # = Mysql2
 #

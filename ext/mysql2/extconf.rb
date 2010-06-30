@@ -1,6 +1,10 @@
 # encoding: UTF-8
 require 'mkmf'
 
+def asplode lib
+  abort "-----\n#{lib} is missing.  please check your installation of mysql and try again.\n-----"
+end
+
 # 1.9-only
 have_func('rb_thread_blocking_region')
 
@@ -41,41 +45,17 @@ else
 end
 
 if have_header('mysql.h') then
-  src = "#include <errmsg.h>\n#include <mysqld_error.h>\n"
+  prefix = nil
 elsif have_header('mysql/mysql.h') then
-  src = "#include <mysql/errmsg.h>\n#include <mysql/mysqld_error.h>\n"
+  prefix = 'mysql'
 else
-  exit 1
+  asplode 'mysql.h'
 end
 
-# make mysql constant
-File.open("conftest.c", "w") do |f|
-  f.puts src
+%w{ errmsg.h mysqld_error.h }.each do |h|
+  header = [prefix, h].compact.join '/'
+  asplode h unless have_header h
 end
-if defined? cpp_command then
-  cpp = Config.expand(cpp_command(''))
-else
-  cpp = Config.expand sprintf(CPP, $CPPFLAGS, $CFLAGS, '')
-end
-if /mswin32/ =~ RUBY_PLATFORM && !/-E/.match(cpp)
-  cpp << " -E"
-end
-unless system "#{cpp} > confout" then
-  exit 1
-end
-File.unlink "conftest.c"
-
-error_syms = []
-IO.foreach('confout') do |l|
-  next unless l =~ /errmsg\.h|mysqld_error\.h/
-  fn = l.split(/\"/)[1]
-  IO.foreach(fn) do |m|
-    if m =~ /^#define\s+([CE]R_[0-9A-Z_]+)/ then
-      error_syms << $1
-    end
-  end
-end
-File.unlink 'confout'
 
 $CFLAGS << ' -Wall -Wextra -funroll-loops'
 # $CFLAGS << ' -O0 -ggdb3'

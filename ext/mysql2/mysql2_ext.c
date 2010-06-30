@@ -753,7 +753,7 @@ static VALUE rb_raise_mysql2_error(MYSQL *client) {
 }
 
 /* Ruby Extension initializer */
-void Init_mysql2_ext() {
+void Init_mysql2() {
   rb_require("date");
   rb_require("bigdecimal");
 

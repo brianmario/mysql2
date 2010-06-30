@@ -1,5 +1,5 @@
 # encoding: UTF-8
-require 'mysql2_ext'
+require 'mysql2.so'
 
 # = Mysql2
 #

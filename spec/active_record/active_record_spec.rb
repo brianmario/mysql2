@@ -1,5 +1,6 @@
 # encoding: UTF-8
 require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
+require 'rubygems'
 require 'active_record'
 require 'active_record/connection_adapters/mysql2_adapter'
 

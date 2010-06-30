@@ -80,4 +80,4 @@ File.unlink 'confout'
 $CFLAGS << ' -Wall -Wextra -funroll-loops'
 # $CFLAGS << ' -O0 -ggdb3'
 
-create_makefile('mysql2_ext')
+create_makefile('mysql2/mysql2')

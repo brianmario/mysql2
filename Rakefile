@@ -1,7 +1,7 @@
 # encoding: UTF-8
 begin
   require 'jeweler'
-  Jeweler::Tasks.new do |gem|
+  JEWELER = Jeweler::Tasks.new do |gem|
     gem.name = "mysql2"
     gem.summary = "A simple, fast Mysql library for Ruby, binding to libmysql"
     gem.email = "seniorlopez@gmail.com"
@@ -10,7 +10,7 @@ begin
     gem.require_paths = ["lib", "ext"]
     gem.extra_rdoc_files = `git ls-files *.rdoc`.split("\n")
     gem.files = `git ls-files`.split("\n")
-    gem.extensions = ["ext/extconf.rb"]
+    gem.extensions = ["ext/mysql2/extconf.rb"]
     gem.files.include %w(lib/jeweler/templates/.document lib/jeweler/templates/.gitignore)
     # gem.rubyforge_project = "mysql2"
   end
@@ -20,6 +20,8 @@ end
 
 require 'rake'
 require 'spec/rake/spectask'
+gem 'rake-compiler', '>= 0.4.1'
+require "rake/extensiontask"
 
 desc "Run all examples with RCov"
 Spec::Rake::SpecTask.new('spec:rcov') do |t|
@@ -33,3 +35,6 @@ Spec::Rake::SpecTask.new('spec') do |t|
   t.spec_files = FileList['spec/']
   t.spec_opts << '--options' << 'spec/spec.opts'
 end
+
+Rake::ExtensionTask.new("mysql2", JEWELER.gemspec)
+Rake::Task[:spec].prerequisites << :compile

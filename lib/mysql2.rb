@@ -1,4 +1,7 @@
 # encoding: UTF-8
+require 'date'
+require 'bigdecimal'
+
 require 'mysql2.so'
 
 # = Mysql2

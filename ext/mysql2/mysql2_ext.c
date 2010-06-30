@@ -754,9 +754,6 @@ static VALUE rb_raise_mysql2_error(MYSQL *client) {
 
 /* Ruby Extension initializer */
 void Init_mysql2() {
-  rb_require("date");
-  rb_require("bigdecimal");
-
   cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));

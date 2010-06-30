@@ -39,7 +39,6 @@ static ID sym_socket, sym_host, sym_port, sym_username, sym_password,
           sym_database, sym_reconnect, sym_connect_timeout, sym_id, sym_version,
           sym_sslkey, sym_sslcert, sym_sslca, sym_sslcapath, sym_sslcipher,
           sym_symbolize_keys, sym_async;
-static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass);
 static VALUE rb_mysql_client_init(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str);
@@ -72,8 +71,6 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper);
 
 /* Mysql2::Error */
 static VALUE rb_raise_mysql2_error(MYSQL *client);
-static VALUE rb_mysql_error_error_number(VALUE obj);
-static VALUE rb_mysql_error_sql_state(VALUE obj);
 
 /*
  * used to pass all arguments to mysql_real_connect while inside

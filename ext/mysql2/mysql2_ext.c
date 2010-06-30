@@ -43,8 +43,21 @@ static VALUE nogvl_connect(void *ptr) {
   return client ? Qtrue : Qfalse;
 }
 
+static VALUE allocate(VALUE klass)
+{
+  mysql2_client_wrapper * client;
+
+  return Data_Make_Struct(
+      klass,
+      mysql2_client_wrapper,
+      NULL,
+      rb_mysql_client_free,
+      client
+  );
+}
+
 /* Mysql2::Client */
-static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
+static VALUE rb_mysql_client_init(int argc, VALUE * argv, VALUE self) {
   mysql2_client_wrapper * client;
   struct nogvl_connect_args args = {
     .host = "localhost",
@@ -55,7 +68,7 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
     .unix_socket = NULL,
     .client_flag = 0
   };
-  VALUE obj, opts;
+  VALUE opts;
   VALUE rb_host, rb_socket, rb_port, rb_database,
         rb_username, rb_password, rb_reconnect,
         rb_connect_timeout;
@@ -66,7 +79,8 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
   unsigned int connect_timeout = 0;
   my_bool reconnect = 1;
 
-  obj = Data_Make_Struct(klass, mysql2_client_wrapper, NULL, rb_mysql_client_free, client);
+  /* FIXME: refactor this to not use mysql2_client_wrapper */
+  Data_Get_Struct(self, mysql2_client_wrapper, client);
 
   if (rb_scan_args(argc, argv, "01", &opts) == 1) {
     Check_Type(opts, T_HASH);
@@ -171,11 +185,6 @@ static VALUE rb_mysql_client_new(int argc, VALUE * argv, VALUE klass) {
 
   client->client = args.mysql;
 
-  rb_obj_call_init(obj, argc, argv);
-  return obj;
-}
-
-static VALUE rb_mysql_client_init(RB_MYSQL_UNUSED int argc, RB_MYSQL_UNUSED VALUE * argv, VALUE self) {
   return self;
 }
 
@@ -751,9 +760,10 @@ void Init_mysql2() {
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
 
   VALUE mMysql2 = rb_define_module("Mysql2");
-
   VALUE cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
-  rb_define_singleton_method(cMysql2Client, "new", rb_mysql_client_new, -1);
+
+  rb_define_alloc_func(cMysql2Client, allocate);
+
   rb_define_method(cMysql2Client, "initialize", rb_mysql_client_init, -1);
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);

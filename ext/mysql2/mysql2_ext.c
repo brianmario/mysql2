@@ -91,33 +91,27 @@ static VALUE rb_mysql_client_init(int argc, VALUE * argv, VALUE self) {
     Check_Type(opts, T_HASH);
 
     if ((rb_host = rb_hash_aref(opts, sym_host)) != Qnil) {
-      Check_Type(rb_host, T_STRING);
-      args.host = RSTRING_PTR(rb_host);
+      args.host = StringValuePtr(rb_host);
     }
 
     if ((rb_socket = rb_hash_aref(opts, sym_socket)) != Qnil) {
-      Check_Type(rb_socket, T_STRING);
-      args.unix_socket = RSTRING_PTR(rb_socket);
+      args.unix_socket = StringValuePtr(rb_socket);
     }
 
     if ((rb_port = rb_hash_aref(opts, sym_port)) != Qnil) {
-      Check_Type(rb_port, T_FIXNUM);
-      args.port = FIX2INT(rb_port);
+      args.port = NUM2INT(rb_port);
     }
 
     if ((rb_username = rb_hash_aref(opts, sym_username)) != Qnil) {
-      Check_Type(rb_username, T_STRING);
-      args.user = RSTRING_PTR(rb_username);
+      args.user = StringValuePtr(rb_username);
     }
 
     if ((rb_password = rb_hash_aref(opts, sym_password)) != Qnil) {
-      Check_Type(rb_password, T_STRING);
-      args.passwd = RSTRING_PTR(rb_password);
+      args.passwd = StringValuePtr(rb_password);
     }
 
     if ((rb_database = rb_hash_aref(opts, sym_database)) != Qnil) {
-      Check_Type(rb_database, T_STRING);
-      args.db = RSTRING_PTR(rb_database);
+      args.db = StringValuePtr(rb_database);
     }
 
     if ((rb_reconnect = rb_hash_aref(opts, sym_reconnect)) != Qnil) {
@@ -125,34 +119,28 @@ static VALUE rb_mysql_client_init(int argc, VALUE * argv, VALUE self) {
     }
 
     if ((rb_connect_timeout = rb_hash_aref(opts, sym_connect_timeout)) != Qnil) {
-      Check_Type(rb_connect_timeout, T_FIXNUM);
-      connect_timeout = FIX2INT(rb_connect_timeout);
+      connect_timeout = NUM2INT(rb_connect_timeout);
     }
 
     // SSL options
     if ((rb_ssl_client_key = rb_hash_aref(opts, sym_sslkey)) != Qnil) {
-      Check_Type(rb_ssl_client_key, T_STRING);
-      ssl_client_key = RSTRING_PTR(rb_ssl_client_key);
+      ssl_client_key = StringValuePtr(rb_ssl_client_key);
     }
 
     if ((rb_ssl_client_cert = rb_hash_aref(opts, sym_sslcert)) != Qnil) {
-      Check_Type(rb_ssl_client_cert, T_STRING);
-      ssl_client_cert = RSTRING_PTR(rb_ssl_client_cert);
+      ssl_client_cert = StringValuePtr(rb_ssl_client_cert);
     }
 
     if ((rb_ssl_ca_cert = rb_hash_aref(opts, sym_sslca)) != Qnil) {
-      Check_Type(rb_ssl_ca_cert, T_STRING);
-      ssl_ca_cert = RSTRING_PTR(rb_ssl_ca_cert);
+      ssl_ca_cert = StringValuePtr(rb_ssl_ca_cert);
     }
 
     if ((rb_ssl_ca_path = rb_hash_aref(opts, sym_sslcapath)) != Qnil) {
-      Check_Type(rb_ssl_ca_path, T_STRING);
-      ssl_ca_path = RSTRING_PTR(rb_ssl_ca_path);
+      ssl_ca_path = StringValuePtr(rb_ssl_ca_path);
     }
 
     if ((rb_ssl_cipher = rb_hash_aref(opts, sym_sslcipher)) != Qnil) {
-      Check_Type(rb_ssl_cipher, T_STRING);
-      ssl_cipher = RSTRING_PTR(rb_ssl_cipher);
+      ssl_cipher = StringValuePtr(rb_ssl_cipher);
     }
   }
 
@@ -248,7 +236,7 @@ static VALUE rb_mysql_client_close(VALUE self) {
 static VALUE nogvl_send_query(void *ptr) {
   struct nogvl_send_query_args *args = ptr;
   int rv;
-  const char *sql = RSTRING_PTR(args->sql);
+  const char *sql = StringValuePtr(args->sql);
   long sql_len = RSTRING_LEN(args->sql);
 
   rv = mysql_send_query(args->mysql, sql, sql_len);
@@ -322,7 +310,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   Data_Get_Struct(self, MYSQL, client);
 
   REQUIRE_OPEN_DB(client);
-  newLen = mysql_real_escape_string(client, escaped, RSTRING_PTR(str), RSTRING_LEN(str));
+  newLen = mysql_real_escape_string(client, escaped, StringValuePtr(str), RSTRING_LEN(str));
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
     return str;
@@ -344,7 +332,7 @@ static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE self) {
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
 #endif
 
-  rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_client_version()));
+  rb_hash_aset(version, sym_id, LONG2NUM(mysql_get_client_version()));
   client_info = rb_str_new2(mysql_get_client_info());
 #ifdef HAVE_RUBY_ENCODING_H
   rb_enc_associate(client_info, utf8Encoding);

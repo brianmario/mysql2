@@ -4,6 +4,7 @@ require 'bigdecimal'
 
 require 'mysql2/error'
 require 'mysql2/mysql2'
+require 'mysql2/client'
 
 # = Mysql2
 #

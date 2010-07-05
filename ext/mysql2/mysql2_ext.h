@@ -30,11 +30,7 @@ static ID intern_new, intern_utc;
 /* Mysql2::Error */
 static VALUE cMysql2Error;
 
-static ID sym_socket, sym_host, sym_port, sym_username, sym_password,
-          sym_database, sym_reconnect, sym_connect_timeout, sym_id, sym_version,
-          sym_sslkey, sym_sslcert, sym_sslca, sym_sslcapath, sym_sslcipher,
-          sym_symbolize_keys, sym_async;
-static VALUE rb_mysql_client_init(int argc, VALUE * argv, VALUE self);
+static ID sym_id, sym_version, sym_symbolize_keys, sym_async;
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self);
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str);
 static VALUE rb_mysql_client_info(VALUE self);

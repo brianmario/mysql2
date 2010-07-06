@@ -1,3 +1,6 @@
+#ifndef MYSQL2_EXT
+#define MYSQL2_EXT
+
 #include <ruby.h>
 #include <fcntl.h>
 
@@ -15,7 +18,10 @@
 
 #ifdef HAVE_RUBY_ENCODING_H
 #include <ruby/encoding.h>
-static rb_encoding *utf8Encoding, *binaryEncoding;
+#endif
+
+#ifdef HAVE_RUBY_ENCODING_H
+extern rb_encoding *utf8Encoding;
 #endif
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)
@@ -24,22 +30,12 @@ static rb_encoding *utf8Encoding, *binaryEncoding;
 #define RB_MYSQL_UNUSED
 #endif
 
-static VALUE cBigDecimal, cDate, cDateTime;
-static ID intern_new, intern_utc;
+#include <result.h>
+
+extern VALUE mMysql2;
 
 /* Mysql2::Error */
-static VALUE cMysql2Error;
-
-static ID sym_id, sym_version, sym_symbolize_keys, sym_async;
-static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self);
-static VALUE rb_mysql_client_escape(VALUE self, VALUE str);
-static VALUE rb_mysql_client_info(VALUE self);
-static VALUE rb_mysql_client_server_info(VALUE self);
-static VALUE rb_mysql_client_socket(VALUE self);
-static VALUE rb_mysql_client_async_result(VALUE self);
-static VALUE rb_mysql_client_last_id(VALUE self);
-static VALUE rb_mysql_client_affected_rows(VALUE self);
-static void rb_mysql_client_free(void * client);
+extern VALUE cMysql2Error;
 
 /* Mysql2::Result */
 typedef struct {
@@ -52,16 +48,6 @@ typedef struct {
     MYSQL_RES *result;
 } mysql2_result_wrapper;
 #define GetMysql2Result(obj, sval) (sval = (mysql2_result_wrapper*)DATA_PTR(obj));
-static VALUE cMysql2Result;
-static VALUE rb_mysql_result_to_obj(MYSQL_RES * res);
-static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self);
-static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self);
-static void rb_mysql_result_free(void * wrapper);
-static void rb_mysql_result_mark(void * wrapper);
-static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper);
-
-/* Mysql2::Error */
-static VALUE rb_raise_mysql2_error(MYSQL *client);
 
 /*
  * used to pass all arguments to mysql_real_connect while inside
@@ -112,3 +98,5 @@ rb_thread_blocking_region(
 	return rv;
 }
 #endif /* ! HAVE_RB_THREAD_BLOCKING_REGION */
+
+#endif

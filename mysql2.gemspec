@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Brian Lopez"]
-  s.date = %q{2010-07-04}
+  s.date = %q{2010-07-06}
   s.email = %q{seniorlopez@gmail.com}
   s.extensions = ["ext/mysql2/extconf.rb"]
   s.extra_rdoc_files = [
@@ -38,6 +38,7 @@ Gem::Specification.new do |s|
      "lib/mysql2/client.rb",
      "lib/mysql2/em.rb",
      "lib/mysql2/error.rb",
+     "lib/mysql2/result.rb",
      "lib/sequel/adapters/mysql2.rb",
      "mysql2.gemspec",
      "spec/active_record/active_record_spec.rb",

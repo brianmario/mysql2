@@ -756,9 +756,6 @@ void Init_mysql2() {
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
 
-  VALUE mEnumerable = rb_const_get(rb_cObject, rb_intern("Enumerable"));
-  rb_include_module(cMysql2Result, mEnumerable);
-
   intern_new = rb_intern("new");
   intern_utc = rb_intern("utc");
 

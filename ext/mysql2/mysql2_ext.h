@@ -27,6 +27,7 @@
 #endif
 
 #include <result.h>
+#include <statement.h>
 
 extern VALUE mMysql2;
 

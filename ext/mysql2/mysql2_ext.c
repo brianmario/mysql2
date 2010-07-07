@@ -455,6 +455,21 @@ static VALUE init_connection(VALUE self)
   return self;
 }
 
+/* call-seq: client.create_statement # => Mysql2::Statement
+ *
+ * Create a new prepared statement.
+ */
+static VALUE create_statement(VALUE self)
+{
+  MYSQL * client;
+  MYSQL_STMT * stmt;
+
+  Data_Get_Struct(self, MYSQL, client);
+  stmt = mysql_stmt_init(client);
+
+  return Data_Wrap_Struct(cMysql2Statement, 0, mysql_stmt_close, stmt);
+}
+
 /* Ruby Extension initializer */
 void Init_mysql2() {
   mMysql2 = rb_define_module("Mysql2");
@@ -471,6 +486,7 @@ void Init_mysql2() {
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
+  rb_define_method(cMysql2Client, "create_statement", create_statement, 0);
 
   rb_define_private_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
@@ -482,6 +498,7 @@ void Init_mysql2() {
   cMysql2Error = rb_const_get(mMysql2, rb_intern("Error"));
 
   init_mysql2_result();
+  init_mysql2_statement();
 
   sym_id = ID2SYM(rb_intern("id"));
   sym_version = ID2SYM(rb_intern("version"));

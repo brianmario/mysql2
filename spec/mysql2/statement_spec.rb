@@ -2,7 +2,7 @@
 require 'spec_helper'
 
 describe Mysql2::Statement do
-  before :all do
+  before :each do
     @client = Mysql2::Client.new :host => "localhost", :username => "root"
   end
 
@@ -25,5 +25,14 @@ describe Mysql2::Statement do
     stmt = @client.create_statement
     @client.close
     lambda { stmt.prepare 'SELECT 1' }.should raise_error(Mysql2::Error)
+  end
+
+  it "should tell us the param count" do
+    stmt = @client.create_statement
+    stmt.prepare 'SELECT ?, ?'
+    stmt.param_count.should == 2
+
+    stmt.prepare 'SELECT 1'
+    stmt.param_count.should == 0
   end
 end

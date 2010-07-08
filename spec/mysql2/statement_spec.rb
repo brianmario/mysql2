@@ -44,4 +44,10 @@ describe Mysql2::Statement do
     stmt.prepare 'SELECT 1'
     stmt.field_count.should == 1
   end
+
+  it "should let us execute our statement" do
+    stmt = @client.create_statement
+    stmt.prepare 'SELECT 1'
+    stmt.execute.should == stmt
+  end
 end

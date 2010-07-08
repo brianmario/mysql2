@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.9 (HEAD)
+* Support async ActiveRecord access with fibers and EventMachine (mperham)
+
 ## 0.1.8 (June 2nd, 2010)
 * fixes for AR adapter for timezone juggling
 * fixes to be able to run benchmarks and specs under 1.9.2

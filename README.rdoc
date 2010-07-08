@@ -80,6 +80,11 @@ If you need multiple query concurrency take a look at using a connection pool.
 To use the ActiveRecord driver, all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
 That was easy right? :)
 
+== Asynchronous ActiveRecord
+
+You can also use Mysql2 with asynchronous Rails (first introduced at http://www.mikeperham.com/2010/04/03/introducing-phat-an-asynchronous-rails-app/) by
+setting the adapter in your database.yml to "em_mysql2".  You must be running Ruby 1.9, thin and the rack-fiber_pool middleware for it to work.
+
 == EventMachine
 
 The mysql2 EventMachine deferrable api allows you to make async queries using EventMachine,

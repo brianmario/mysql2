@@ -50,4 +50,9 @@ describe Mysql2::Statement do
     stmt.prepare 'SELECT 1'
     stmt.execute.should == stmt
   end
+
+  it "should raise an exception on error" do
+    stmt = @client.create_statement
+    lambda { stmt.execute }.should raise_error(Mysql2::Error)
+  end
 end

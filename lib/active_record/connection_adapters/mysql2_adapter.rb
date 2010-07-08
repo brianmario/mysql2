@@ -256,12 +256,11 @@ module ActiveRecord
       # DATABASE STATEMENTS ======================================
 
       def select_values(sql, name = nil)
-        result = select_rows(sql, name)
-        result.map { |row| row.values.first }
+        select(sql, name).map { |row| row.values.first }
       end
 
       def select_rows(sql, name = nil)
-        select(sql, name)
+        select(sql, name).map { |row| row.values }
       end
 
       # Executes a SQL query and returns a MySQL::Result object. Note that you have to free the Result object after you're done using it.

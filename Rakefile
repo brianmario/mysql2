@@ -1,5 +1,6 @@
 # encoding: UTF-8
 begin
+  require 'rubygems'
   require 'jeweler'
   JEWELER = Jeweler::Tasks.new do |gem|
     gem.name = "mysql2"

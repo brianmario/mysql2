@@ -35,4 +35,13 @@ describe Mysql2::Statement do
     stmt.prepare 'SELECT 1'
     stmt.param_count.should == 0
   end
+
+  it "should tell us the field count" do
+    stmt = @client.create_statement
+    stmt.prepare 'SELECT ?, ?'
+    stmt.field_count.should == 2
+
+    stmt.prepare 'SELECT 1'
+    stmt.field_count.should == 1
+  end
 end

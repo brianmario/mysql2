@@ -51,7 +51,8 @@ static VALUE execute(VALUE self)
   MYSQL_STMT * stmt;
   Data_Get_Struct(self, MYSQL_STMT, stmt);
 
-  mysql_stmt_execute(stmt);
+  if(mysql_stmt_execute(stmt))
+    rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
 
   return self;
 }

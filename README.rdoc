@@ -152,10 +152,10 @@ then iterating over every row using an #each like method yielding a block:
    user       system     total       real
   Mysql2
    0.890000   0.190000   1.080000 (  2.028887)
-  Mysql
-   7.330000   0.350000   7.680000 (  8.013160)
   do_mysql
    1.740000   0.220000   1.960000 (  2.909290)
+  Mysql
+   7.330000   0.350000   7.680000 (  8.013160)
 
 == Special Thanks
 

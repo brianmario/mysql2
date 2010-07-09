@@ -209,12 +209,17 @@ describe Mysql2::Result do
       @test_result['enum_test'].should eql('val1')
     end
 
-    if RUBY_VERSION =~ /^1.9/
+    if defined? Encoding
       context "string encoding for ENUM values" do
-        it "should default to utf-8 if Encoding.default_internal is nil" do
+        it "should default to the connection's encoding if Encoding.default_internal is nil" do
           Encoding.default_internal = nil
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['enum_test'].encoding.should eql(Encoding.find('utf-8'))
+
+          client2 = Mysql2::Client.new :encoding => 'ascii'
+          client2.query "USE test"
+          result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
         end
 
         it "should use Encoding.default_internal" do
@@ -233,12 +238,17 @@ describe Mysql2::Result do
       @test_result['set_test'].should eql('val1,val2')
     end
 
-    if RUBY_VERSION =~ /^1.9/
+    if defined? Encoding
       context "string encoding for SET values" do
-        it "should default to utf-8 if Encoding.default_internal is nil" do
+        it "should default to the connection's encoding if Encoding.default_internal is nil" do
           Encoding.default_internal = nil
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['set_test'].encoding.should eql(Encoding.find('utf-8'))
+
+          client2 = Mysql2::Client.new :encoding => 'ascii'
+          client2.query "USE test"
+          result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
         end
 
         it "should use Encoding.default_internal" do
@@ -257,7 +267,7 @@ describe Mysql2::Result do
       @test_result['binary_test'].should eql("test#{"\000"*6}")
     end
 
-    if RUBY_VERSION =~ /^1.9/
+    if defined? Encoding
       context "string encoding for BINARY values" do
         it "should default to binary if Encoding.default_internal is nil" do
           Encoding.default_internal = nil
@@ -294,7 +304,7 @@ describe Mysql2::Result do
         @test_result[field].should eql("test")
       end
 
-      if RUBY_VERSION =~ /^1.9/
+      if defined? Encoding
         context "string encoding for #{type} values" do
           if ['VARBINARY', 'TINYBLOB', 'BLOB', 'MEDIUMBLOB', 'LONGBLOB'].include?(type)
             it "should default to binary if Encoding.default_internal is nil" do
@@ -316,6 +326,11 @@ describe Mysql2::Result do
               Encoding.default_internal = nil
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               result[field].encoding.should eql(Encoding.find('utf-8'))
+
+              client2 = Mysql2::Client.new :encoding => 'ascii'
+              client2.query "USE test"
+              result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+              result[field].encoding.should eql(Encoding.find('us-ascii'))
             end
 
             it "should use Encoding.default_internal" do

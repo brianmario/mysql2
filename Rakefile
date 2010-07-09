@@ -37,6 +37,12 @@ Spec::Rake::SpecTask.new('spec') do |t|
   t.spec_opts << '--options' << 'spec/spec.opts'
 end
 
+Spec::Rake::SpecTask.new('spec:gdb') do |t|
+  t.spec_files = FileList['spec/']
+  t.spec_opts << '--options' << 'spec/spec.opts'
+  t.ruby_cmd = "gdb --args #{RUBY}"
+end
+
 Rake::ExtensionTask.new("mysql2", JEWELER.gemspec) do |ext|
   ext.lib_dir = File.join 'lib', 'mysql2'
 end

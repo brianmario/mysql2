@@ -221,6 +221,12 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     }
   }
 
+#ifdef HAVE_RUBY_ENCODING_H
+    rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+    // ensure the string is in the encoding the connection is expecting
+    args.sql = rb_str_export_to_enc(args.sql, conn_enc);
+#endif
+
   Check_Type(args.sql, T_STRING);
   Data_Get_Struct(self, MYSQL, client);
 

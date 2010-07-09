@@ -100,6 +100,13 @@ static VALUE each(VALUE self)
   MYSQL_STMT * stmt;
   MYSQL_FIELD * fields;
   MYSQL_RES * metadata;
+
+  MYSQL_BIND * binds;
+  my_bool * is_null;
+  my_bool * error;
+  unsigned long * length;
+  int int_data;
+
   unsigned int field_count;
   unsigned int i;
   VALUE block;
@@ -111,8 +118,53 @@ static VALUE each(VALUE self)
   fields      = mysql_fetch_fields(metadata);
   field_count = mysql_stmt_field_count(stmt);
 
+  binds   = xcalloc(field_count, sizeof(MYSQL_BIND));
+  is_null = xcalloc(field_count, sizeof(my_bool));
+  error   = xcalloc(field_count, sizeof(my_bool));
+  length  = xcalloc(field_count, sizeof(unsigned long));
+
   for(i = 0; i < field_count; i++) {
+    switch(fields[i].type) {
+      case MYSQL_TYPE_LONGLONG:
+        binds[i].buffer_type = MYSQL_TYPE_LONG;
+        binds[i].buffer      = (char *)&int_data;
+        break;
+      default:
+        rb_raise(cMysql2Error, "unhandled mysql type: %d", fields[i].type);
+    }
+
+    binds[i].is_null = &is_null[i];
+    binds[i].length  = &length[i];
+    binds[i].error   = &error[i];
   }
+
+  /* FIXME: if this raises, we need to free our allocated buffers */
+  if(mysql_stmt_bind_result(stmt, binds))
+    rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+
+  while(!mysql_stmt_fetch(stmt)) {
+    VALUE row = rb_ary_new2((long)field_count);
+
+    for(i = 0; i < field_count; i++) {
+      VALUE column = Qnil;
+      switch(binds[i].buffer_type) {
+        case MYSQL_TYPE_LONG:
+          column = INT2NUM(int_data);
+          break;
+        default:
+          rb_raise(cMysql2Error, "unhandled buffer type: %d",
+              binds[i].buffer_type);
+          break;
+      }
+      rb_ary_store(row, (long)i, column);
+    }
+    rb_yield(row);
+  }
+
+  xfree(binds);
+  xfree(is_null);
+  xfree(error);
+  xfree(length);
 
   return self;
 }

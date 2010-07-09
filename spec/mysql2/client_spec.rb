@@ -74,11 +74,14 @@ describe Mysql2::Client do
     info[:version].class.should eql(String)
   end
 
-  if RUBY_VERSION =~ /^1.9/
+  if defined? Encoding
     context "strings returned by #info" do
-      it "should default to utf-8 if Encoding.default_internal is nil" do
+      it "should default to the connection's encoding if Encoding.default_internal is nil" do
         Encoding.default_internal = nil
         @client.info[:version].encoding.should eql(Encoding.find('utf-8'))
+
+        client2 = Mysql2::Client.new :encoding => 'ascii'
+        client2.info[:version].encoding.should eql(Encoding.find('us-ascii'))
       end
 
       it "should use Encoding.default_internal" do
@@ -103,11 +106,14 @@ describe Mysql2::Client do
     server_info[:version].class.should eql(String)
   end
 
-  if RUBY_VERSION =~ /^1.9/
+  if defined? Encoding
     context "strings returned by #server_info" do
-      it "should default to utf-8 if Encoding.default_internal is nil" do
+      it "should default to the connection's encoding if Encoding.default_internal is nil" do
         Encoding.default_internal = nil
         @client.server_info[:version].encoding.should eql(Encoding.find('utf-8'))
+
+        client2 = Mysql2::Client.new :encoding => 'ascii'
+        client2.server_info[:version].encoding.should eql(Encoding.find('us-ascii'))
       end
 
       it "should use Encoding.default_internal" do

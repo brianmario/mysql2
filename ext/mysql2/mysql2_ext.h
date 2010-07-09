@@ -20,10 +20,6 @@
 #include <ruby/encoding.h>
 #endif
 
-#ifdef HAVE_RUBY_ENCODING_H
-extern rb_encoding *utf8Encoding;
-#endif
-
 #if defined(__GNUC__) && (__GNUC__ >= 3)
 #define RB_MYSQL_UNUSED __attribute__ ((unused))
 #else

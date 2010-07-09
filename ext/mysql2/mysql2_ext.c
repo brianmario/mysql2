@@ -1,6 +1,6 @@
 #include <mysql2_ext.h>
 
-VALUE mMysql2;
+VALUE mMysql2, cMysql2Client;
 VALUE cMysql2Error;
 ID sym_id, sym_version, sym_async;
 
@@ -9,10 +9,6 @@ ID sym_id, sym_version, sym_async;
     rb_raise(cMysql2Error, "closed MySQL connection"); \
     return Qnil; \
   }
-
-#ifdef HAVE_RUBY_ENCODING_H
-rb_encoding *utf8Encoding;
-#endif
 
 /*
  * non-blocking mysql_*() functions that we won't be wrapping since
@@ -204,7 +200,9 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  return rb_mysql_result_to_obj(result);
+  VALUE resultObj = rb_mysql_result_to_obj(result);
+  rb_iv_set(resultObj, "@encoding", rb_iv_get(self, "@encoding"));
+  return resultObj;
 }
 
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
@@ -264,6 +262,9 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   unsigned long newLen, oldLen;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
+  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+  // ensure the string is in the encoding the connection is expecting
+  str = rb_str_export_to_enc(str, conn_enc);
 #endif
 
   Check_Type(str, T_STRING);
@@ -280,7 +281,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   } else {
     newStr = rb_str_new(escaped, newLen);
 #ifdef HAVE_RUBY_ENCODING_H
-    rb_enc_associate(newStr, utf8Encoding);
+    rb_enc_associate(newStr, conn_enc);
     if (default_internal_enc) {
       newStr = rb_str_export_to_enc(newStr, default_internal_enc);
     }
@@ -293,12 +294,13 @@ static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE self) {
   VALUE version = rb_hash_new(), client_info;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
+  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
 #endif
 
   rb_hash_aset(version, sym_id, LONG2NUM(mysql_get_client_version()));
   client_info = rb_str_new2(mysql_get_client_info());
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_enc_associate(client_info, utf8Encoding);
+  rb_enc_associate(client_info, conn_enc);
   if (default_internal_enc) {
     client_info = rb_str_export_to_enc(client_info, default_internal_enc);
   }
@@ -312,6 +314,7 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
   VALUE version, server_info;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
+  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
 #endif
 
   Data_Get_Struct(self, MYSQL, client);
@@ -321,7 +324,7 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_server_version(client)));
   server_info = rb_str_new2(mysql_get_server_info(client));
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_enc_associate(server_info, utf8Encoding);
+  rb_enc_associate(server_info, conn_enc);
   if (default_internal_enc) {
     server_info = rb_str_export_to_enc(server_info, default_internal_enc);
   }
@@ -397,6 +400,15 @@ static VALUE set_charset_name(VALUE self, VALUE value)
 
   Data_Get_Struct(self, MYSQL, client);
 
+#ifdef HAVE_RUBY_ENCODING_H
+  VALUE new_encoding, old_encoding;
+  new_encoding = rb_funcall(cMysql2Client, rb_intern("encoding_from_charset"), 1, value);
+  old_encoding = rb_iv_get(self, "@encoding");
+  if (old_encoding == Qnil) {
+    rb_iv_set(self, "@encoding", new_encoding);
+  }
+#endif
+
   charset_name = StringValuePtr(value);
 
   if (mysql_options(client, MYSQL_SET_CHARSET_NAME, charset_name)) {
@@ -440,7 +452,7 @@ static VALUE init_connection(VALUE self)
 /* Ruby Extension initializer */
 void Init_mysql2() {
   mMysql2 = rb_define_module("Mysql2");
-  VALUE cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
+  cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
 
   rb_define_alloc_func(cMysql2Client, allocate);
 
@@ -462,11 +474,6 @@ void Init_mysql2() {
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 6);
 
   cMysql2Error = rb_const_get(mMysql2, rb_intern("Error"));
-
-
-#ifdef HAVE_RUBY_ENCODING_H
-  utf8Encoding = rb_utf8_encoding();
-#endif
 
   init_mysql2_result();
 

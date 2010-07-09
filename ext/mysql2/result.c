@@ -45,7 +45,11 @@ static VALUE nogvl_fetch_row(void *ptr) {
   return (VALUE)mysql_fetch_row(result);
 }
 
-static VALUE rb_mysql_result_fetch_field(mysql2_result_wrapper * wrapper, unsigned int idx, short int symbolize_keys) {
+static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
+  mysql2_result_wrapper * wrapper;
+
+  GetMysql2Result(self, wrapper);
+
   if (wrapper->fields == Qnil) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
@@ -54,9 +58,10 @@ static VALUE rb_mysql_result_fetch_field(mysql2_result_wrapper * wrapper, unsign
   VALUE rb_field = rb_ary_entry(wrapper->fields, idx);
   if (rb_field == Qnil) {
     MYSQL_FIELD *field = NULL;
-  #ifdef HAVE_RUBY_ENCODING_H
+#ifdef HAVE_RUBY_ENCODING_H
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  #endif
+    rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+#endif
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
@@ -66,12 +71,12 @@ static VALUE rb_mysql_result_fetch_field(mysql2_result_wrapper * wrapper, unsign
       rb_field = ID2SYM(rb_intern(buf));
     } else {
       rb_field = rb_str_new(field->name, field->name_length);
-  #ifdef HAVE_RUBY_ENCODING_H
-      rb_enc_associate(rb_field, utf8Encoding);
+#ifdef HAVE_RUBY_ENCODING_H
+      rb_enc_associate(rb_field, conn_enc);
       if (default_internal_enc) {
         rb_field = rb_str_export_to_enc(rb_field, default_internal_enc);
       }
-  #endif
+#endif
     }
     rb_ary_store(wrapper->fields, idx, rb_field);
   }
@@ -89,6 +94,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
   void * ptr;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
+  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
 #endif
 
   GetMysql2Result(self, wrapper);
@@ -115,7 +121,7 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
   }
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
-    VALUE field = rb_mysql_result_fetch_field(wrapper, i, symbolizeKeys);
+    VALUE field = rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     if (row[i]) {
       VALUE val;
       switch(fields[i].type) {
@@ -196,7 +202,9 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
           if ((fields[i].flags & BINARY_FLAG) || fields[i].charsetnr == 63) {
             rb_enc_associate(val, binaryEncoding);
           } else {
-            rb_enc_associate(val, utf8Encoding);
+            // TODO: we should probably lookup the encoding that was set on the field
+            // and either use that and/or fall back to the connection's encoding
+            rb_enc_associate(val, conn_enc);
             if (default_internal_enc) {
               val = rb_str_export_to_enc(val, default_internal_enc);
             }
@@ -225,7 +233,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
 
   if (RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
-      rb_mysql_result_fetch_field(wrapper, i, 0);
+      rb_mysql_result_fetch_field(self, i, 0);
     }
   }
 
@@ -318,7 +326,6 @@ void init_mysql2_result()
   intern_utc = rb_intern("utc");
 
 #ifdef HAVE_RUBY_ENCODING_H
-  utf8Encoding = rb_utf8_encoding();
   binaryEncoding = rb_enc_find("binary");
 #endif
 }

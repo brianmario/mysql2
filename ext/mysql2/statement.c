@@ -106,6 +106,7 @@ static VALUE each(VALUE self)
   my_bool * error;
   unsigned long * length;
   int int_data;
+  MYSQL_TIME ts;
 
   unsigned int field_count;
   unsigned int i;
@@ -129,6 +130,10 @@ static VALUE each(VALUE self)
         binds[i].buffer_type = MYSQL_TYPE_LONG;
         binds[i].buffer      = (char *)&int_data;
         break;
+      case MYSQL_TYPE_DATETIME:
+        binds[i].buffer_type = MYSQL_TYPE_DATETIME;
+        binds[i].buffer      = (char *)&ts;
+        break;
       default:
         rb_raise(cMysql2Error, "unhandled mysql type: %d", fields[i].type);
     }
@@ -150,6 +155,17 @@ static VALUE each(VALUE self)
       switch(binds[i].buffer_type) {
         case MYSQL_TYPE_LONG:
           column = INT2NUM(int_data);
+          break;
+        /* FIXME: maybe we want to return a datetime in this case? */
+        case MYSQL_TYPE_DATETIME:
+          column = rb_funcall(rb_cTime,
+              rb_intern("mktime"), 6,
+              UINT2NUM(ts.year),
+              UINT2NUM(ts.month),
+              UINT2NUM(ts.day),
+              UINT2NUM(ts.hour),
+              UINT2NUM(ts.minute),
+              UINT2NUM(ts.second));
           break;
         default:
           rb_raise(cMysql2Error, "unhandled buffer type: %d",

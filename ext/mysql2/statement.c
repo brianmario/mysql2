@@ -80,6 +80,28 @@ static VALUE fields(VALUE self)
   return field_list;
 }
 
+static VALUE each(VALUE self)
+{
+  MYSQL_STMT * stmt;
+  MYSQL_FIELD * fields;
+  MYSQL_RES * metadata;
+  unsigned int field_count;
+  unsigned int i;
+  VALUE block;
+
+  Data_Get_Struct(self, MYSQL_STMT, stmt);
+
+  block       = rb_block_proc();
+  metadata    = mysql_stmt_result_metadata(stmt);
+  fields      = mysql_fetch_fields(metadata);
+  field_count = mysql_stmt_field_count(stmt);
+
+  for(i = 0; i < field_count; i++) {
+  }
+
+  return self;
+}
+
 void init_mysql2_statement()
 {
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
@@ -88,4 +110,5 @@ void init_mysql2_statement()
   rb_define_method(cMysql2Statement, "field_count", field_count, 0);
   rb_define_method(cMysql2Statement, "execute", execute, -1);
   rb_define_method(cMysql2Statement, "fields", fields, 0);
+  rb_define_method(cMysql2Statement, "each", each, 0);
 }

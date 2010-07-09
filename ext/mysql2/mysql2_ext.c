@@ -227,7 +227,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
 
-  Check_Type(args.sql, T_STRING);
   Data_Get_Struct(self, MYSQL, client);
 
   REQUIRE_OPEN_DB(client);
@@ -273,7 +272,6 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   str = rb_str_export_to_enc(str, conn_enc);
 #endif
 
-  Check_Type(str, T_STRING);
   oldLen = RSTRING_LEN(str);
   char escaped[(oldLen*2)+1];
 

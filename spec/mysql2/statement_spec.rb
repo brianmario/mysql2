@@ -69,7 +69,6 @@ describe Mysql2::Statement do
     stmt.execute
     rows = []
     stmt.each { |row| rows << row }
-    pending "not working yet"
     rows.should == [[1]]
   end
 

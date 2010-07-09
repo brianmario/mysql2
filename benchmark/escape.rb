@@ -1,10 +1,10 @@
 # encoding: UTF-8
-$LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/..')
+$LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'rubygems'
 require 'benchmark'
 require 'mysql'
-require 'mysql2_ext'
+require 'mysql2'
 require 'do_mysql'
 
 number_of = 1000

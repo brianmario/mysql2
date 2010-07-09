@@ -55,4 +55,31 @@ describe Mysql2::Statement do
     stmt = @client.create_statement
     lambda { stmt.execute }.should raise_error(Mysql2::Error)
   end
+
+  it "should raise an exception without a block" do
+    stmt = @client.create_statement
+    stmt.prepare 'SELECT 1'
+    stmt.execute
+    lambda { stmt.each }.should raise_error
+  end
+
+  it "should let us iterate over results" do
+    stmt = @client.create_statement
+    stmt.prepare 'SELECT 1'
+    stmt.execute
+    rows = []
+    stmt.each { |row| rows << row }
+    pending "not working yet"
+    rows.should == [[1]]
+  end
+
+  it "should tell us about the fields" do
+    stmt = @client.create_statement
+    stmt.prepare 'SELECT 1 as foo, 2'
+    stmt.execute
+    list = stmt.fields
+    list.length.should == 2
+    list.first.name.should == 'foo'
+    list[1].name.should == '2'
+  end
 end

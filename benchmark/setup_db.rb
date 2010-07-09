@@ -1,12 +1,13 @@
 # encoding: UTF-8
 $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/..')
+$LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 # This script is for generating psudo-random data into a single table consisting of nearly every
 # data type MySQL 5.1 supports.
 #
 # It's meant to be used with the query.rb benchmark script (or others in the future)
 
-require 'mysql2_ext'
+require 'mysql2'
 require 'rubygems'
 require 'faker'
 

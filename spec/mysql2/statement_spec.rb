@@ -72,6 +72,15 @@ describe Mysql2::Statement do
     rows.should == [[1]]
   end
 
+  it "should select dates" do
+    stmt = @client.create_statement
+    stmt.prepare 'SELECT NOW()'
+    stmt.execute
+    rows = []
+    stmt.each { |row| rows << row }
+    rows.first.first.should be_kind_of Time
+  end
+
   it "should tell us about the fields" do
     stmt = @client.create_statement
     stmt.prepare 'SELECT 1 as foo, 2'

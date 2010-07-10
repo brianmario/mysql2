@@ -221,10 +221,11 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     }
   }
 
+  Check_Type(args.sql, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
-    rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
-    // ensure the string is in the encoding the connection is expecting
-    args.sql = rb_str_export_to_enc(args.sql, conn_enc);
+  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+  // ensure the string is in the encoding the connection is expecting
+  args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
 
   Data_Get_Struct(self, MYSQL, client);
@@ -265,6 +266,8 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   MYSQL * client;
   VALUE newStr;
   unsigned long newLen, oldLen;
+
+  Check_Type(str, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));

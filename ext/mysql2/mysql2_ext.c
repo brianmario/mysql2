@@ -1,7 +1,7 @@
 #include <mysql2_ext.h>
 
 VALUE mMysql2, cMysql2Client;
-VALUE cMysql2Error;
+VALUE cMysql2Error, intern_encoding_from_charset;
 ID sym_id, sym_version, sym_async;
 
 #define REQUIRE_OPEN_DB(_ctxt) \
@@ -409,10 +409,14 @@ static VALUE set_charset_name(VALUE self, VALUE value)
 
 #ifdef HAVE_RUBY_ENCODING_H
   VALUE new_encoding, old_encoding;
-  new_encoding = rb_funcall(cMysql2Client, rb_intern("encoding_from_charset"), 1, value);
-  old_encoding = rb_iv_get(self, "@encoding");
-  if (old_encoding == Qnil) {
-    rb_iv_set(self, "@encoding", new_encoding);
+  new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset, 1, value);
+  if (new_encoding == Qnil) {
+    rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(value));
+  } else {
+    old_encoding = rb_iv_get(self, "@encoding");
+    if (old_encoding == Qnil) {
+      rb_iv_set(self, "@encoding", new_encoding);
+    }
   }
 #endif
 
@@ -487,4 +491,6 @@ void Init_mysql2() {
   sym_id = ID2SYM(rb_intern("id"));
   sym_version = ID2SYM(rb_intern("version"));
   sym_async = ID2SYM(rb_intern("async"));
+
+  intern_encoding_from_charset = rb_intern("encoding_from_charset");
 }

@@ -6,6 +6,14 @@ describe Mysql2::Client do
     @client = Mysql2::Client.new
   end
 
+  if defined? Encoding
+    it "should raise an exception on create for invalid encodings" do
+      lambda {
+        c = Mysql2::Client.new(:encoding => "fake")
+      }.should raise_error(Mysql2::Error)
+    end
+  end
+
   it "should be able to connect via SSL options" do
     pending("DON'T WORRY, THIS TEST PASSES :) - but is machine-specific. You need to have MySQL running with SSL configured and enabled. Then update the paths in this test to your needs and remove the pending state.")
     ssl_client = nil

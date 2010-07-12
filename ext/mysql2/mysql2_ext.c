@@ -1,7 +1,7 @@
 #include <mysql2_ext.h>
 
 VALUE mMysql2, cMysql2Client;
-VALUE cMysql2Error;
+VALUE cMysql2Error, intern_encoding_from_charset;
 ID sym_id, sym_version, sym_async;
 
 #define REQUIRE_OPEN_DB(_ctxt) \
@@ -221,13 +221,13 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     }
   }
 
+  Check_Type(args.sql, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
-    rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
-    // ensure the string is in the encoding the connection is expecting
-    args.sql = rb_str_export_to_enc(args.sql, conn_enc);
+  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+  // ensure the string is in the encoding the connection is expecting
+  args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
 
-  Check_Type(args.sql, T_STRING);
   Data_Get_Struct(self, MYSQL, client);
 
   REQUIRE_OPEN_DB(client);
@@ -266,6 +266,8 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   MYSQL * client;
   VALUE newStr;
   unsigned long newLen, oldLen;
+
+  Check_Type(str, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
@@ -273,7 +275,6 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   str = rb_str_export_to_enc(str, conn_enc);
 #endif
 
-  Check_Type(str, T_STRING);
   oldLen = RSTRING_LEN(str);
   char escaped[(oldLen*2)+1];
 
@@ -408,10 +409,14 @@ static VALUE set_charset_name(VALUE self, VALUE value)
 
 #ifdef HAVE_RUBY_ENCODING_H
   VALUE new_encoding, old_encoding;
-  new_encoding = rb_funcall(cMysql2Client, rb_intern("encoding_from_charset"), 1, value);
-  old_encoding = rb_iv_get(self, "@encoding");
-  if (old_encoding == Qnil) {
-    rb_iv_set(self, "@encoding", new_encoding);
+  new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset, 1, value);
+  if (new_encoding == Qnil) {
+    rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(value));
+  } else {
+    old_encoding = rb_iv_get(self, "@encoding");
+    if (old_encoding == Qnil) {
+      rb_iv_set(self, "@encoding", new_encoding);
+    }
   }
 #endif
 
@@ -503,4 +508,6 @@ void Init_mysql2() {
   sym_id = ID2SYM(rb_intern("id"));
   sym_version = ID2SYM(rb_intern("version"));
   sym_async = ID2SYM(rb_intern("async"));
+
+  intern_encoding_from_charset = rb_intern("encoding_from_charset");
 }

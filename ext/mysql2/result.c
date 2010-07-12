@@ -5,10 +5,11 @@ rb_encoding *binaryEncoding;
 #endif
 
 ID sym_symbolize_keys;
-ID intern_new, intern_utc;
+ID intern_new, intern_utc, intern_encoding_from_charset_code;
 
 VALUE cBigDecimal, cDate, cDateTime;
 VALUE cMysql2Result;
+extern VALUE cMysql2Client;
 
 static void rb_mysql_result_mark(void * wrapper) {
     mysql2_result_wrapper * w = wrapper;
@@ -198,13 +199,20 @@ static VALUE rb_mysql_result_fetch_row(int argc, VALUE * argv, VALUE self) {
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
 #ifdef HAVE_RUBY_ENCODING_H
-          // rudimentary check for binary content
-          if ((fields[i].flags & BINARY_FLAG) || fields[i].charsetnr == 63) {
+          // if binary flag is set, respect it's wishes
+          if (fields[i].flags & BINARY_FLAG) {
             rb_enc_associate(val, binaryEncoding);
           } else {
-            // TODO: we should probably lookup the encoding that was set on the field
-            // and either use that and/or fall back to the connection's encoding
-            rb_enc_associate(val, conn_enc);
+            // lookup the encoding configured on this field
+            VALUE new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset_code, 1, INT2NUM(fields[i].charsetnr));
+            if (new_encoding != Qnil) {
+              // use the field encoding we were able to match
+              rb_encoding *enc = rb_to_encoding(new_encoding);
+              rb_enc_associate(val, enc);
+            } else {
+              // otherwise fall-back to the connection's encoding
+              rb_enc_associate(val, conn_enc);
+            }
             if (default_internal_enc) {
               val = rb_str_export_to_enc(val, default_internal_enc);
             }
@@ -324,6 +332,7 @@ void init_mysql2_result()
   sym_symbolize_keys = ID2SYM(rb_intern("symbolize_keys"));
   intern_new = rb_intern("new");
   intern_utc = rb_intern("utc");
+  intern_encoding_from_charset_code = rb_intern("encoding_from_charset_code");
 
 #ifdef HAVE_RUBY_ENCODING_H
   binaryEncoding = rb_enc_find("binary");

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.9 (HEAD)
+## 0.1.9 (July 17th, 2010)
 * Support async ActiveRecord access with fibers and EventMachine (mperham)
 * string encoding support for 1.9, respecting Encoding.default_internal
 * added support for rake-compiler (tenderlove)

@@ -2,6 +2,19 @@
 
 ## 0.1.9 (HEAD)
 * Support async ActiveRecord access with fibers and EventMachine (mperham)
+* string encoding support for 1.9, respecting Encoding.default_internal
+* added support for rake-compiler (tenderlove)
+* bugfixes for ActiveRecord driver
+** one minor bugfix for TimeZone support
+** fix the select_rows method to return what it should according to the docs (r-stu31)
+* Mysql2::Client#fields method added - returns the array of field names from a resultset, as strings
+* Sequel adapter
+** bugfix regarding sybolized field names (Eric Wong)
+** fix query logging in Sequel adapter
+* Lots of nice code cleanup (tenderlove)
+** Mysql2::Error definition moved to pure-Ruby
+** Mysql2::client#initialize definition moved to pure-Ruby
+** Mysql2::Result partially moved to pure-Ruby
 
 ## 0.1.8 (June 2nd, 2010)
 * fixes for AR adapter for timezone juggling

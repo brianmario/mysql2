@@ -141,7 +141,6 @@ static VALUE rb_mysql_client_close(VALUE self) {
 
   Data_Get_Struct(self, MYSQL, client);
 
-  REQUIRE_OPEN_DB(client);
   rb_thread_blocking_region(nogvl_close, client, RUBY_UBF_IO, 0);
 
   return Qnil;

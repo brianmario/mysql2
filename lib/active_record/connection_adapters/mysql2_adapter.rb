@@ -14,7 +14,7 @@ module ActiveRecord
 
   module ConnectionAdapters
     class Mysql2Column < Column
-      BOOL = "tinyint(1)".freeze
+      BOOL = "tinyint(1)"
       def extract_default(default)
         if sql_type =~ /blob/i || type == :text
           if default.blank?
@@ -130,8 +130,8 @@ module ActiveRecord
       cattr_accessor :emulate_booleans
       self.emulate_booleans = true
 
-      ADAPTER_NAME = 'MySQL'.freeze
-      PRIMARY = "PRIMARY".freeze
+      ADAPTER_NAME = 'MySQL2'
+      PRIMARY = "PRIMARY"
 
       LOST_CONNECTION_ERROR_MESSAGES = [
         "Server shutdown in progress",
@@ -139,10 +139,10 @@ module ActiveRecord
         "Lost connection to MySQL server during query",
         "MySQL server has gone away" ]
 
-      QUOTED_TRUE, QUOTED_FALSE = '1'.freeze, '0'.freeze
+      QUOTED_TRUE, QUOTED_FALSE = '1', '0'
 
       NATIVE_DATABASE_TYPES = {
-        :primary_key => "int(11) DEFAULT NULL auto_increment PRIMARY KEY".freeze,
+        :primary_key => "int(11) DEFAULT NULL auto_increment PRIMARY KEY",
         :string      => { :name => "varchar", :limit => 255 },
         :text        => { :name => "text" },
         :integer     => { :name => "int", :limit => 4 },
@@ -263,7 +263,7 @@ module ActiveRecord
         select(sql, name).map { |row| row.values }
       end
 
-      # Executes a SQL query and returns a MySQL::Result object. Note that you have to free the Result object after you're done using it.
+      # Executes a SQL query and returns a Mysql2::Result object. Note that you have to free the Result object after you're done using it.
       def execute(sql, name = nil)
         if name == :skip_logging
           @connection.query(sql)

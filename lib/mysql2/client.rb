@@ -3,12 +3,13 @@ module Mysql2
     def initialize opts = {}
       init_connection
 
-      [:reconnect, :connect_timeout].each do |key|
-        next unless opts.key?(key)
-        send(:"#{key}=", opts[key])
-      end
+      self.connect_timeout = opts[:connect_timeout]
+
       # force the encoding to utf8
       self.charset_name = opts[:encoding] || 'utf8'
+
+      # force reconnection behavior in libmysql
+      self.reconnect = true
 
       ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslciper))
 

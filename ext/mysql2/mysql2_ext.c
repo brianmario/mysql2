@@ -4,12 +4,6 @@ VALUE mMysql2, cMysql2Client;
 VALUE cMysql2Error, intern_encoding_from_charset;
 ID sym_id, sym_version, sym_async;
 
-#define REQUIRE_OPEN_DB(_ctxt) \
-  if(!_ctxt->net.vio) { \
-    rb_raise(cMysql2Error, "closed MySQL connection"); \
-    return Qnil; \
-  }
-
 /*
  * non-blocking mysql_*() functions that we won't be wrapping since
  * they do not appear to hit the network nor issue any interruptible
@@ -186,7 +180,6 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   Data_Get_Struct(self, MYSQL, client);
 
-  REQUIRE_OPEN_DB(client);
   if (rb_thread_blocking_region(nogvl_read_query_result, client, RUBY_UBF_IO, 0) == Qfalse) {
     return rb_raise_mysql2_error(client);
   }
@@ -228,8 +221,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #endif
 
   Data_Get_Struct(self, MYSQL, client);
-
-  REQUIRE_OPEN_DB(client);
 
   args.mysql = client;
   if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
@@ -279,7 +270,6 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 
   Data_Get_Struct(self, MYSQL, client);
 
-  REQUIRE_OPEN_DB(client);
   newLen = mysql_real_escape_string(client, escaped, StringValuePtr(str), RSTRING_LEN(str));
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
@@ -324,7 +314,6 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 #endif
 
   Data_Get_Struct(self, MYSQL, client);
-  REQUIRE_OPEN_DB(client);
 
   version = rb_hash_new();
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_server_version(client)));
@@ -342,21 +331,18 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 static VALUE rb_mysql_client_socket(VALUE self) {
   MYSQL * client;
   Data_Get_Struct(self, MYSQL, client);
-  REQUIRE_OPEN_DB(client);
   return INT2NUM(client->net.fd);
 }
 
 static VALUE rb_mysql_client_last_id(VALUE self) {
   MYSQL * client;
   Data_Get_Struct(self, MYSQL, client);
-  REQUIRE_OPEN_DB(client);
   return ULL2NUM(mysql_insert_id(client));
 }
 
 static VALUE rb_mysql_client_affected_rows(VALUE self) {
   MYSQL * client;
   Data_Get_Struct(self, MYSQL, client);
-  REQUIRE_OPEN_DB(client);
   return ULL2NUM(mysql_affected_rows(client));
 }
 

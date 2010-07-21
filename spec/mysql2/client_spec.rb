@@ -45,13 +45,6 @@ describe Mysql2::Client do
     @client.close.should be_nil
   end
 
-  it "should raise an exception when closed twice" do
-    @client.close.should be_nil
-    lambda {
-      @client.close
-    }.should raise_error(Mysql2::Error)
-  end
-
   it "should respond to #query" do
     @client.should respond_to :query
   end

@@ -8,8 +8,8 @@ module Mysql2
         send(:"#{key}=", opts[key])
       end
       # force the encoding to utf8
-      self.charset_name = opts[:encoding] || 'utf8'
       @encoding = nil
+      self.charset_name = opts[:encoding] || 'utf8'
 
       ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslciper))
 

@@ -238,7 +238,8 @@ module ActiveRecord
       end
 
       def reconnect!
-        reset!
+        disconnect!
+        connect
       end
 
       def disconnect!
@@ -250,7 +251,12 @@ module ActiveRecord
 
       def reset!
         disconnect!
-        @connection = Mysql2::Client.new(@config)
+        connect
+      end
+
+      # this is set to true in 2.3, but we don't want it to be
+      def requires_reloading?
+        false
       end
 
       # DATABASE STATEMENTS ======================================
@@ -263,7 +269,6 @@ module ActiveRecord
         select(sql, name).map { |row| row.values }
       end
 
-      # Executes a SQL query and returns a Mysql2::Result object. Note that you have to free the Result object after you're done using it.
       def execute(sql, name = nil)
         if name == :skip_logging
           @connection.query(sql)
@@ -547,7 +552,6 @@ module ActiveRecord
           end
         end
 
-        # TODO: implement error_number method on Mysql2::Exception
         def translate_exception(exception, message)
           return super unless exception.respond_to?(:error_number)
 
@@ -563,7 +567,8 @@ module ActiveRecord
 
       private
         def connect
-          # no-op
+          @connection = Mysql2::Client.new(@config)
+          configure_connection
         end
 
         def configure_connection

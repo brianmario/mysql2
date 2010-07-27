@@ -255,11 +255,6 @@ module ActiveRecord
         connect
       end
 
-      # this is set to true in 2.3, but we don't want it to be
-      def requires_reloading?
-        false
-      end
-
       # DATABASE STATEMENTS ======================================
 
       def select_values(sql, name = nil)
@@ -569,7 +564,6 @@ module ActiveRecord
       private
         def connect
           @connection = Mysql2::Client.new(@config)
-          configure_connection
         end
 
         def configure_connection

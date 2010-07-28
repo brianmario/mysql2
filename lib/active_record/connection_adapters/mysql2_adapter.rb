@@ -86,8 +86,9 @@ module ActiveRecord
       private
         def simplified_type(field_type)
           return :boolean if Mysql2Adapter.emulate_booleans && field_type.downcase.index(BOOL)
-          return :string  if field_type =~ /enum/i
+          return :string  if field_type =~ /enum/i or field_type =~ /set/i
           return :integer if field_type =~ /year/i
+          return :binary  if field_type =~ /bit/i
           super
         end
 

@@ -88,7 +88,9 @@ static void rb_mysql_client_free(void * ptr) {
 }
 
 static VALUE nogvl_close(void * ptr) {
-  mysql_close((MYSQL *)ptr);
+  MYSQL *client = (MYSQL *)ptr;
+  mysql_close(client);
+  client->net.fd = -1;
   return Qnil;
 }
 

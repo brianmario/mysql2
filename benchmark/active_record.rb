@@ -5,6 +5,9 @@ require 'rubygems'
 require 'benchmark'
 require 'active_record'
 
+ActiveRecord::Base.default_timezone = 'Pacific Time (US & Canada)'
+ActiveRecord::Base.time_zone_aware_attributes = true
+
 number_of = 10
 mysql2_opts = {
   :adapter => 'mysql2',

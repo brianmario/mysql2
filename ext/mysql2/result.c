@@ -7,16 +7,16 @@ rb_encoding *binaryEncoding;
 ID sym_symbolize_keys;
 ID intern_new, intern_utc, intern_encoding_from_charset_code;
 
-VALUE cBigDecimal, cDate, cDateTime;
 VALUE cMysql2Result;
-extern VALUE cMysql2Client;
+VALUE cBigDecimal, cDate, cDateTime;
+extern VALUE mMysql2, cMysql2Client, cMysql2Error, intern_encoding_from_charset;
 
 static void rb_mysql_result_mark(void * wrapper) {
-    mysql2_result_wrapper * w = wrapper;
-    if (w) {
-        rb_gc_mark(w->fields);
-        rb_gc_mark(w->rows);
-    }
+  mysql2_result_wrapper * w = wrapper;
+  if (w) {
+    rb_gc_mark(w->fields);
+    rb_gc_mark(w->rows);
+  }
 }
 
 /* this may be called manually or during GC */

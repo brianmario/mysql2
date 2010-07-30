@@ -1,6 +1,7 @@
 #include <mysql2_ext.h>
 
 VALUE cMysql2Statement;
+extern VALUE mMysql2, cMysql2Error;
 
 /* call-seq: stmt.prepare(sql)
  *

@@ -42,17 +42,21 @@ module Mysql2
       end
 
       def query(sql, opts={})
-        super(sql, opts.merge(:async => true))
-        deferable = ::EM::DefaultDeferrable.new
-        ::EM.watch(self.socket, Watcher, self, deferable).notify_readable = true
-        fiber = Fiber.current
-        deferable.callback do |result|
-          fiber.resume(result)
+        if EM.reactor_running?
+          super(sql, opts.merge(:async => true))
+          deferable = ::EM::DefaultDeferrable.new
+          ::EM.watch(self.socket, Watcher, self, deferable).notify_readable = true
+          fiber = Fiber.current
+          deferable.callback do |result|
+            fiber.resume(result)
+          end
+          deferable.errback do |err|
+            fiber.resume(err)
+          end
+          Fiber.yield
+        else
+          super(sql, opts)
         end
-        deferable.errback do |err|
-          fiber.resume(err)
-        end
-        Fiber.yield
       end
     end
   end

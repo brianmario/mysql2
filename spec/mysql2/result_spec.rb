@@ -15,7 +15,7 @@ describe Mysql2::Result do
   end
 
   it "should respond to #each" do
-    @result.should respond_to :each
+    @result.should respond_to(:each)
   end
 
   it "should raise a Mysql2::Error exception upon a bad query" do

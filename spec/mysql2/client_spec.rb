@@ -38,7 +38,7 @@ describe Mysql2::Client do
   end
 
   it "should respond to #close" do
-    @client.should respond_to :close
+    @client.should respond_to(:close)
   end
 
   it "should be able to close properly" do
@@ -46,11 +46,11 @@ describe Mysql2::Client do
   end
 
   it "should respond to #query" do
-    @client.should respond_to :query
+    @client.should respond_to(:query)
   end
 
   it "should respond to #escape" do
-    @client.should respond_to :escape
+    @client.should respond_to(:escape)
   end
 
   it "#escape should return a new SQL-escape version of the passed string" do
@@ -63,7 +63,7 @@ describe Mysql2::Client do
   end
 
   it "should respond to #info" do
-    @client.should respond_to :info
+    @client.should respond_to(:info)
   end
 
   it "#info should return a hash containing the client version ID and String" do
@@ -95,7 +95,7 @@ describe Mysql2::Client do
   end
 
   it "should respond to #server_info" do
-    @client.should respond_to :server_info
+    @client.should respond_to(:server_info)
   end
 
   it "#server_info should return a hash containing the client version ID and String" do
@@ -127,7 +127,7 @@ describe Mysql2::Client do
   end
 
   it "should respond to #socket" do
-    @client.should respond_to :socket
+    @client.should respond_to(:socket)
   end
 
   it "#socket should return a Fixnum (file descriptor from C)" do

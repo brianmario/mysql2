@@ -4,5 +4,6 @@ Makefile
 *.bundle
 *.so
 *.a
+*.rbc
 mkmf.log
 pkg/

@@ -126,7 +126,8 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
       test.decimal_test.should eql(BigDecimal.new('1.0000'))
       test.date_test.should eql(Date.parse('2010-01-01'))
       test.date_time_test.should eql(Time.local(2010,1,1,0,0,0))
-      test.timestamp_test.class.should eql(Time)
+      test.timestamp_test.class.should eql(ActiveSupport::TimeWithZone) if RUBY_VERSION >= "1.9"
+      test.timestamp_test.class.should eql(Time) if RUBY_VERSION < "1.9"
       test.time_test.class.should eql(Time)
       test.year_test.should eql(2010)
       test.char_test.should eql('abcdefghij')

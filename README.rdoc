@@ -77,7 +77,7 @@ or
 
  # this will change the defaults for all future results returned by the #query method _for this connection only_
  c = Mysql2::Client.new
- c.query_options.merge(:symbolize_keys => true)
+ c.query_options.merge!(:symbolize_keys => true)
 
 or
 

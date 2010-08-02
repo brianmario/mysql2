@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Brian Lopez"]
-  s.date = %q{2010-07-17}
+  s.date = %q{2010-08-01}
   s.email = %q{seniorlopez@gmail.com}
   s.extensions = ["ext/mysql2/extconf.rb"]
   s.extra_rdoc_files = [
@@ -29,6 +29,8 @@ Gem::Specification.new do |s|
      "benchmark/sequel.rb",
      "benchmark/setup_db.rb",
      "examples/eventmachine.rb",
+     "ext/mysql2/client.c",
+     "ext/mysql2/client.h",
      "ext/mysql2/extconf.rb",
      "ext/mysql2/mysql2_ext.c",
      "ext/mysql2/mysql2_ext.h",

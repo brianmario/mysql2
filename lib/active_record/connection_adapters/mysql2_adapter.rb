@@ -131,7 +131,7 @@ module ActiveRecord
       cattr_accessor :emulate_booleans
       self.emulate_booleans = true
 
-      ADAPTER_NAME = 'MySQL2'
+      ADAPTER_NAME = 'Mysql2'
       PRIMARY = "PRIMARY"
 
       LOST_CONNECTION_ERROR_MESSAGES = [
@@ -161,6 +161,7 @@ module ActiveRecord
         super(connection, logger)
         @connection_options, @config = connection_options, config
         @quoted_column_names, @quoted_table_names = {}, {}
+        configure_connection
       end
 
       def adapter_name
@@ -263,15 +264,45 @@ module ActiveRecord
 
       # DATABASE STATEMENTS ======================================
 
-      def select_values(sql, name = nil)
-        select(sql, name).map { |row| row.values.first }
-      end
+      # FIXME: re-enable the following once a "better" query_cache solution is in core
+      #
+      # The overrides below perform much better than the originals in AbstractAdapter
+      # because we're able to take advantage of mysql2's lazy-loading capabilities
+      #
+      # # Returns a record hash with the column names as keys and column values
+      # # as values.
+      # def select_one(sql, name = nil)
+      #   result = execute(sql, name)
+      #   result.each(:as => :hash) do |r|
+      #     return r
+      #   end
+      # end
+      # 
+      # # Returns a single value from a record
+      # def select_value(sql, name = nil)
+      #   result = execute(sql, name)
+      #   if first = result.first
+      #     first.first
+      #   end
+      # end
+      # 
+      # # Returns an array of the values of the first column in a select:
+      # #   select_values("SELECT id FROM companies LIMIT 3") => [1,2,3]
+      # def select_values(sql, name = nil)
+      #   execute(sql, name).map { |row| row.first }
+      # end
 
+      # Returns an array of arrays containing the field values.
+      # Order is the same as that returned by +columns+.
       def select_rows(sql, name = nil)
-        select(sql, name).map { |row| row.values }
+        execute(sql, name).to_a
       end
 
+      # Executes the SQL statement in the context of this connection.
       def execute(sql, name = nil)
+        # make sure we carry over any changes to ActiveRecord::Base.default_timezone that have been
+        # made since we established the connection
+        @connection.query_options[:timezone] = ActiveRecord::Base.default_timezone
         if name == :skip_logging
           @connection.query(sql)
         else
@@ -286,7 +317,7 @@ module ActiveRecord
       end
 
       def insert_sql(sql, name = nil, pk = nil, id_value = nil, sequence_name = nil)
-        super sql, name
+        super
         id_value || @connection.last_id
       end
       alias :create :insert_sql
@@ -393,8 +424,8 @@ module ActiveRecord
 
       def tables(name = nil)
         tables = []
-        execute("SHOW TABLES", name).each(:symbolize_keys => true) do |field|
-          tables << field.values.first
+        execute("SHOW TABLES", name).each do |field|
+          tables << field.first
         end
         tables
       end
@@ -407,7 +438,7 @@ module ActiveRecord
         indexes = []
         current_index = nil
         result = execute("SHOW KEYS FROM #{quote_table_name(table_name)}", name)
-        result.each(:symbolize_keys => true) do |row|
+        result.each(:symbolize_keys => true, :as => :hash) do |row|
           if current_index != row[:Key_name]
             next if row[:Key_name] == PRIMARY # skip the primary key
             current_index = row[:Key_name]
@@ -423,7 +454,7 @@ module ActiveRecord
         sql = "SHOW FIELDS FROM #{quote_table_name(table_name)}"
         columns = []
         result = execute(sql, :skip_logging)
-        result.each(:symbolize_keys => true) { |field|
+        result.each(:symbolize_keys => true, :as => :hash) { |field|
           columns << Mysql2Column.new(field[:Field], field[:Default], field[:Type], field[:Null] == "YES")
         }
         columns
@@ -520,7 +551,7 @@ module ActiveRecord
       def pk_and_sequence_for(table)
         keys = []
         result = execute("describe #{quote_table_name(table)}")
-        result.each(:symbolize_keys => true) do |row|
+        result.each(:symbolize_keys => true, :as => :hash) do |row|
           keys << row[:Field] if row[:Key] == "PRI"
         end
         keys.length == 1 ? [keys.first, nil] : nil
@@ -574,6 +605,7 @@ module ActiveRecord
         end
 
         def configure_connection
+          @connection.query_options.merge!(:as => :array)
           encoding = @config[:encoding]
           execute("SET NAMES '#{encoding}'", :skip_logging) if encoding
 
@@ -582,8 +614,10 @@ module ActiveRecord
           execute("SET SQL_AUTO_IS_NULL=0", :skip_logging)
         end
 
+        # Returns an array of record hashes with the column names as keys and
+        # column values as values.
         def select(sql, name = nil)
-          execute(sql, name).to_a
+          execute(sql, name).each(:as => :hash)
         end
 
         def supports_views?

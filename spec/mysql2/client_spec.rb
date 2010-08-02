@@ -14,6 +14,10 @@ describe Mysql2::Client do
     end
   end
 
+  it "should have a global default_query_options hash" do
+    Mysql2::Client.should respond_to(:default_query_options)
+  end
+
   it "should be able to connect via SSL options" do
     pending("DON'T WORRY, THIS TEST PASSES :) - but is machine-specific. You need to have MySQL running with SSL configured and enabled. Then update the paths in this test to your needs and remove the pending state.")
     ssl_client = nil
@@ -47,6 +51,26 @@ describe Mysql2::Client do
 
   it "should respond to #query" do
     @client.should respond_to(:query)
+  end
+
+  context "#query" do
+    it "should accept an options hash that inherits from Mysql2::Client.default_query_options" do
+      @client.query "SELECT 1", :something => :else
+      @client.query_options.should eql(@client.query_options.merge(:something => :else))
+    end
+
+    it "should return results as a hash by default" do
+      @client.query("SELECT 1").first.class.should eql(Hash)
+    end
+
+    it "should be able to return results as an array" do
+      @client.query("SELECT 1", :as => :array).first.class.should eql(Array)
+      @client.query("SELECT 1").each(:as => :array)
+    end
+
+    it "should be able to return results with symbolized keys" do
+      @client.query("SELECT 1", :symbolize_keys => true).first.keys[0].class.should eql(Symbol)
+    end
   end
 
   it "should respond to #escape" do

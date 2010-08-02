@@ -21,14 +21,14 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
     end
 
     it "should be able to execute a raw query" do
-      @connection.execute("SELECT 1 as one").first['one'].should eql(1)
-      @connection.execute("SELECT NOW() as n").first['n'].class.should eql(Time)
+      @connection.execute("SELECT 1 as one").first.first.should eql(1)
+      @connection.execute("SELECT NOW() as n").first.first.class.should eql(Time)
     end
   end
 
   context "columns" do
     before(:all) do
-      ActiveRecord::Base.default_timezone = 'Pacific Time (US & Canada)'
+      ActiveRecord::Base.default_timezone = :local
       ActiveRecord::Base.time_zone_aware_attributes = true
       ActiveRecord::Base.establish_connection(:adapter => 'mysql2', :database => 'test')
       Mysql2Test2.connection.execute %[
@@ -72,7 +72,7 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
     end
 
     after(:all) do
-      Mysql2Test2.connection.execute("DELETE FROM mysql2_test WHERE id=#{@test_result['id']}")
+      Mysql2Test2.connection.execute("DELETE FROM mysql2_test WHERE id=#{@test_result.first}")
     end
 
     it "default value should be cast to the expected type of the field" do
@@ -89,9 +89,9 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
       test.double_test.should eql('1.0000'.to_f)
       test.decimal_test.should eql(BigDecimal.new('1.0000'))
       test.date_test.should eql(Date.parse('2010-01-01'))
-      test.date_time_test.should eql(DateTime.parse('2010-01-01 00:00:00'))
+      test.date_time_test.should eql(Time.local(2010,1,1,0,0,0))
       test.timestamp_test.should be_nil
-      test.time_test.class.should eql(DateTime)
+      test.time_test.class.should eql(Time)
       test.year_test.should eql(2010)
       test.char_test.should eql('abcdefghij')
       test.varchar_test.should eql('abcdefghij')
@@ -125,8 +125,9 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
       test.double_test.should eql('1.0000'.to_f)
       test.decimal_test.should eql(BigDecimal.new('1.0000'))
       test.date_test.should eql(Date.parse('2010-01-01'))
-      test.date_time_test.should eql(Time.utc(2010,1,1,0,0,0))
-      test.timestamp_test.class.should eql(ActiveSupport::TimeWithZone)
+      test.date_time_test.should eql(Time.local(2010,1,1,0,0,0))
+      test.timestamp_test.class.should eql(ActiveSupport::TimeWithZone) if RUBY_VERSION >= "1.9"
+      test.timestamp_test.class.should eql(Time) if RUBY_VERSION < "1.9"
       test.time_test.class.should eql(Time)
       test.year_test.should eql(2010)
       test.char_test.should eql('abcdefghij')

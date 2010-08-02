@@ -45,8 +45,8 @@ Benchmark.bmbm do |x|
   x.report do
     puts "Mysql2"
     number_of.times do
-      mysql2_result = mysql2.query sql
-      mysql2_result.each(:symbolize_keys => true) do |res|
+      mysql2_result = mysql2.query sql, :symbolize_keys => true
+      mysql2_result.each do |res|
         # puts res.inspect
       end
     end

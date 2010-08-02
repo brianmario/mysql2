@@ -1,6 +1,16 @@
 module Mysql2
   class Client
-    def initialize opts = {}
+    attr_reader :query_options
+    @@default_query_options = {
+      :symbolize_keys => false,
+      :async => false,
+      :as => :hash,
+      :timezone => :local
+    }
+
+    def initialize(opts = {})
+      @query_options = @@default_query_options.dup
+
       init_connection
 
       [:reconnect, :connect_timeout].each do |key|
@@ -21,6 +31,10 @@ module Mysql2
       socket   = opts[:socket]
 
       connect user, pass, host, port, database, socket
+    end
+
+    def self.default_query_options
+      @@default_query_options
     end
 
     # NOTE: from ruby-mysql

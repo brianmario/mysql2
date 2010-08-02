@@ -158,7 +158,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, VALUE opts) {
         case MYSQL_TYPE_TIME: {     // TIME field
           int hour, min, sec, tokens;
           tokens = sscanf(row[i], "%2d:%2d:%2d", &hour, &min, &sec);
-          val = rb_funcall(rb_cTime, intern_utc, 6, INT2NUM(0), INT2NUM(1), INT2NUM(1), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
+          val = rb_funcall(rb_cTime, intern_utc, 6, INT2NUM(2000), INT2NUM(1), INT2NUM(1), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
           break;
         }
         case MYSQL_TYPE_TIMESTAMP:  // TIMESTAMP field

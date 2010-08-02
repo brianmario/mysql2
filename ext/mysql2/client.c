@@ -3,7 +3,8 @@
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error, intern_encoding_from_charset;
-extern ID sym_id, sym_version, sym_async;
+extern ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
+extern ID intern_merge;
 
 #define REQUIRE_OPEN_DB(_ctxt) \
   if(!_ctxt->net.vio) { \
@@ -225,7 +226,12 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   }
 
   VALUE resultObj = rb_mysql_result_to_obj(result);
+  // pass-through query options for result construction later
+  rb_iv_set(resultObj, "@query_options", rb_obj_dup(rb_iv_get(self, "@query_options")));
+
+#ifdef HAVE_RUBY_ENCODING_H
   rb_iv_set(resultObj, "@encoding", rb_iv_get(self, "@encoding"));
+#endif
   return resultObj;
 }
 
@@ -234,29 +240,31 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   fd_set fdset;
   int fd, retval;
   int async = 0;
-  VALUE opts;
-  VALUE rb_async;
+  VALUE opts, defaults;
+  MYSQL *client;
 
-  MYSQL * client;
+  Data_Get_Struct(self, MYSQL, client);
+  REQUIRE_OPEN_DB(client);
+  args.mysql = client;
 
+  defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
-    if ((rb_async = rb_hash_aref(opts, sym_async)) != Qnil) {
-      async = rb_async == Qtrue ? 1 : 0;
+    opts = rb_funcall(defaults, intern_merge, 1, opts);
+    rb_iv_set(self, "@query_options", opts);
+
+    if (rb_hash_aref(opts, sym_async) == Qtrue) {
+      async = 1;
     }
+  } else {
+    opts = defaults;
   }
 
-  Check_Type(args.sql, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
   // ensure the string is in the encoding the connection is expecting
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
 
-  Data_Get_Struct(self, MYSQL, client);
-
-  REQUIRE_OPEN_DB(client);
-
-  args.mysql = client;
   if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
     return rb_raise_mysql2_error(client);
   }
@@ -272,15 +280,20 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
       retval = rb_thread_select(fd + 1, &fdset, NULL, NULL, NULL);
 
       if (retval < 0) {
-          rb_sys_fail(0);
+        rb_sys_fail(0);
       }
 
       if (retval > 0) {
-          break;
+        break;
       }
     }
 
-    return rb_mysql_client_async_result(self);
+    VALUE result = rb_mysql_client_async_result(self);
+
+    // pass-through query options for result construction later
+    rb_iv_set(result, "@query_options", rb_obj_dup(opts));
+
+    return result;
   } else {
     return Qnil;
   }

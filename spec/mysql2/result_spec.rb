@@ -2,7 +2,7 @@
 require 'spec_helper'
 
 describe Mysql2::Result do
-  before(:all) do
+  before(:each) do
     @client = Mysql2::Client.new :host => "localhost", :username => "root"
   end
 
@@ -37,8 +37,13 @@ describe Mysql2::Result do
 
     it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
       @result.each(:symbolize_keys => true) do |row|
-        row.class.should eql(Hash)
         row.keys.first.class.should eql(Symbol)
+      end
+    end
+
+    it "should be able to return results as an array" do
+      @result.each(:as => :array) do |row|
+        row.class.should eql(Array)
       end
     end
 
@@ -48,7 +53,7 @@ describe Mysql2::Result do
   end
 
   context "#fields" do
-    before(:all) do
+    before(:each) do
       @client.query "USE test"
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1")
     end
@@ -64,7 +69,7 @@ describe Mysql2::Result do
   end
 
   context "row data type mapping" do
-    before(:all) do
+    before(:each) do
       @client.query "USE test"
       @client.query %[
         CREATE TABLE IF NOT EXISTS mysql2_test (

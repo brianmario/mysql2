@@ -21,8 +21,8 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
     end
 
     it "should be able to execute a raw query" do
-      @connection.execute("SELECT 1 as one").first['one'].should eql(1)
-      @connection.execute("SELECT NOW() as n").first['n'].class.should eql(Time)
+      @connection.execute("SELECT 1 as one").first.first.should eql(1)
+      @connection.execute("SELECT NOW() as n").first.first.class.should eql(Time)
     end
   end
 
@@ -72,7 +72,7 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
     end
 
     after(:all) do
-      Mysql2Test2.connection.execute("DELETE FROM mysql2_test WHERE id=#{@test_result['id']}")
+      Mysql2Test2.connection.execute("DELETE FROM mysql2_test WHERE id=#{@test_result.first}")
     end
 
     it "default value should be cast to the expected type of the field" do

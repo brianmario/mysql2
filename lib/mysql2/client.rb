@@ -4,7 +4,8 @@ module Mysql2
     @@default_query_options = {
       :symbolize_keys => false,
       :async => false,
-      :as => :hash
+      :as => :hash,
+      :timezone => :local
     }
 
     def initialize(opts = {})

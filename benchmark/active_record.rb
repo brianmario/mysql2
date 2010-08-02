@@ -5,7 +5,7 @@ require 'rubygems'
 require 'benchmark'
 require 'active_record'
 
-ActiveRecord::Base.default_timezone = 'Pacific Time (US & Canada)'
+ActiveRecord::Base.default_timezone = :local
 ActiveRecord::Base.time_zone_aware_attributes = true
 
 number_of = 10

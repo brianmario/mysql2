@@ -100,6 +100,10 @@ The default result type is set to :hash, but you can override a previous setting
 I may add support for {:as => :csv} or even {:as => :json} to allow for *much* more efficient generation of those data types from result sets.
 If you'd like to see either of these (or others), open an issue and start bugging me about it ;)
 
+== Timezones
+
+You can set the :timezone option to :local or :utc to tell Mysql2 which timezone you'd like to have Time objects in
+
 == Async
 
 Mysql2::Client takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.

@@ -1,7 +1,8 @@
 #include <mysql2_ext.h>
 
 VALUE mMysql2, cMysql2Error, intern_encoding_from_charset;
-ID    sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
+ID    sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as,
+      sym_array, sym_timezone, sym_utc, sym_local;
 ID    intern_merge;
 
 /* Ruby Extension initializer */
@@ -11,6 +12,9 @@ void Init_mysql2() {
 
   intern_merge = rb_intern("merge");
 
+  sym_timezone        = ID2SYM(rb_intern("timezone"));
+  sym_utc             = ID2SYM(rb_intern("utc"));
+  sym_local           = ID2SYM(rb_intern("local"));
   sym_array           = ID2SYM(rb_intern("array"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_id              = ID2SYM(rb_intern("id"));

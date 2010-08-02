@@ -317,7 +317,7 @@ module ActiveRecord
       end
 
       def insert_sql(sql, name = nil, pk = nil, id_value = nil, sequence_name = nil)
-        super sql, name
+        super
         id_value || @connection.last_id
       end
       alias :create :insert_sql
@@ -617,7 +617,7 @@ module ActiveRecord
         # Returns an array of record hashes with the column names as keys and
         # column values as values.
         def select(sql, name = nil)
-          result = execute(sql, name).each(:as => :hash)
+          execute(sql, name).each(:as => :hash)
         end
 
         def supports_views?

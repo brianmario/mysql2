@@ -131,7 +131,7 @@ module ActiveRecord
       cattr_accessor :emulate_booleans
       self.emulate_booleans = true
 
-      ADAPTER_NAME = 'MySQL2'
+      ADAPTER_NAME = 'Mysql2'
       PRIMARY = "PRIMARY"
 
       LOST_CONNECTION_ERROR_MESSAGES = [

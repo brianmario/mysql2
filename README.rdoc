@@ -58,6 +58,48 @@ How about with symbolized keys?
     # do something with row, it's ready to rock
   end
 
+== Cascading config
+
+The default config hash is at:
+
+ Mysql2::Client.default_query_options
+
+which defaults to:
+
+ {:async => false, :as => :hash, :symbolize_keys => false}
+
+that can be used as so:
+
+ # these are the defaults all Mysql2::Client instances inherit
+ Mysql2::Client.default_query_options.merge!(:as => :array)
+
+or
+
+ # this will change the defaults for all future results returned by the #query method _for this connection only_
+ c = Mysql2::Client.new
+ c.query_options.merge(:symbolize_keys => true)
+
+or
+
+ # this will set the options for the Mysql2::Result instance returned from the #query method
+ c = Mysql2::Client.new
+ c.query(sql, :symbolize_keys => true)
+
+== Result types
+
+=== Array of Arrays
+
+Pass the {:as => :array} option to any of the above methods of configuration
+
+=== Array of Hashes
+
+The default result type is set to :hash, but you can override a previous setting to something else with {:as => :hash}
+
+=== Others...
+
+I may add support for {:as => :csv} or even {:as => :json} to allow for *much* more efficient generation of those data types from result sets.
+If you'd like to see either of these (or others), open an issue and start bugging me about it ;)
+
 == Async
 
 Mysql2::Client takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.
@@ -151,11 +193,11 @@ then iterating over every row using an #each like method yielding a block:
 # These results are from the query_with_mysql_casting.rb script in the benchmarks folder
    user       system     total       real
   Mysql2
-   0.890000   0.190000   1.080000 (  2.028887)
+   0.750000   0.180000   0.930000 (  1.821655)
   do_mysql
-   1.740000   0.220000   1.960000 (  2.909290)
+   1.650000   0.200000   1.850000 (  2.811357)
   Mysql
-   7.330000   0.350000   7.680000 (  8.013160)
+   7.500000   0.210000   7.710000 (  8.065871)
 
 == Special Thanks
 

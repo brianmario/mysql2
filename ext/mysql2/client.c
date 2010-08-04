@@ -12,6 +12,9 @@ extern ID intern_merge;
     return Qnil; \
   }
 
+#define MARK_CONN_INACTIVE(conn) \
+  rb_iv_set(conn, "@active", Qfalse);
+
 /*
  * used to pass all arguments to mysql_real_connect while inside
  * rb_thread_blocking_region
@@ -147,8 +150,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.mysql = client;
   args.client_flag = 0;
 
-  if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse)
-  {
+  if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
     return rb_raise_mysql2_error(client);
   }
@@ -214,10 +216,16 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   REQUIRE_OPEN_DB(client);
   if (rb_thread_blocking_region(nogvl_read_query_result, client, RUBY_UBF_IO, 0) == Qfalse) {
+    // an error occurred, mark this connection inactive
+    MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(client);
   }
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, client, RUBY_UBF_IO, 0);
+
+  // we have our result, mark this connection inactive
+  MARK_CONN_INACTIVE(self);
+
   if (result == NULL) {
     if (mysql_field_count(client) != 0) {
       rb_raise_mysql2_error(client);
@@ -240,12 +248,21 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   fd_set fdset;
   int fd, retval;
   int async = 0;
-  VALUE opts, defaults;
+  VALUE opts, defaults, active;
   MYSQL *client;
 
   Data_Get_Struct(self, MYSQL, client);
   REQUIRE_OPEN_DB(client);
   args.mysql = client;
+
+  active = rb_iv_get(self, "@active");
+  // see if this connection is still waiting on a result from a previous query
+  if (NIL_P(active) || active == Qfalse) {
+    // mark this connection active
+    rb_iv_set(self, "@active", Qtrue);
+  } else {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  }
 
   defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
@@ -266,6 +283,8 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #endif
 
   if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
+    // an error occurred, we're not active anymore
+    MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(client);
   }
 

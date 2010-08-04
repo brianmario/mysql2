@@ -237,8 +237,15 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID timezone, int symbolizeKey
 static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   mysql2_result_wrapper * wrapper;
   unsigned int i = 0;
+  short int symbolizeKeys = 0;
+  VALUE defaults;
 
   GetMysql2Result(self, wrapper);
+
+  defaults = rb_iv_get(self, "@query_options");
+  if (rb_hash_aref(defaults, sym_symbolize_keys) == Qtrue) {
+    symbolizeKeys = 1;
+  }
 
   if (wrapper->fields == Qnil) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
@@ -247,7 +254,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
 
   if (RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
-      rb_mysql_result_fetch_field(self, i, 0);
+      rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     }
   }
 

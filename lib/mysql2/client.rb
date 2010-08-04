@@ -10,6 +10,7 @@ module Mysql2
 
     def initialize(opts = {})
       @query_options = @@default_query_options.dup
+      @active = false
 
       init_connection
 

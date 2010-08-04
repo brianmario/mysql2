@@ -290,9 +290,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 
     VALUE result = rb_mysql_client_async_result(self);
 
-    // pass-through query options for result construction later
-    rb_iv_set(result, "@query_options", rb_obj_dup(opts));
-
     return result;
   } else {
     return Qnil;

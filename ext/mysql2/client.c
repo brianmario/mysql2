@@ -225,6 +225,9 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
+  // we have a result, mark this connection inactive
+  rb_iv_set(self, "@active", Qfalse);
+
   VALUE resultObj = rb_mysql_result_to_obj(result);
   // pass-through query options for result construction later
   rb_iv_set(resultObj, "@query_options", rb_obj_dup(rb_iv_get(self, "@query_options")));
@@ -240,12 +243,21 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   fd_set fdset;
   int fd, retval;
   int async = 0;
-  VALUE opts, defaults;
+  VALUE opts, defaults, active;
   MYSQL *client;
 
   Data_Get_Struct(self, MYSQL, client);
   REQUIRE_OPEN_DB(client);
   args.mysql = client;
+
+  active = rb_iv_get(self, "@active");
+  // see if this connection is still waiting on a result from a previous query
+  if (NIL_P(active) || active == Qfalse) {
+    // mark this connection active
+    rb_iv_set(self, "@active", Qtrue);
+  } else {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  }
 
   defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {

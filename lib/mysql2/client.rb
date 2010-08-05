@@ -5,7 +5,8 @@ module Mysql2
       :symbolize_keys => false,
       :async => false,
       :as => :hash,
-      :timezone => :local
+      :timezone => :local,
+      :cast_booleans => false
     }
 
     def initialize(opts = {})

@@ -71,63 +71,7 @@ describe Mysql2::Result do
   context "row data type mapping" do
     before(:each) do
       @client.query "USE test"
-      @client.query %[
-        CREATE TABLE IF NOT EXISTS mysql2_test (
-          id MEDIUMINT NOT NULL AUTO_INCREMENT,
-          null_test VARCHAR(10),
-          bit_test BIT(64),
-          tiny_int_test TINYINT,
-          small_int_test SMALLINT,
-          medium_int_test MEDIUMINT,
-          int_test INT,
-          big_int_test BIGINT,
-          float_test FLOAT(10,3),
-          double_test DOUBLE(10,3),
-          decimal_test DECIMAL(10,3),
-          date_test DATE,
-          date_time_test DATETIME,
-          timestamp_test TIMESTAMP,
-          time_test TIME,
-          year_test YEAR(4),
-          char_test CHAR(10),
-          varchar_test VARCHAR(10),
-          binary_test BINARY(10),
-          varbinary_test VARBINARY(10),
-          tiny_blob_test TINYBLOB,
-          tiny_text_test TINYTEXT,
-          blob_test BLOB,
-          text_test TEXT,
-          medium_blob_test MEDIUMBLOB,
-          medium_text_test MEDIUMTEXT,
-          long_blob_test LONGBLOB,
-          long_text_test LONGTEXT,
-          enum_test ENUM('val1', 'val2'),
-          set_test SET('val1', 'val2'),
-          PRIMARY KEY (id)
-        )
-      ]
-      @client.query %[
-        INSERT INTO mysql2_test (
-          null_test, bit_test, tiny_int_test, small_int_test, medium_int_test, int_test, big_int_test,
-          float_test, double_test, decimal_test, date_test, date_time_test, timestamp_test, time_test,
-          year_test, char_test, varchar_test, binary_test, varbinary_test, tiny_blob_test,
-          tiny_text_test, blob_test, text_test, medium_blob_test, medium_text_test,
-          long_blob_test, long_text_test, enum_test, set_test
-        )
-
-        VALUES (
-          NULL, b'101', 1, 10, 10, 10, 10,
-          10.3, 10.3, 10.3, '2010-4-4', '2010-4-4 11:44:00', '2010-4-4 11:44:00', '11:44:00',
-          2009, "test", "test", "test", "test", "test",
-          "test", "test", "test", "test", "test",
-          "test", "test", 'val1', 'val1,val2'
-        )
-      ]
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-    end
-
-    after(:all) do
-      @client.query("DELETE FROM mysql2_test WHERE id=#{@test_result['id']}")
     end
 
     it "should return nil for a NULL value" do
@@ -143,6 +87,20 @@ describe Mysql2::Result do
     it "should return Fixnum for a TINYINT value" do
       [Fixnum, Bignum].should include(@test_result['tiny_int_test'].class)
       @test_result['tiny_int_test'].should eql(1)
+    end
+
+    it "should return TrueClass or FalseClass for a TINYINT value if :cast_booleans is enabled" do
+      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (1)'
+      id1 = @client.last_id
+      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (0)'
+      id2 = @client.last_id
+
+      result1 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast_booleans => true
+      result2 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 0 LIMIT 1', :cast_booleans => true
+      result1.first['bool_cast_test'].should be_true
+      result2.first['bool_cast_test'].should be_false
+
+      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
     end
 
     it "should return Fixnum for a SMALLINT value" do

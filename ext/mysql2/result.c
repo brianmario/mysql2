@@ -9,7 +9,8 @@ VALUE cBigDecimal, cDate, cDateTime;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code;
-static ID sym_symbolize_keys, sym_as, sym_array, sym_timezone, sym_local, sym_utc;
+static ID sym_symbolize_keys, sym_as, sym_array, sym_timezone, sym_local, sym_utc,
+          sym_cast_booleans;
 static ID intern_merge;
 
 static void rb_mysql_result_mark(void * wrapper) {
@@ -86,7 +87,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
   return rb_field;
 }
 
-static VALUE rb_mysql_result_fetch_row(VALUE self, ID timezone, int symbolizeKeys, int asArray) {
+static VALUE rb_mysql_result_fetch_row(VALUE self, ID timezone, int symbolizeKeys, int asArray, int castBool) {
   VALUE rowVal;
   mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
@@ -131,6 +132,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID timezone, int symbolizeKey
           val = rb_str_new(row[i], fieldLengths[i]);
           break;
         case MYSQL_TYPE_TINY:       // TINYINT field
+          if (castBool && fields[i].length == 1) {
+            val = *row[i] == '1' ? Qtrue : Qfalse;
+            break;
+          }
         case MYSQL_TYPE_SHORT:      // SMALLINT field
         case MYSQL_TYPE_LONG:       // INTEGER field
         case MYSQL_TYPE_INT24:      // MEDIUMINT field
@@ -266,7 +271,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   ID timezone;
   mysql2_result_wrapper * wrapper;
   unsigned long i;
-  int symbolizeKeys = 0, asArray = 0;
+  int symbolizeKeys = 0, asArray = 0, castBool = 0;
 
   GetMysql2Result(self, wrapper);
 
@@ -283,6 +288,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (rb_hash_aref(opts, sym_as) == sym_array) {
     asArray = 1;
+  }
+
+  if (rb_hash_aref(opts, sym_cast_booleans) == Qtrue) {
+    castBool = 1;
   }
 
   timezoneVal = rb_hash_aref(opts, sym_timezone);
@@ -318,7 +327,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       if (i < rowsProcessed) {
         row = rb_ary_entry(wrapper->rows, i);
       } else {
-        row = rb_mysql_result_fetch_row(self, timezone, symbolizeKeys, asArray);
+        row = rb_mysql_result_fetch_row(self, timezone, symbolizeKeys, asArray, castBool);
         rb_ary_store(wrapper->rows, i, row);
         wrapper->lastRowProcessed++;
       }
@@ -381,6 +390,7 @@ void init_mysql2_result() {
   sym_timezone        = ID2SYM(rb_intern("timezone"));
   sym_local           = ID2SYM(rb_intern("local"));
   sym_utc             = ID2SYM(rb_intern("utc"));
+  sym_cast_booleans   = ID2SYM(rb_intern("cast_booleans"));
 
 #ifdef HAVE_RUBY_ENCODING_H
   binaryEncoding = rb_enc_find("binary");

@@ -208,7 +208,7 @@ module Sequel
         super(sql, {:type=>:dui}.merge(opts), &block)
       end
 
-      # Handle correct quoting of strings using ::Mysql2#escape.
+      # Handle correct quoting of strings using ::Mysql2::Client#escape.
       def literal_string(v)
         db.synchronize{|c| "'#{c.escape(v)}'"}
       end

@@ -57,6 +57,7 @@ module Sequel
       def connect(server)
         opts = server_opts(server)
         opts[:host] ||= 'localhost'
+        opts[:username] ||= opts[:user]
         conn = ::Mysql2::Client.new(opts)
 
         sqls = []

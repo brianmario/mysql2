@@ -1,42 +1,29 @@
 require 'mysql2' unless defined? Mysql2
 
-Sequel.require %w'shared/mysql utils/stored_procedures', 'adapters'
+Sequel.require %w'shared/mysql', 'adapters'
 
 module Sequel
-  # Module for holding all MySQL-related classes and modules for Sequel.
+  # Module for holding all Mysql2-related classes and modules for Sequel.
   module Mysql2
-    # Mapping of type numbers to conversion procs
-    MYSQL_TYPES = {}
+    class << self
+      # Set the default charset used for CREATE TABLE.  You can pass the
+      # :charset option to create_table to override this setting.
+      attr_accessor :default_charset
 
-    MYSQL2_LITERAL_PROC = lambda{|v| v}
+      # Set the default collation used for CREATE TABLE.  You can pass the
+      # :collate option to create_table to override this setting.
+      attr_accessor :default_collate
 
-    # Use only a single proc for each type to save on memory
-    MYSQL_TYPE_PROCS = {
-      [0, 246]  => MYSQL2_LITERAL_PROC,                               # decimal
-      [1]  => lambda{|v| convert_tinyint_to_bool ? v != 0 : v},       # tinyint
-      [2, 3, 8, 9, 13, 247, 248]  => MYSQL2_LITERAL_PROC,             # integer
-      [4, 5]  => MYSQL2_LITERAL_PROC,                                 # float
-      [10, 14]  => MYSQL2_LITERAL_PROC,                               # date
-      [7, 12] => MYSQL2_LITERAL_PROC,                                # datetime
-      [11]  => MYSQL2_LITERAL_PROC,                                   # time
-      [249, 250, 251, 252]  => lambda{|v| Sequel::SQL::Blob.new(v)}   # blob
-    }
-    MYSQL_TYPE_PROCS.each do |k,v|
-      k.each{|n| MYSQL_TYPES[n] = v}
+      # Set the default engine used for CREATE TABLE.  You can pass the
+      # :engine option to create_table to override this setting.
+      attr_accessor :default_engine
     end
 
-    @convert_invalid_date_time = false
     @convert_tinyint_to_bool = true
 
     class << self
-      # By default, Sequel raises an exception if in invalid date or time is used.
-      # However, if this is set to nil or :nil, the adapter treats dates
-      # like 0000-00-00 and times like 838:00:00 as nil values.  If set to :string,
-      # it returns the strings as is.
-      attr_accessor :convert_invalid_date_time
-
       # Sequel converts the column type tinyint(1) to a boolean by default when
-      # using the native MySQL adapter.  You can turn off the conversion by setting
+      # using the native Mysql2 adapter.  You can turn off the conversion by setting
       # this to false.
       attr_accessor :convert_tinyint_to_bool
     end
@@ -49,12 +36,6 @@ module Sequel
       MYSQL_DATABASE_DISCONNECT_ERRORS = /\A(Commands out of sync; you can't run this command now|Can't connect to local MySQL server through socket|MySQL server has gone away)/
 
       set_adapter_scheme :mysql2
-
-      # Support stored procedures on MySQL
-      def call_sproc(name, opts={}, &block)
-        args = opts[:args] || []
-        execute("CALL #{name}#{args.empty? ? '()' : literal(args)}", opts.merge(:sproc=>false), &block)
-      end
 
       # Connect to the database.  In addition to the usual database options,
       # the following options have effect:
@@ -75,20 +56,25 @@ module Sequel
       #   disconnect this connection.
       def connect(server)
         opts = server_opts(server)
-        conn = ::Mysql2::Client.new({
-          :host => opts[:host] || 'localhost',
-          :username => opts[:user],
-          :password => opts[:password],
-          :database => opts[:database],
-          :port => opts[:port],
-          :socket => opts[:socket]
-        })
+        opts[:host] ||= 'localhost'
+        conn = ::Mysql2::Client.new(opts)
+
+        sqls = []
+        # Set encoding a slightly different way after connecting,
+        # in case the READ_DEFAULT_GROUP overrode the provided encoding.
+        # Doesn't work across implicit reconnects, but Sequel doesn't turn on
+        # that feature.
+        if encoding = opts[:encoding] || opts[:charset]
+          sqls << "SET NAMES #{literal(encoding.to_s)}"
+        end
 
         # increase timeout so mysql server doesn't disconnect us
-        conn.query("set @@wait_timeout = #{opts[:timeout] || 2592000}")
+        sqls << "SET @@wait_timeout = #{opts[:timeout] || 2592000}"
 
         # By default, MySQL 'where id is null' selects the last inserted id
-        conn.query("set SQL_AUTO_IS_NULL=0") unless opts[:auto_is_null]
+        sqls << "SET SQL_AUTO_IS_NULL=0" unless opts[:auto_is_null]
+
+        sqls.each{|sql| log_yield(sql){conn.query(sql)}}
 
         conn
       end
@@ -110,17 +96,30 @@ module Sequel
 
       # Return the version of the MySQL server two which we are connecting.
       def server_version(server=nil)
-        @server_version ||= (synchronize(server){|conn| conn.info[:id]})
+        @server_version ||= (synchronize(server){|conn| conn.server_info[:id]} || super)
       end
 
       private
+
+      # Use MySQL specific syntax for engine type and character encoding
+      def create_table_sql(name, generator, options = {})
+        engine = options.fetch(:engine, Sequel::Mysql2.default_engine)
+        charset = options.fetch(:charset, Sequel::Mysql2.default_charset)
+        collate = options.fetch(:collate, Sequel::Mysql2.default_collate)
+        generator.columns.each do |c|
+          if t = c.delete(:table)
+            generator.foreign_key([c[:name]], t, c.merge(:name=>nil, :type=>:foreign_key))
+          end
+        end
+        super(name, generator, options.merge(:engine => engine, :charset => charset, :collate => collate))
+      end
 
       # Execute the given SQL on the given connection.  If the :type
       # option is :select, yield the result of the query, otherwise
       # yield the connection if a block is given.
       def _execute(conn, sql, opts)
         begin
-          r = log_yield(sql){conn.query(sql)}
+          r = log_yield(sql){conn.query(sql, :symbolize_keys => true)}
           if opts[:type] == :select
             yield r if r
           elsif block_given?
@@ -136,7 +135,7 @@ module Sequel
         :query
       end
 
-      # The MySQL adapter main error class is Mysql::Error
+      # The MySQL adapter main error class is Mysql2::Error
       def database_error_classes
         [::Mysql2::Error]
       end
@@ -161,36 +160,17 @@ module Sequel
     # Dataset class for MySQL datasets accessed via the native driver.
     class Dataset < Sequel::Dataset
       include Sequel::MySQL::DatasetMethods
-      include StoredProcedures
-
-      # Methods for MySQL stored procedures using the native driver.
-      module StoredProcedureMethods
-        include Sequel::Dataset::StoredProcedureMethods
-
-        private
-
-        # Execute the database stored procedure with the stored arguments.
-        def execute(sql, opts={}, &block)
-          super(@sproc_name, {:args=>@sproc_args, :sproc=>true}.merge(opts), &block)
-        end
-
-        # Same as execute, explicit due to intricacies of alias and super.
-        def execute_dui(sql, opts={}, &block)
-          super(@sproc_name, {:args=>@sproc_args, :sproc=>true}.merge(opts), &block)
-        end
-      end
 
       # Delete rows matching this dataset
       def delete
         execute_dui(delete_sql){|c| return c.affected_rows}
       end
 
-      # Yield all rows matching this dataset.  If the dataset is set to
-      # split multiple statements, yield arrays of hashes one per statement
-      # instead of yielding results for all statements as hashes.
+      # Yield all rows matching this dataset.
       def fetch_rows(sql, &block)
         execute(sql) do |r|
-          r.each(:symbolize_keys => true, &block)
+          @columns = r.fields
+          r.each(:cast_booleans => Sequel::Mysql2.convert_tinyint_to_bool, &block)
         end
         self
       end
@@ -228,7 +208,7 @@ module Sequel
         super(sql, {:type=>:dui}.merge(opts), &block)
       end
 
-      # Handle correct quoting of strings using ::Mysql2#escape.
+      # Handle correct quoting of strings using ::MySQL.quote.
       def literal_string(v)
         db.synchronize{|c| "'#{c.escape(v)}'"}
       end

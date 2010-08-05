@@ -66,7 +66,7 @@ module Sequel
         # Doesn't work across implicit reconnects, but Sequel doesn't turn on
         # that feature.
         if encoding = opts[:encoding] || opts[:charset]
-          sqls << "SET NAMES #{literal(encoding.to_s)}"
+          sqls << "SET NAMES #{conn.escape(encoding.to_s)}"
         end
 
         # increase timeout so mysql server doesn't disconnect us

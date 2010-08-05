@@ -2,9 +2,10 @@
 #include <client.h>
 
 VALUE cMysql2Client;
-extern VALUE mMysql2, cMysql2Error, intern_encoding_from_charset;
-extern ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
-extern ID intern_merge;
+extern VALUE mMysql2, cMysql2Error;
+static VALUE intern_encoding_from_charset;
+static ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
+static ID intern_merge;
 
 #define REQUIRE_OPEN_DB(_ctxt) \
   if(!_ctxt->net.vio) { \
@@ -529,4 +530,15 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "init_connection", init_connection, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 6);
+
+  intern_encoding_from_charset = rb_intern("encoding_from_charset");
+
+  sym_id              = ID2SYM(rb_intern("id"));
+  sym_version         = ID2SYM(rb_intern("version"));
+  sym_async           = ID2SYM(rb_intern("async"));
+  sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
+  sym_as              = ID2SYM(rb_intern("as"));
+  sym_array           = ID2SYM(rb_intern("array"));
+
+  intern_merge = rb_intern("merge");
 }

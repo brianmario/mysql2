@@ -4,13 +4,13 @@
 rb_encoding *binaryEncoding;
 #endif
 
-ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code;
-
 VALUE cMysql2Result;
 VALUE cBigDecimal, cDate, cDateTime;
-extern VALUE mMysql2, cMysql2Client, cMysql2Error, intern_encoding_from_charset;
-extern ID sym_symbolize_keys, sym_as, sym_array, sym_timezone, sym_local, sym_utc;
-extern ID intern_merge;
+extern VALUE mMysql2, cMysql2Client, cMysql2Error;
+static VALUE intern_encoding_from_charset;
+static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code;
+static ID sym_symbolize_keys, sym_as, sym_array, sym_timezone, sym_local, sym_utc;
+static ID intern_merge;
 
 static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
@@ -367,10 +367,20 @@ void init_mysql2_result() {
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
 
+  intern_encoding_from_charset = rb_intern("encoding_from_charset");
+  intern_encoding_from_charset_code = rb_intern("encoding_from_charset_code");
+
   intern_new    = rb_intern("new");
   intern_utc    = rb_intern("utc");
   intern_local  = rb_intern("local");
-  intern_encoding_from_charset_code = rb_intern("encoding_from_charset_code");
+  intern_merge  = rb_intern("merge");
+
+  sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
+  sym_as              = ID2SYM(rb_intern("as"));
+  sym_array           = ID2SYM(rb_intern("array"));
+  sym_timezone        = ID2SYM(rb_intern("timezone"));
+  sym_local           = ID2SYM(rb_intern("local"));
+  sym_utc             = ID2SYM(rb_intern("utc"));
 
 #ifdef HAVE_RUBY_ENCODING_H
   binaryEncoding = rb_enc_find("binary");

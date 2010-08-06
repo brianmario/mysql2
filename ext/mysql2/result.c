@@ -64,7 +64,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
     MYSQL_FIELD *field = NULL;
 #ifdef HAVE_RUBY_ENCODING_H
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
-    rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+    rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
 #endif
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
@@ -98,7 +98,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   void * ptr;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
 #endif
 
   GetMysql2Result(self, wrapper);

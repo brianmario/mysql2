@@ -29,4 +29,7 @@
 #include <client.h>
 #include <result.h>
 
+#define GET_ENCODING(self) \
+  rb_iv_get(self, "@encoding")
+
 #endif

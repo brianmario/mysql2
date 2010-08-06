@@ -239,7 +239,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   rb_iv_set(resultObj, "@query_options", rb_obj_dup(rb_iv_get(self, "@query_options")));
 
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_iv_set(resultObj, "@encoding", rb_iv_get(self, "@encoding"));
+  rb_iv_set(resultObj, "@encoding", GET_ENCODING(self));
 #endif
   return resultObj;
 }
@@ -278,7 +278,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
   // ensure the string is in the encoding the connection is expecting
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
@@ -324,7 +324,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   Check_Type(str, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
   // ensure the string is in the encoding the connection is expecting
   str = rb_str_export_to_enc(str, conn_enc);
 #endif
@@ -355,7 +355,7 @@ static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE self) {
   VALUE version = rb_hash_new(), client_info;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
 #endif
 
   rb_hash_aset(version, sym_id, LONG2NUM(mysql_get_client_version()));
@@ -375,7 +375,7 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
   VALUE version, server_info;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(rb_iv_get(self, "@encoding"));
+  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
 #endif
 
   Data_Get_Struct(self, MYSQL, client);

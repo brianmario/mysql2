@@ -327,9 +327,6 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   } else if (appTz == sym_utc) {
     app_timezone = intern_utc;
   } else {
-    if (!NIL_P(appTz)) {
-      rb_warn(":application_timezone option must be :utc or :local - defaulting to :local");
-    }
     app_timezone = intern_local;
   }
 

@@ -302,7 +302,7 @@ module ActiveRecord
       def execute(sql, name = nil)
         # make sure we carry over any changes to ActiveRecord::Base.default_timezone that have been
         # made since we established the connection
-        @connection.query_options[:timezone] = ActiveRecord::Base.default_timezone
+        @connection.query_options[:database_timezone] = ActiveRecord::Base.default_timezone
         if name == :skip_logging
           @connection.query(sql)
         else

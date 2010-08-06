@@ -6,8 +6,8 @@ module Mysql2
       :async => false,
       :cast_booleans => false,
       :symbolize_keys => false,
-      :database_timezone => :local,   # timezone Mysql2 will assume datetime objects are stored in
-      :application_timezone => :local # timezone Mysql2 will convert to before handing the object back to the caller
+      :database_timezone => :local, # timezone Mysql2 will assume datetime objects are stored in
+      :application_timezone => nil  # timezone Mysql2 will convert to before handing the object back to the caller
     }
 
     def initialize(opts = {})

@@ -57,7 +57,7 @@ end
   asplode h unless have_header h
 end
 
-$CFLAGS << ' -Wall -Wextra -funroll-loops'
-# $CFLAGS << ' -O0 -ggdb3'
+$CFLAGS << ' -Wall -funroll-loops'
+# $CFLAGS << ' -O0 -ggdb3 -Wextra'
 
 create_makefile('mysql2/mysql2')

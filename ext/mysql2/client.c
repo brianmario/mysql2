@@ -2,15 +2,19 @@
 #include <client.h>
 
 VALUE cMysql2Client;
-extern VALUE mMysql2, cMysql2Error, intern_encoding_from_charset;
-extern ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
-extern ID intern_merge;
+extern VALUE mMysql2, cMysql2Error;
+static VALUE intern_encoding_from_charset;
+static ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
+static ID intern_merge;
 
 #define REQUIRE_OPEN_DB(_ctxt) \
   if(!_ctxt->net.vio) { \
     rb_raise(cMysql2Error, "closed MySQL connection"); \
     return Qnil; \
   }
+
+#define MARK_CONN_INACTIVE(conn) \
+  rb_iv_set(conn, "@active", Qfalse);
 
 /*
  * used to pass all arguments to mysql_real_connect while inside
@@ -147,8 +151,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.mysql = client;
   args.client_flag = 0;
 
-  if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse)
-  {
+  if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
     return rb_raise_mysql2_error(client);
   }
@@ -214,10 +217,16 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   REQUIRE_OPEN_DB(client);
   if (rb_thread_blocking_region(nogvl_read_query_result, client, RUBY_UBF_IO, 0) == Qfalse) {
+    // an error occurred, mark this connection inactive
+    MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(client);
   }
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, client, RUBY_UBF_IO, 0);
+
+  // we have our result, mark this connection inactive
+  MARK_CONN_INACTIVE(self);
+
   if (result == NULL) {
     if (mysql_field_count(client) != 0) {
       rb_raise_mysql2_error(client);
@@ -240,12 +249,21 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   fd_set fdset;
   int fd, retval;
   int async = 0;
-  VALUE opts, defaults;
+  VALUE opts, defaults, active;
   MYSQL *client;
 
   Data_Get_Struct(self, MYSQL, client);
   REQUIRE_OPEN_DB(client);
   args.mysql = client;
+
+  active = rb_iv_get(self, "@active");
+  // see if this connection is still waiting on a result from a previous query
+  if (NIL_P(active) || active == Qfalse) {
+    // mark this connection active
+    rb_iv_set(self, "@active", Qtrue);
+  } else {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  }
 
   defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
@@ -266,6 +284,8 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #endif
 
   if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
+    // an error occurred, we're not active anymore
+    MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(client);
   }
 
@@ -289,9 +309,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     }
 
     VALUE result = rb_mysql_client_async_result(self);
-
-    // pass-through query options for result construction later
-    rb_iv_set(result, "@query_options", rb_obj_dup(opts));
 
     return result;
   } else {
@@ -528,4 +545,15 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "init_connection", init_connection, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 6);
+
+  intern_encoding_from_charset = rb_intern("encoding_from_charset");
+
+  sym_id              = ID2SYM(rb_intern("id"));
+  sym_version         = ID2SYM(rb_intern("version"));
+  sym_async           = ID2SYM(rb_intern("async"));
+  sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
+  sym_as              = ID2SYM(rb_intern("as"));
+  sym_array           = ID2SYM(rb_intern("array"));
+
+  intern_merge = rb_intern("merge");
 }

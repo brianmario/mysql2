@@ -2,14 +2,17 @@ module Mysql2
   class Client
     attr_reader :query_options
     @@default_query_options = {
-      :symbolize_keys => false,
-      :async => false,
       :as => :hash,
-      :timezone => :local
+      :async => false,
+      :cast_booleans => false,
+      :symbolize_keys => false,
+      :database_timezone => :local, # timezone Mysql2 will assume datetime objects are stored in
+      :application_timezone => nil  # timezone Mysql2 will convert to before handing the object back to the caller
     }
 
     def initialize(opts = {})
       @query_options = @@default_query_options.dup
+      @active = false
 
       init_connection
 

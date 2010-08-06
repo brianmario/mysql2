@@ -71,6 +71,13 @@ describe Mysql2::Client do
     it "should be able to return results with symbolized keys" do
       @client.query("SELECT 1", :symbolize_keys => true).first.keys[0].class.should eql(Symbol)
     end
+
+    it "should not allow another query to be sent without fetching a result first" do
+      @client.query("SELECT 1", :async => true)
+      lambda {
+        @client.query("SELECT 1")
+      }.should raise_error(Mysql2::Error)
+    end
   end
 
   it "should respond to #escape" do

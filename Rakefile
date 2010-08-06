@@ -36,5 +36,18 @@ end
 
 task :default => :spec
 
+def define_bench_task(feature)
+  desc "Run #{feature} benchmarks"
+  task(feature){ ruby "benchmark/#{feature}.rb" }
+end
+
+namespace :bench do
+  define_bench_task :active_record
+  define_bench_task :escape
+  define_bench_task :query_with_mysql_casting
+  define_bench_task :query_without_mysql_casting
+  define_bench_task :sequel
+end
+
 # Load custom tasks
 Dir['tasks/*.rake'].sort.each { |f| load f }

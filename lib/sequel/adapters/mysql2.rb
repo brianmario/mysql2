@@ -119,8 +119,11 @@ module Sequel
       # option is :select, yield the result of the query, otherwise
       # yield the connection if a block is given.
       def _execute(conn, sql, opts)
+        query_opts = {:symbolize_keys => true}
+        query_opts.merge!(:database_timezone => Sequel.database_timezone) if Sequel.respond_to?(:database_timezone)
+        query_opts.merge!(:application_timezone => Sequel.application_timezone) if Sequel.respond_to?(:application_timezone)
         begin
-          r = log_yield(sql){conn.query(sql, :symbolize_keys => true)}
+          r = log_yield(sql){conn.query(sql, query_opts)}
           if opts[:type] == :select
             yield r if r
           elsif block_given?

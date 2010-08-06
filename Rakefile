@@ -34,5 +34,7 @@ Spec::Rake::SpecTask.new('spec') do |t|
   t.spec_opts << '--options' << 'spec/spec.opts'
 end
 
+task :default => :spec
+
 # Load custom tasks
 Dir['tasks/*.rake'].sort.each { |f| load f }

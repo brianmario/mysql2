@@ -5,7 +5,7 @@ VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE intern_encoding_from_charset;
 static ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
-static ID intern_merge;
+static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #define REQUIRE_OPEN_DB(_ctxt) \
   if(!_ctxt->net.vio) { \
@@ -68,8 +68,8 @@ struct nogvl_send_query_args {
 
 static VALUE rb_raise_mysql2_error(MYSQL *client) {
   VALUE e = rb_exc_new2(cMysql2Error, mysql_error(client));
-  rb_funcall(e, rb_intern("error_number="), 1, INT2NUM(mysql_errno(client)));
-  rb_funcall(e, rb_intern("sql_state="), 1, rb_tainted_str_new2(mysql_sqlstate(client)));
+  rb_funcall(e, intern_error_number_eql, 1, INT2NUM(mysql_errno(client)));
+  rb_funcall(e, intern_sql_state_eql, 1, rb_tainted_str_new2(mysql_sqlstate(client)));
   rb_exc_raise(e);
   return Qnil;
 }
@@ -526,4 +526,7 @@ void init_mysql2_client() {
   sym_array           = ID2SYM(rb_intern("array"));
 
   intern_merge = rb_intern("merge");
+  intern_error_number_eql = rb_intern("error_number=");
+  intern_sql_state_eql = rb_intern("sql_state=");
+
 }

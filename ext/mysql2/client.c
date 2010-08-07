@@ -248,6 +248,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   int fd, retval;
   int async = 0;
   VALUE opts, defaults, active;
+  int(*selector)(int, fd_set *, fd_set *, fd_set *, struct timeval *) = NULL;
   GET_CLIENT(self)
 
   REQUIRE_OPEN_DB(client);
@@ -290,8 +291,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     // the below code is largely from do_mysql
     // http://github.com/datamapper/do
     fd = client->net.fd;
-    int(*selector)(int, fd_set *, fd_set *, fd_set *, struct timeval *) = NULL;
-    selector = rb_thread_alone ? *select : *rb_thread_select;
+    selector = rb_thread_alone() ? *select : *rb_thread_select;
     for(;;) {
       FD_ZERO(&fdset);
       FD_SET(fd, &fdset);

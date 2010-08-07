@@ -290,11 +290,13 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     // the below code is largely from do_mysql
     // http://github.com/datamapper/do
     fd = client->net.fd;
+    int(*selector)(int, fd_set *, fd_set *, fd_set *, struct timeval *) = NULL;
+    selector = rb_thread_alone ? *select : *rb_thread_select;
     for(;;) {
       FD_ZERO(&fdset);
       FD_SET(fd, &fdset);
 
-      retval = rb_thread_select(fd + 1, &fdset, NULL, NULL, NULL);
+      retval = selector(fd + 1, &fdset, NULL, NULL, NULL);
 
       if (retval < 0) {
         rb_sys_fail(0);

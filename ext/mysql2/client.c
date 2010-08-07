@@ -335,7 +335,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   Data_Get_Struct(self, MYSQL, client);
 
   REQUIRE_OPEN_DB(client);
-  newLen = mysql_real_escape_string(client, escaped, StringValuePtr(str), RSTRING_LEN(str));
+  newLen = mysql_real_escape_string(client, escaped, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
     return str;

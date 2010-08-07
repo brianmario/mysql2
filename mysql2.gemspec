@@ -45,7 +45,6 @@ Gem::Specification.new do |s|
      "lib/mysql2/em.rb",
      "lib/mysql2/error.rb",
      "lib/mysql2/result.rb",
-     "lib/sequel/adapters/mysql2.rb",
      "mysql2.gemspec",
      "spec/active_record/active_record_spec.rb",
      "spec/em/em_spec.rb",

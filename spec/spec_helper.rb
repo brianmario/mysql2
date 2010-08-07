@@ -3,6 +3,7 @@ $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/..')
 $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'mysql2'
+require 'timeout'
 
 Spec::Runner.configure do |config|
   config.before(:all) do

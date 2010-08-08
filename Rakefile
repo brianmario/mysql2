@@ -48,6 +48,6 @@ namespace :bench do
   define_bench_task :query_without_mysql_casting
   define_bench_task :sequel
   define_bench_task :allocations
-end
-# Load custom tasks
+  define_bench_task :thread_alone
+end# Load custom tasks
 Dir['tasks/*.rake'].sort.each { |f| load f }

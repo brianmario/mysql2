@@ -6,6 +6,7 @@ rb_encoding *binaryEncoding;
 
 VALUE cMysql2Result;
 VALUE cBigDecimal, cDate, cDateTime;
+VALUE opt_decimal_zero, opt_float_zero;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
@@ -95,6 +96,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   MYSQL_FIELD * fields = NULL;
   unsigned int i = 0;
   unsigned long * fieldLengths;
+  double column_to_double;
   void * ptr;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
@@ -146,11 +148,20 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           break;
         case MYSQL_TYPE_DECIMAL:    // DECIMAL or NUMERIC field
         case MYSQL_TYPE_NEWDECIMAL: // Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up)
-          val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
+          if (strtod(row[i], NULL) == 0.000000){
+            val = rb_funcall(cBigDecimal, intern_new, 1, opt_decimal_zero);
+          }else{
+            val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
+          }
           break;
         case MYSQL_TYPE_FLOAT:      // FLOAT field
         case MYSQL_TYPE_DOUBLE:     // DOUBLE or REAL field
-          val = rb_float_new(strtod(row[i], NULL));
+          column_to_double = strtod(row[i], NULL);
+          if (column_to_double == 0.000000){
+            val = opt_float_zero;
+          }else{
+            val = rb_float_new(column_to_double);
+          }
           break;
         case MYSQL_TYPE_TIME: {     // TIME field
           int hour, min, sec, tokens;
@@ -419,6 +430,11 @@ void init_mysql2_result() {
   sym_cast_booleans   = ID2SYM(rb_intern("cast_booleans"));
   sym_database_timezone     = ID2SYM(rb_intern("database_timezone"));
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
+
+  rb_global_variable(&opt_decimal_zero); //never GC
+  opt_decimal_zero = rb_str_new2("0.0");
+  rb_global_variable(&opt_float_zero);
+  opt_float_zero = rb_float_new((double)0);
 
 #ifdef HAVE_RUBY_ENCODING_H
   binaryEncoding = rb_enc_find("binary");

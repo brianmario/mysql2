@@ -20,8 +20,10 @@ Spec::Runner.configure do |config|
         int_test INT,
         big_int_test BIGINT,
         float_test FLOAT(10,3),
+        float_zero_test FLOAT(10,3),
         double_test DOUBLE(10,3),
         decimal_test DECIMAL(10,3),
+        decimal_zero_test DECIMAL(10,3),
         date_test DATE,
         date_time_test DATETIME,
         timestamp_test TIMESTAMP,
@@ -47,7 +49,7 @@ Spec::Runner.configure do |config|
     client.query %[
       INSERT INTO mysql2_test (
         null_test, bit_test, tiny_int_test, bool_cast_test, small_int_test, medium_int_test, int_test, big_int_test,
-        float_test, double_test, decimal_test, date_test, date_time_test, timestamp_test, time_test,
+        float_test, float_zero_test, double_test, decimal_test, decimal_zero_test, date_test, date_time_test, timestamp_test, time_test,
         year_test, char_test, varchar_test, binary_test, varbinary_test, tiny_blob_test,
         tiny_text_test, blob_test, text_test, medium_blob_test, medium_text_test,
         long_blob_test, long_text_test, enum_test, set_test
@@ -55,7 +57,7 @@ Spec::Runner.configure do |config|
 
       VALUES (
         NULL, b'101', 1, 1, 10, 10, 10, 10,
-        10.3, 10.3, 10.3, '2010-4-4', '2010-4-4 11:44:00', '2010-4-4 11:44:00', '11:44:00',
+        10.3, 0, 10.3, 10.3, 0, '2010-4-4', '2010-4-4 11:44:00', '2010-4-4 11:44:00', '11:44:00',
         2009, "test", "test", "test", "test", "test",
         "test", "test", "test", "test", "test",
         "test", "test", 'val1', 'val1,val2'

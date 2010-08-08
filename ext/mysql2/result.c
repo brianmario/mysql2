@@ -6,7 +6,7 @@ rb_encoding *binaryEncoding;
 
 VALUE cMysql2Result;
 VALUE cBigDecimal, cDate, cDateTime;
-VALUE opt_decimal_zero, opt_float_zero;
+VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
@@ -96,7 +96,6 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   MYSQL_FIELD * fields = NULL;
   unsigned int i = 0;
   unsigned long * fieldLengths;
-  double column_to_double;
   void * ptr;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
@@ -155,7 +154,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           }
           break;
         case MYSQL_TYPE_FLOAT:      // FLOAT field
-        case MYSQL_TYPE_DOUBLE:     // DOUBLE or REAL field
+        case MYSQL_TYPE_DOUBLE: {     // DOUBLE or REAL field
+          double column_to_double;
           column_to_double = strtod(row[i], NULL);
           if (column_to_double == 0.000000){
             val = opt_float_zero;
@@ -163,10 +163,11 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
             val = rb_float_new(column_to_double);
           }
           break;
+        }
         case MYSQL_TYPE_TIME: {     // TIME field
           int hour, min, sec, tokens;
           tokens = sscanf(row[i], "%2d:%2d:%2d", &hour, &min, &sec);
-          val = rb_funcall(rb_cTime, db_timezone, 6, INT2NUM(2000), INT2NUM(1), INT2NUM(1), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
+          val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
           if (!NIL_P(app_timezone)) {
             if (app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);
@@ -435,6 +436,8 @@ void init_mysql2_result() {
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_float_zero);
   opt_float_zero = rb_float_new((double)0);
+  opt_time_year = INT2NUM(2000);
+  opt_time_month = INT2NUM(1);
 
 #ifdef HAVE_RUBY_ENCODING_H
   binaryEncoding = rb_enc_find("binary");

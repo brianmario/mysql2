@@ -37,7 +37,6 @@ Gem::Specification.new do |s|
      "ext/mysql2/result.c",
      "ext/mysql2/result.h",
      "lib/active_record/connection_adapters/em_mysql2_adapter.rb",
-     "lib/active_record/connection_adapters/mysql2_adapter.rb",
      "lib/active_record/fiber_patches.rb",
      "lib/arel/engines/sql/compilers/mysql2_compiler.rb",
      "lib/mysql2.rb",

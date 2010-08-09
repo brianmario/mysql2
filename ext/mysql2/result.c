@@ -327,7 +327,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   } else if (appTz == sym_utc) {
     app_timezone = intern_utc;
   } else {
-    app_timezone = intern_local;
+    app_timezone = Qnil;
   }
 
   if (wrapper->lastRowProcessed == 0) {

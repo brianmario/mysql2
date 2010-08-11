@@ -10,7 +10,7 @@ have_func('rb_thread_blocking_region')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
-dirs = ENV['PATH'].split(':') + %w[
+dirs = ENV['PATH'].split(File::PATH_SEPARATOR) + %w[
   /opt
   /opt/local
   /opt/local/mysql
@@ -24,7 +24,7 @@ dirs = ENV['PATH'].split(':') + %w[
 
 GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5}"
 
-if /mswin32/ =~ RUBY_PLATFORM
+if RUBY_PLATFORM =~ /mswin|mingw/
   inc, lib = dir_config('mysql')
   exit 1 unless have_library("libmysql")
 elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
@@ -57,7 +57,9 @@ end
   asplode h unless have_header h
 end
 
-$CFLAGS << ' -Wall -funroll-loops'
+unless RUBY_PLATFORM =~ /mswin/
+  $CFLAGS << ' -Wall -funroll-loops'
+end
 # $CFLAGS << ' -O0 -ggdb3 -Wextra'
 
 create_makefile('mysql2/mysql2')

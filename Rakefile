@@ -20,7 +20,7 @@ end
 
 require 'rake'
 require 'spec/rake/spectask'
-gem 'rake-compiler', '>= 0.4.1'
+gem 'rake-compiler', '~> 0.7.1'
 require "rake/extensiontask"
 
 desc "Run all examples with RCov"

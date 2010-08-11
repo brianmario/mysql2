@@ -7,3 +7,5 @@ Makefile
 *.rbc
 mkmf.log
 pkg/
+tmp
+vendor

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.1 (August 16th, 2010)
+* bring mysql2 ActiveRecord adapter back into gem
+
 ## 0.2.0 (August 16th, 2010)
 * switch back to letting libmysql manage all allocation/thread-state/freeing for the connection
 * cache various numeric type conversions in hot-spots of the code for a little speed boost

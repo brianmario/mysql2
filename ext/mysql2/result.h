@@ -7,6 +7,7 @@ VALUE rb_mysql_result_to_obj(MYSQL_RES * r);
 typedef struct {
   VALUE fields;
   VALUE rows;
+  VALUE encoding;
   unsigned int numberOfFields;
   unsigned long numberOfRows;
   unsigned long lastRowProcessed;

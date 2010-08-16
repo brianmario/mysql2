@@ -14,11 +14,13 @@ static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
   }
 
 #define MARK_CONN_INACTIVE(conn) \
-  rb_iv_set(conn, "@active", Qfalse);
+  wrapper->active = 0;
 
 #define GET_CLIENT(self) \
-  MYSQL * client; \
-  Data_Get_Struct(self, MYSQL, client);
+  mysql_client_wrapper *wrapper; \
+  MYSQL *client; \
+  Data_Get_Struct(self, mysql_client_wrapper, wrapper); \
+  client = &wrapper->client;
 
 /*
  * used to pass all arguments to mysql_real_connect while inside
@@ -66,6 +68,13 @@ struct nogvl_send_query_args {
  * - mysql_ssl_set()
  */
 
+static void rb_mysql_client_mark(void * wrapper) {
+  mysql_client_wrapper * w = wrapper;
+  if (w) {
+    rb_gc_mark(w->encoding);
+  }
+}
+
 static VALUE rb_raise_mysql2_error(MYSQL *client) {
   VALUE e = rb_exc_new2(cMysql2Error, mysql_error(client));
   rb_funcall(e, intern_error_number_eql, 1, INT2NUM(mysql_errno(client)));
@@ -78,7 +87,7 @@ static VALUE nogvl_init(void *ptr) {
   MYSQL * client = (MYSQL *)ptr;
 
   /* may initialize embedded server and read /etc/services off disk */
-  mysql_init(client);
+  client = mysql_init(NULL);
 
   return client ? Qtrue : Qfalse;
 }
@@ -96,7 +105,8 @@ static VALUE nogvl_connect(void *ptr) {
 }
 
 static void rb_mysql_client_free(void * ptr) {
-  MYSQL * client = (MYSQL *)ptr;
+  mysql_client_wrapper * wrapper = (mysql_client_wrapper *)ptr;
+  MYSQL * client = &wrapper->client;
 
   /*
    * we'll send a QUIT message to the server, but that message is more of a
@@ -129,15 +139,12 @@ static VALUE nogvl_close(void * ptr) {
 }
 
 static VALUE allocate(VALUE klass) {
-  MYSQL * client;
-
-  return Data_Make_Struct(
-      klass,
-      MYSQL,
-      NULL,
-      rb_mysql_client_free,
-      client
-  );
+  VALUE obj;
+  mysql_client_wrapper * wrapper;
+  obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
+  wrapper->encoding = Qnil;
+  wrapper->active = 0;
+  return obj;
 }
 
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket) {
@@ -237,7 +244,9 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   rb_iv_set(resultObj, "@query_options", rb_obj_dup(rb_iv_get(self, "@query_options")));
 
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_iv_set(resultObj, "@encoding", GET_ENCODING(self));
+  mysql2_result_wrapper * result_wrapper;
+  GetMysql2Result(resultObj, result_wrapper);
+  result_wrapper->encoding = wrapper->encoding;
 #endif
   return resultObj;
 }
@@ -247,18 +256,17 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   fd_set fdset;
   int fd, retval;
   int async = 0;
-  VALUE opts, defaults, active;
+  VALUE opts, defaults;
   int(*selector)(int, fd_set *, fd_set *, fd_set *, struct timeval *) = NULL;
   GET_CLIENT(self)
 
   REQUIRE_OPEN_DB(client);
   args.mysql = client;
 
-  active = rb_iv_get(self, "@active");
   // see if this connection is still waiting on a result from a previous query
-  if (NIL_P(active) || active == Qfalse) {
+  if (wrapper->active == 0) {
     // mark this connection active
-    rb_iv_set(self, "@active", Qtrue);
+    wrapper->active = 1;
   } else {
     rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
   }
@@ -276,7 +284,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
+  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
   // ensure the string is in the encoding the connection is expecting
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
@@ -323,7 +331,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   Check_Type(str, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
+  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
   // ensure the string is in the encoding the connection is expecting
   str = rb_str_export_to_enc(str, conn_enc);
 #endif
@@ -348,11 +356,12 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   }
 }
 
-static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE self) {
+static VALUE rb_mysql_client_info(VALUE self) {
   VALUE version = rb_hash_new(), client_info;
+  GET_CLIENT(self);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
+  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
 
   rb_hash_aset(version, sym_id, LONG2NUM(mysql_get_client_version()));
@@ -372,7 +381,7 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
   GET_CLIENT(self)
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
+  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
 
   REQUIRE_OPEN_DB(client);
@@ -446,14 +455,13 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
   GET_CLIENT(self)
 
 #ifdef HAVE_RUBY_ENCODING_H
-  VALUE new_encoding, old_encoding;
+  VALUE new_encoding;
   new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset, 1, value);
   if (new_encoding == Qnil) {
     rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(value));
   } else {
-    old_encoding = rb_iv_get(self, "@encoding");
-    if (old_encoding == Qnil) {
-      rb_iv_set(self, "@encoding", new_encoding);
+    if (wrapper->encoding == Qnil) {
+      wrapper->encoding = new_encoding;
     }
   }
 #endif

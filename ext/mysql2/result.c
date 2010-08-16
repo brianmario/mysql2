@@ -20,6 +20,7 @@ static void rb_mysql_result_mark(void * wrapper) {
   if (w) {
     rb_gc_mark(w->fields);
     rb_gc_mark(w->rows);
+    rb_gc_mark(w->encoding);
   }
 }
 
@@ -65,7 +66,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
     MYSQL_FIELD *field = NULL;
 #ifdef HAVE_RUBY_ENCODING_H
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
-    rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
+    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
@@ -97,12 +98,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   unsigned int i = 0;
   unsigned long * fieldLengths;
   void * ptr;
-#ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(GET_ENCODING(self));
-#endif
 
   GetMysql2Result(self, wrapper);
+
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+#endif
 
   ptr = wrapper->result;
   row = (MYSQL_ROW)rb_thread_blocking_region(nogvl_fetch_row, ptr, RUBY_UBF_IO, 0);
@@ -401,6 +403,7 @@ VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   wrapper->result = r;
   wrapper->fields = Qnil;
   wrapper->rows = Qnil;
+  wrapper->encoding = Qnil;
   rb_obj_call_init(obj, 0, NULL);
   return obj;
 }

@@ -102,7 +102,22 @@ If you'd like to see either of these (or others), open an issue and start buggin
 
 == Timezones
 
-You can set the :timezone option to :local or :utc to tell Mysql2 which timezone you'd like to have Time objects in
+Mysql2 now supports two timezone options:
+
+  :database_timezone - this is the timezone Mysql2 will assume fields are already stored as, and will use this when creating the initial Time objects in ruby
+  :application_timezone - this is the timezone Mysql2 will convert to before finally handing back to the caller
+
+In other words, if :database_timezone is set to :utc - Mysql2 will create the Time objects using Time.utc(...) from the raw value libmysql hands over initially.
+Then, if :application_timezone is set to say - :local - Mysql2 will then convert the just-created UTC Time object to local time.
+
+Both options only allow two values - :local or :utc - with the exception that :application_timezone can be [and defaults to] nil
+
+== Casting "boolean" columns
+
+You can now tell Mysql2 to cast tinyint(1) fields to boolean values in Ruby with the :cast_booleans option.
+
+  client = Mysql2::Client.new
+  result = client.query("SELECT * FROM table_with_boolean_field", :cast_booleans => true)
 
 == Async
 
@@ -123,13 +138,16 @@ If you need multiple query concurrency take a look at using a connection pool.
 
 == ActiveRecord
 
-To use the ActiveRecord driver, all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
-That was easy right? :)
+The ActiveRecord adapter has been removed from the mysql2 gem and is now part of Rails 3 core. We'll be releasing a separate gem or trying to get it into 2.3.9 for 2.3.x users.
 
 == Asynchronous ActiveRecord
 
 You can also use Mysql2 with asynchronous Rails (first introduced at http://www.mikeperham.com/2010/04/03/introducing-phat-an-asynchronous-rails-app/) by
 setting the adapter in your database.yml to "em_mysql2".  You must be running Ruby 1.9, thin and the rack-fiber_pool middleware for it to work.
+
+== Sequel
+
+The Sequel adapter was pulled out into Sequel core (will be part of the next release) and can be used by specifying the "mysql2://" prefix to your connection specification.
 
 == EventMachine
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 (August 16th, 2010)
+* switch back to letting libmysql manage all allocation/thread-state/freeing for the connection
+* cache various numeric type conversions in hot-spots of the code for a little speed boost
+* ActiveRecord adapter moved into Rails 3 core
+** Don't worry 2.3.x users! We'll either release the adapter as a separate gem, or try to get it into 2.3.9
+* Fix for the "closed MySQL connection" error (GH #34)
+* Fix for the "can't modify frozen object" error in 1.9.2 (GH #37)
+* Introduce cascading query and result options (more info in README)
+* Sequel adapter pulled into core (will be in the next release - 3.15.0 at the time of writing)
+* add a safety check when attempting to send a query before a result has been fetched
+
 ## 0.1.9 (July 17th, 2010)
 * Support async ActiveRecord access with fibers and EventMachine (mperham)
 * string encoding support for 1.9, respecting Encoding.default_internal

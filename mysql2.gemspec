@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{mysql2}
-  s.version = "0.1.9"
+  s.version = "0.2.0"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Brian Lopez"]
-  s.date = %q{2010-08-01}
+  s.date = %q{2010-08-16}
   s.email = %q{seniorlopez@gmail.com}
   s.extensions = ["ext/mysql2/extconf.rb"]
   s.extra_rdoc_files = [
@@ -23,12 +23,15 @@ Gem::Specification.new do |s|
      "Rakefile",
      "VERSION",
      "benchmark/active_record.rb",
+     "benchmark/allocations.rb",
      "benchmark/escape.rb",
      "benchmark/query_with_mysql_casting.rb",
      "benchmark/query_without_mysql_casting.rb",
      "benchmark/sequel.rb",
      "benchmark/setup_db.rb",
+     "benchmark/thread_alone.rb",
      "examples/eventmachine.rb",
+     "examples/threaded.rb",
      "ext/mysql2/client.c",
      "ext/mysql2/client.h",
      "ext/mysql2/extconf.rb",
@@ -51,7 +54,10 @@ Gem::Specification.new do |s|
      "spec/mysql2/result_spec.rb",
      "spec/rcov.opts",
      "spec/spec.opts",
-     "spec/spec_helper.rb"
+     "spec/spec_helper.rb",
+     "tasks/benchmarks.rake",
+     "tasks/compile.rake",
+     "tasks/vendor_mysql.rake"
   ]
   s.homepage = %q{http://github.com/brianmario/mysql2}
   s.rdoc_options = ["--charset=UTF-8"]
@@ -64,7 +70,8 @@ Gem::Specification.new do |s|
      "spec/mysql2/error_spec.rb",
      "spec/mysql2/result_spec.rb",
      "spec/spec_helper.rb",
-     "examples/eventmachine.rb"
+     "examples/eventmachine.rb",
+     "examples/threaded.rb"
   ]
 
   if s.respond_to? :specification_version then

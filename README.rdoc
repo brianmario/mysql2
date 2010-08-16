@@ -138,7 +138,8 @@ If you need multiple query concurrency take a look at using a connection pool.
 
 == ActiveRecord
 
-The ActiveRecord adapter has been removed from the mysql2 gem and is now part of Rails 3 core. We'll be releasing a separate gem or trying to get it into 2.3.9 for 2.3.x users.
+To use the ActiveRecord driver, all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
+That was easy right? :)
 
 == Asynchronous ActiveRecord
 

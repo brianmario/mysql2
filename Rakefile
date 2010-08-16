@@ -21,8 +21,6 @@ end
 
 require 'rake'
 require 'spec/rake/spectask'
-gem 'rake-compiler', '>= 0.4.1'
-require "rake/extensiontask"
 
 desc "Run all examples with RCov"
 Spec::Rake::SpecTask.new('spec:rcov') do |t|
@@ -43,7 +41,7 @@ Spec::Rake::SpecTask.new('spec:gdb') do |t|
   t.ruby_cmd = "gdb --args #{RUBY}"
 end
 
-Rake::ExtensionTask.new("mysql2", JEWELER.gemspec) do |ext|
-  ext.lib_dir = File.join 'lib', 'mysql2'
-end
-Rake::Task[:spec].prerequisites << :compile
+task :default => :spec
+
+# Load custom tasks
+Dir['tasks/*.rake'].sort.each { |f| load f }

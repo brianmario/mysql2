@@ -22,8 +22,10 @@ create_table_sql = %[
     int_test INT,
     big_int_test BIGINT,
     float_test FLOAT(10,3),
+    float_zero_test FLOAT(10,3),
     double_test DOUBLE(10,3),
     decimal_test DECIMAL(10,3),
+    decimal_zero_test DECIMAL(10,3),
     date_test DATE,
     date_time_test DATETIME,
     timestamp_test TIMESTAMP,
@@ -55,7 +57,7 @@ def insert_record(args)
   insert_sql = "
     INSERT INTO mysql2_test (
       null_test, bit_test, tiny_int_test, small_int_test, medium_int_test, int_test, big_int_test,
-      float_test, double_test, decimal_test, date_test, date_time_test, timestamp_test, time_test,
+      float_test, float_zero_test, double_test, decimal_test, decimal_zero_test, date_test, date_time_test, timestamp_test, time_test,
       year_test, char_test, varchar_test, binary_test, varbinary_test, tiny_blob_test,
       tiny_text_test, blob_test, text_test, medium_blob_test, medium_text_test,
       long_blob_test, long_text_test, enum_test, set_test
@@ -63,7 +65,7 @@ def insert_record(args)
 
     VALUES (
       NULL, #{args[:bit_test]}, #{args[:tiny_int_test]}, #{args[:small_int_test]}, #{args[:medium_int_test]}, #{args[:int_test]}, #{args[:big_int_test]},
-      #{args[:float_test]}, #{args[:double_test]}, #{args[:decimal_test]}, '#{args[:date_test]}', '#{args[:date_time_test]}', '#{args[:timestamp_test]}', '#{args[:time_test]}',
+      #{args[:float_test]}, #{args[:float_zero_test]}, #{args[:double_test]}, #{args[:decimal_test]}, #{args[:decimal_zero_test]}, '#{args[:date_test]}', '#{args[:date_time_test]}', '#{args[:timestamp_test]}', '#{args[:time_test]}',
       #{args[:year_test]}, '#{args[:char_test]}', '#{args[:varchar_test]}', '#{args[:binary_test]}', '#{args[:varbinary_test]}', '#{args[:tiny_blob_test]}',
       '#{args[:tiny_text_test]}', '#{args[:blob_test]}', '#{args[:text_test]}', '#{args[:medium_blob_test]}', '#{args[:medium_text_test]}',
       '#{args[:long_blob_test]}', '#{args[:long_text_test]}', '#{args[:enum_test]}', '#{args[:set_test]}'
@@ -82,8 +84,10 @@ num.times do |n|
     :int_test => rand(2147483647),
     :big_int_test => rand(9223372036854775807),
     :float_test => rand(32767)/1.87,
+    :float_zero_test => 0.0,
     :double_test => rand(8388607)/1.87,
     :decimal_test => rand(8388607)/1.87,
+    :decimal_zero_test => 0,
     :date_test => '2010-4-4',
     :date_time_test => '2010-4-4 11:44:00',
     :timestamp_test => '2010-4-4 11:44:00',

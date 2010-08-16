@@ -176,6 +176,20 @@ describe Mysql2::Client do
     }.should_not raise_error(Mysql2::Error)
   end
 
+  it "threaded queries should be supported" do
+    threads, results = [], {}
+    connect = lambda{ Mysql2::Client.new(:host => "localhost", :username => "root") }
+    Timeout.timeout(0.7) do
+      5.times {
+        threads << Thread.new do
+          results[Thread.current.object_id] = connect.call.query("SELECT sleep(0.5) as result")
+        end
+      }
+    end
+    threads.each{|t| t.join }
+    results.keys.sort.should eql(threads.map{|t| t.object_id }.sort)
+  end
+
   it "evented async queries should be supported" do
     # should immediately return nil
     @client.query("SELECT sleep(0.1)", :async => true).should eql(nil)

@@ -12,7 +12,6 @@ module Mysql2
 
     def initialize(opts = {})
       @query_options = @@default_query_options.dup
-      @active = false
 
       init_connection
 
@@ -21,7 +20,6 @@ module Mysql2
         send(:"#{key}=", opts[key])
       end
       # force the encoding to utf8
-      @encoding = nil
       self.charset_name = opts[:encoding] || 'utf8'
 
       ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslciper))

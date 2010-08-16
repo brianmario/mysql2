@@ -37,7 +37,6 @@ Gem::Specification.new do |s|
      "ext/mysql2/result.c",
      "ext/mysql2/result.h",
      "lib/active_record/connection_adapters/em_mysql2_adapter.rb",
-     "lib/active_record/connection_adapters/mysql2_adapter.rb",
      "lib/active_record/fiber_patches.rb",
      "lib/arel/engines/sql/compilers/mysql2_compiler.rb",
      "lib/mysql2.rb",
@@ -45,9 +44,7 @@ Gem::Specification.new do |s|
      "lib/mysql2/em.rb",
      "lib/mysql2/error.rb",
      "lib/mysql2/result.rb",
-     "lib/sequel/adapters/mysql2.rb",
      "mysql2.gemspec",
-     "spec/active_record/active_record_spec.rb",
      "spec/em/em_spec.rb",
      "spec/mysql2/client_spec.rb",
      "spec/mysql2/error_spec.rb",
@@ -62,8 +59,7 @@ Gem::Specification.new do |s|
   s.rubygems_version = %q{1.3.7}
   s.summary = %q{A simple, fast Mysql library for Ruby, binding to libmysql}
   s.test_files = [
-    "spec/active_record/active_record_spec.rb",
-     "spec/em/em_spec.rb",
+    "spec/em/em_spec.rb",
      "spec/mysql2/client_spec.rb",
      "spec/mysql2/error_spec.rb",
      "spec/mysql2/result_spec.rb",

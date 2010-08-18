@@ -606,12 +606,11 @@ module ActiveRecord
 
         def configure_connection
           @connection.query_options.merge!(:as => :array)
-          encoding = @config[:encoding]
-          execute("SET NAMES '#{encoding}'", :skip_logging) if encoding
 
           # By default, MySQL 'where id is null' selects the last inserted id.
           # Turn this off. http://dev.rubyonrails.org/ticket/6778
-          execute("SET SQL_AUTO_IS_NULL=0", :skip_logging)
+          encoding = @config[:encoding]
+          execute("SET NAMES '#{encoding}', SQL_AUTO_IS_NULL=0", :skip_logging) if encoding
         end
 
         # Returns an array of record hashes with the column names as keys and

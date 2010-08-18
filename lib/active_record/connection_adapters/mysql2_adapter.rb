@@ -609,8 +609,11 @@ module ActiveRecord
 
           # By default, MySQL 'where id is null' selects the last inserted id.
           # Turn this off. http://dev.rubyonrails.org/ticket/6778
+          variable_assignments = ['SQL_AUTO_IS_NULL=0']
           encoding = @config[:encoding]
-          execute("SET NAMES '#{encoding}', SQL_AUTO_IS_NULL=0", :skip_logging) if encoding
+          variable_assignments << "NAMES '#{encoding}'" if encoding
+
+          execute("SET #{variable_assignments.join(', ')}", :skip_logging)
         end
 
         # Returns an array of record hashes with the column names as keys and

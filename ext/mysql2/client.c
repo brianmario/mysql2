@@ -1,5 +1,6 @@
 #include <mysql2_ext.h>
 #include <client.h>
+#include <errno.h>
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
@@ -96,10 +97,12 @@ static VALUE nogvl_connect(void *ptr) {
   struct nogvl_connect_args *args = ptr;
   MYSQL *client;
 
-  client = mysql_real_connect(args->mysql, args->host,
-                              args->user, args->passwd,
-                              args->db, args->port, args->unix_socket,
-                              args->client_flag);
+  do {
+    client = mysql_real_connect(args->mysql, args->host,
+                                args->user, args->passwd,
+                                args->db, args->port, args->unix_socket,
+                                args->client_flag);
+  } while (! client && errno == EINTR && (errno = 0) == 0);
 
   return client ? Qtrue : Qfalse;
 }

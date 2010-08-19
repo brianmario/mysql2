@@ -1,5 +1,11 @@
 # Changelog
 
+# 0.2.2 (August 19th, 2010)
+* Change how AR adapter would send initial commands upon connecting
+** we can make multiple session variable assignments in a single query
+* fix signal handling when waiting on queries
+* retry connect if interrupted by signals
+
 ## 0.2.1 (August 16th, 2010)
 * bring mysql2 ActiveRecord adapter back into gem
 

@@ -6,11 +6,11 @@ rb_encoding *binaryEncoding;
 
 VALUE cMysql2Result;
 VALUE cBigDecimal, cDate, cDateTime;
-VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month;
+VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
-          intern_localtime, intern_local_offset, intern_civil;
+          intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
 static ID sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
           sym_local, sym_utc, sym_cast_booleans;
 static ID intern_merge;
@@ -193,9 +193,17 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
               if (year < 1902 || year+month+day > 2058) { // use DateTime instead
                 VALUE offset = INT2NUM(0);
                 if (db_timezone == intern_local) {
-                  offset = rb_funcall(cMysql2Client, rb_intern("local_offset"), 0);
+                  offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
                 }
                 val = rb_funcall(cDateTime, intern_civil, 7, INT2NUM(year), INT2NUM(month), INT2NUM(day), INT2NUM(hour), INT2NUM(min), INT2NUM(sec), offset);
+                if (!NIL_P(app_timezone)) {
+                  if (app_timezone == intern_local) {
+                    offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
+                    val = rb_funcall(val, intern_new_offset, 1, offset);
+                  } else { // utc
+                    val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
+                  }
+                }
               } else {
                 val = rb_funcall(rb_cTime, db_timezone, 6, INT2NUM(year), INT2NUM(month), INT2NUM(day), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
                 if (!NIL_P(app_timezone)) {
@@ -435,6 +443,7 @@ void init_mysql2_result() {
   intern_localtime    = rb_intern("localtime");
   intern_local_offset = rb_intern("local_offset");
   intern_civil        = rb_intern("civil");
+  intern_new_offset   = rb_intern("new_offset");
 
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
@@ -451,6 +460,7 @@ void init_mysql2_result() {
   opt_float_zero = rb_float_new((double)0);
   opt_time_year = INT2NUM(2000);
   opt_time_month = INT2NUM(1);
+  opt_utc_offset = INT2NUM(0);
 
 #ifdef HAVE_RUBY_ENCODING_H
   binaryEncoding = rb_enc_find("binary");

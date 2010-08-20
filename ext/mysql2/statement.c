@@ -143,9 +143,13 @@ static VALUE each(VALUE self)
     binds[i].error   = &error[i];
   }
 
-  /* FIXME: if this raises, we need to free our allocated buffers */
-  if(mysql_stmt_bind_result(stmt, binds))
+  if(mysql_stmt_bind_result(stmt, binds)) {
+    xfree(binds);
+    xfree(is_null);
+    xfree(error);
+    xfree(length);
     rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+  }
 
   while(!mysql_stmt_fetch(stmt)) {
     VALUE row = rb_ary_new2((long)field_count);

@@ -538,4 +538,109 @@ void init_mysql2_client() {
   intern_error_number_eql = rb_intern("error_number=");
   intern_sql_state_eql = rb_intern("sql_state=");
 
+#ifdef CLIENT_LONG_PASSWORD
+  rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),
+      INT2NUM(CLIENT_LONG_PASSWORD));
+#endif
+
+#ifdef CLIENT_FOUND_ROWS
+  rb_const_set(cMysql2Client, rb_intern("FOUND_ROWS"),
+      INT2NUM(CLIENT_FOUND_ROWS));
+#endif
+
+#ifdef CLIENT_LONG_FLAG
+  rb_const_set(cMysql2Client, rb_intern("LONG_FLAG"),
+      INT2NUM(CLIENT_LONG_FLAG));
+#endif
+
+#ifdef CLIENT_CONNECT_WITH_DB
+  rb_const_set(cMysql2Client, rb_intern("CONNECT_WITH_DB"),
+      INT2NUM(CLIENT_CONNECT_WITH_DB));
+#endif
+
+#ifdef CLIENT_NO_SCHEMA
+  rb_const_set(cMysql2Client, rb_intern("NO_SCHEMA"),
+      INT2NUM(CLIENT_NO_SCHEMA));
+#endif
+
+#ifdef CLIENT_COMPRESS
+  rb_const_set(cMysql2Client, rb_intern("COMPRESS"), INT2NUM(CLIENT_COMPRESS));
+#endif
+
+#ifdef CLIENT_ODBC
+  rb_const_set(cMysql2Client, rb_intern("ODBC"), INT2NUM(CLIENT_ODBC));
+#endif
+
+#ifdef CLIENT_LOCAL_FILES
+  rb_const_set(cMysql2Client, rb_intern("LOCAL_FILES"),
+      INT2NUM(CLIENT_LOCAL_FILES));
+#endif
+
+#ifdef CLIENT_IGNORE_SPACE
+  rb_const_set(cMysql2Client, rb_intern("IGNORE_SPACE"),
+      INT2NUM(CLIENT_IGNORE_SPACE));
+#endif
+
+#ifdef CLIENT_PROTOCOL_41
+  rb_const_set(cMysql2Client, rb_intern("PROTOCOL_41"),
+      INT2NUM(CLIENT_PROTOCOL_41));
+#endif
+
+#ifdef CLIENT_INTERACTIVE
+  rb_const_set(cMysql2Client, rb_intern("INTERACTIVE"),
+      INT2NUM(CLIENT_INTERACTIVE));
+#endif
+
+#ifdef CLIENT_SSL
+  rb_const_set(cMysql2Client, rb_intern("SSL"), INT2NUM(CLIENT_SSL));
+#endif
+
+#ifdef CLIENT_IGNORE_SIGPIPE
+  rb_const_set(cMysql2Client, rb_intern("IGNORE_SIGPIPE"),
+      INT2NUM(CLIENT_IGNORE_SIGPIPE));
+#endif
+
+#ifdef CLIENT_TRANSACTIONS
+  rb_const_set(cMysql2Client, rb_intern("TRANSACTIONS"),
+      INT2NUM(CLIENT_TRANSACTIONS));
+#endif
+
+#ifdef CLIENT_RESERVED
+  rb_const_set(cMysql2Client, rb_intern("RESERVED"), INT2NUM(CLIENT_RESERVED));
+#endif
+
+#ifdef CLIENT_SECURE_CONNECTION
+  rb_const_set(cMysql2Client, rb_intern("SECURE_CONNECTION"),
+      INT2NUM(CLIENT_SECURE_CONNECTION));
+#endif
+
+#ifdef CLIENT_MULTI_STATEMENTS
+  rb_const_set(cMysql2Client, rb_intern("MULTI_STATEMENTS"),
+      INT2NUM(CLIENT_MULTI_STATEMENTS));
+#endif
+
+#ifdef CLIENT_PS_MULTI_RESULTS
+  rb_const_set(cMysql2Client, rb_intern("PS_MULTI_RESULTS"),
+      INT2NUM(CLIENT_PS_MULTI_RESULTS));
+#endif
+
+#ifdef CLIENT_SSL_VERIFY_SERVER_CERT
+  rb_const_set(cMysql2Client, rb_intern("SSL_VERIFY_SERVER_CERT"),
+      INT2NUM(CLIENT_SSL_VERIFY_SERVER_CERT));
+#endif
+
+#ifdef CLIENT_REMEMBER_OPTIONS
+  rb_const_set(cMysql2Client, rb_intern("REMEMBER_OPTIONS"),
+      INT2NUM(CLIENT_REMEMBER_OPTIONS));
+#endif
+
+#ifdef CLIENT_ALL_FLAGS
+  rb_const_set(cMysql2Client, rb_intern("ALL_FLAGS"),
+      INT2NUM(CLIENT_ALL_FLAGS));
+#endif
+
+#ifdef CLIENT_BASIC_FLAGS
+  rb_const_set(cMysql2Client, rb_intern("BASIC_FLAGS"),
+      INT2NUM(CLIENT_BASIC_FLAGS));
+#endif
 }

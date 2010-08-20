@@ -30,7 +30,7 @@ module Mysql2
       port     = opts[:port] || 3306
       database = opts[:database]
       socket   = opts[:socket]
-      flags    = 0
+      flags    = opts[:flags] || 0
 
       connect user, pass, host, port, database, socket, flags
     end

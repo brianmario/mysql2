@@ -14,6 +14,30 @@ describe Mysql2::Client do
     end
   end
 
+  it "should accept connect flags and pass them to #connect" do
+    klient = Class.new(Mysql2::Client) do
+      attr_reader :connect_args
+      def connect *args
+        @connect_args ||= []
+        @connect_args << args
+      end
+    end
+    client = klient.new :flags => Mysql2::Client::FOUND_ROWS
+    client.connect_args.last.last.should == Mysql2::Client::FOUND_ROWS
+  end
+
+  it "should default flags to 0" do
+    klient = Class.new(Mysql2::Client) do
+      attr_reader :connect_args
+      def connect *args
+        @connect_args ||= []
+        @connect_args << args
+      end
+    end
+    client = klient.new
+    client.connect_args.last.last.should == 0
+  end
+
   it "should have a global default_query_options hash" do
     Mysql2::Client.should respond_to(:default_query_options)
   end

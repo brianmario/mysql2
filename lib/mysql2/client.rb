@@ -30,8 +30,9 @@ module Mysql2
       port     = opts[:port] || 3306
       database = opts[:database]
       socket   = opts[:socket]
+      flags    = opts[:flags] || 0
 
-      connect user, pass, host, port, database, socket
+      connect user, pass, host, port, database, socket, flags
     end
 
     def self.default_query_options

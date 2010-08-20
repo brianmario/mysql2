@@ -1,5 +1,6 @@
 #include <mysql2_ext.h>
 #include <client.h>
+#include <errno.h>
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
@@ -96,10 +97,12 @@ static VALUE nogvl_connect(void *ptr) {
   struct nogvl_connect_args *args = ptr;
   MYSQL *client;
 
-  client = mysql_real_connect(args->mysql, args->host,
-                              args->user, args->passwd,
-                              args->db, args->port, args->unix_socket,
-                              args->client_flag);
+  do {
+    client = mysql_real_connect(args->mysql, args->host,
+                                args->user, args->passwd,
+                                args->db, args->port, args->unix_socket,
+                                args->client_flag);
+  } while (! client && errno == EINTR && (errno = 0) == 0);
 
   return client ? Qtrue : Qfalse;
 }
@@ -147,7 +150,7 @@ static VALUE allocate(VALUE klass) {
   return obj;
 }
 
-static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket) {
+static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
   GET_CLIENT(self)
 
@@ -158,7 +161,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.passwd = NIL_P(pass) ? NULL : StringValuePtr(pass);
   args.db = NIL_P(database) ? NULL : StringValuePtr(database);
   args.mysql = client;
-  args.client_flag = 0;
+  args.client_flag = NUM2INT(flags);
 
   if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
@@ -257,7 +260,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   int fd, retval;
   int async = 0;
   VALUE opts, defaults;
-  int(*selector)(int, fd_set *, fd_set *, fd_set *, struct timeval *) = NULL;
   GET_CLIENT(self)
 
   REQUIRE_OPEN_DB(client);
@@ -299,12 +301,11 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     // the below code is largely from do_mysql
     // http://github.com/datamapper/do
     fd = client->net.fd;
-    selector = rb_thread_alone() ? *select : *rb_thread_select;
     for(;;) {
       FD_ZERO(&fdset);
       FD_SET(fd, &fdset);
 
-      retval = selector(fd + 1, &fdset, NULL, NULL, NULL);
+      retval = rb_thread_select(fd + 1, &fdset, NULL, NULL, NULL);
 
       if (retval < 0) {
         rb_sys_fail(0);
@@ -537,7 +538,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "charset_name=", set_charset_name, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "init_connection", init_connection, 0);
-  rb_define_private_method(cMysql2Client, "connect", rb_connect, 6);
+  rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
 
   intern_encoding_from_charset = rb_intern("encoding_from_charset");
 
@@ -552,4 +553,109 @@ void init_mysql2_client() {
   intern_error_number_eql = rb_intern("error_number=");
   intern_sql_state_eql = rb_intern("sql_state=");
 
+#ifdef CLIENT_LONG_PASSWORD
+  rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),
+      INT2NUM(CLIENT_LONG_PASSWORD));
+#endif
+
+#ifdef CLIENT_FOUND_ROWS
+  rb_const_set(cMysql2Client, rb_intern("FOUND_ROWS"),
+      INT2NUM(CLIENT_FOUND_ROWS));
+#endif
+
+#ifdef CLIENT_LONG_FLAG
+  rb_const_set(cMysql2Client, rb_intern("LONG_FLAG"),
+      INT2NUM(CLIENT_LONG_FLAG));
+#endif
+
+#ifdef CLIENT_CONNECT_WITH_DB
+  rb_const_set(cMysql2Client, rb_intern("CONNECT_WITH_DB"),
+      INT2NUM(CLIENT_CONNECT_WITH_DB));
+#endif
+
+#ifdef CLIENT_NO_SCHEMA
+  rb_const_set(cMysql2Client, rb_intern("NO_SCHEMA"),
+      INT2NUM(CLIENT_NO_SCHEMA));
+#endif
+
+#ifdef CLIENT_COMPRESS
+  rb_const_set(cMysql2Client, rb_intern("COMPRESS"), INT2NUM(CLIENT_COMPRESS));
+#endif
+
+#ifdef CLIENT_ODBC
+  rb_const_set(cMysql2Client, rb_intern("ODBC"), INT2NUM(CLIENT_ODBC));
+#endif
+
+#ifdef CLIENT_LOCAL_FILES
+  rb_const_set(cMysql2Client, rb_intern("LOCAL_FILES"),
+      INT2NUM(CLIENT_LOCAL_FILES));
+#endif
+
+#ifdef CLIENT_IGNORE_SPACE
+  rb_const_set(cMysql2Client, rb_intern("IGNORE_SPACE"),
+      INT2NUM(CLIENT_IGNORE_SPACE));
+#endif
+
+#ifdef CLIENT_PROTOCOL_41
+  rb_const_set(cMysql2Client, rb_intern("PROTOCOL_41"),
+      INT2NUM(CLIENT_PROTOCOL_41));
+#endif
+
+#ifdef CLIENT_INTERACTIVE
+  rb_const_set(cMysql2Client, rb_intern("INTERACTIVE"),
+      INT2NUM(CLIENT_INTERACTIVE));
+#endif
+
+#ifdef CLIENT_SSL
+  rb_const_set(cMysql2Client, rb_intern("SSL"), INT2NUM(CLIENT_SSL));
+#endif
+
+#ifdef CLIENT_IGNORE_SIGPIPE
+  rb_const_set(cMysql2Client, rb_intern("IGNORE_SIGPIPE"),
+      INT2NUM(CLIENT_IGNORE_SIGPIPE));
+#endif
+
+#ifdef CLIENT_TRANSACTIONS
+  rb_const_set(cMysql2Client, rb_intern("TRANSACTIONS"),
+      INT2NUM(CLIENT_TRANSACTIONS));
+#endif
+
+#ifdef CLIENT_RESERVED
+  rb_const_set(cMysql2Client, rb_intern("RESERVED"), INT2NUM(CLIENT_RESERVED));
+#endif
+
+#ifdef CLIENT_SECURE_CONNECTION
+  rb_const_set(cMysql2Client, rb_intern("SECURE_CONNECTION"),
+      INT2NUM(CLIENT_SECURE_CONNECTION));
+#endif
+
+#ifdef CLIENT_MULTI_STATEMENTS
+  rb_const_set(cMysql2Client, rb_intern("MULTI_STATEMENTS"),
+      INT2NUM(CLIENT_MULTI_STATEMENTS));
+#endif
+
+#ifdef CLIENT_PS_MULTI_RESULTS
+  rb_const_set(cMysql2Client, rb_intern("PS_MULTI_RESULTS"),
+      INT2NUM(CLIENT_PS_MULTI_RESULTS));
+#endif
+
+#ifdef CLIENT_SSL_VERIFY_SERVER_CERT
+  rb_const_set(cMysql2Client, rb_intern("SSL_VERIFY_SERVER_CERT"),
+      INT2NUM(CLIENT_SSL_VERIFY_SERVER_CERT));
+#endif
+
+#ifdef CLIENT_REMEMBER_OPTIONS
+  rb_const_set(cMysql2Client, rb_intern("REMEMBER_OPTIONS"),
+      INT2NUM(CLIENT_REMEMBER_OPTIONS));
+#endif
+
+#ifdef CLIENT_ALL_FLAGS
+  rb_const_set(cMysql2Client, rb_intern("ALL_FLAGS"),
+      INT2NUM(CLIENT_ALL_FLAGS));
+#endif
+
+#ifdef CLIENT_BASIC_FLAGS
+  rb_const_set(cMysql2Client, rb_intern("BASIC_FLAGS"),
+      INT2NUM(CLIENT_BASIC_FLAGS));
+#endif
 }

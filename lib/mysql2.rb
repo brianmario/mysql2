@@ -1,6 +1,7 @@
 # encoding: UTF-8
 require 'date'
 require 'bigdecimal'
+require 'rational' unless RUBY_VERSION >= '1.9.2'
 
 require 'mysql2/error'
 require 'mysql2/mysql2'

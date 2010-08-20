@@ -224,5 +224,10 @@ module Mysql2
         end
       end
     end
+
+    private
+      def self.local_offset
+        ::Time.local(2010).utc_offset.to_r / 86400
+      end
   end
 end

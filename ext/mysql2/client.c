@@ -150,7 +150,7 @@ static VALUE allocate(VALUE klass) {
   return obj;
 }
 
-static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket) {
+static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
   GET_CLIENT(self)
 
@@ -161,7 +161,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.passwd = NIL_P(pass) ? NULL : StringValuePtr(pass);
   args.db = NIL_P(database) ? NULL : StringValuePtr(database);
   args.mysql = client;
-  args.client_flag = 0;
+  args.client_flag = NUM2INT(flags);
 
   if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
@@ -523,7 +523,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "charset_name=", set_charset_name, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "init_connection", init_connection, 0);
-  rb_define_private_method(cMysql2Client, "connect", rb_connect, 6);
+  rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
 
   intern_encoding_from_charset = rb_intern("encoding_from_charset");
 

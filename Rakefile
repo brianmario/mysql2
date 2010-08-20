@@ -32,6 +32,8 @@ end
 Spec::Rake::SpecTask.new('spec') do |t|
   t.spec_files = FileList['spec/']
   t.spec_opts << '--options' << 'spec/spec.opts'
+  t.verbose = true
+  t.warning = true
 end
 
 task :default => :spec

@@ -128,8 +128,11 @@ static VALUE each(VALUE self)
     binds[i].error   = &error[i];
   }
 
-  /* FIXME: if this raises, we need to free our allocated buffers */
   if(mysql_stmt_bind_result(stmt, binds)) {
+    xfree(binds);
+    xfree(is_null);
+    xfree(error);
+    xfree(length);
     rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
   }
 

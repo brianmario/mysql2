@@ -127,7 +127,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   for (i = 0; i < wrapper->numberOfFields; i++) {
     VALUE field = rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     if (row[i]) {
-      VALUE val;
+      VALUE val = Qnil;
       switch(fields[i].type) {
         case MYSQL_TYPE_NULL:       // NULL-type field
           val = Qnil;

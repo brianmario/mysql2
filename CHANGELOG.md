@@ -1,6 +1,11 @@
 # Changelog
 
-# 0.2.2 (August 19th, 2010)
+## 0.2.3 (August 20th, 2010)
+* connection flags can now be passed to the constructor via the :flags key
+* switch AR adapter connection over to use FOUND_ROWS option
+* patch to ensure we use DateTime objects in place of Time for timestamps that are out of the supported range on 32bit platforms < 1.9.2
+
+## 0.2.2 (August 19th, 2010)
 * Change how AR adapter would send initial commands upon connecting
 ** we can make multiple session variable assignments in a single query
 * fix signal handling when waiting on queries

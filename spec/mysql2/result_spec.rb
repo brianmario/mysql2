@@ -143,12 +143,17 @@ describe Mysql2::Result do
       @test_result['double_test'].should eql(10.3)
     end
 
-    it "should return Time for a DATETIME value" do
+    it "should return Time for a DATETIME value when within the supported range" do
       @test_result['date_time_test'].class.should eql(Time)
       @test_result['date_time_test'].strftime("%F %T").should eql('2010-04-04 11:44:00')
     end
 
-    it "should return Time for a TIMESTAMP value" do
+    it "should return DateTime for a DATETIME value when outside the supported range" do
+      r = @client.query("SELECT CAST('1901-1-1 01:01:01' AS DATETIME) as test")
+      r.first['test'].class.should eql(DateTime)
+    end
+
+    it "should return Time for a TIMESTAMP value when within the supported range" do
       @test_result['timestamp_test'].class.should eql(Time)
       @test_result['timestamp_test'].strftime("%F %T").should eql('2010-04-04 11:44:00')
     end

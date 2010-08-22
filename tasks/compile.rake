@@ -1,8 +1,8 @@
 gem 'rake-compiler', '~> 0.7.1'
 require "rake/extensiontask"
 
-MYSQL_VERSION = "5.1.49"
-MYSQL_MIRROR  = ENV['MYSQL_MIRROR'] || "http://mysql.localhost.net.ar"
+MYSQL_VERSION = "5.1.50"
+MYSQL_MIRROR  = ENV['MYSQL_MIRROR'] || "http://mysql.mirrors.pair.com"
 
 Rake::ExtensionTask.new("mysql2", JEWELER.gemspec) do |ext|
   # reference where the vendored MySQL got extracted
@@ -15,5 +15,8 @@ Rake::ExtensionTask.new("mysql2", JEWELER.gemspec) do |ext|
   end
 
   ext.lib_dir = File.join 'lib', 'mysql2'
+
+  # clean compiled extension
+  CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
 end
 Rake::Task[:spec].prerequisites << :compile

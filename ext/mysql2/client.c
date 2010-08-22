@@ -117,16 +117,20 @@ static void rb_mysql_client_free(void * ptr) {
    * anyways, so ensure the socket write does not block our interpreter
    */
   int fd = client->net.fd;
-  int flags;
 
   if (fd >= 0) {
     /*
      * if the socket is dead we have no chance of blocking,
      * so ignore any potential fcntl errors since they don't matter
      */
-    flags = fcntl(fd, F_GETFL);
+#ifndef _WIN32
+    int flags = fcntl(fd, F_GETFL);
     if (flags > 0 && !(flags & O_NONBLOCK))
       fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+#else
+    u_long iMode = 1;
+    ioctlsocket(fd, FIONBIO, &iMode);
+#endif
   }
 
   /* It's safe to call mysql_close() on an already closed connection. */

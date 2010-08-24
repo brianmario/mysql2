@@ -342,15 +342,15 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 #endif
 
   oldLen = RSTRING_LEN(str);
-  char escaped[(oldLen*2)+1];
+  newStr = rb_str_new(0, oldLen*2+1);
 
   REQUIRE_OPEN_DB(client);
-  newLen = mysql_real_escape_string(client, escaped, StringValuePtr(str), oldLen);
+  newLen = mysql_real_escape_string(client, RSTRING_PTR(newStr), StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
     return str;
   } else {
-    newStr = rb_str_new(escaped, newLen);
+    rb_str_resize(newStr, newLen);
 #ifdef HAVE_RUBY_ENCODING_H
     rb_enc_associate(newStr, conn_enc);
     if (default_internal_enc) {

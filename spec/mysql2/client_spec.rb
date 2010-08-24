@@ -144,6 +144,18 @@ describe Mysql2::Client do
     @client.escape(str).object_id.should eql(str.object_id)
   end
 
+  it "#escape should not overflow the thread stack" do
+    lambda {
+      Thread.new { @client.escape("'" * 256 * 1024) }.join
+    }.should_not raise_error(SystemStackError)
+  end
+
+  it "#escape should not overflow the process stack" do
+    lambda {
+      Thread.new { @client.escape("'" * 1024 * 1024 * 4) }.join
+    }.should_not raise_error(SystemStackError)
+  end
+
   it "should respond to #info" do
     @client.should respond_to(:info)
   end

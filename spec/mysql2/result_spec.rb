@@ -47,8 +47,13 @@ describe Mysql2::Result do
       end
     end
 
-    it "should cache previously yielded results" do
-      @result.first.should eql(@result.first)
+    it "should cache previously yielded results by default" do
+      @result.first.object_id.should eql(@result.first.object_id)
+    end
+
+    it "should not cache previously yielded results if cache_rows is disabled" do
+      result = @client.query "SELECT 1", :cache_rows => false
+      result.first.object_id.should_not eql(result.first.object_id)
     end
   end
 

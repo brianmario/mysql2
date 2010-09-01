@@ -7,5 +7,9 @@ module Mysql2
       @error_number = nil
       @sql_state    = nil
     end
+
+    # Mysql gem compatibility
+    alias_method :errno, :error_number
+    alias_method :error, :message
   end
 end

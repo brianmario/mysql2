@@ -70,7 +70,7 @@ Benchmark.bmbm do |x|
   end
 
   do_mysql = DataObjects::Connection.new("mysql://localhost/#{database}")
-  command = DataObjects::Mysql::Command.new do_mysql, sql
+  command = do_mysql.create_command sql
   x.report do
     puts "do_mysql"
     number_of.times do

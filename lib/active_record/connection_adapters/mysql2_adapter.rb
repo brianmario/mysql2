@@ -447,10 +447,11 @@ module ActiveRecord
           if current_index != row[:Key_name]
             next if row[:Key_name] == PRIMARY # skip the primary key
             current_index = row[:Key_name]
-            indexes << IndexDefinition.new(row[:Table], row[:Key_name], row[:Non_unique] == 0, [])
+            indexes << IndexDefinition.new(row[:Table], row[:Key_name], row[:Non_unique] == 0, [], [])
           end
 
           indexes.last.columns << row[:Column_name]
+          indexes.last.lengths << row[:Sub_part]
         end
         indexes
       end

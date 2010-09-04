@@ -248,7 +248,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   VALUE resultObj = rb_mysql_result_to_obj(result);
   // pass-through query options for result construction later
-  rb_iv_set(resultObj, "@query_options", rb_obj_dup(rb_iv_get(self, "@query_options")));
+  rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
 
 #ifdef HAVE_RUBY_ENCODING_H
   mysql2_result_wrapper * result_wrapper;

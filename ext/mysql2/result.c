@@ -461,10 +461,10 @@ void init_mysql2_result() {
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
 
-  rb_global_variable(&opt_decimal_zero); //never GC
   opt_decimal_zero = rb_str_new2("0.0");
-  rb_global_variable(&opt_float_zero);
+  rb_global_variable(&opt_decimal_zero); //never GC
   opt_float_zero = rb_float_new((double)0);
+  rb_global_variable(&opt_float_zero);
   opt_time_year = INT2NUM(2000);
   opt_time_month = INT2NUM(1);
   opt_utc_offset = INT2NUM(0);

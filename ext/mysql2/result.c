@@ -6,6 +6,7 @@ rb_encoding *binaryEncoding;
 
 VALUE cMysql2Result;
 VALUE cBigDecimal, cDate, cDateTime;
+VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
@@ -148,19 +149,27 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           break;
         case MYSQL_TYPE_DECIMAL:    // DECIMAL or NUMERIC field
         case MYSQL_TYPE_NEWDECIMAL: // Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up)
-          val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
+          if (strtod(row[i], NULL) == 0.000000){
+            val = rb_funcall(cBigDecimal, intern_new, 1, opt_decimal_zero);
+          }else{
+            val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
+          }
           break;
         case MYSQL_TYPE_FLOAT:      // FLOAT field
         case MYSQL_TYPE_DOUBLE: {     // DOUBLE or REAL field
           double column_to_double;
           column_to_double = strtod(row[i], NULL);
-          val = rb_float_new(column_to_double);
+          if (column_to_double == 0.000000){
+            val = opt_float_zero;
+          }else{
+            val = rb_float_new(column_to_double);
+          }
           break;
         }
         case MYSQL_TYPE_TIME: {     // TIME field
           int hour, min, sec, tokens;
           tokens = sscanf(row[i], "%2d:%2d:%2d", &hour, &min, &sec);
-          val = rb_funcall(rb_cTime, db_timezone, 6, INT2NUM(2000), INT2NUM(1), INT2NUM(1), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
+          val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
           if (!NIL_P(app_timezone)) {
             if (app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);
@@ -192,7 +201,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
                     offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
                     val = rb_funcall(val, intern_new_offset, 1, offset);
                   } else { // utc
-                    val = rb_funcall(val, intern_new_offset, 1, INT2NUM(0));
+                    val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
                   }
                 }
               } else {
@@ -451,6 +460,14 @@ void init_mysql2_result() {
   sym_database_timezone     = ID2SYM(rb_intern("database_timezone"));
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
+
+  rb_global_variable(&opt_decimal_zero); //never GC
+  opt_decimal_zero = rb_str_new2("0.0");
+  rb_global_variable(&opt_float_zero);
+  opt_float_zero = rb_float_new((double)0);
+  opt_time_year = INT2NUM(2000);
+  opt_time_month = INT2NUM(1);
+  opt_utc_offset = INT2NUM(0);
 
 #ifdef HAVE_RUBY_ENCODING_H
   binaryEncoding = rb_enc_find("binary");

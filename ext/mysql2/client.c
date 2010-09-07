@@ -305,7 +305,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     // the below code is largely from do_mysql
     // http://github.com/datamapper/do
     fd = client->net.fd;
-
     for(;;) {
       FD_ZERO(&fdset);
       FD_SET(fd, &fdset);

@@ -105,7 +105,7 @@ static VALUE nogvl_connect(void *ptr) {
 }
 
 static void rb_mysql_client_free(void * ptr) {
-  GET_CLIENT(ptr);
+  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
 
   /*
    * we'll send a QUIT message to the server, but that message is more of a

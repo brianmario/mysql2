@@ -95,7 +95,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
   MYSQL_FIELD * fields = NULL;
-  long i = 0;
+  unsigned int i = 0;
   unsigned long * fieldLengths;
   void * ptr;
 
@@ -286,7 +286,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
 
 static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   mysql2_result_wrapper * wrapper;
-  long i = 0;
+  unsigned int i = 0;
   short int symbolizeKeys = 0;
   VALUE defaults;
 

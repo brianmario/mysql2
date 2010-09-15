@@ -15,11 +15,11 @@ static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
   }
 
 #define MARK_CONN_INACTIVE(conn) \
-  wrapper->active = 0;
+  wrapper->active = 0
 
 #define GET_CLIENT(self) \
   mysql_client_wrapper *wrapper; \
-  Data_Get_Struct(self, mysql_client_wrapper, wrapper);
+  Data_Get_Struct(self, mysql_client_wrapper, wrapper)
 
 /*
  * used to pass all arguments to mysql_real_connect while inside
@@ -105,7 +105,7 @@ static VALUE nogvl_connect(void *ptr) {
 }
 
 static void rb_mysql_client_free(void * ptr) {
-  GET_CLIENT(ptr)
+  GET_CLIENT(ptr);
 
   /*
    * we'll send a QUIT message to the server, but that message is more of a
@@ -152,7 +152,7 @@ static VALUE allocate(VALUE klass) {
 
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   args.host = NIL_P(host) ? "localhost" : StringValuePtr(host);
   args.unix_socket = NIL_P(socket) ? NULL : StringValuePtr(socket);
@@ -178,7 +178,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
  * for the garbage collector.
  */
 static VALUE rb_mysql_client_close(VALUE self) {
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   rb_thread_blocking_region(nogvl_close, wrapper->client, RUBY_UBF_IO, 0);
 
@@ -221,7 +221,7 @@ static VALUE nogvl_store_result(void *ptr) {
 
 static VALUE rb_mysql_client_async_result(VALUE self) {
   MYSQL_RES * result;
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   REQUIRE_OPEN_DB(wrapper->client);
   if (rb_thread_blocking_region(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
@@ -260,7 +260,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   int fd, retval;
   int async = 0;
   VALUE opts, defaults;
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   REQUIRE_OPEN_DB(wrapper->client);
   args.mysql = wrapper->client;
@@ -327,7 +327,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   VALUE newStr;
   unsigned long newLen, oldLen;
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   Check_Type(str, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
@@ -379,7 +379,7 @@ static VALUE rb_mysql_client_info(VALUE self) {
 
 static VALUE rb_mysql_client_server_info(VALUE self) {
   VALUE version, server_info;
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
@@ -401,26 +401,26 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 }
 
 static VALUE rb_mysql_client_socket(VALUE self) {
-  GET_CLIENT(self)
+  GET_CLIENT(self);
   REQUIRE_OPEN_DB(wrapper->client);
   return INT2NUM(wrapper->client->net.fd);
 }
 
 static VALUE rb_mysql_client_last_id(VALUE self) {
-  GET_CLIENT(self)
+  GET_CLIENT(self);
   REQUIRE_OPEN_DB(wrapper->client);
   return ULL2NUM(mysql_insert_id(wrapper->client));
 }
 
 static VALUE rb_mysql_client_affected_rows(VALUE self) {
-  GET_CLIENT(self)
+  GET_CLIENT(self);
   REQUIRE_OPEN_DB(wrapper->client);
   return ULL2NUM(mysql_affected_rows(wrapper->client));
 }
 
 static VALUE set_reconnect(VALUE self, VALUE value) {
   my_bool reconnect;
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   if(!NIL_P(value)) {
     reconnect = value == Qfalse ? 0 : 1;
@@ -436,7 +436,7 @@ static VALUE set_reconnect(VALUE self, VALUE value) {
 
 static VALUE set_connect_timeout(VALUE self, VALUE value) {
   unsigned int connect_timeout = 0;
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   if(!NIL_P(value)) {
     connect_timeout = NUM2INT(value);
@@ -453,7 +453,7 @@ static VALUE set_connect_timeout(VALUE self, VALUE value) {
 
 static VALUE set_charset_name(VALUE self, VALUE value) {
   char * charset_name;
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
 #ifdef HAVE_RUBY_ENCODING_H
   VALUE new_encoding;
@@ -478,7 +478,7 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
 }
 
 static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE capath, VALUE cipher) {
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   if(!NIL_P(ca) || !NIL_P(key)) {
     mysql_ssl_set(wrapper->client,
@@ -493,7 +493,7 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
 }
 
 static VALUE init_connection(VALUE self) {
-  GET_CLIENT(self)
+  GET_CLIENT(self);
 
   if (rb_thread_blocking_region(nogvl_init, ((void *) &wrapper->client), RUBY_UBF_IO, 0) == Qfalse) {
     /* TODO: warning - not enough memory? */

@@ -30,3 +30,12 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
 end
 Rake::Task[:spec].prerequisites << :compile
+
+file 'lib/mysql2/mysql2.rb' do
+  name = gemspec.name
+  File.open("lib/#{name}/#{name}.rb", 'wb') do |f|
+    f.write <<-eoruby
+require "#{name}/\#{RUBY_VERSION.sub(/\\.\\d+$/, '')}/#{name}"
+    eoruby
+  end
+end

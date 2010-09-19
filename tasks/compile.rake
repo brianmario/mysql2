@@ -31,6 +31,15 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
 end
 Rake::Task[:spec].prerequisites << :compile
 
+namespace :cross do
+  task :file_list do
+    gemspec.extensions = []
+    gemspec.files += Dir["lib/#{gemspec.name}/#{gemspec.name}.rb"]
+    gemspec.files += Dir["lib/#{gemspec.name}/1.{8,9}/#{gemspec.name}.so"]
+    # gemspec.files += Dir["ext/mysql2/*.dll"]
+  end
+end
+
 file 'lib/mysql2/mysql2.rb' do
   name = gemspec.name
   File.open("lib/#{name}/#{name}.rb", 'wb') do |f|
@@ -38,4 +47,9 @@ file 'lib/mysql2/mysql2.rb' do
 require "#{name}/\#{RUBY_VERSION.sub(/\\.\\d+$/, '')}/#{name}"
     eoruby
   end
+end
+
+if Rake::Task.task_defined?(:cross)
+  Rake::Task[:cross].prerequisites << "lib/mysql2/mysql2.rb"
+  Rake::Task[:cross].prerequisites << "cross:file_list"
 end

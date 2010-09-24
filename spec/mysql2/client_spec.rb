@@ -105,30 +105,32 @@ describe Mysql2::Client do
 
     # XXX this test is not deterministic (because Unix signal handling is not)
     # and may fail on a loaded system
-    it "should run signal handlers while waiting for a response" do
-      mark = {}
-      trap(:USR1) { mark[:USR1] = Time.now }
-      begin
-        mark[:START] = Time.now
-        pid = fork do
-          sleep 1 # wait for client "SELECT sleep(2)" query to start
-          Process.kill(:USR1, Process.ppid)
-          sleep # wait for explicit kill to prevent GC disconnect
+    if RUBY_PLATFORM !~ /mingw|mswin/
+      it "should run signal handlers while waiting for a response" do
+        mark = {}
+        trap(:USR1) { mark[:USR1] = Time.now }
+        begin
+          mark[:START] = Time.now
+          pid = fork do
+            sleep 1 # wait for client "SELECT sleep(2)" query to start
+            Process.kill(:USR1, Process.ppid)
+            sleep # wait for explicit kill to prevent GC disconnect
+          end
+          @client.query("SELECT sleep(2)")
+          mark[:END] = Time.now
+          mark.include?(:USR1).should be_true
+          (mark[:USR1] - mark[:START]).should >= 1
+          (mark[:USR1] - mark[:START]).should < 1.1
+          (mark[:END] - mark[:USR1]).should > 0.9
+          (mark[:END] - mark[:START]).should >= 2
+          (mark[:END] - mark[:START]).should < 2.1
+          Process.kill(:TERM, pid)
+          Process.waitpid2(pid)
+        ensure
+          trap(:USR1, 'DEFAULT')
         end
-        @client.query("SELECT sleep(2)")
-        mark[:END] = Time.now
-        mark.include?(:USR1).should be_true
-        (mark[:USR1] - mark[:START]).should >= 1
-        (mark[:USR1] - mark[:START]).should < 1.1
-        (mark[:END] - mark[:USR1]).should > 0.9
-        (mark[:END] - mark[:START]).should >= 2
-        (mark[:END] - mark[:START]).should < 2.1
-        Process.kill(:TERM, pid)
-        Process.waitpid2(pid)
-      ensure
-        trap(:USR1, 'DEFAULT')
       end
-    end if RUBY_PLATFORM !~ /mingw|mswin/
+    end
   end
 
   it "should respond to #escape" do
@@ -142,6 +144,18 @@ describe Mysql2::Client do
   it "#escape should return the passed string if nothing was escaped" do
     str = "plain"
     @client.escape(str).object_id.should eql(str.object_id)
+  end
+
+  it "#escape should not overflow the thread stack" do
+    lambda {
+      Thread.new { @client.escape("'" * 256 * 1024) }.join
+    }.should_not raise_error(SystemStackError)
+  end
+
+  it "#escape should not overflow the process stack" do
+    lambda {
+      Thread.new { @client.escape("'" * 1024 * 1024 * 4) }.join
+    }.should_not raise_error(SystemStackError)
   end
 
   it "should respond to #info" do

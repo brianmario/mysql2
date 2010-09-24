@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4 (September 17th, 2010)
+* a few patches for win32 support from Luis Lavena - thanks man!
+* bugfix from Eric Wong to avoid a potential stack overflow during Mysql2::Client#escape
+* added the ability to turn internal row caching on/off via the :cache_rows => true/false option
+* a couple of small patches for rbx compatibility
+* set IndexDefinition#length in AR adapter - Kouhei Yanagita <yanagi@shakenbu.org>
+* fix a long-standing data corruption bug - thank you thank you thank you to @joedamato (http://github.com/ice799)
+* bugfix from calling mysql_close on a closed/freed connection surfaced by the above fix
+
 ## 0.2.3 (August 20th, 2010)
 * connection flags can now be passed to the constructor via the :flags key
 * switch AR adapter connection over to use FOUND_ROWS option

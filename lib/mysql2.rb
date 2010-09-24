@@ -13,5 +13,5 @@ require 'mysql2/field'
 #
 # A modern, simple and very fast Mysql library for Ruby - binding to libmysql
 module Mysql2
-  VERSION = "0.2.3"
+  VERSION = "0.2.4"
 end

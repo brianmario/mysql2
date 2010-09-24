@@ -13,4 +13,13 @@ describe Mysql2::Error do
   it "should respond to #sql_state" do
     @error.should respond_to(:sql_state)
   end
+
+  # Mysql gem compatibility
+  it "should alias #error_number to #errno" do
+    @error.should respond_to(:errno)
+  end
+
+  it "should alias #message to #error" do
+    @error.should respond_to(:error)
+  end
 end

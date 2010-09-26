@@ -1,9 +1,8 @@
 gem 'rake-compiler', '~> 0.7.1'
 require "rake/extensiontask"
 
-MYSQL_VERSION = "5.1.50"
-MYSQL_MIRROR  = ENV['MYSQL_MIRROR'] || "http://mysql.mirrors.pair.com"
-
+MYSQL_VERSION = "5.1.51"
+MYSQL_MIRROR  = ENV['MYSQL_MIRROR'] || "http://mysql.he.net/"
 
 def gemspec
   @clean_gemspec ||= eval(File.read(File.expand_path('../../mysql2.gemspec', __FILE__)))

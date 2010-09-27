@@ -13,12 +13,12 @@ module Mysql2
         end
 
         def notify_readable
+          detach
           begin
             @deferable.succeed(@client.async_result)
           rescue Exception => e
             @deferable.fail(e)
           end
-          detach
         end
       end
 

@@ -7,7 +7,7 @@ describe Mysql2::EM::Client do
     results = []
     EM.run do
       client1 = Mysql2::EM::Client.new
-      defer1 = client1.query "SELECT sleep(0.05) as first_query"
+      defer1 = client1.query "SELECT sleep(0.1) as first_query"
       defer1.callback do |result|
         results << result.first
         EM.stop_event_loop

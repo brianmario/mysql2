@@ -18,6 +18,14 @@ Mysql2::Result - returned from issuing a #query on the connection. It includes E
 
 You may have to specify --with-mysql-config=/some/random/path/bin/mysql_config
 
+== Installing with MariaDB on Windows
+
+  gem install mysql2-0.2.4.gem -- --with-mysql-include=C:/mariadb-5.1.50-win32/include --with-mysql-lib=C:/mariadb-5.1.50-win32/lib/opt
+
+== Installing with MariaDB on Linux
+
+  gem install mysql2-0.2.4.gem -- --with-mysql-include=/usr/include/mysql --with-mysql-lib=/usr/lib
+
 == Usage
 
 Connect to a database:

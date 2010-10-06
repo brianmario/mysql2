@@ -408,20 +408,24 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 
 static VALUE rb_mysql_client_socket(VALUE self) {
   GET_CLIENT(self);
-  REQUIRE_OPEN_DB(wrapper);
   return INT2NUM(wrapper->client->net.fd);
 }
 
 static VALUE rb_mysql_client_last_id(VALUE self) {
   GET_CLIENT(self);
-  REQUIRE_OPEN_DB(wrapper);
   return ULL2NUM(mysql_insert_id(wrapper->client));
 }
 
 static VALUE rb_mysql_client_affected_rows(VALUE self) {
   GET_CLIENT(self);
+  my_ulonglong retVal;
+
   REQUIRE_OPEN_DB(wrapper);
-  return ULL2NUM(mysql_affected_rows(wrapper->client));
+  retVal = mysql_affected_rows(wrapper->client);
+  if (retVal == (my_ulonglong)-1) {
+    rb_raise_mysql2_error(wrapper->client);
+  }
+  return ULL2NUM(retVal);
 }
 
 static VALUE set_reconnect(VALUE self, VALUE value) {

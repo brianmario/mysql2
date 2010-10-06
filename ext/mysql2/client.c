@@ -9,7 +9,7 @@ static ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #define REQUIRE_OPEN_DB(wrapper) \
-  if(wrapper->closed || !wrapper->client->net.vio) { \
+  if(wrapper->closed) { \
     rb_raise(cMysql2Error, "closed MySQL connection"); \
     return Qnil; \
   }

@@ -186,7 +186,9 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 static VALUE rb_mysql_client_close(VALUE self) {
   GET_CLIENT(self);
 
-  rb_thread_blocking_region(nogvl_close, wrapper, RUBY_UBF_IO, 0);
+  if (!wrapper->closed) {
+    rb_thread_blocking_region(nogvl_close, wrapper, RUBY_UBF_IO, 0);
+  }
 
   return Qnil;
 }
@@ -335,6 +337,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   unsigned long newLen, oldLen;
   GET_CLIENT(self);
 
+  REQUIRE_OPEN_DB(wrapper);
   Check_Type(str, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
@@ -346,7 +349,6 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   oldLen = RSTRING_LEN(str);
   newStr = rb_str_new(0, oldLen*2+1);
 
-  REQUIRE_OPEN_DB(wrapper);
   newLen = mysql_real_escape_string(wrapper->client, RSTRING_PTR(newStr), StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
@@ -366,6 +368,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 static VALUE rb_mysql_client_info(VALUE self) {
   VALUE version = rb_hash_new(), client_info;
   GET_CLIENT(self);
+
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
@@ -386,12 +389,12 @@ static VALUE rb_mysql_client_info(VALUE self) {
 static VALUE rb_mysql_client_server_info(VALUE self) {
   VALUE version, server_info;
   GET_CLIENT(self);
+
+  REQUIRE_OPEN_DB(wrapper);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
-
-  REQUIRE_OPEN_DB(wrapper);
 
   version = rb_hash_new();
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_server_version(wrapper->client)));
@@ -408,11 +411,13 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 
 static VALUE rb_mysql_client_socket(VALUE self) {
   GET_CLIENT(self);
+  REQUIRE_OPEN_DB(wrapper);
   return INT2NUM(wrapper->client->net.fd);
 }
 
 static VALUE rb_mysql_client_last_id(VALUE self) {
   GET_CLIENT(self);
+  REQUIRE_OPEN_DB(wrapper);
   return ULL2NUM(mysql_insert_id(wrapper->client));
 }
 

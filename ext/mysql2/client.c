@@ -142,7 +142,6 @@ static VALUE nogvl_close(void * ptr) {
   if (!wrapper->closed) {
     mysql_close(wrapper->client);
     wrapper->closed = 1;
-    free(wrapper->client);
   }
   return Qnil;
 }

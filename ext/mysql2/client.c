@@ -83,11 +83,11 @@ static VALUE rb_raise_mysql2_error(MYSQL *client) {
 }
 
 static VALUE nogvl_init(void *ptr) {
-  MYSQL **client = (MYSQL **)ptr;
+  MYSQL *client;
 
   /* may initialize embedded server and read /etc/services off disk */
-  *client = mysql_init(NULL);
-  return *client ? Qtrue : Qfalse;
+  client = mysql_init((MYSQL *)ptr);
+  return client ? Qtrue : Qfalse;
 }
 
 static VALUE nogvl_connect(void *ptr) {
@@ -132,6 +132,7 @@ static void rb_mysql_client_free(void * ptr) {
   /* It's safe to call mysql_close() on an already closed connection. */
   if (!wrapper->closed) {
     mysql_close(wrapper->client);
+    free(wrapper->client);
   }
   xfree(ptr);
 }
@@ -140,8 +141,8 @@ static VALUE nogvl_close(void * ptr) {
   mysql_client_wrapper *wrapper = ptr;
   if (!wrapper->closed) {
     mysql_close(wrapper->client);
-    wrapper->client->net.fd = -1;
     wrapper->closed = 1;
+    free(wrapper->client);
   }
   return Qnil;
 }
@@ -153,6 +154,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active = 0;
   wrapper->closed = 0;
+  wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
   return obj;
 }
 
@@ -510,7 +512,7 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
 static VALUE init_connection(VALUE self) {
   GET_CLIENT(self);
 
-  if (rb_thread_blocking_region(nogvl_init, ((void *) &wrapper->client), RUBY_UBF_IO, 0) == Qfalse) {
+  if (rb_thread_blocking_region(nogvl_init, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     /* TODO: warning - not enough memory? */
     return rb_raise_mysql2_error(wrapper->client);
   }

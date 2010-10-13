@@ -132,7 +132,9 @@ static void rb_mysql_client_free(void * ptr) {
   /* It's safe to call mysql_close() on an already closed connection. */
   if (!wrapper->closed) {
     mysql_close(wrapper->client);
-    free(wrapper->client);
+    if (!wrapper->freed) {
+      free(wrapper->client);
+    }
   }
   xfree(ptr);
 }
@@ -142,6 +144,9 @@ static VALUE nogvl_close(void * ptr) {
   if (!wrapper->closed) {
     mysql_close(wrapper->client);
     wrapper->closed = 1;
+    if (!wrapper->freed) {
+      free(wrapper->client);
+    }
   }
   return Qnil;
 }
@@ -153,6 +158,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active = 0;
   wrapper->closed = 0;
+  wrapper->freed  = 0;
   wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
   return obj;
 }

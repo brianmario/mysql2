@@ -142,8 +142,8 @@ static void rb_mysql_client_free(void * ptr) {
 static VALUE nogvl_close(void * ptr) {
   mysql_client_wrapper *wrapper = ptr;
   if (!wrapper->closed) {
-    mysql_close(wrapper->client);
     wrapper->closed = 1;
+    mysql_close(wrapper->client);
     if (!wrapper->freed) {
       free(wrapper->client);
     }

@@ -9,7 +9,7 @@ module Mysql2
       :database_timezone => :local,   # timezone Mysql2 will assume datetime objects are stored in
       :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller
       :cache_rows => true,            # tells Mysql2 to use it's internal row cache for results
-      :connect_flags => REMEMBER_OPTIONS
+      :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION
     }
 
     def initialize(opts = {})

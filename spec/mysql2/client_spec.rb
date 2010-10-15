@@ -23,10 +23,10 @@ describe Mysql2::Client do
       end
     end
     client = klient.new :flags => Mysql2::Client::FOUND_ROWS
-    client.connect_args.last.last.should == Mysql2::Client::FOUND_ROWS
+    (client.connect_args.last.last & Mysql2::Client::FOUND_ROWS).should be_true
   end
 
-  it "should default flags to 0" do
+  it "should default flags to (REMEMBER_OPTIONS, LONG_PASSWORD, LONG_FLAG, TRANSACTIONS, PROTOCOL_41, SECURE_CONNECTION)" do
     klient = Class.new(Mysql2::Client) do
       attr_reader :connect_args
       def connect *args
@@ -35,7 +35,12 @@ describe Mysql2::Client do
       end
     end
     client = klient.new
-    client.connect_args.last.last.should == 0
+    (client.connect_args.last.last & (Mysql2::Client::REMEMBER_OPTIONS |
+                                     Mysql2::Client::LONG_PASSWORD |
+                                     Mysql2::Client::LONG_FLAG |
+                                     Mysql2::Client::TRANSACTIONS |
+                                     Mysql2::Client::PROTOCOL_41 |
+                                     Mysql2::Client::SECURE_CONNECTION)).should be_true
   end
 
   it "should have a global default_query_options hash" do

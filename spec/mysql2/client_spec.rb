@@ -23,10 +23,10 @@ describe Mysql2::Client do
       end
     end
     client = klient.new :flags => Mysql2::Client::FOUND_ROWS
-    client.connect_args.last.last.should == Mysql2::Client::FOUND_ROWS
+    (client.connect_args.last.last & Mysql2::Client::FOUND_ROWS).should be_true
   end
 
-  it "should default flags to 0" do
+  it "should default flags to (REMEMBER_OPTIONS, LONG_PASSWORD, LONG_FLAG, TRANSACTIONS, PROTOCOL_41, SECURE_CONNECTION)" do
     klient = Class.new(Mysql2::Client) do
       attr_reader :connect_args
       def connect *args
@@ -35,7 +35,12 @@ describe Mysql2::Client do
       end
     end
     client = klient.new
-    client.connect_args.last.last.should == 0
+    (client.connect_args.last.last & (Mysql2::Client::REMEMBER_OPTIONS |
+                                     Mysql2::Client::LONG_PASSWORD |
+                                     Mysql2::Client::LONG_FLAG |
+                                     Mysql2::Client::TRANSACTIONS |
+                                     Mysql2::Client::PROTOCOL_41 |
+                                     Mysql2::Client::SECURE_CONNECTION)).should be_true
   end
 
   it "should have a global default_query_options hash" do
@@ -71,6 +76,9 @@ describe Mysql2::Client do
 
   it "should be able to close properly" do
     @client.close.should be_nil
+    lambda {
+      @client.query "SELECT 1"
+    }.should raise_error(Mysql2::Error)
   end
 
   it "should respond to #query" do
@@ -100,6 +108,13 @@ describe Mysql2::Client do
       @client.query("SELECT 1", :async => true)
       lambda {
         @client.query("SELECT 1")
+      }.should raise_error(Mysql2::Error)
+    end
+
+    it "should require an open connection" do
+      @client.close
+      lambda {
+        @client.query "SELECT 1"
       }.should raise_error(Mysql2::Error)
     end
 
@@ -137,25 +152,34 @@ describe Mysql2::Client do
     @client.should respond_to(:escape)
   end
 
-  it "#escape should return a new SQL-escape version of the passed string" do
-    @client.escape("abc'def\"ghi\0jkl%mno").should eql("abc\\'def\\\"ghi\\0jkl%mno")
-  end
+  context "#escape" do
+    it "should return a new SQL-escape version of the passed string" do
+      @client.escape("abc'def\"ghi\0jkl%mno").should eql("abc\\'def\\\"ghi\\0jkl%mno")
+    end
 
-  it "#escape should return the passed string if nothing was escaped" do
-    str = "plain"
-    @client.escape(str).object_id.should eql(str.object_id)
-  end
+    it "should return the passed string if nothing was escaped" do
+      str = "plain"
+      @client.escape(str).object_id.should eql(str.object_id)
+    end
 
-  it "#escape should not overflow the thread stack" do
-    lambda {
-      Thread.new { @client.escape("'" * 256 * 1024) }.join
-    }.should_not raise_error(SystemStackError)
-  end
+    it "should not overflow the thread stack" do
+      lambda {
+        Thread.new { @client.escape("'" * 256 * 1024) }.join
+      }.should_not raise_error(SystemStackError)
+    end
 
-  it "#escape should not overflow the process stack" do
-    lambda {
-      Thread.new { @client.escape("'" * 1024 * 1024 * 4) }.join
-    }.should_not raise_error(SystemStackError)
+    it "should not overflow the process stack" do
+      lambda {
+        Thread.new { @client.escape("'" * 1024 * 1024 * 4) }.join
+      }.should_not raise_error(SystemStackError)
+    end
+
+    it "should require an open connection" do
+      @client.close
+      lambda {
+        @client.escape ""
+      }.should raise_error(Mysql2::Error)
+    end
   end
 
   it "should respond to #info" do
@@ -203,6 +227,13 @@ describe Mysql2::Client do
     server_info[:version].class.should eql(String)
   end
 
+  it "#server_info should require an open connection" do
+    @client.close
+    lambda {
+      @client.server_info
+    }.should raise_error(Mysql2::Error)
+  end
+
   if defined? Encoding
     context "strings returned by #server_info" do
       it "should default to the connection's encoding if Encoding.default_internal is nil" do
@@ -229,6 +260,13 @@ describe Mysql2::Client do
   it "#socket should return a Fixnum (file descriptor from C)" do
     @client.socket.class.should eql(Fixnum)
     @client.socket.should_not eql(0)
+  end
+
+  it "#socket should require an open connection" do
+    @client.close
+    lambda {
+      @client.socket
+    }.should raise_error(Mysql2::Error)
   end
 
   it "should raise a Mysql2::Error exception upon connection failure" do

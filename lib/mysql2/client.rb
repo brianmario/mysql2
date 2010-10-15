@@ -8,7 +8,8 @@ module Mysql2
       :symbolize_keys => false,       # return field names as symbols instead of strings
       :database_timezone => :local,   # timezone Mysql2 will assume datetime objects are stored in
       :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller
-      :cache_rows => true             # tells Mysql2 to use it's internal row cache for results
+      :cache_rows => true,            # tells Mysql2 to use it's internal row cache for results
+      :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION
     }
 
     def initialize(opts = {})
@@ -31,7 +32,7 @@ module Mysql2
       port     = opts[:port] || 3306
       database = opts[:database]
       socket   = opts[:socket]
-      flags    = opts[:flags] || 0
+      flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
 
       connect user, pass, host, port, database, socket, flags
     end

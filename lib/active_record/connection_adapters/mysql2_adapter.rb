@@ -617,7 +617,12 @@ module ActiveRecord
           # Turn this off. http://dev.rubyonrails.org/ticket/6778
           variable_assignments = ['SQL_AUTO_IS_NULL=0']
           encoding = @config[:encoding]
+
+          # make sure we set the encoding
           variable_assignments << "NAMES '#{encoding}'" if encoding
+
+          # increase timeout so mysql server doesn't disconnect us
+          variable_assignments << "@@wait_timeout = #{@config[:wait_timeout] || 2592000}"
 
           execute("SET #{variable_assignments.join(', ')}", :skip_logging)
         end

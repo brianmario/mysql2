@@ -9,7 +9,7 @@ static ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #define REQUIRE_OPEN_DB(wrapper) \
-  if(wrapper->closed || !wrapper->client->net.vio) { \
+  if(wrapper->closed) { \
     rb_raise(cMysql2Error, "closed MySQL connection"); \
     return Qnil; \
   }
@@ -83,11 +83,11 @@ static VALUE rb_raise_mysql2_error(MYSQL *client) {
 }
 
 static VALUE nogvl_init(void *ptr) {
-  MYSQL **client = (MYSQL **)ptr;
+  MYSQL *client;
 
   /* may initialize embedded server and read /etc/services off disk */
-  *client = mysql_init(NULL);
-  return *client ? Qtrue : Qfalse;
+  client = mysql_init((MYSQL *)ptr);
+  return client ? Qtrue : Qfalse;
 }
 
 static VALUE nogvl_connect(void *ptr) {
@@ -132,6 +132,9 @@ static void rb_mysql_client_free(void * ptr) {
   /* It's safe to call mysql_close() on an already closed connection. */
   if (!wrapper->closed) {
     mysql_close(wrapper->client);
+    if (!wrapper->freed) {
+      free(wrapper->client);
+    }
   }
   xfree(ptr);
 }
@@ -139,9 +142,11 @@ static void rb_mysql_client_free(void * ptr) {
 static VALUE nogvl_close(void * ptr) {
   mysql_client_wrapper *wrapper = ptr;
   if (!wrapper->closed) {
-    mysql_close(wrapper->client);
-    wrapper->client->net.fd = -1;
     wrapper->closed = 1;
+    mysql_close(wrapper->client);
+    if (!wrapper->freed) {
+      free(wrapper->client);
+    }
   }
   return Qnil;
 }
@@ -153,6 +158,8 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active = 0;
   wrapper->closed = 0;
+  wrapper->freed  = 0;
+  wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
   return obj;
 }
 
@@ -167,7 +174,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.passwd = NIL_P(pass) ? NULL : StringValuePtr(pass);
   args.db = NIL_P(database) ? NULL : StringValuePtr(database);
   args.mysql = wrapper->client;
-  args.client_flag = NUM2INT(flags);
+  args.client_flag = NUM2ULONG(flags);
 
   if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
@@ -186,7 +193,9 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 static VALUE rb_mysql_client_close(VALUE self) {
   GET_CLIENT(self);
 
-  rb_thread_blocking_region(nogvl_close, wrapper, RUBY_UBF_IO, 0);
+  if (!wrapper->closed) {
+    rb_thread_blocking_region(nogvl_close, wrapper, RUBY_UBF_IO, 0);
+  }
 
   return Qnil;
 }
@@ -335,6 +344,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   unsigned long newLen, oldLen;
   GET_CLIENT(self);
 
+  REQUIRE_OPEN_DB(wrapper);
   Check_Type(str, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
@@ -346,7 +356,6 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   oldLen = RSTRING_LEN(str);
   newStr = rb_str_new(0, oldLen*2+1);
 
-  REQUIRE_OPEN_DB(wrapper);
   newLen = mysql_real_escape_string(wrapper->client, RSTRING_PTR(newStr), StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
@@ -366,6 +375,7 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 static VALUE rb_mysql_client_info(VALUE self) {
   VALUE version = rb_hash_new(), client_info;
   GET_CLIENT(self);
+
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
@@ -386,12 +396,12 @@ static VALUE rb_mysql_client_info(VALUE self) {
 static VALUE rb_mysql_client_server_info(VALUE self) {
   VALUE version, server_info;
   GET_CLIENT(self);
+
+  REQUIRE_OPEN_DB(wrapper);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
-
-  REQUIRE_OPEN_DB(wrapper);
 
   version = rb_hash_new();
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_server_version(wrapper->client)));
@@ -420,8 +430,14 @@ static VALUE rb_mysql_client_last_id(VALUE self) {
 
 static VALUE rb_mysql_client_affected_rows(VALUE self) {
   GET_CLIENT(self);
+  my_ulonglong retVal;
+
   REQUIRE_OPEN_DB(wrapper);
-  return ULL2NUM(mysql_affected_rows(wrapper->client));
+  retVal = mysql_affected_rows(wrapper->client);
+  if (retVal == (my_ulonglong)-1) {
+    rb_raise_mysql2_error(wrapper->client);
+  }
+  return ULL2NUM(retVal);
 }
 
 static VALUE set_reconnect(VALUE self, VALUE value) {
@@ -501,7 +517,7 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
 static VALUE init_connection(VALUE self) {
   GET_CLIENT(self);
 
-  if (rb_thread_blocking_region(nogvl_init, ((void *) &wrapper->client), RUBY_UBF_IO, 0) == Qfalse) {
+  if (rb_thread_blocking_region(nogvl_init, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     /* TODO: warning - not enough memory? */
     return rb_raise_mysql2_error(wrapper->client);
   }

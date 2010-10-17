@@ -4,7 +4,7 @@ require 'rubygems'
 require 'mysql2'
 require 'timeout'
 
-Spec::Runner.configure do |config|
+RSpec.configure do |config|
   config.before(:all) do
     client = Mysql2::Client.new :database => 'test'
     client.query %[

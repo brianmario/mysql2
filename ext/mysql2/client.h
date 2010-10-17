@@ -35,7 +35,6 @@ typedef struct {
   VALUE encoding;
   short int active;
   short int closed;
-  short int freed;
   MYSQL *client;
 } mysql_client_wrapper;
 

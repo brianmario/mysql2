@@ -104,52 +104,50 @@ static VALUE nogvl_connect(void *ptr) {
   return client ? Qtrue : Qfalse;
 }
 
-static void rb_mysql_client_free(void * ptr) {
-  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
-
-  /*
-   * we'll send a QUIT message to the server, but that message is more of a
-   * formality than a hard requirement since the socket is getting shutdown
-   * anyways, so ensure the socket write does not block our interpreter
-   */
-  int fd = wrapper->client->net.fd;
-
-  if (fd >= 0) {
-    /*
-     * if the socket is dead we have no chance of blocking,
-     * so ignore any potential fcntl errors since they don't matter
-     */
-#ifndef _WIN32
-    int flags = fcntl(fd, F_GETFL);
-    if (flags > 0 && !(flags & O_NONBLOCK))
-      fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-#else
-    u_long iMode = 1;
-    ioctlsocket(fd, FIONBIO, &iMode);
-#endif
-  }
-
-  /* It's safe to call mysql_close() on an already closed connection. */
-  if (!wrapper->closed) {
-    mysql_close(wrapper->client);
-    if (!wrapper->freed) {
-      free(wrapper->client);
-    }
-  }
-  xfree(ptr);
-}
-
-static VALUE nogvl_close(void * ptr) {
+static VALUE nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
   if (!wrapper->closed) {
     wrapper->closed = 1;
+
+    /*
+     * we'll send a QUIT message to the server, but that message is more of a
+     * formality than a hard requirement since the socket is getting shutdown
+     * anyways, so ensure the socket write does not block our interpreter
+     */
+    int fd = wrapper->client->net.fd;
+
+    if (fd >= 0) {
+      /*
+       * if the socket is dead we have no chance of blocking,
+       * so ignore any potential fcntl errors since they don't matter
+       */
+  #ifndef _WIN32
+      int flags = fcntl(fd, F_GETFL);
+      if (flags > 0 && !(flags & O_NONBLOCK))
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+  #else
+      u_long iMode = 1;
+      ioctlsocket(fd, FIONBIO, &iMode);
+  #endif
+    }
+
     mysql_close(wrapper->client);
     wrapper->client->net.fd = -1;
-    if (!wrapper->freed) {
-      free(wrapper->client);
-    }
+  }
+
+  if (!wrapper->freed) {
+    wrapper->freed = 1;
+    free(wrapper->client);
   }
   return Qnil;
+}
+
+static void rb_mysql_client_free(void * ptr) {
+  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
+
+  nogvl_close(wrapper);
+
+  xfree(ptr);
 }
 
 static VALUE allocate(VALUE klass) {

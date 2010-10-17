@@ -1,6 +1,7 @@
 # encoding: UTF-8
 
-require 'rubygems'
+$LOAD_PATH.unshift File.expand_path("../../lib", __FILE__)
+require 'rspec'
 require 'mysql2'
 require 'timeout'
 

@@ -622,7 +622,8 @@ module ActiveRecord
           variable_assignments << "NAMES '#{encoding}'" if encoding
 
           # increase timeout so mysql server doesn't disconnect us
-          variable_assignments << "@@wait_timeout = #{@config[:wait_timeout] || 2592000}"
+          wait_timeout = @config[:wait_timeout] || 2592000
+          variable_assignments << "@@wait_timeout = #{wait_timeout}" if wait_timeout.is_a?(Fixnum)
 
           execute("SET #{variable_assignments.join(', ')}", :skip_logging)
         end

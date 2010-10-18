@@ -128,7 +128,6 @@ static VALUE nogvl_close(void *ptr) {
 #endif
 
     mysql_close(wrapper->client);
-    wrapper->client->net.fd = -1;
     free(wrapper->client);
   }
 

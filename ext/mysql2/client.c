@@ -153,7 +153,7 @@ static VALUE allocate(VALUE klass) {
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
   wrapper->active = 0;
-  wrapper->closed = 0;
+  wrapper->closed = 1;
   wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
   return obj;
 }
@@ -517,6 +517,7 @@ static VALUE init_connection(VALUE self) {
     return rb_raise_mysql2_error(wrapper->client);
   }
 
+  wrapper->closed = 0;
   return self;
 }
 

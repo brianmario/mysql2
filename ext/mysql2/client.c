@@ -113,26 +113,21 @@ static VALUE nogvl_close(void *ptr) {
      * we'll send a QUIT message to the server, but that message is more of a
      * formality than a hard requirement since the socket is getting shutdown
      * anyways, so ensure the socket write does not block our interpreter
+     *
+     *
+     * if the socket is dead we have no chance of blocking,
+     * so ignore any potential fcntl errors since they don't matter
      */
-    int fd = wrapper->client->net.fd;
-
-    if (fd >= 0) {
-      /*
-       * if the socket is dead we have no chance of blocking,
-       * so ignore any potential fcntl errors since they don't matter
-       */
-  #ifndef _WIN32
-      int flags = fcntl(fd, F_GETFL);
-      if (flags > 0 && !(flags & O_NONBLOCK))
-        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-  #else
-      u_long iMode = 1;
-      ioctlsocket(fd, FIONBIO, &iMode);
-  #endif
-    }
+#ifndef _WIN32
+    int flags = fcntl(wrapper->client->net.fd, F_GETFL);
+    if (flags > 0 && !(flags & O_NONBLOCK))
+      fcntl(wrapper->client->net.fd, F_SETFL, flags | O_NONBLOCK);
+#else
+    u_long iMode = 1;
+    ioctlsocket(wrapper->client->net.fd, FIONBIO, &iMode);
+#endif
 
     mysql_close(wrapper->client);
-    wrapper->client->net.fd = -1;
     free(wrapper->client);
   }
 

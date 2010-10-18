@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Brian Lopez"]
-  s.date = %q{2010-09-17}
+  s.date = %q{2010-10-18}
   s.email = %q{seniorlopez@gmail.com}
   s.extensions = ["ext/mysql2/extconf.rb"]
   s.extra_rdoc_files = [
@@ -17,6 +17,7 @@ Gem::Specification.new do |s|
   ]
   s.files = [
     ".gitignore",
+     ".rspec",
      "CHANGELOG.md",
      "MIT-LICENSE",
      "README.rdoc",
@@ -29,7 +30,6 @@ Gem::Specification.new do |s|
      "benchmark/query_without_mysql_casting.rb",
      "benchmark/sequel.rb",
      "benchmark/setup_db.rb",
-     "benchmark/thread_alone.rb",
      "examples/eventmachine.rb",
      "examples/threaded.rb",
      "ext/mysql2/client.c",
@@ -54,10 +54,11 @@ Gem::Specification.new do |s|
      "spec/mysql2/error_spec.rb",
      "spec/mysql2/result_spec.rb",
      "spec/rcov.opts",
-     "spec/spec.opts",
      "spec/spec_helper.rb",
      "tasks/benchmarks.rake",
      "tasks/compile.rake",
+     "tasks/jeweler.rake",
+     "tasks/rspec.rake",
      "tasks/vendor_mysql.rake"
   ]
   s.homepage = %q{http://github.com/brianmario/mysql2}

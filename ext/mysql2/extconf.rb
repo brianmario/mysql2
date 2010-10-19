@@ -57,7 +57,7 @@ end
   asplode h unless have_header h
 end
 
-unless RUBY_PLATFORM =~ /mswin/
+unless RUBY_PLATFORM =~ /mswin/ or RUBY_PLATFORM =~ /sparc/
   $CFLAGS << ' -Wall -funroll-loops'
 end
 # $CFLAGS << ' -O0 -ggdb3 -Wextra'

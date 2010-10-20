@@ -12,5 +12,5 @@ require 'mysql2/result'
 #
 # A modern, simple and very fast Mysql library for Ruby - binding to libmysql
 module Mysql2
-  VERSION = "0.2.5"
+  VERSION = "0.2.6"
 end

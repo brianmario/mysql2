@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.6 (October 19th, 2010)
+* version bump since the 0.2.5 win32 binary gems were broken
+
 ## 0.2.5 (October 19th, 2010)
 * fixes for easier Win32 binary gem deployment for targeting 1.8 and 1.9 in the same gem
 * refactor of connection checks and management to avoid race conditions with the GC/threading to prevent the unexpected loss of connections

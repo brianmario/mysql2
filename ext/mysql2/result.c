@@ -234,6 +234,17 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           }
           break;
         }
+        // From: http://dev.mysql.com/doc/refman/5.0/en/c-api-data-structures.html
+        // ... To distinguish between binary and nonbinary data for string data types, 
+        // check whether the charsetnr value is 63. If so, the character set is binary, 
+        // which indicates binary rather than nonbinary data. ...
+        case 63: {
+          val = rb_str_new(row[i], fieldLengths[i]);
+#ifdef HAVE_RUBY_ENCODING_H
+          rb_enc_associate(val, binaryEncoding);
+#endif
+          break;
+        }
         case MYSQL_TYPE_TINY_BLOB:
         case MYSQL_TYPE_MEDIUM_BLOB:
         case MYSQL_TYPE_LONG_BLOB:
@@ -247,23 +258,18 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
 #ifdef HAVE_RUBY_ENCODING_H
-          // if binary flag is set, respect it's wishes
-          if (fields[i].flags & BINARY_FLAG) {
-            rb_enc_associate(val, binaryEncoding);
+          // lookup the encoding configured on this field
+          VALUE new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset_code, 1, INT2NUM(fields[i].charsetnr));
+          if (new_encoding != Qnil) {
+            // use the field encoding we were able to match
+            rb_encoding *enc = rb_to_encoding(new_encoding);
+            rb_enc_associate(val, enc);
           } else {
-            // lookup the encoding configured on this field
-            VALUE new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset_code, 1, INT2NUM(fields[i].charsetnr));
-            if (new_encoding != Qnil) {
-              // use the field encoding we were able to match
-              rb_encoding *enc = rb_to_encoding(new_encoding);
-              rb_enc_associate(val, enc);
-            } else {
-              // otherwise fall-back to the connection's encoding
-              rb_enc_associate(val, conn_enc);
-            }
-            if (default_internal_enc) {
-              val = rb_str_export_to_enc(val, default_internal_enc);
-            }
+            // otherwise fall-back to the connection's encoding
+            rb_enc_associate(val, conn_enc);
+          }
+          if (default_internal_enc) {
+            val = rb_str_export_to_enc(val, default_internal_enc);
           }
 #endif
           break;

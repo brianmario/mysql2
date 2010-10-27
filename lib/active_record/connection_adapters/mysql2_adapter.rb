@@ -18,6 +18,9 @@ module ActiveRecord
   end
 
   module ConnectionAdapters
+    class Mysql2IndexDefinition < Struct.new(:table, :name, :unique, :columns, :lengths) #:nodoc:
+    end
+
     class Mysql2Column < Column
       BOOL = "tinyint(1)"
       def extract_default(default)
@@ -447,7 +450,7 @@ module ActiveRecord
           if current_index != row[:Key_name]
             next if row[:Key_name] == PRIMARY # skip the primary key
             current_index = row[:Key_name]
-            indexes << IndexDefinition.new(row[:Table], row[:Key_name], row[:Non_unique] == 0, [], [])
+            indexes << Mysql2IndexDefinition.new(row[:Table], row[:Key_name], row[:Non_unique] == 0, [], [])
           end
 
           indexes.last.columns << row[:Column_name]

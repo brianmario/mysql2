@@ -76,7 +76,7 @@ static void rb_mysql_client_mark(void * wrapper) {
 
 static VALUE rb_raise_mysql2_error(MYSQL *client) {
   VALUE e = rb_exc_new2(cMysql2Error, mysql_error(client));
-  rb_funcall(e, intern_error_number_eql, 1, INT2NUM(mysql_errno(client)));
+  rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(client)));
   rb_funcall(e, intern_sql_state_eql, 1, rb_tainted_str_new2(mysql_sqlstate(client)));
   rb_exc_raise(e);
   return Qnil;

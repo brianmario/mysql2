@@ -248,7 +248,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           val = rb_str_new(row[i], fieldLengths[i]);
 #ifdef HAVE_RUBY_ENCODING_H
           // if binary flag is set, respect it's wishes
-          if (fields[i].flags & BINARY_FLAG) {
+          if (fields[i].flags & BINARY_FLAG && fields[i].charsetnr == 63) {
             rb_enc_associate(val, binaryEncoding);
           } else {
             // lookup the encoding configured on this field

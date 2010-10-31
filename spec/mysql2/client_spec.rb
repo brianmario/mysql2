@@ -86,6 +86,12 @@ describe Mysql2::Client do
   end
 
   context "#query" do
+    it "should only accept strings as the query parameter" do
+      lambda {
+        @client.query ["SELECT 'not right'"]
+      }.should raise_error(TypeError)
+    end
+
     it "should accept an options hash that inherits from Mysql2::Client.default_query_options" do
       @client.query "SELECT 1", :something => :else
       @client.query_options.should eql(@client.query_options.merge(:something => :else))

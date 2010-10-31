@@ -290,6 +290,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     opts = defaults;
   }
 
+  Check_Type(args.sql, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
   // ensure the string is in the encoding the connection is expecting

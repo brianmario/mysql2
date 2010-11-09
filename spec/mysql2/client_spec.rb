@@ -85,6 +85,12 @@ describe Mysql2::Client do
     @client.should respond_to(:query)
   end
 
+  it "should expect read_timeout to be a positive integer" do
+    lambda {
+      Mysql2::Client.new(:read_timeout => -1)
+    }.should raise_error(Mysql2::Error)
+  end
+
   context "#query" do
     it "should only accept strings as the query parameter" do
       lambda {
@@ -121,6 +127,13 @@ describe Mysql2::Client do
       @client.close
       lambda {
         @client.query "SELECT 1"
+      }.should raise_error(Mysql2::Error)
+    end
+
+    it "should timeout if we wait longer than :read_timeout" do
+      client = Mysql2::Client.new(:read_timeout => 1)
+      lambda {
+        client.query("SELECT sleep(2)")
       }.should raise_error(Mysql2::Error)
     end
 

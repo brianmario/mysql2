@@ -146,7 +146,7 @@ This would be helpful if you wanted to iterate over the results in a streaming m
 
 == ActiveRecord
 
-To use the ActiveRecord driver, all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
+To use the ActiveRecord driver (for example, rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
 That was easy right? :)
 
 == Asynchronous ActiveRecord

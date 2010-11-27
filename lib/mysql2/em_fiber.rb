@@ -1,23 +1,28 @@
 # encoding: utf-8
 
 require 'mysql2/em'
-require 'fiber' unless defined? Fiber
+require 'fiber'
 
 module Mysql2
   module EM
     module Fiber
       class Client < ::Mysql2::EM::Client
         def query(sql, opts={})
-          deferable = super(sql, opts)
+          if ::EM.reactor_running?
+            deferable = super(sql, opts)
 
-          fiber = ::Fiber.current
-          deferable.callback do |result|
-            fiber.resume(result)
+            fiber = ::Fiber.current
+            deferable.callback do |result|
+              fiber.resume(result)
+            end
+            deferable.errback do |err|
+              p err
+              fiber.resume(err)
+            end
+            ::Fiber.yield
+          else
+            super(sql, opts)
           end
-          deferable.errback do |err|
-            fiber.resume(err)
-          end
-          ::Fiber.yield
         end
       end
     end

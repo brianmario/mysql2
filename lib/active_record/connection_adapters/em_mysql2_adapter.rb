@@ -35,7 +35,6 @@ module Mysql2
             results = @client.async_result
             @deferable.succeed(results)
           rescue Exception => e
-            puts e.backtrace.join("\n\t")
             @deferable.fail(e)
           end
         end

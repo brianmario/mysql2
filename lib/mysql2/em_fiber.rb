@@ -16,7 +16,6 @@ module Mysql2
               fiber.resume(result)
             end
             deferable.errback do |err|
-              p err
               fiber.resume(err)
             end
             ::Fiber.yield

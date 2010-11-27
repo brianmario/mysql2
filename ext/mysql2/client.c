@@ -315,7 +315,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     if (sec >= 0) {
       tvp->tv_sec = sec;
     } else {
-      rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %d", sec);
+      rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %ld", sec);
     }
     tvp->tv_usec = 0;
   }

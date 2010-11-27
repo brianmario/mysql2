@@ -46,6 +46,7 @@ Gem::Specification.new do |s|
      "lib/mysql2.rb",
      "lib/mysql2/client.rb",
      "lib/mysql2/em.rb",
+     "lib/mysql2/em_fiber.rb",
      "lib/mysql2/error.rb",
      "lib/mysql2/result.rb",
      "mysql2.gemspec",

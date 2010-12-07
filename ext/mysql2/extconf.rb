@@ -62,4 +62,8 @@ unless RUBY_PLATFORM =~ /mswin/ or RUBY_PLATFORM =~ /sparc/
 end
 # $CFLAGS << ' -O0 -ggdb3 -Wextra'
 
+if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
+	$LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"
+end
+
 create_makefile('mysql2/mysql2')

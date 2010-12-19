@@ -105,7 +105,11 @@ static VALUE nogvl_connect(void *ptr) {
 }
 
 static VALUE nogvl_close(void *ptr) {
-  mysql_client_wrapper *wrapper = ptr;
+  mysql_client_wrapper *wrapper;
+#ifndef _WIN32
+  int flags;
+#endif
+  wrapper = ptr;
   if (!wrapper->closed) {
     wrapper->closed = 1;
 
@@ -119,11 +123,12 @@ static VALUE nogvl_close(void *ptr) {
      * so ignore any potential fcntl errors since they don't matter
      */
 #ifndef _WIN32
-    int flags = fcntl(wrapper->client->net.fd, F_GETFL);
+    flags = fcntl(wrapper->client->net.fd, F_GETFL);
     if (flags > 0 && !(flags & O_NONBLOCK))
       fcntl(wrapper->client->net.fd, F_SETFL, flags | O_NONBLOCK);
 #else
-    u_long iMode = 1;
+    u_long iMode;
+    iMode = 1;
     ioctlsocket(wrapper->client->net.fd, FIONBIO, &iMode);
 #endif
 
@@ -226,6 +231,10 @@ static VALUE nogvl_store_result(void *ptr) {
 
 static VALUE rb_mysql_client_async_result(VALUE self) {
   MYSQL_RES * result;
+  VALUE resultObj;
+#ifdef HAVE_RUBY_ENCODING_H
+  mysql2_result_wrapper * result_wrapper;
+#endif
   GET_CLIENT(self);
 
   REQUIRE_OPEN_DB(wrapper);
@@ -247,12 +256,11 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  VALUE resultObj = rb_mysql_result_to_obj(result);
+  resultObj = rb_mysql_result_to_obj(result);
   // pass-through query options for result construction later
   rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
 
 #ifdef HAVE_RUBY_ENCODING_H
-  mysql2_result_wrapper * result_wrapper;
   GetMysql2Result(resultObj, result_wrapper);
   result_wrapper->encoding = wrapper->encoding;
 #endif
@@ -265,6 +273,13 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   int fd, retval;
   int async = 0;
   VALUE opts, defaults, read_timeout;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *conn_enc;
+#endif
+  struct timeval tv;
+  struct timeval* tvp;
+  long int sec;
+  VALUE result;
   GET_CLIENT(self);
 
   REQUIRE_OPEN_DB(wrapper);
@@ -292,7 +307,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 
   Check_Type(args.sql, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+  conn_enc = rb_to_encoding(wrapper->encoding);
   // ensure the string is in the encoding the connection is expecting
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
@@ -304,12 +319,12 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 
   read_timeout = rb_iv_get(self, "@read_timeout");
-  struct timeval tv;
-  struct timeval* tvp = NULL;
+
+  tvp = NULL;
   if (!NIL_P(read_timeout)) {
     Check_Type(read_timeout, T_FIXNUM);
     tvp = &tv;
-    long int sec = FIX2INT(read_timeout);
+    sec = FIX2INT(read_timeout);
     // TODO: support partial seconds?
     // also, this check is here for sanity, we also check up in Ruby
     if (sec >= 0) {
@@ -343,7 +358,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
       }
     }
 
-    VALUE result = rb_mysql_client_async_result(self);
+    result = rb_mysql_client_async_result(self);
 
     return result;
   } else {
@@ -354,13 +369,17 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
   VALUE newStr;
   unsigned long newLen, oldLen;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc;
+  rb_encoding *conn_enc;
+#endif
   GET_CLIENT(self);
 
   REQUIRE_OPEN_DB(wrapper);
   Check_Type(str, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+  default_internal_enc = rb_default_internal_encoding();
+  conn_enc = rb_to_encoding(wrapper->encoding);
   // ensure the string is in the encoding the connection is expecting
   str = rb_str_export_to_enc(str, conn_enc);
 #endif
@@ -385,12 +404,17 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 }
 
 static VALUE rb_mysql_client_info(VALUE self) {
-  VALUE version = rb_hash_new(), client_info;
+  VALUE version, client_info;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc;
+  rb_encoding *conn_enc;
+#endif
   GET_CLIENT(self);
+  version = rb_hash_new();
 
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+  default_internal_enc = rb_default_internal_encoding();
+  conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
 
   rb_hash_aset(version, sym_id, LONG2NUM(mysql_get_client_version()));
@@ -407,12 +431,16 @@ static VALUE rb_mysql_client_info(VALUE self) {
 
 static VALUE rb_mysql_client_server_info(VALUE self) {
   VALUE version, server_info;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc;
+  rb_encoding *conn_enc;
+#endif
   GET_CLIENT(self);
 
   REQUIRE_OPEN_DB(wrapper);
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+  default_internal_enc = rb_default_internal_encoding();
+  conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
 
   version = rb_hash_new();
@@ -441,8 +469,8 @@ static VALUE rb_mysql_client_last_id(VALUE self) {
 }
 
 static VALUE rb_mysql_client_affected_rows(VALUE self) {
-  GET_CLIENT(self);
   my_ulonglong retVal;
+  GET_CLIENT(self);
 
   REQUIRE_OPEN_DB(wrapper);
   retVal = mysql_affected_rows(wrapper->client);
@@ -487,10 +515,12 @@ static VALUE set_connect_timeout(VALUE self, VALUE value) {
 
 static VALUE set_charset_name(VALUE self, VALUE value) {
   char * charset_name;
+#ifdef HAVE_RUBY_ENCODING_H
+  VALUE new_encoding;
+#endif
   GET_CLIENT(self);
 
 #ifdef HAVE_RUBY_ENCODING_H
-  VALUE new_encoding;
   new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset, 1, value);
   if (new_encoding == Qnil) {
     rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(value));

@@ -53,7 +53,7 @@ static VALUE nogvl_fetch_row(void *ptr) {
 
 static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
   mysql2_result_wrapper * wrapper;
-
+  VALUE rb_field;
   GetMysql2Result(self, wrapper);
 
   if (wrapper->fields == Qnil) {
@@ -61,7 +61,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  VALUE rb_field = rb_ary_entry(wrapper->fields, idx);
+  rb_field = rb_ary_entry(wrapper->fields, idx);
   if (rb_field == Qnil) {
     MYSQL_FIELD *field = NULL;
 #ifdef HAVE_RUBY_ENCODING_H
@@ -98,12 +98,15 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   unsigned int i = 0;
   unsigned long * fieldLengths;
   void * ptr;
-
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc;
+  rb_encoding *conn_enc;
+#endif
   GetMysql2Result(self, wrapper);
 
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+  default_internal_enc = rb_default_internal_encoding();
+  conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
 
   ptr = wrapper->result;

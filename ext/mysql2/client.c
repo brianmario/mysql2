@@ -11,7 +11,6 @@ static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 #define REQUIRE_OPEN_DB(wrapper) \
   if(wrapper->closed) { \
     rb_raise(cMysql2Error, "closed MySQL connection"); \
-    return Qnil; \
   }
 
 #define MARK_CONN_INACTIVE(conn) \

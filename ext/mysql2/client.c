@@ -339,10 +339,28 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     // http://github.com/datamapper/do
     fd = wrapper->client->net.fd;
     for(;;) {
-      FD_ZERO(&fdset);
-      FD_SET(fd, &fdset);
+      int fd_set_fd = fd;
 
-      retval = rb_thread_select(fd + 1, &fdset, NULL, NULL, tvp);
+#ifdef _WIN32
+      WSAPROTOCOL_INFO wsa_pi;
+      // dupicate the SOCKET from libmysql
+      int r = WSADuplicateSocket(fd, GetCurrentProcessId(), &wsa_pi);
+      SOCKET s = WSASocket(wsa_pi.iAddressFamily, wsa_pi.iSocketType, wsa_pi.iProtocol, &wsa_pi, 0, 0);
+      // create the CRT fd so ruby can get back to the SOCKET
+      fd_set_fd = _open_osfhandle(s, O_RDWR|O_BINARY);
+#endif
+
+      FD_ZERO(&fdset);
+      FD_SET(fd_set_fd, &fdset);
+
+      retval = rb_thread_select(fd_set_fd + 1, &fdset, NULL, NULL, tvp);
+
+#ifdef _WIN32
+      // cleanup the CRT fd
+      _close(fd_set_fd);
+      // cleanup the duplicated SOCKET
+      closesocket(s);
+#endif
 
       if (retval == 0) {
         rb_raise(cMysql2Error, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));

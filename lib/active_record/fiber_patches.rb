@@ -16,7 +16,7 @@ module ActiveRecord
           @queue = []
         end
 
-        def wait(timeout)
+        def _wait(timeout)
           t = timeout || 5
           fiber = Fiber.current
           x = EM::Timer.new(t) do
@@ -24,10 +24,26 @@ module ActiveRecord
             fiber.resume(false)
           end
           @queue << fiber
-          returning Fiber.yield do
-            x.cancel
+          yield x
+        end
+
+if RUBY_VERSION < "1.9"
+        def wait(timeout)
+          _wait(timeout) do |x|
+            returning Fiber.yield do
+              x.cancel
+            end
           end
         end
+else
+        def wait(timeout)
+          _wait(timeout) do |x|
+            Fiber.yield.tap do
+              x.cancel
+            end
+          end
+        end
+end
 
         def signal
           fiber = @queue.pop

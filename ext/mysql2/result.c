@@ -193,7 +193,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
               val = Qnil;
             } else {
-              if (year < 1902 || year+month+day > 2058) { // use DateTime instead
+              if (year < 1970 || year+month+day > 2058) { // use DateTime instead
                 VALUE offset = INT2NUM(0);
                 if (db_timezone == intern_local) {
                   offset = rb_funcall(cMysql2Client, intern_local_offset, 0);

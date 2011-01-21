@@ -1,4 +1,3 @@
-gem 'rake-compiler', '~> 0.7.1'
 require "rake/extensiontask"
 
 MYSQL_VERSION = "5.1.51"

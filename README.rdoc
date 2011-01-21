@@ -232,6 +232,14 @@ then iterating over every row using an #each like method yielding a block:
   Mysql
    7.500000   0.210000   7.710000 (  8.065871)
 
+== Development
+
+To run the tests, you can use RVM and Bundler to create a pristine environment for mysql2 development/hacking.
+Use 'bundle install' to install the necessary development and testing gems:
+
+    bundle install
+    rake
+
 == Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude

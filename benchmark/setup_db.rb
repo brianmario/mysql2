@@ -76,6 +76,8 @@ end
 
 puts "Creating #{num} records"
 num.times do |n|
+  five_words = Faker::Lorem.words(rand(5))
+  twenty5_paragraphs = Faker::Lorem.paragraphs(rand(25))
   insert_record(
     :bit_test => 1,
     :tiny_int_test => rand(128),
@@ -93,23 +95,25 @@ num.times do |n|
     :timestamp_test => '2010-4-4 11:44:00',
     :time_test => '11:44:00',
     :year_test => Time.now.year,
-    :char_test => Faker::Lorem.words(rand(5)),
-    :varchar_test => Faker::Lorem.words(rand(5)),
-    :binary_test => Faker::Lorem.words(rand(5)),
-    :varbinary_test => Faker::Lorem.words(rand(5)),
-    :tiny_blob_test => Faker::Lorem.words(rand(5)),
+    :char_test => five_words,
+    :varchar_test => five_words,
+    :binary_test => five_words,
+    :varbinary_test => five_words,
+    :tiny_blob_test => five_words,
     :tiny_text_test => Faker::Lorem.paragraph(rand(5)),
-    :blob_test => Faker::Lorem.paragraphs(rand(25)),
-    :text_test => Faker::Lorem.paragraphs(rand(25)),
-    :medium_blob_test => Faker::Lorem.paragraphs(rand(25)),
-    :medium_text_test => Faker::Lorem.paragraphs(rand(25)),
-    :long_blob_test => Faker::Lorem.paragraphs(rand(25)),
-    :long_text_test => Faker::Lorem.paragraphs(rand(25)),
+    :blob_test => twenty5_paragraphs,
+    :text_test => twenty5_paragraphs,
+    :medium_blob_test => twenty5_paragraphs,
+    :medium_text_test => twenty5_paragraphs,
+    :long_blob_test => twenty5_paragraphs,
+    :long_text_test => twenty5_paragraphs,
     :enum_test => ['val1', 'val2'].rand,
     :set_test => ['val1', 'val2', 'val1,val2'].rand
   )
-  $stdout.putc '.'
-  $stdout.flush
+  if n % 100 == 0
+    $stdout.putc '.'
+    $stdout.flush
+  end
 end
 puts
 puts "Done"

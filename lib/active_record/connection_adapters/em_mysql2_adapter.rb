@@ -52,9 +52,9 @@ module Mysql2
           deferrable.errback do |err|
             fiber.resume(err)
           end
-          result = Fiber.yield
-          raise result if result.is_a?(Exception)
-          result
+          Fiber.yield.tap do |result|
+            raise result if result.is_a?(Exception)
+          end
         else
           super(sql, opts)
         end

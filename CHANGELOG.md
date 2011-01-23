@@ -1,5 +1,8 @@
 # Changelog
 
+## HEAD
+* various fixes for em_mysql2 and fiber usage
+
 ## 0.2.6 (October 19th, 2010)
 * version bump since the 0.2.5 win32 binary gems were broken
 

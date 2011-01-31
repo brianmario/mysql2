@@ -290,7 +290,7 @@ describe Mysql2::Client do
 
   it "should raise a Mysql2::Error exception upon connection failure" do
     lambda {
-      bad_client = Mysql2::Client.new :host => "dfjhdi9wrhw", :username => 'asdfasdf8d2h'
+      bad_client = Mysql2::Client.new :host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42'
     }.should raise_error(Mysql2::Error)
 
     lambda {

@@ -24,7 +24,7 @@ module ActiveRecord
             fiber.resume(false)
           end
           @queue << fiber
-          returning Fiber.yield do
+          Fiber.yield.tap do
             x.cancel
           end
         end
@@ -69,14 +69,8 @@ module ActiveRecord
         @checked_out = []
       end
 
-      private
-
-      def current_connection_id #:nodoc:
-        Fiber.current.object_id
-      end
-
-      # Remove stale fibers from the cache.
-      def remove_stale_cached_threads!(cache, &block)
+      def clear_stale_cached_connections!
+        cache = @reserved_connections
         keys = Set.new(cache.keys)
 
         ActiveRecord::ConnectionAdapters.fiber_pools.each do |pool|
@@ -87,9 +81,15 @@ module ActiveRecord
 
         keys.each do |key|
           next unless cache.has_key?(key)
-          block.call(key, cache[key])
+          checkin cache[key]
           cache.delete(key)
         end
+      end
+
+      private
+
+      def current_connection_id #:nodoc:
+        Fiber.current.object_id
       end
 
       def checkout_and_verify(c)

@@ -8,10 +8,10 @@ typedef struct {
   VALUE fields;
   VALUE rows;
   VALUE encoding;
-  long numberOfFields;
+  unsigned int numberOfFields;
   unsigned long numberOfRows;
   unsigned long lastRowProcessed;
-  short int resultFreed;
+  char resultFreed;
   MYSQL_RES *result;
 } mysql2_result_wrapper;
 

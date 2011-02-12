@@ -85,7 +85,19 @@ describe Mysql2::Client do
     @client.should respond_to(:query)
   end
 
+  it "should expect read_timeout to be a positive integer" do
+    lambda {
+      Mysql2::Client.new(:read_timeout => -1)
+    }.should raise_error(Mysql2::Error)
+  end
+
   context "#query" do
+    it "should only accept strings as the query parameter" do
+      lambda {
+        @client.query ["SELECT 'not right'"]
+      }.should raise_error(TypeError)
+    end
+
     it "should accept an options hash that inherits from Mysql2::Client.default_query_options" do
       @client.query "SELECT 1", :something => :else
       @client.query_options.should eql(@client.query_options.merge(:something => :else))
@@ -115,6 +127,13 @@ describe Mysql2::Client do
       @client.close
       lambda {
         @client.query "SELECT 1"
+      }.should raise_error(Mysql2::Error)
+    end
+
+    it "should timeout if we wait longer than :read_timeout" do
+      client = Mysql2::Client.new(:read_timeout => 1)
+      lambda {
+        client.query("SELECT sleep(2)")
       }.should raise_error(Mysql2::Error)
     end
 
@@ -271,7 +290,7 @@ describe Mysql2::Client do
 
   it "should raise a Mysql2::Error exception upon connection failure" do
     lambda {
-      bad_client = Mysql2::Client.new :host => "dfjhdi9wrhw", :username => 'asdfasdf8d2h'
+      bad_client = Mysql2::Client.new :host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42'
     }.should raise_error(Mysql2::Error)
 
     lambda {

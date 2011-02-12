@@ -4,6 +4,12 @@
 #include <ruby.h>
 #include <fcntl.h>
 
+#ifndef HAVE_UINT
+#define HAVE_UINT
+typedef unsigned short    ushort;
+typedef unsigned int    uint;
+#endif
+
 #ifdef HAVE_MYSQL_H
 #include <mysql.h>
 #include <mysql_com.h>

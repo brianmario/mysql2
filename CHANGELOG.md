@@ -1,5 +1,20 @@
 # Changelog
 
+## HEAD
+* various fixes for em_mysql2 and fiber usage
+
+## 0.2.6 (October 19th, 2010)
+* version bump since the 0.2.5 win32 binary gems were broken
+
+## 0.2.5 (October 19th, 2010)
+* fixes for easier Win32 binary gem deployment for targeting 1.8 and 1.9 in the same gem
+* refactor of connection checks and management to avoid race conditions with the GC/threading to prevent the unexpected loss of connections
+* update the default flags during connection
+* add support for setting wait_timeout on AR adapter
+* upgrade to rspec2
+* bugfix for an edge case where the GC would clean up a Mysql2::Client object before the underlying MYSQL pointer had been initialized
+* fix to CFLAGS to allow compilation on SPARC with sunstudio compiler - Anko painting <anko.com+github@gmail.com>
+
 ## 0.2.4 (September 17th, 2010)
 * a few patches for win32 support from Luis Lavena - thanks man!
 * bugfix from Eric Wong to avoid a potential stack overflow during Mysql2::Client#escape

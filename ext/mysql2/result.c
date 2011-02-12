@@ -4,6 +4,16 @@
 rb_encoding *binaryEncoding;
 #endif
 
+#define MYSQL2_MAX_YEAR 2058
+
+#ifdef NEGATIVE_TIME_T
+  /* 1901-12-13 20:45:52 UTC : The oldest time in 32-bit signed time_t. */
+#define MYSQL2_MIN_YEAR 1902
+#else
+ /* 1970-01-01 00:00:00 UTC : The Unix epoch - the oldest time in portable time_t. */
+#define MYSQL2_MIN_YEAR 1970
+#endif
+
 VALUE cMysql2Result;
 VALUE cBigDecimal, cDate, cDateTime;
 VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
@@ -53,7 +63,7 @@ static VALUE nogvl_fetch_row(void *ptr) {
 
 static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
   mysql2_result_wrapper * wrapper;
-
+  VALUE rb_field;
   GetMysql2Result(self, wrapper);
 
   if (wrapper->fields == Qnil) {
@@ -61,7 +71,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  VALUE rb_field = rb_ary_entry(wrapper->fields, idx);
+  rb_field = rb_ary_entry(wrapper->fields, idx);
   if (rb_field == Qnil) {
     MYSQL_FIELD *field = NULL;
 #ifdef HAVE_RUBY_ENCODING_H
@@ -98,12 +108,15 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   unsigned int i = 0;
   unsigned long * fieldLengths;
   void * ptr;
-
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc;
+  rb_encoding *conn_enc;
+#endif
   GetMysql2Result(self, wrapper);
 
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+  default_internal_enc = rb_default_internal_encoding();
+  conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
 
   ptr = wrapper->result;
@@ -190,7 +203,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
               val = Qnil;
             } else {
-              if (year < 1902 || year+month+day > 2058) { // use DateTime instead
+              if (year < MYSQL2_MIN_YEAR || year+month+day > MYSQL2_MAX_YEAR) { // use DateTime instead
                 VALUE offset = INT2NUM(0);
                 if (db_timezone == intern_local) {
                   offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
@@ -248,7 +261,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           val = rb_str_new(row[i], fieldLengths[i]);
 #ifdef HAVE_RUBY_ENCODING_H
           // if binary flag is set, respect it's wishes
-          if (fields[i].flags & BINARY_FLAG) {
+          if (fields[i].flags & BINARY_FLAG && fields[i].charsetnr == 63) {
             rb_enc_associate(val, binaryEncoding);
           } else {
             // lookup the encoding configured on this field

@@ -35,25 +35,26 @@ module Mysql2
             results = @client.async_result
             @deferable.succeed(results)
           rescue Exception => e
-            puts e.backtrace.join("\n\t")
             @deferable.fail(e)
           end
         end
       end
 
       def query(sql, opts={})
-        if EM.reactor_running?
+        if ::EM.reactor_running?
           super(sql, opts.merge(:async => true))
-          deferable = ::EM::DefaultDeferrable.new
-          ::EM.watch(self.socket, Watcher, self, deferable).notify_readable = true
+          deferrable = ::EM::DefaultDeferrable.new
+          ::EM.watch(self.socket, Watcher, self, deferrable).notify_readable = true
           fiber = Fiber.current
-          deferable.callback do |result|
+          deferrable.callback do |result|
             fiber.resume(result)
           end
-          deferable.errback do |err|
+          deferrable.errback do |err|
             fiber.resume(err)
           end
-          Fiber.yield
+          Fiber.yield.tap do |result|
+            raise result if result.is_a?(Exception)
+          end
         else
           super(sql, opts)
         end

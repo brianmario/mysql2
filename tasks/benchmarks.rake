@@ -1,8 +1,20 @@
+BENCHMARKS = Dir["#{File.dirname(__FILE__)}/../benchmark/*.rb"].map do |path|
+  File.basename(path, '.rb')
+end.select { |x| x != 'setup_db' }
+
 namespace :bench do
-  [ :active_record, :escape, :query_with_mysql_casting,
-    :query_without_mysql_casting, :sequel, :allocations,
-    :thread_alone].each do |feature|
+  BENCHMARKS.each do |feature|
       desc "Run #{feature} benchmarks"
       task(feature){ ruby "benchmark/#{feature}.rb" }
+  end
+
+  task :all do
+    BENCHMARKS.each do |feature|
+      ruby "benchmark/#{feature}.rb"
+    end
+  end
+
+  task :setup do
+    ruby 'benchmark/setup_db'
   end
 end

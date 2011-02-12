@@ -3,7 +3,7 @@ require 'spec_helper'
 
 describe Mysql2::Result do
   before(:each) do
-    @client = Mysql2::Client.new :host => "localhost", :username => "root"
+    @client = Mysql2::Client.new :host => "localhost", :username => "root", :database => 'test'
   end
 
   before(:each) do
@@ -153,8 +153,18 @@ describe Mysql2::Result do
       @test_result['date_time_test'].strftime("%F %T").should eql('2010-04-04 11:44:00')
     end
 
-    it "should return DateTime for a DATETIME value when outside the supported range" do
-      r = @client.query("SELECT CAST('1901-1-1 01:01:01' AS DATETIME) as test")
+    it "should return DateTime for a DATETIME value when outside the supported range, Time if otherwise" do
+      if RUBY_PLATFORM =~ /mswin/
+        inside_year = 1970
+        outside_year = inside_year-1
+      else
+        inside_year = 1902
+        outside_year = inside_year-1
+      end
+      r = @client.query("SELECT CAST('#{inside_year}-1-1 01:01:01' AS DATETIME) as test")
+      r.first['test'].class.should eql(Time)
+
+      r = @client.query("SELECT CAST('#{outside_year}-1-1 01:01:01' AS DATETIME) as test")
       r.first['test'].class.should eql(DateTime)
     end
 

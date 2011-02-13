@@ -364,4 +364,13 @@ describe Mysql2::Client do
       @client.affected_rows.should eql(1)
     end
   end
+
+  it "should respond to #thread_id" do
+    @client.should respond_to(:thread_id)
+  end
+
+  it "#thread_id should be a Fixnum" do
+    puts @client.thread_id
+    @client.thread_id.class.should eql(Fixnum)
+  end
 end

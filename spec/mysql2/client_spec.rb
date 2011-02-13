@@ -370,7 +370,16 @@ describe Mysql2::Client do
   end
 
   it "#thread_id should be a Fixnum" do
-    puts @client.thread_id
     @client.thread_id.class.should eql(Fixnum)
+  end
+
+  it "should respond to #ping" do
+    @client.should respond_to(:ping)
+  end
+
+  it "#thread_id should return a boolean" do
+    @client.ping.should eql(true)
+    @client.close
+    @client.ping.should eql(false)
   end
 end

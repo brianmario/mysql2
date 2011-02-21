@@ -10,24 +10,21 @@ require 'do_mysql'
 def run_escape_benchmarks(str, number_of = 1000)
   Benchmark.bmbm do |x|
     mysql = Mysql.new("localhost", "root")
-    x.report do
-      puts "Mysql #{str.inspect}"
+    x.report "Mysql #{str.inspect}" do
       number_of.times do
         mysql.quote str
       end
     end
 
     mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
-    x.report do
-      puts "Mysql2 #{str.inspect}"
+    x.report "Mysql2 #{str.inspect}" do
       number_of.times do
         mysql2.escape str
       end
     end
 
     do_mysql = DataObjects::Connection.new("mysql://localhost/test")
-    x.report do
-      puts "do_mysql #{str.inspect}"
+    x.report "do_mysql #{str.inspect}" do
       number_of.times do
         do_mysql.quote_string str
       end

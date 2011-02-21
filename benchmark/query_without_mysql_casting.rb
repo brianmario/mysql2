@@ -14,8 +14,7 @@ sql = "SELECT * FROM mysql2_test LIMIT 100"
 Benchmark.bmbm do |x|
   mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
   mysql2.query "USE #{database}"
-  x.report do
-    puts "Mysql2"
+  x.report "Mysql2" do
     number_of.times do
       mysql2_result = mysql2.query sql, :symbolize_keys => true
       mysql2_result.each do |res|
@@ -26,8 +25,7 @@ Benchmark.bmbm do |x|
 
   mysql = Mysql.new("localhost", "root")
   mysql.query "USE #{database}"
-  x.report do
-    puts "Mysql"
+  x.report "Mysql" do
     number_of.times do
       mysql_result = mysql.query sql
       mysql_result.each_hash do |res|
@@ -38,8 +36,7 @@ Benchmark.bmbm do |x|
 
   do_mysql = DataObjects::Connection.new("mysql://localhost/#{database}")
   command = DataObjects::Mysql::Command.new do_mysql, sql
-  x.report do
-    puts "do_mysql"
+  x.report "do_mysql" do
     number_of.times do
       do_result = command.execute_reader
       do_result.each do |res|

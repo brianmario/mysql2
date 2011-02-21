@@ -497,6 +497,27 @@ static VALUE rb_mysql_client_affected_rows(VALUE self) {
   return ULL2NUM(retVal);
 }
 
+static VALUE rb_mysql_client_thread_id(VALUE self) {
+  unsigned long retVal;
+  GET_CLIENT(self);
+
+  REQUIRE_OPEN_DB(wrapper);
+  retVal = mysql_thread_id(wrapper->client);
+  return ULL2NUM(retVal);
+}
+
+static VALUE rb_mysql_client_ping(VALUE self) {
+  unsigned long retVal;
+  GET_CLIENT(self);
+
+  retVal = mysql_ping(wrapper->client);
+  if (retVal == 0) {
+    return Qtrue;
+  } else {
+    return Qfalse;
+  }
+}
+
 static VALUE set_reconnect(VALUE self, VALUE value) {
   my_bool reconnect;
   GET_CLIENT(self);
@@ -586,6 +607,23 @@ static VALUE init_connection(VALUE self) {
 }
 
 void init_mysql2_client() {
+  // verify the libmysql we're about to use was the version we were built against
+  // https://github.com/luislavena/mysql-gem/commit/a600a9c459597da0712f70f43736e24b484f8a99
+  int i;
+  int dots = 0;
+  const char *lib = mysql_get_client_info();
+  for (i = 0; lib[i] != 0 && MYSQL_SERVER_VERSION[i] != 0; i++) {
+    if (lib[i] == '.') {
+      dots++;
+              // we only compare MAJOR and MINOR
+      if (dots == 2) break;
+    }
+    if (lib[i] != MYSQL_SERVER_VERSION[i]) {
+      rb_raise(rb_eRuntimeError, "Incorrect MySQL client library version! This gem was compiled for %s but the client library is %s.", MYSQL_SERVER_VERSION, lib);
+      return;
+    }
+  }
+
   cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
 
   rb_define_alloc_func(cMysql2Client, allocate);
@@ -599,6 +637,8 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
+  rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
+  rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
 
   rb_define_private_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);

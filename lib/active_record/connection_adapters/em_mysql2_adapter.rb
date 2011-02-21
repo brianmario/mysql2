@@ -15,8 +15,8 @@ module ActiveRecord
 end
 
 require 'fiber'
-require 'eventmachine' unless defined? EventMachine
-require 'mysql2' unless defined? Mysql2
+require 'eventmachine'
+require 'mysql2'
 require 'active_record/connection_adapters/mysql2_adapter'
 require 'active_record/fiber_patches'
 

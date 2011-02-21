@@ -3,6 +3,7 @@ $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'rubygems'
 require 'benchmark'
+require 'mysql2'
 require 'sequel'
 require 'sequel/adapters/do'
 
@@ -16,22 +17,19 @@ class MysqlModel < Sequel::Model(Sequel.connect(mysql_opts)[:mysql2_test]); end
 class DOMysqlModel < Sequel::Model(Sequel.connect(do_mysql_opts)[:mysql2_test]); end
 
 Benchmark.bmbm do |x|
-  x.report do
-    puts "Mysql2"
+  x.report "Mysql2" do
     number_of.times do
       Mysql2Model.limit(1000).all
     end
   end
 
-  x.report do
-    puts "do:mysql"
+  x.report "do:mysql" do
     number_of.times do
       DOMysqlModel.limit(1000).all
     end
   end
 
-  x.report do
-    puts "Mysql"
+  x.report "Mysql" do
     number_of.times do
       MysqlModel.limit(1000).all
     end

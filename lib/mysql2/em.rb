@@ -1,7 +1,7 @@
 # encoding: utf-8
 
-require 'eventmachine' unless defined? EventMachine
-require 'mysql2' unless defined? Mysql2
+require 'eventmachine'
+require 'mysql2'
 
 module Mysql2
   module EM

@@ -1,4 +1,4 @@
-require './lib/mysql2/version'
+require File.expand_path('../lib/mysql2/version', __FILE__)
 
 Gem::Specification.new do |s|
   s.name = %q{mysql2}

@@ -99,7 +99,6 @@ static VALUE nogvl_connect(void *ptr) {
                                 args->db, args->port, args->unix_socket,
                                 args->client_flag);
   } while (! client && errno == EINTR && (errno = 0) == 0);
-
   return client ? Qtrue : Qfalse;
 }
 
@@ -136,6 +135,44 @@ static VALUE nogvl_close(void *ptr) {
   }
 
   return Qnil;
+}
+
+/*
+ * Run fcntl on the mysql client socket.
+ *
+ * Based on io.c:rb_io_fcntl.
+ *
+ * Ruby's IO object will close its underlying file descriptor on garbage
+ * collection (assuming fd > 2).  Thus AFAIK the only safe way to call fcntl on
+ * the mysql socket from Ruby is to keep around a reference to
+ *   IO.for_fd(mysql.socket)
+ */
+static VALUE
+rb_mysql_fcntl(argc, argv, self)
+    int argc;
+    VALUE *argv;
+    VALUE self;
+{
+#ifdef HAVE_FCNTL
+    VALUE req, arg;
+    int reti, reqi, argi;
+    GET_CLIENT(self);
+    REQUIRE_OPEN_DB(wrapper);
+    rb_scan_args(argc, argv, "11", &req, &arg);
+    reqi = NUM2INT(req);
+    if (arg == Qnil) {
+      if ((reti = fcntl(wrapper->client->net.fd, reqi)) < 0)
+        rb_raise(cMysql2Error, "Could not retrieve socket flags: %s", strerror(errno));
+    } else {
+      argi = NUM2INT(arg);
+      if ((reti = fcntl(wrapper->client->net.fd, reqi, argi)) < 0)
+        rb_raise(cMysql2Error, "Could not set socket flags: %s", strerror(errno));
+    }
+    return INT2NUM(reti);
+#else
+    rb_notimplement();
+    return Qnil;		/* not reached */
+#endif
 }
 
 static void rb_mysql_client_free(void * ptr) {
@@ -630,6 +667,7 @@ void init_mysql2_client() {
 
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
+  rb_define_method(cMysql2Client, "fcntl", rb_mysql_fcntl, -1);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
   rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);

@@ -7,29 +7,49 @@ module Mysql2
   module EM
     class Client < ::Mysql2::Client
       module Watcher
-        def initialize(client, deferable)
+        def initialize(client)
           @client = client
-          @deferable = deferable
         end
 
         def notify_readable
-          detach
           begin
-            @deferable.succeed(@client.async_result)
+            # TODO: buffer result bytes instead of calling blocking async_result
+            @client.deferrable.succeed(@client.async_result)
           rescue Exception => e
-            @deferable.fail(e)
+            @client.deferrable.fail(e)
+          ensure
+            @client.deferrable = nil
+            @client.next_query
           end
         end
       end
 
+      attr_accessor :deferrable
+      alias :query_now :query
+
+      def initialize(*args, &blk)
+        super(*args, &blk)
+        @query_queue = []
+      end
+
       def query(sql, opts={})
         if ::EM.reactor_running?
-          super(sql, opts.merge(:async => true))
-          deferable = ::EM::DefaultDeferrable.new
-          ::EM.watch(self.socket, Watcher, self, deferable).notify_readable = true
-          deferable
+          deferrable = ::EM::DefaultDeferrable.new
+          @query_queue << [sql, opts, deferrable]
+          next_query if @deferrable.nil?
+          deferrable
         else
-          super(sql, opts)
+          query_now(sql, opts)
+        end
+      end
+
+      def next_query
+        # TODO: does there need to be a detach on close line in here somewhere?
+        @watch ||= (::EM.watch(self.socket, Watcher, self).notify_readable = true)
+        if pending = @query_queue.shift
+          sql, opts, deferrable = pending
+          @deferrable = deferrable
+          query_now(sql, opts.merge(:async => true))
         end
       end
     end

@@ -73,10 +73,24 @@ static void rb_mysql_client_mark(void * wrapper) {
   }
 }
 
-static VALUE rb_raise_mysql2_error(MYSQL *client) {
-  VALUE e = rb_exc_new2(cMysql2Error, mysql_error(client));
-  rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(client)));
-  rb_funcall(e, intern_sql_state_eql, 1, rb_tainted_str_new2(mysql_sqlstate(client)));
+static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
+  VALUE rb_error_msg = rb_str_new2(mysql_error(wrapper->client));
+  VALUE rb_sql_state = rb_tainted_str_new2(mysql_sqlstate(wrapper->client));
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+
+  rb_enc_associate(rb_error_msg, conn_enc);
+  rb_enc_associate(rb_sql_state, conn_enc);
+  if (default_internal_enc) {
+    rb_error_msg = rb_str_export_to_enc(rb_error_msg, default_internal_enc);
+    rb_sql_state = rb_str_export_to_enc(rb_sql_state, default_internal_enc);
+  }
+#endif
+
+  VALUE e = rb_exc_new3(cMysql2Error, rb_error_msg);
+  rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(wrapper->client)));
+  rb_funcall(e, intern_sql_state_eql, 1, rb_sql_state);
   rb_exc_raise(e);
   return Qnil;
 }
@@ -172,7 +186,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 
   if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
-    return rb_raise_mysql2_error(wrapper->client);
+    return rb_raise_mysql2_error(wrapper);
   }
 
   return self;
@@ -240,7 +254,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   if (rb_thread_blocking_region(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     // an error occurred, mark this connection inactive
     MARK_CONN_INACTIVE(self);
-    return rb_raise_mysql2_error(wrapper->client);
+    return rb_raise_mysql2_error(wrapper);
   }
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper->client, RUBY_UBF_IO, 0);
@@ -250,7 +264,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   if (result == NULL) {
     if (mysql_field_count(wrapper->client) != 0) {
-      rb_raise_mysql2_error(wrapper->client);
+      rb_raise_mysql2_error(wrapper);
     }
     return Qnil;
   }
@@ -314,7 +328,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // an error occurred, we're not active anymore
     MARK_CONN_INACTIVE(self);
-    return rb_raise_mysql2_error(wrapper->client);
+    return rb_raise_mysql2_error(wrapper);
   }
 
   read_timeout = rb_iv_get(self, "@read_timeout");
@@ -495,7 +509,7 @@ static VALUE rb_mysql_client_affected_rows(VALUE self) {
   REQUIRE_OPEN_DB(wrapper);
   retVal = mysql_affected_rows(wrapper->client);
   if (retVal == (my_ulonglong)-1) {
-    rb_raise_mysql2_error(wrapper->client);
+    rb_raise_mysql2_error(wrapper);
   }
   return ULL2NUM(retVal);
 }
@@ -520,6 +534,13 @@ static VALUE rb_mysql_client_ping(VALUE self) {
     return Qfalse;
   }
 }
+
+#ifdef HAVE_RUBY_ENCODING_H
+static VALUE rb_mysql_client_encoding(VALUE self) {
+  GET_CLIENT(self);
+  return wrapper->encoding;
+}
+#endif
 
 static VALUE set_reconnect(VALUE self, VALUE value) {
   my_bool reconnect;
@@ -602,7 +623,7 @@ static VALUE init_connection(VALUE self) {
 
   if (rb_thread_blocking_region(nogvl_init, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     /* TODO: warning - not enough memory? */
-    return rb_raise_mysql2_error(wrapper->client);
+    return rb_raise_mysql2_error(wrapper);
   }
 
   wrapper->closed = 0;
@@ -642,6 +663,9 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
+#endif
 
   rb_define_private_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);

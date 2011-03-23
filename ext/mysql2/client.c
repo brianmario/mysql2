@@ -132,7 +132,7 @@ static VALUE nogvl_close(void *ptr) {
 #endif
 
     mysql_close(wrapper->client);
-    free(wrapper->client);
+    xfree(wrapper->client);
   }
 
   return Qnil;
@@ -153,7 +153,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active = 0;
   wrapper->closed = 1;
-  wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
+  wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
 }
 
@@ -384,7 +384,8 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 }
 
 static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
-  VALUE newStr;
+  unsigned char *newStr;
+  VALUE rb_str;
   unsigned long newLen, oldLen;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc;
@@ -402,21 +403,23 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 #endif
 
   oldLen = RSTRING_LEN(str);
-  newStr = rb_str_new(0, oldLen*2+1);
+  newStr = xmalloc(oldLen*2+1);
 
-  newLen = mysql_real_escape_string(wrapper->client, RSTRING_PTR(newStr), StringValuePtr(str), oldLen);
+  newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
+    xfree(newStr);
     return str;
   } else {
-    rb_str_resize(newStr, newLen);
+    rb_str = rb_str_new((const char*)newStr, newLen);
 #ifdef HAVE_RUBY_ENCODING_H
-    rb_enc_associate(newStr, conn_enc);
+    rb_enc_associate(rb_str, conn_enc);
     if (default_internal_enc) {
-      newStr = rb_str_export_to_enc(newStr, default_internal_enc);
+      rb_str = rb_str_export_to_enc(rb_str, default_internal_enc);
     }
 #endif
-    return newStr;
+    xfree(newStr);
+    return rb_str;
   }
 }
 

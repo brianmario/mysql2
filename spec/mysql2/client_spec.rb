@@ -382,4 +382,10 @@ describe Mysql2::Client do
     @client.close
     @client.ping.should eql(false)
   end
+
+if RUBY_VERSION =~ /1.9/
+  it "should respond to #encoding" do
+    @client.should respond_to(:encoding)
+  end
+end
 end

@@ -523,16 +523,17 @@ static VALUE rb_mysql_client_thread_id(VALUE self) {
   return ULL2NUM(retVal);
 }
 
+static VALUE nogvl_ping(void *ptr)
+{
+  MYSQL *client = ptr;
+
+  return mysql_ping(client) == 0 ? Qtrue : Qfalse;
+}
+
 static VALUE rb_mysql_client_ping(VALUE self) {
-  unsigned long retVal;
   GET_CLIENT(self);
 
-  retVal = mysql_ping(wrapper->client);
-  if (retVal == 0) {
-    return Qtrue;
-  } else {
-    return Qfalse;
-  }
+  return rb_thread_blocking_region(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
 }
 
 #ifdef HAVE_RUBY_ENCODING_H

@@ -162,7 +162,7 @@ describe Mysql2::Result do
         outside_year = inside_year-1
       end
       r = @client.query("SELECT CAST('#{inside_year}-1-1 01:01:01' AS DATETIME) as test")
-      if RUBY_ENGINE =~ /rbx/
+      if defined?(RUBY_ENGINE) && RUBY_ENGINE =~ /rbx/
         klass = DateTime
       else
         klass = Time

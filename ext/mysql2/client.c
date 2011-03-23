@@ -132,7 +132,7 @@ static VALUE nogvl_close(void *ptr) {
 #endif
 
     mysql_close(wrapper->client);
-    free(wrapper->client);
+    xfree(wrapper->client);
   }
 
   return Qnil;
@@ -153,7 +153,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active = 0;
   wrapper->closed = 1;
-  wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
+  wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
 }
 

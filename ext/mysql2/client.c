@@ -586,7 +586,8 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
 #ifdef HAVE_RUBY_ENCODING_H
   new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset, 1, value);
   if (new_encoding == Qnil) {
-    rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(value));
+    VALUE inspect = rb_inspect(value);
+    rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(inspect));
   } else {
     if (wrapper->encoding == Qnil) {
       wrapper->encoding = new_encoding;

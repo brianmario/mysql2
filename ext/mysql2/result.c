@@ -21,7 +21,7 @@ extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
           intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
-static ID sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
+static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
           sym_local, sym_utc, sym_cast_booleans, sym_cache_rows;
 static ID intern_merge;
 

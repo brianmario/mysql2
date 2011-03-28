@@ -1,7 +1,29 @@
 # Changelog
 
-## HEAD
+## 0.2.7 (March 28th, 2011)
 * various fixes for em_mysql2 and fiber usage
+* use our own Mysql2IndexDefinition class for better compatibility across ActiveRecord versions
+* ensure the query is a string earlier in the Mysql2::Client#query codepath for 1.9
+* only set binary ruby encoding on fields that have a binary flag *and* encoding set
+* a few various optimizations
+* add support for :read_timeout to be set on a connection
+* Fix to install with MariDB on Windows
+* add fibered em connection without activerecord
+* fix some 1.9.3 compilation warnings
+* add LD_RUN_PATH when using hard coded mysql paths - this should help users with MySQL installed in non-standard locations
+* for windows support, duplicate the socket from libmysql and create a temporary CRT fd
+* fix for handling years before 1970 on Windows
+* fixes to the Fiber adapter
+* set wait_timeout maximum on Windows to 2147483
+* update supported range for Time objects
+* upon being required, make sure the libmysql we're using is the one we were built against
+* add Mysql2::Client#thread_id
+* add Mysql2::Client#ping
+* switch connection check in AR adapter to use Mysql2::Client#ping for efficiency
+* prefer linking against thread-safe version of libmysqlclient
+* define RSTRING_NOT_MODIFIED for an awesome rbx speed boost
+* expose Mysql2::Client#encoding in 1.9, make sure we set the error message and sqlstate encodings accordingly
+* do not segfault when raising for invalid charset (found in 1.9.3dev)
 
 ## 0.2.6 (October 19th, 2010)
 * version bump since the 0.2.5 win32 binary gems were broken

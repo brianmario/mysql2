@@ -15,13 +15,12 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
 
   it 'should accept "time_zone" connection configuration option' do
     # Set different time zones and expect different results.
-    datetime = '2011-03-26 12:25:49'
-    tz_unix_timestamps = {'UTC' => 1301142349, 'Europe/Prague' => 1301138749}
+    time_zones = ['Australia/Sydney', 'Europe/Prague']
     
-    tz_unix_timestamps.each do |time_zone, unix_timestamp|
+    time_zones.each do |time_zone|
       ActiveRecord::Base.establish_connection(@connection_options.merge({:time_zone => time_zone}))
-      result = ActiveRecord::Base.connection.execute("SELECT UNIX_TIMESTAMP('#{datetime}')")
-      result.first.first.should eql(unix_timestamp)
+      result = ActiveRecord::Base.connection.execute("SELECT @@session.time_zone")
+      result.first.first.should eql(time_zone)
     end
   end
 end

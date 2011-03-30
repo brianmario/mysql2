@@ -8,7 +8,7 @@ describe ActiveRecord::ConnectionAdapters::Mysql2Adapter do
     @connection_options = {
       :adapter  => 'mysql2',
       :host     => 'localhost',
-      :database => 'reklabox_test',
+      :database => 'test',
       :username => 'root'
     }
   end

@@ -120,7 +120,7 @@ describe Mysql2::Client do
       @client.query("SELECT 1", :async => true)
       lambda {
         @client.query("SELECT 1")
-      }.should raise_error(Mysql2::Error)
+      }.should raise_error(Mysql2::AlreadyActiveError)
     end
 
     it "should require an open connection" do

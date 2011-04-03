@@ -533,7 +533,11 @@ static VALUE nogvl_ping(void *ptr)
 static VALUE rb_mysql_client_ping(VALUE self) {
   GET_CLIENT(self);
 
-  return rb_thread_blocking_region(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
+  if (wrapper->closed) {
+    return Qfalse;
+  } else {
+    return rb_thread_blocking_region(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
+  }
 }
 
 #ifdef HAVE_RUBY_ENCODING_H

@@ -493,7 +493,18 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 static VALUE rb_mysql_client_socket(VALUE self) {
   GET_CLIENT(self);
   REQUIRE_OPEN_DB(wrapper);
-  return INT2NUM(wrapper->client->net.fd);
+  int fd_set_fd = wrapper->client->net.fd;
+#ifdef _WIN32
+  WSAPROTOCOL_INFO wsa_pi;
+  // dupicate the SOCKET from libmysql
+  int r = WSADuplicateSocket(wrapper->client->net.fd, GetCurrentProcessId(), &wsa_pi);
+  SOCKET s = WSASocket(wsa_pi.iAddressFamily, wsa_pi.iSocketType, wsa_pi.iProtocol, &wsa_pi, 0, 0);
+  // create the CRT fd so ruby can get back to the SOCKET
+  fd_set_fd = _open_osfhandle(s, O_RDWR|O_BINARY);
+  return INT2NUM(fd_set_fd);
+#else
+  return INT2NUM(fd_set_fd);
+#endif
 }
 
 static VALUE rb_mysql_client_last_id(VALUE self) {
@@ -533,7 +544,11 @@ static VALUE nogvl_ping(void *ptr)
 static VALUE rb_mysql_client_ping(VALUE self) {
   GET_CLIENT(self);
 
-  return rb_thread_blocking_region(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
+  if (wrapper->closed) {
+    return Qfalse;
+  } else {
+    return rb_thread_blocking_region(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
+  }
 }
 
 #ifdef HAVE_RUBY_ENCODING_H

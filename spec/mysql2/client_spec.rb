@@ -167,6 +167,33 @@ describe Mysql2::Client do
     end
   end
 
+  it "should respond to escape" do
+    Mysql2::Client.should respond_to(:escape)
+  end
+
+  context "escape" do
+    it "should return a new SQL-escape version of the passed string" do
+      Mysql2::Client.escape("abc'def\"ghi\0jkl%mno").should eql("abc\\'def\\\"ghi\\0jkl%mno")
+    end
+
+    it "should return the passed string if nothing was escaped" do
+      str = "plain"
+      Mysql2::Client.escape(str).object_id.should eql(str.object_id)
+    end
+
+    it "should not overflow the thread stack" do
+      lambda {
+        Thread.new { Mysql2::Client.escape("'" * 256 * 1024) }.join
+      }.should_not raise_error(SystemStackError)
+    end
+
+    it "should not overflow the process stack" do
+      lambda {
+        Thread.new { Mysql2::Client.escape("'" * 1024 * 1024 * 4) }.join
+      }.should_not raise_error(SystemStackError)
+    end
+  end
+
   it "should respond to #escape" do
     @client.should respond_to(:escape)
   end

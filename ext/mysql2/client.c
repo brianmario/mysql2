@@ -171,6 +171,28 @@ static VALUE allocate(VALUE klass) {
   return obj;
 }
 
+static VALUE rb_mysql_client_escape(VALUE klass, VALUE str) {
+  unsigned char *newStr;
+  VALUE rb_str;
+  unsigned long newLen, oldLen;
+
+  Check_Type(str, T_STRING);
+
+  oldLen = RSTRING_LEN(str);
+  newStr = xmalloc(oldLen*2+1);
+
+  newLen = mysql_escape_string((char *)newStr, StringValuePtr(str), oldLen);
+  if (newLen == oldLen) {
+    // no need to return a new ruby string if nothing changed
+    xfree(newStr);
+    return str;
+  } else {
+    rb_str = rb_str_new((const char*)newStr, newLen);
+    xfree(newStr);
+    return rb_str;
+  }
+}
+
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
   GET_CLIENT(self);
@@ -397,7 +419,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 }
 
-static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
+static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
   unsigned char *newStr;
   VALUE rb_str;
   unsigned long newLen, oldLen;
@@ -669,9 +691,11 @@ void init_mysql2_client() {
 
   rb_define_alloc_func(cMysql2Client, allocate);
 
+  rb_define_singleton_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
+
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
-  rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
+  rb_define_method(cMysql2Client, "escape", rb_mysql_client_real_escape, 1);
   rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
   rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);

@@ -192,6 +192,18 @@ describe Mysql2::Client do
         Thread.new { Mysql2::Client.escape("'" * 1024 * 1024 * 4) }.join
       }.should_not raise_error(SystemStackError)
     end
+
+    if RUBY_VERSION =~ /1.9/
+      it "should carry over the original string's encoding" do
+        str = "abc'def\"ghi\0jkl%mno"
+        escaped = Mysql2::Client.escape(str)
+        escaped.encoding.should eql(str.encoding)
+
+        str.encode!('us-ascii')
+        escaped = Mysql2::Client.escape(str)
+        escaped.encoding.should eql(str.encoding)
+      end
+    end
   end
 
   it "should respond to #escape" do

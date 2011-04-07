@@ -188,6 +188,9 @@ static VALUE rb_mysql_client_escape(VALUE klass, VALUE str) {
     return str;
   } else {
     rb_str = rb_str_new((const char*)newStr, newLen);
+#ifdef HAVE_RUBY_ENCODING_H
+    rb_enc_copy(rb_str, str);
+#endif
     xfree(newStr);
     return rb_str;
   }

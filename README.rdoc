@@ -58,6 +58,15 @@ How about with symbolized keys?
     # do something with row, it's ready to rock
   end
 
+You can get the headers and the columns in the order that they were returned
+by the query like this:
+
+  headers = results.fields # <= that's an array of field names, in order
+  results.each(:as => :array) do |row|
+  # Each row is an array, ordered the same as the query results
+  # An otter's den is called a "holt" or "couch"
+  end
+
 == Cascading config
 
 The default config hash is at:

@@ -576,6 +576,25 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   }
 }
 
+static VALUE rb_mysql_client_more_results(VALUE self)
+{
+  GET_CLIENT(self);
+    if (mysql_more_results(wrapper->client) == 0)
+    return Qfalse;
+    else
+    return Qtrue;
+}
+
+static VALUE rb_mysql_client_next_result(VALUE self)
+{
+    GET_CLIENT(self);
+    int ret;
+    ret = mysql_next_result(wrapper->client);
+    if (ret == 0)
+    return Qtrue;
+    return Qfalse;
+}
+
 #ifdef HAVE_RUBY_ENCODING_H
 static VALUE rb_mysql_client_encoding(VALUE self) {
   GET_CLIENT(self);
@@ -707,6 +726,8 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
+  rb_define_method(cMysql2Client, "more_results", rb_mysql_client_more_results, 0);
+  rb_define_method(cMysql2Client, "next_result", rb_mysql_client_next_result, 0);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif

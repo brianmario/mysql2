@@ -91,6 +91,12 @@ struct nogvl_select_db_args {
   char *db;
 };
 
+struct nogvl_prepare_statement_args {
+  MYSQL_STMT *stmt;
+  const char *sql;
+  unsigned long sql_len;
+};
+
 /*
  * non-blocking mysql_*() functions that we won't be wrapping since
  * they do not appear to hit the network nor issue any interruptible
@@ -1146,6 +1152,44 @@ static VALUE initialize_ext(VALUE self) {
   return self;
 }
 
+static VALUE nogvl_prepare_statement(void *ptr) {
+  struct nogvl_prepare_statement_args *args = ptr;
+
+  if (mysql_stmt_prepare(args->stmt, args->sql, args->sql_len)) {
+    return Qfalse;
+  } else {
+    return Qtrue;
+  }
+}
+
+/* call-seq: client.create_statement # => Mysql2::Statement
+ *
+ * Create a new prepared statement.
+ */
+static VALUE prepare_statement(VALUE self, VALUE sql) {
+  GET_CLIENT(self);
+  struct nogvl_prepare_statement_args args;
+  MYSQL_STMT *stmt;
+  VALUE rb_stmt;
+
+  stmt = mysql_stmt_init(wrapper->client);
+  if (stmt == NULL) {
+    rb_raise(cMysql2Error, "Out of memory");
+  }
+
+  rb_stmt = Data_Wrap_Struct(cMysql2Statement, 0, mysql_stmt_close, stmt);
+
+  args.stmt = stmt;
+  args.sql = StringValuePtr(sql);
+  args.sql_len = RSTRING_LEN(sql);
+
+  if (rb_thread_blocking_region(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
+    rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+  }
+
+  return rb_stmt;
+}
+
 void init_mysql2_client() {
   /* verify the libmysql we're about to use was the version we were built against
      https://github.com/luislavena/mysql-gem/commit/a600a9c459597da0712f70f43736e24b484f8a99 */
@@ -1184,6 +1228,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
+  rb_define_method(cMysql2Client, "prepare", prepare_statement, 1);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);

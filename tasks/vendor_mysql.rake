@@ -4,9 +4,8 @@ require 'rake/extensioncompiler'
 # download mysql library and headers
 directory "vendor"
 
-file "vendor/mysql-noinstall-#{MYSQL_VERSION}-win32.zip" => ['vendor'] do |t|
-  base_version = MYSQL_VERSION.gsub(/\.[0-9]+$/, '')
-  url = "http://dev.mysql.com/get/Downloads/MySQL-#{base_version}/#{File.basename(t.name)}/from/#{MYSQL_MIRROR}/"
+file "vendor/mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32.zip" => ["vendor"] do |t|
+  url = "http://dev.mysql.com/get/Downloads/Connector-C/mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32.zip/from/#{CONNECTOR_MIRROR}/"
   when_writing "downloading #{t.name}" do
     cd File.dirname(t.name) do
       sh "wget -c #{url} || curl -C - -O #{url}"
@@ -14,11 +13,11 @@ file "vendor/mysql-noinstall-#{MYSQL_VERSION}-win32.zip" => ['vendor'] do |t|
   end
 end
 
-file "vendor/mysql-#{MYSQL_VERSION}-win32/include/mysql.h" => ["vendor/mysql-noinstall-#{MYSQL_VERSION}-win32.zip"] do |t|
+file "vendor/mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32/include/mysql.h" => ["vendor/mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32.zip"] do |t|
   full_file = File.expand_path(t.prerequisites.last)
   when_writing "creating #{t.name}" do
     cd "vendor" do
-      sh "unzip #{full_file} mysql-#{MYSQL_VERSION}-win32/bin/** mysql-#{MYSQL_VERSION}-win32/include/** mysql-#{MYSQL_VERSION}-win32/lib/**"
+      sh "unzip #{full_file} mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32/bin/** mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32/include/** mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32/lib/**"
     end
     # update file timestamp to avoid Rake perform this extraction again.
     touch t.name
@@ -26,10 +25,10 @@ file "vendor/mysql-#{MYSQL_VERSION}-win32/include/mysql.h" => ["vendor/mysql-noi
 end
 
 # clobber expanded packages
-CLOBBER.include("vendor/mysql-#{MYSQL_VERSION}-win32")
+CLOBBER.include("vendor/mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32")
 
 # vendor:mysql
-task 'vendor:mysql' => ["vendor/mysql-#{MYSQL_VERSION}-win32/include/mysql.h"]
+task 'vendor:mysql' => ["vendor/mysql-connector-c-noinstall-#{CONNECTOR_VERSION}-win32/include/mysql.h"]
 
 # hook into cross compilation vendored mysql dependency
 if RUBY_PLATFORM =~ /mingw|mswin/ then

@@ -1,7 +1,7 @@
 #include <mysql2_ext.h>
 
 #ifdef HAVE_RUBY_ENCODING_H
-rb_encoding *binaryEncoding;
+static rb_encoding *binaryEncoding;
 #endif
 
 #define MYSQL2_MAX_YEAR 2058
@@ -14,14 +14,14 @@ rb_encoding *binaryEncoding;
 #define MYSQL2_MIN_YEAR 1970
 #endif
 
-VALUE cMysql2Result;
-VALUE cBigDecimal, cDate, cDateTime;
-VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
+static VALUE cMysql2Result;
+static VALUE cBigDecimal, cDate, cDateTime;
+static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
           intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
-static ID sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
+static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
           sym_local, sym_utc, sym_cast_booleans, sym_cache_rows;
 static ID intern_merge;
 

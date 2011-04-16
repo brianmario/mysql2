@@ -20,7 +20,7 @@ Gem::Specification.new do |s|
 
   # tests
   s.add_development_dependency 'eventmachine'
-  s.add_development_dependency 'rake-compiler', "~> 0.7.1"
+  s.add_development_dependency 'rake-compiler', "~> 0.7.7"
   s.add_development_dependency 'rspec'
   # benchmarks
   s.add_development_dependency 'activerecord'

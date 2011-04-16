@@ -27,9 +27,8 @@ class MysqlModel < ActiveRecord::Base
 end
 
 Benchmark.bmbm do |x|
-  x.report do
+  x.report "Mysql2" do
     Mysql2Model.establish_connection(mysql2_opts)
-    puts "Mysql2"
     number_of.times do
       Mysql2Model.all(:limit => 1000).each{ |r|
         r.attributes.keys.each{ |k|
@@ -39,9 +38,8 @@ Benchmark.bmbm do |x|
     end
   end
 
-  x.report do
+  x.report "Mysql" do
     MysqlModel.establish_connection(mysql_opts)
-    puts "Mysql"
     number_of.times do
       MysqlModel.all(:limit => 1000).each{ |r|
         r.attributes.keys.each{ |k|

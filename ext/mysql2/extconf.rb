@@ -31,7 +31,10 @@ elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   mc = Dir[GLOB].first if mc == true
   cflags = `#{mc} --cflags`.chomp
   exit 1 if $? != 0
-  libs = `#{mc} --libs`.chomp
+  libs = `#{mc} --libs_r`.chomp
+  if libs.empty?
+    libs = `#{mc} --libs`.chomp
+  end
   exit 1 if $? != 0
   $CPPFLAGS += ' ' + cflags
   $libs = libs + " " + $libs

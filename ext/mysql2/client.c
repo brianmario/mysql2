@@ -5,7 +5,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE intern_encoding_from_charset;
-static ID sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
+static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #define REQUIRE_OPEN_DB(wrapper) \
@@ -73,10 +73,24 @@ static void rb_mysql_client_mark(void * wrapper) {
   }
 }
 
-static VALUE rb_raise_mysql2_error(MYSQL *client) {
-  VALUE e = rb_exc_new2(cMysql2Error, mysql_error(client));
-  rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(client)));
-  rb_funcall(e, intern_sql_state_eql, 1, rb_tainted_str_new2(mysql_sqlstate(client)));
+static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
+  VALUE rb_error_msg = rb_str_new2(mysql_error(wrapper->client));
+  VALUE rb_sql_state = rb_tainted_str_new2(mysql_sqlstate(wrapper->client));
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+
+  rb_enc_associate(rb_error_msg, conn_enc);
+  rb_enc_associate(rb_sql_state, conn_enc);
+  if (default_internal_enc) {
+    rb_error_msg = rb_str_export_to_enc(rb_error_msg, default_internal_enc);
+    rb_sql_state = rb_str_export_to_enc(rb_sql_state, default_internal_enc);
+  }
+#endif
+
+  VALUE e = rb_exc_new3(cMysql2Error, rb_error_msg);
+  rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(wrapper->client)));
+  rb_funcall(e, intern_sql_state_eql, 1, rb_sql_state);
   rb_exc_raise(e);
   return Qnil;
 }
@@ -132,7 +146,7 @@ static VALUE nogvl_close(void *ptr) {
 #endif
 
     mysql_close(wrapper->client);
-    free(wrapper->client);
+    xfree(wrapper->client);
   }
 
   return Qnil;
@@ -153,8 +167,33 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active = 0;
   wrapper->closed = 1;
-  wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
+  wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
+}
+
+static VALUE rb_mysql_client_escape(VALUE klass, VALUE str) {
+  unsigned char *newStr;
+  VALUE rb_str;
+  unsigned long newLen, oldLen;
+
+  Check_Type(str, T_STRING);
+
+  oldLen = RSTRING_LEN(str);
+  newStr = xmalloc(oldLen*2+1);
+
+  newLen = mysql_escape_string((char *)newStr, StringValuePtr(str), oldLen);
+  if (newLen == oldLen) {
+    // no need to return a new ruby string if nothing changed
+    xfree(newStr);
+    return str;
+  } else {
+    rb_str = rb_str_new((const char*)newStr, newLen);
+#ifdef HAVE_RUBY_ENCODING_H
+    rb_enc_copy(rb_str, str);
+#endif
+    xfree(newStr);
+    return rb_str;
+  }
 }
 
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
@@ -172,7 +211,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 
   if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // unable to connect
-    return rb_raise_mysql2_error(wrapper->client);
+    return rb_raise_mysql2_error(wrapper);
   }
 
   return self;
@@ -240,7 +279,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   if (rb_thread_blocking_region(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     // an error occurred, mark this connection inactive
     MARK_CONN_INACTIVE(self);
-    return rb_raise_mysql2_error(wrapper->client);
+    return rb_raise_mysql2_error(wrapper);
   }
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper->client, RUBY_UBF_IO, 0);
@@ -250,7 +289,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   if (result == NULL) {
     if (mysql_field_count(wrapper->client) != 0) {
-      rb_raise_mysql2_error(wrapper->client);
+      rb_raise_mysql2_error(wrapper);
     }
     return Qnil;
   }
@@ -314,7 +353,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
     // an error occurred, we're not active anymore
     MARK_CONN_INACTIVE(self);
-    return rb_raise_mysql2_error(wrapper->client);
+    return rb_raise_mysql2_error(wrapper);
   }
 
   read_timeout = rb_iv_get(self, "@read_timeout");
@@ -383,8 +422,9 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 }
 
-static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
-  VALUE newStr;
+static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
+  unsigned char *newStr;
+  VALUE rb_str;
   unsigned long newLen, oldLen;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc;
@@ -402,21 +442,23 @@ static VALUE rb_mysql_client_escape(VALUE self, VALUE str) {
 #endif
 
   oldLen = RSTRING_LEN(str);
-  newStr = rb_str_new(0, oldLen*2+1);
+  newStr = xmalloc(oldLen*2+1);
 
-  newLen = mysql_real_escape_string(wrapper->client, RSTRING_PTR(newStr), StringValuePtr(str), oldLen);
+  newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
+    xfree(newStr);
     return str;
   } else {
-    rb_str_resize(newStr, newLen);
+    rb_str = rb_str_new((const char*)newStr, newLen);
 #ifdef HAVE_RUBY_ENCODING_H
-    rb_enc_associate(newStr, conn_enc);
+    rb_enc_associate(rb_str, conn_enc);
     if (default_internal_enc) {
-      newStr = rb_str_export_to_enc(newStr, default_internal_enc);
+      rb_str = rb_str_export_to_enc(rb_str, default_internal_enc);
     }
 #endif
-    return newStr;
+    xfree(newStr);
+    return rb_str;
   }
 }
 
@@ -476,7 +518,18 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 static VALUE rb_mysql_client_socket(VALUE self) {
   GET_CLIENT(self);
   REQUIRE_OPEN_DB(wrapper);
-  return INT2NUM(wrapper->client->net.fd);
+  int fd_set_fd = wrapper->client->net.fd;
+#ifdef _WIN32
+  WSAPROTOCOL_INFO wsa_pi;
+  // dupicate the SOCKET from libmysql
+  int r = WSADuplicateSocket(wrapper->client->net.fd, GetCurrentProcessId(), &wsa_pi);
+  SOCKET s = WSASocket(wsa_pi.iAddressFamily, wsa_pi.iSocketType, wsa_pi.iProtocol, &wsa_pi, 0, 0);
+  // create the CRT fd so ruby can get back to the SOCKET
+  fd_set_fd = _open_osfhandle(s, O_RDWR|O_BINARY);
+  return INT2NUM(fd_set_fd);
+#else
+  return INT2NUM(fd_set_fd);
+#endif
 }
 
 static VALUE rb_mysql_client_last_id(VALUE self) {
@@ -492,7 +545,7 @@ static VALUE rb_mysql_client_affected_rows(VALUE self) {
   REQUIRE_OPEN_DB(wrapper);
   retVal = mysql_affected_rows(wrapper->client);
   if (retVal == (my_ulonglong)-1) {
-    rb_raise_mysql2_error(wrapper->client);
+    rb_raise_mysql2_error(wrapper);
   }
   return ULL2NUM(retVal);
 }
@@ -506,17 +559,29 @@ static VALUE rb_mysql_client_thread_id(VALUE self) {
   return ULL2NUM(retVal);
 }
 
+static VALUE nogvl_ping(void *ptr)
+{
+  MYSQL *client = ptr;
+
+  return mysql_ping(client) == 0 ? Qtrue : Qfalse;
+}
+
 static VALUE rb_mysql_client_ping(VALUE self) {
-  unsigned long retVal;
   GET_CLIENT(self);
 
-  retVal = mysql_ping(wrapper->client);
-  if (retVal == 0) {
-    return Qtrue;
-  } else {
+  if (wrapper->closed) {
     return Qfalse;
+  } else {
+    return rb_thread_blocking_region(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
   }
 }
+
+#ifdef HAVE_RUBY_ENCODING_H
+static VALUE rb_mysql_client_encoding(VALUE self) {
+  GET_CLIENT(self);
+  return wrapper->encoding;
+}
+#endif
 
 static VALUE set_reconnect(VALUE self, VALUE value) {
   my_bool reconnect;
@@ -561,7 +626,8 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
 #ifdef HAVE_RUBY_ENCODING_H
   new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset, 1, value);
   if (new_encoding == Qnil) {
-    rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(value));
+    VALUE inspect = rb_inspect(value);
+    rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(inspect));
   } else {
     if (wrapper->encoding == Qnil) {
       wrapper->encoding = new_encoding;
@@ -599,7 +665,7 @@ static VALUE init_connection(VALUE self) {
 
   if (rb_thread_blocking_region(nogvl_init, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     /* TODO: warning - not enough memory? */
-    return rb_raise_mysql2_error(wrapper->client);
+    return rb_raise_mysql2_error(wrapper);
   }
 
   wrapper->closed = 0;
@@ -642,9 +708,11 @@ void init_mysql2_client() {
 
   rb_define_alloc_func(cMysql2Client, allocate);
 
+  rb_define_singleton_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
+
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
-  rb_define_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
+  rb_define_method(cMysql2Client, "escape", rb_mysql_client_real_escape, 1);
   rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
   rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);
@@ -654,6 +722,9 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "create_statement", create_statement, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
+#endif
 
   rb_define_private_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);

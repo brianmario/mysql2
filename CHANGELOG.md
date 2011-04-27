@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.2 (April 26th, 2011)
+* Fix typo in initialization for older ActiveRecord versions
+
 ## 0.3.1 (April 26th, 2011)
 * Fix typo in initialization for older ActiveRecord versions
 

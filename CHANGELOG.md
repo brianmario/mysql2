@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 (April 26th, 2011)
+* Fix typo in initialization for older ActiveRecord versions
+
+## 0.3.0 (April 26th, 2011)
+* switch to MySQL Connector/C for win32 builds
+* win32 bugfixes
+* BREAKING CHANGE: the ActiveRecord adapter has been pulled into Rails 3.1 and is no longer part of the gem
+* added Mysql2::Client.escape (class-level) for raw one-off non-encoding-aware escaping
+
 ## 0.2.7 (March 28th, 2011)
 * various fixes for em_mysql2 and fiber usage
 * use our own Mysql2IndexDefinition class for better compatibility across ActiveRecord versions

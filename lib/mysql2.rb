@@ -16,7 +16,7 @@ require 'mysql2/field'
 module Mysql2
 end
 
-if defined?(ActiveRecord::VERSION::STRING) < "3.1"
+if defined?(ActiveRecord::VERSION::STRING) && ActiveRecord::VERSION::STRING < "3.1"
   puts "WARNING: This version of mysql2 (#{Mysql2::VERSION}) doesn't ship with the ActiveRecord adapter bundled anymore as it's now part of Rails 3.1"
   puts "WARNING: Please use the 0.2.x releases if you plan on using it in Rails <= 3.0.x"
 end

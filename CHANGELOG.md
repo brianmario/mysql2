@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.1 (April 26th, 2011)
+* Fix typo in initialization for older ActiveRecord versions
+
 ## 0.3.0 (April 26th, 2011)
 * switch to MySQL Connector/C for win32 builds
 * win32 bugfixes

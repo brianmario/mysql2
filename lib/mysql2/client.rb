@@ -13,6 +13,7 @@ module Mysql2
     }
 
     def initialize(opts = {})
+      opts = Mysql2::Util.key_hash_as_symbols
       @query_options = @@default_query_options.dup
 
       init_connection

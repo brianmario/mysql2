@@ -31,12 +31,12 @@ module Mysql2
 
       ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslciper))
 
-      user     = opts[:username]
-      pass     = opts[:password]
-      host     = opts[:host] || 'localhost'
+      user     = opts[:username] || opts[:user]
+      pass     = opts[:password] || opts[:pass]
+      host     = opts[:host] || opts[:hostname] || 'localhost'
       port     = opts[:port] || 3306
-      database = opts[:database]
-      socket   = opts[:socket]
+      database = opts[:database] || opts[:dbname] || opts[:db]
+      socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
 
       connect user, pass, host, port, database, socket, flags

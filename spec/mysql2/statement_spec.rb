@@ -65,7 +65,7 @@ describe Mysql2::Statement do
     statement.execute
     list = statement.fields
     list.length.should == 2
-    list.first.name.should == 'foo'
-    list[1].name.should == '2'
+    list.first.should == 'foo'
+    list[1].should == '2'
   end
 end

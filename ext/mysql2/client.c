@@ -1113,7 +1113,7 @@ static VALUE nogvl_prepare_statement(void *ptr) {
   }
 }
 
-/* call-seq: client.create_statement # => Mysql2::Statement
+/* call-seq: client.prepare # => Mysql2::Statement
  *
  * Create a new prepared statement.
  */

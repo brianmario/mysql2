@@ -14,8 +14,8 @@ static rb_encoding *binaryEncoding;
 #define MYSQL2_MIN_YEAR 1970
 #endif
 
+VALUE cBigDecimal, cDateTime, cDate;
 static VALUE cMysql2Result;
-static VALUE cBigDecimal, cDate, cDateTime;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE intern_encoding_from_charset;

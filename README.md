@@ -151,7 +151,7 @@ Both options only allow two values - `:local` or `:utc` - with the exception tha
 
 ### Casting "boolean" columns
 
-You can now tell Mysql2 to cast tinyint(1) fields to boolean values in Ruby with the :cast_booleans option.
+You can now tell Mysql2 to cast `tinyint(1)` fields to boolean values in Ruby with the `:cast_booleans` option.
 
 ``` ruby
 client = Mysql2::Client.new
@@ -160,7 +160,7 @@ result = client.query("SELECT * FROM table_with_boolean_field", :cast_booleans =
 
 ### Async
 
-Mysql2::Client takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.
+`Mysql2::Client` takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.
 But, in order to take full advantage of it in your Ruby code, you can do:
 
 ``` ruby

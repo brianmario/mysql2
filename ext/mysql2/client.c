@@ -1171,10 +1171,15 @@ static VALUE prepare_statement(VALUE self, VALUE sql) {
   struct nogvl_prepare_statement_args args;
   MYSQL_STMT *stmt;
   VALUE rb_stmt;
+  my_bool truth = 1;
 
   stmt = mysql_stmt_init(wrapper->client);
   if (stmt == NULL) {
-    rb_raise(cMysql2Error, "Out of memory");
+    rb_raise(cMysql2Error, "Unable to initialize prepared statement: out of memory");
+  }
+
+  if (mysql_stmt_attr_set(stmt, STMT_ATTR_UPDATE_MAX_LENGTH, &truth)) {
+    rb_raise(cMysql2Error, "Unable to initialize prepared statement");
   }
 
   rb_stmt = Data_Wrap_Struct(cMysql2Statement, 0, mysql_stmt_close, stmt);

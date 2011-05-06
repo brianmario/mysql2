@@ -173,6 +173,11 @@ describe Mysql2::Result do
       r.first['test'].class.should eql(DateTime)
     end
 
+    it "should return DateTime when time > year 2038" do
+      r = @client.query("SELECT CAST('2039-01-01 01:01:01' AS DATETIME) as test")
+      r.first['test'].class.should eql(DateTime)
+    end
+
     it "should return Time for a TIMESTAMP value when within the supported range" do
       @test_result['timestamp_test'].class.should eql(Time)
       @test_result['timestamp_test'].strftime("%F %T").should eql('2010-04-04 11:44:00')

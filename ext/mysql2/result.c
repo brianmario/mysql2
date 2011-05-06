@@ -4,7 +4,7 @@
 static rb_encoding *binaryEncoding;
 #endif
 
-#define MYSQL2_MAX_YEAR 2058
+#define MYSQL2_MAX_YEAR 2038
 
 #ifdef NEGATIVE_TIME_T
   /* 1901-12-13 20:45:52 UTC : The oldest time in 32-bit signed time_t. */

@@ -626,6 +626,10 @@ module ActiveRecord
           wait_timeout = 2147483 unless wait_timeout.is_a?(Fixnum)
           variable_assignments << "@@wait_timeout = #{wait_timeout}"
 
+          # set time_zone
+          time_zone = @config[:time_zone]
+          variable_assignments << "@@time_zone = '#{time_zone}'" if time_zone
+
           execute("SET #{variable_assignments.join(', ')}", :skip_logging)
         end
 

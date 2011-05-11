@@ -30,27 +30,31 @@ module Mysql2
         end
 
         def notify_readable
-          begin
-            detach
-            results = @client.async_result
-            @deferable.succeed(results)
-          rescue Exception => e
-            @deferable.fail(e)
+          detach
+          ::EM.schedule do
+            begin
+              results = @client.async_result
+              @deferable.succeed(results)
+            rescue Exception => e
+              @deferable.fail(e)
+            end
           end
         end
       end
 
       def query(sql, opts={})
         if ::EM.reactor_running?
-          super(sql, opts.merge(:async => true))
           deferrable = ::EM::DefaultDeferrable.new
-          ::EM.watch(self.socket, Watcher, self, deferrable).notify_readable = true
           fiber = Fiber.current
           deferrable.callback do |result|
             fiber.resume(result)
           end
           deferrable.errback do |err|
             fiber.resume(err)
+          end
+          ::EM.schedule do
+            super(sql, opts.merge(:async => true))
+            ::EM.watch(self.socket, Watcher, self, deferrable).notify_readable = true
           end
           Fiber.yield.tap do |result|
             raise result if result.is_a?(Exception)

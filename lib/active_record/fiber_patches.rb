@@ -67,6 +67,34 @@ module ActiveRecord
 
         @connections = []
         @checked_out = []
+        @automatic_reconnect = true
+        @tables = {}
+
+        @columns     = Hash.new do |h, table_name|
+          h[table_name] = with_connection do |conn|
+
+            # Fetch a list of columns
+            conn.columns(table_name, "#{table_name} Columns").tap do |columns|
+
+              # set primary key information
+              columns.each do |column|
+                column.primary = column.name == primary_keys[table_name]
+              end
+            end
+          end
+        end
+
+        @columns_hash = Hash.new do |h, table_name|
+          h[table_name] = Hash[columns[table_name].map { |col|
+            [col.name, col]
+          }]
+        end
+
+        @primary_keys = Hash.new do |h, table_name|
+          h[table_name] = with_connection do |conn|
+            table_exists?(table_name) ? conn.primary_key(table_name) : 'id'
+          end
+        end
       end
 
       def clear_stale_cached_connections!

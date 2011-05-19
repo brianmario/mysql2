@@ -14,6 +14,7 @@ static rb_encoding *binaryEncoding;
 #define MYSQL2_MIN_YEAR 1970
 #endif
 
+extern VALUE cMysql2Client;
 static VALUE cMysql2Result;
 static VALUE cBigDecimal, cDate, cDateTime;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
@@ -72,7 +73,7 @@ static VALUE rb_mysql_result_cast_date(VALUE klass, VALUE date_str) {
   return mysql2_cast_date(RSTRING_PTR(date_str));
 }
 
-static VALUE mysql2_cast_datetime(unsigned char *datetime_str, VALUE db_timezone, VALUE app_timezone) {
+static VALUE mysql2_cast_datetime(unsigned char *datetime_str, ID db_timezone, ID app_timezone) {
   VALUE val = Qnil;
   int year, month, day, hour, min, sec, tokens;
   tokens = sscanf(datetime_str, "%4d-%2d-%2d %2d:%2d:%2d", &year, &month, &day, &hour, &min, &sec);
@@ -113,7 +114,24 @@ static VALUE mysql2_cast_datetime(unsigned char *datetime_str, VALUE db_timezone
 }
 
 static VALUE rb_mysql_result_cast_datetime(VALUE klass, VALUE datetime_str, VALUE db_timezone, VALUE app_timezone) {
-  return mysql2_cast_datetime(RSTRING_PTR(datetime_str), db_timezone, app_timezone);
+  ID db_tz;
+  ID app_tz;
+
+  Check_Type(datetime_str, T_STRING);
+
+  if (!NIL_P(db_timezone)) {
+    db_tz = rb_to_id(db_timezone);
+  } else {
+    VALUE opts = rb_funcall(cMysql2Client, rb_intern("default_query_options"), 0);
+    VALUE default_db_tz = rb_hash_aref(opts, ID2SYM(rb_intern("database_timezone")));
+    db_tz = rb_to_id(default_db_tz);
+  }
+
+  if (!NIL_P(app_timezone)) {
+    app_tz = rb_to_id(app_timezone);
+  }
+
+  return mysql2_cast_datetime(RSTRING_PTR(datetime_str), db_tz, app_tz);
 }
 
 

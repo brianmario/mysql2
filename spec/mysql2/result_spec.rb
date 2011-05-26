@@ -28,6 +28,12 @@ describe Mysql2::Result do
     }.should_not raise_error(Mysql2::Error)
   end
 
+  context "metadata queries" do
+    it "should show tables" do
+      @result = @client.query "SHOW TABLES"
+    end
+  end
+
   context "#each" do
     it "should yield rows as hash's" do
       @result.each do |row|

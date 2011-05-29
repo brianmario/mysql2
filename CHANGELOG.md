@@ -1,5 +1,8 @@
 # Changelog
 
+## In Git
+* Avoid thread blocking on Ruby 1.9.x under Windows. Patch by Roger Pack.
+
 ## 0.2.7 (March 28th, 2011)
 * various fixes for em_mysql2 and fiber usage
 * use our own Mysql2IndexDefinition class for better compatibility across ActiveRecord versions

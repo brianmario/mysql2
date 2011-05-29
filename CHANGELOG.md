@@ -1,5 +1,8 @@
 # Changelog
 
+## In Git
+* Avoid thread blocking on Ruby 1.9.x under Windows. Patch by Roger Pack.
+
 ## 0.3.2 (April 26th, 2011)
 * Fix typo in initialization for older ActiveRecord versions
 

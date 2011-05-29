@@ -380,7 +380,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     for(;;) {
       int fd_set_fd = fd;
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(HAVE_RB_THREAD_BLOCKING_REGION)
       WSAPROTOCOL_INFO wsa_pi;
       // dupicate the SOCKET from libmysql
       int r = WSADuplicateSocket(fd, GetCurrentProcessId(), &wsa_pi);
@@ -394,7 +394,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 
       retval = rb_thread_select(fd_set_fd + 1, &fdset, NULL, NULL, tvp);
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(HAVE_RB_THREAD_BLOCKING_REGION)
       // cleanup the CRT fd
       _close(fd_set_fd);
       // cleanup the duplicated SOCKET

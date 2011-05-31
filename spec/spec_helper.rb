@@ -45,6 +45,7 @@ RSpec.configure do |config|
         PRIMARY KEY (id)
       )
     ]
+    client.query "DELETE FROM mysql2_test;"
     client.query %[
       INSERT INTO mysql2_test (
         null_test, bit_test, tiny_int_test, bool_cast_test, small_int_test, medium_int_test, int_test, big_int_test,

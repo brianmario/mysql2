@@ -44,6 +44,8 @@ escaped = client.escape("gi'thu\"bbe\0r's")
 results = client.query("SELECT * FROM users WHERE group='#{escaped}'")
 ```
 
+You can get a count of your results with `results.count`.
+
 Finally, iterate over the results:
 
 ``` ruby

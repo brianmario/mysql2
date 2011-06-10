@@ -37,6 +37,8 @@ elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   end
   exit 1 if $? != 0
   $CPPFLAGS += ' ' + cflags
+  rpathflag = RbConfig::CONFIG["RPATHFLAG"]
+  libs.gsub!(%r{(\A|\s)-L(/\S+)}) {$1 + rpathflag % $2} if rpathflag
   $libs = libs + " " + $libs
 else
   inc, lib = dir_config('mysql', '/usr/local')
@@ -64,9 +66,5 @@ unless RUBY_PLATFORM =~ /mswin/ or RUBY_PLATFORM =~ /sparc/
   $CFLAGS << ' -Wall -funroll-loops'
 end
 # $CFLAGS << ' -O0 -ggdb3 -Wextra'
-
-if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
-	$LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"
-end
 
 create_makefile('mysql2/mysql2')

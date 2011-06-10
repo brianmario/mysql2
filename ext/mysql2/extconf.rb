@@ -7,6 +7,7 @@ end
 
 # 1.9-only
 have_func('rb_thread_blocking_region')
+have_func('rb_thread_fd_select')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb

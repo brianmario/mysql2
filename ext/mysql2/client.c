@@ -306,9 +306,16 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   return resultObj;
 }
 
+#ifndef HAVE_RB_THREAD_FD_SELECT
+#define rb_fdset_t fd_set
+#define rb_fd_zero(f)	FD_ZERO(f)
+#define rb_fd_set(n, f)	FD_SET(n, f)
+#define rb_thread_fd_select rb_thread_select
+#endif
+
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   struct nogvl_send_query_args args;
-  fd_set fdset;
+  rb_fdset_t fdset;
   int fd, retval;
   int async = 0;
   VALUE opts, defaults, read_timeout;
@@ -390,10 +397,10 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
       fd_set_fd = _open_osfhandle(s, O_RDWR|O_BINARY);
 #endif
 
-      FD_ZERO(&fdset);
-      FD_SET(fd_set_fd, &fdset);
+      rb_fd_zero(&fdset);
+      rb_fd_set(fd_set_fd, &fdset);
 
-      retval = rb_thread_select(fd_set_fd + 1, &fdset, NULL, NULL, tvp);
+      retval = rb_thread_fd_select(fd_set_fd + 1, &fdset, NULL, NULL, tvp);
 
 #if defined(_WIN32) && !defined(HAVE_RB_THREAD_BLOCKING_REGION)
       // cleanup the CRT fd

@@ -76,6 +76,7 @@ static void rb_mysql_client_mark(void * wrapper) {
 static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   VALUE rb_error_msg = rb_str_new2(mysql_error(wrapper->client));
   VALUE rb_sql_state = rb_tainted_str_new2(mysql_sqlstate(wrapper->client));
+  VALUE e;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
@@ -88,7 +89,7 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   }
 #endif
 
-  VALUE e = rb_exc_new3(cMysql2Error, rb_error_msg);
+  e = rb_exc_new3(cMysql2Error, rb_error_msg);
   rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(wrapper->client)));
   rb_funcall(e, intern_sql_state_eql, 1, rb_sql_state);
   rb_exc_raise(e);
@@ -516,20 +517,21 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 }
 
 static VALUE rb_mysql_client_socket(VALUE self) {
+  int fd_set_fd;
   GET_CLIENT(self);
   REQUIRE_OPEN_DB(wrapper);
-  int fd_set_fd = wrapper->client->net.fd;
+  fd_set_fd = wrapper->client->net.fd;
 #ifdef _WIN32
-  WSAPROTOCOL_INFO wsa_pi;
-  // dupicate the SOCKET from libmysql
-  int r = WSADuplicateSocket(wrapper->client->net.fd, GetCurrentProcessId(), &wsa_pi);
-  SOCKET s = WSASocket(wsa_pi.iAddressFamily, wsa_pi.iSocketType, wsa_pi.iProtocol, &wsa_pi, 0, 0);
-  // create the CRT fd so ruby can get back to the SOCKET
-  fd_set_fd = _open_osfhandle(s, O_RDWR|O_BINARY);
-  return INT2NUM(fd_set_fd);
-#else
-  return INT2NUM(fd_set_fd);
+  {
+    WSAPROTOCOL_INFO wsa_pi;
+    // dupicate the SOCKET from libmysql
+    int r = WSADuplicateSocket(wrapper->client->net.fd, GetCurrentProcessId(), &wsa_pi);
+    SOCKET s = WSASocket(wsa_pi.iAddressFamily, wsa_pi.iSocketType, wsa_pi.iProtocol, &wsa_pi, 0, 0);
+    // create the CRT fd so ruby can get back to the SOCKET
+    fd_set_fd = _open_osfhandle(s, O_RDWR|O_BINARY);
+  }
 #endif
+  return INT2NUM(fd_set_fd);
 }
 
 static VALUE rb_mysql_client_last_id(VALUE self) {

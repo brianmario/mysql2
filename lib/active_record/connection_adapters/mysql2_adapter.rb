@@ -23,8 +23,6 @@ module ActiveRecord
 
     class Mysql2Column < Column
       BOOL = "tinyint(1)"
-      CURRENT_TIMESTAMP = "CURRENT_TIMESTAMP"
-
       def extract_default(default)
         if sql_type =~ /blob/i || type == :text
           if default.blank?
@@ -73,18 +71,6 @@ module ActiveRecord
           when /^tinyint/i;   1
           else
             super
-          end
-        end
-
-        def self.fast_string_to_date(string)
-          Mysql2::Result.cast_date(string)
-        end
-
-        def self.fast_string_to_time(string)
-          if string == CURRENT_TIMESTAMP
-            nil
-          else
-            Mysql2::Result.cast_datetime(string, nil, nil)
           end
         end
 

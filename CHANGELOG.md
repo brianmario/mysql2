@@ -1,7 +1,11 @@
 # Changelog
 
-## In Git
-* Avoid thread blocking on Ruby 1.9.x under Windows. Patch by Roger Pack.
+## 0.3.3 (June 14th, 2011)
+* disable async support, and access to the underlying file descriptor under Windows. It's never worked reliably and ruby-core has a lot of work to do in order to make it possible.
+* added support for turning eager-casting off. This is especially useful in ORMs that will lazily cast values upon access.
+* added a warning if a 0.2.x release is being used with ActiveRecord 3.1 since both the 0.2.x releases and AR 3.1 have mysql2 adapters, we want you to use the one in AR 3.1
+* added Mysql2::Client.escape (class-level method)
+* disabled eager-casting in the bundled ActiveRecord adapter (for Rails 3.0 or less)
 
 ## 0.3.2 (April 26th, 2011)
 * Fix typo in initialization for older ActiveRecord versions
@@ -14,6 +18,13 @@
 * win32 bugfixes
 * BREAKING CHANGE: the ActiveRecord adapter has been pulled into Rails 3.1 and is no longer part of the gem
 * added Mysql2::Client.escape (class-level) for raw one-off non-encoding-aware escaping
+
+## 0.2.8 (June 14th, 2011)
+* disable async support, and access to the underlying file descriptor under Windows. It's never worked reliably and ruby-core has a lot of work to do in order to make it possible.
+* added support for turning eager-casting off. This is especially useful in ORMs that will lazily cast values upon access.
+* added a warning if a 0.2.x release is being used with ActiveRecord 3.1 since both the 0.2.x releases and AR 3.1 have mysql2 adapters, we want you to use the one in AR 3.1
+* added Mysql2::Client.escape (class-level method)
+* disabled eager-casting in the bundled ActiveRecord adapter (for Rails 3.0 or less)
 
 ## 0.2.7 (March 28th, 2011)
 * various fixes for em_mysql2 and fiber usage

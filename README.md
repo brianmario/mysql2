@@ -181,6 +181,8 @@ Although Mysql2 performs reasonably well at retrieving uncasted data, it (curren
 
 ### Async
 
+NOTE: Not supported on Windows.
+
 `Mysql2::Client` takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.
 But, in order to take full advantage of it in your Ruby code, you can do:
 

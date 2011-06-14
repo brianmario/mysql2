@@ -7,6 +7,7 @@ end
 
 # 1.9-only
 have_func('rb_thread_blocking_region')
+have_func('rb_thread_fd_select')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
@@ -37,6 +38,8 @@ elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   end
   exit 1 if $? != 0
   $CPPFLAGS += ' ' + cflags
+  rpathflag = RbConfig::CONFIG["RPATHFLAG"]
+  libs.gsub!(%r{(\A|\s)-L(/\S+)}) {$1 + rpathflag % $2} if rpathflag
   $libs = libs + " " + $libs
 else
   inc, lib = dir_config('mysql', '/usr/local')
@@ -64,9 +67,5 @@ unless RUBY_PLATFORM =~ /mswin/ or RUBY_PLATFORM =~ /sparc/
   $CFLAGS << ' -Wall -funroll-loops'
 end
 # $CFLAGS << ' -O0 -ggdb3 -Wextra'
-
-if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
-	$LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"
-end
 
 create_makefile('mysql2/mysql2')

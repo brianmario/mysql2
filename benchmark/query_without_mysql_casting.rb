@@ -14,9 +14,18 @@ sql = "SELECT * FROM mysql2_test LIMIT 100"
 Benchmark.bmbm do |x|
   mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
   mysql2.query "USE #{database}"
-  x.report "Mysql2" do
+  x.report "Mysql2 (cast: true)" do
     number_of.times do
-      mysql2_result = mysql2.query sql, :symbolize_keys => true
+      mysql2_result = mysql2.query sql, :symbolize_keys => true, :cast => true
+      mysql2_result.each do |res|
+        # puts res.inspect
+      end
+    end
+  end
+
+  x.report "Mysql2 (cast: false)" do
+    number_of.times do
+      mysql2_result = mysql2.query sql, :symbolize_keys => true, :cast => false
       mysql2_result.each do |res|
         # puts res.inspect
       end

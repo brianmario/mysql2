@@ -158,6 +158,27 @@ client = Mysql2::Client.new
 result = client.query("SELECT * FROM table_with_boolean_field", :cast_booleans => true)
 ```
 
+### Skipping casting
+
+Mysql2 casting is fast, but not as fast as not casting data.  In rare cases where typecasting is not needed, it will be faster to disable it by providing :cast => false.
+
+``` ruby
+client = Mysql2::Client.new
+result = client.query("SELECT * FROM table", :cast => false)
+```
+
+Here are the results from the `query_without_mysql_casting.rb` script in the benchmarks folder:
+
+``` sh
+                           user     system      total        real
+Mysql2 (cast: true)    0.340000   0.000000   0.340000 (  0.405018)
+Mysql2 (cast: false)   0.160000   0.010000   0.170000 (  0.209937)
+Mysql                  0.080000   0.000000   0.080000 (  0.129355)
+do_mysql               0.520000   0.010000   0.530000 (  0.574619)
+```
+
+Although Mysql2 performs reasonably well at retrieving uncasted data, it (currently) is not as fast as the Mysql gem.  In spite of this small disadvantage, Mysql2 still sports a friendlier interface and doesn't block the entire ruby process when querying.
+
 ### Async
 
 `Mysql2::Client` takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.

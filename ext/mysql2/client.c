@@ -139,10 +139,6 @@ static VALUE nogvl_close(void *ptr) {
     flags = fcntl(wrapper->client->net.fd, F_GETFL);
     if (flags > 0 && !(flags & O_NONBLOCK))
       fcntl(wrapper->client->net.fd, F_SETFL, flags | O_NONBLOCK);
-#else
-    u_long iMode;
-    iMode = 1;
-    ioctlsocket(wrapper->client->net.fd, FIONBIO, &iMode);
 #endif
 
     mysql_close(wrapper->client);
@@ -356,6 +352,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
+#ifndef _WIN32
   read_timeout = rb_iv_get(self, "@read_timeout");
 
   tvp = NULL;
@@ -380,26 +377,10 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     for(;;) {
       int fd_set_fd = fd;
 
-#if defined(_WIN32) && !defined(HAVE_RB_THREAD_BLOCKING_REGION)
-      WSAPROTOCOL_INFO wsa_pi;
-      // dupicate the SOCKET from libmysql
-      int r = WSADuplicateSocket(fd, GetCurrentProcessId(), &wsa_pi);
-      SOCKET s = WSASocket(wsa_pi.iAddressFamily, wsa_pi.iSocketType, wsa_pi.iProtocol, &wsa_pi, 0, 0);
-      // create the CRT fd so ruby can get back to the SOCKET
-      fd_set_fd = _open_osfhandle(s, O_RDWR|O_BINARY);
-#endif
-
       FD_ZERO(&fdset);
       FD_SET(fd_set_fd, &fdset);
 
       retval = rb_thread_select(fd_set_fd + 1, &fdset, NULL, NULL, tvp);
-
-#if defined(_WIN32) && !defined(HAVE_RB_THREAD_BLOCKING_REGION)
-      // cleanup the CRT fd
-      _close(fd_set_fd);
-      // cleanup the duplicated SOCKET
-      closesocket(s);
-#endif
 
       if (retval == 0) {
         rb_raise(cMysql2Error, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
@@ -420,6 +401,10 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   } else {
     return Qnil;
   }
+#else
+  // this will just block until the result is ready
+  return rb_mysql_client_async_result(self);
+#endif
 }
 
 static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
@@ -517,18 +502,12 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 
 static VALUE rb_mysql_client_socket(VALUE self) {
   GET_CLIENT(self);
+#ifndef _WIN32
   REQUIRE_OPEN_DB(wrapper);
   int fd_set_fd = wrapper->client->net.fd;
-#ifdef _WIN32
-  WSAPROTOCOL_INFO wsa_pi;
-  // dupicate the SOCKET from libmysql
-  int r = WSADuplicateSocket(wrapper->client->net.fd, GetCurrentProcessId(), &wsa_pi);
-  SOCKET s = WSASocket(wsa_pi.iAddressFamily, wsa_pi.iSocketType, wsa_pi.iProtocol, &wsa_pi, 0, 0);
-  // create the CRT fd so ruby can get back to the SOCKET
-  fd_set_fd = _open_osfhandle(s, O_RDWR|O_BINARY);
   return INT2NUM(fd_set_fd);
 #else
-  return INT2NUM(fd_set_fd);
+  rb_raise(cMysql2Error, "Raw access to the mysql file descriptor isn't supported on Windows");
 #endif
 }
 
@@ -559,8 +538,7 @@ static VALUE rb_mysql_client_thread_id(VALUE self) {
   return ULL2NUM(retVal);
 }
 
-static VALUE nogvl_ping(void *ptr)
-{
+static VALUE nogvl_ping(void *ptr) {
   MYSQL *client = ptr;
 
   return mysql_ping(client) == 0 ? Qtrue : Qfalse;

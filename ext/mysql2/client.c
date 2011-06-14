@@ -3,7 +3,7 @@
 #include <errno.h>
 
 VALUE cMysql2Client;
-extern VALUE mMysql2, cMysql2Error;
+extern VALUE mMysql2, cMysql2Error, cMysql2AlreadyActiveError;
 static VALUE intern_encoding_from_charset;
 static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
@@ -328,7 +328,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     // mark this connection active
     wrapper->active = 1;
   } else {
-    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+    rb_raise(cMysql2AlreadyActiveError, "This connection is still waiting for a result, try again once you have the result");
   }
 
   defaults = rb_iv_get(self, "@query_options");

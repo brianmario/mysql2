@@ -12,4 +12,7 @@ module Mysql2
     alias_method :errno, :error_number
     alias_method :error, :message
   end
+
+  class AlreadyActiveError < Error
+  end
 end

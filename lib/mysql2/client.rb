@@ -4,9 +4,7 @@ module Mysql2
     @@default_query_options = {
       :as => :hash,                   # the type of object you want each row back as; also supports :array (an array of values)
       :async => false,                # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
-      :cast_booleans => false,        # automatically cast tinyint(1) fields as true/false in ruby
-      :cast_dates => true,            # automatically cast DATE fields into Ruby Date objects
-      :cast_datetimes => true,        # automatically cast TIMESTAMP and DATETIME fields into Ruby Time or DateTime objects
+      :cast_booleans => false,        # cast tinyint(1) fields as true/false in ruby
       :symbolize_keys => false,       # return field names as symbols instead of strings
       :database_timezone => :local,   # timezone Mysql2 will assume datetime objects are stored in
       :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller

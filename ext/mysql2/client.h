@@ -33,8 +33,9 @@ void init_mysql2_client();
 
 typedef struct {
   VALUE encoding;
-  char active;
-  char closed;
+  int active;
+  int reconnect_enabled;
+  int closed;
   MYSQL *client;
 } mysql_client_wrapper;
 

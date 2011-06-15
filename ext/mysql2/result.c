@@ -22,7 +22,7 @@ static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
           intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
-          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows;
+          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast;
 static ID intern_merge;
 
 static void rb_mysql_result_mark(void * wrapper) {
@@ -100,7 +100,32 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
   return rb_field;
 }
 
-static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool) {
+#ifdef HAVE_RUBY_ENCODING_H
+inline VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc) {
+  // if binary flag is set, respect it's wishes
+  if (field.flags & BINARY_FLAG && field.charsetnr == 63) {
+    rb_enc_associate(val, binaryEncoding);
+  } else {
+    // lookup the encoding configured on this field
+    VALUE new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset_code, 1, INT2NUM(field.charsetnr));
+    if (new_encoding != Qnil) {
+      // use the field encoding we were able to match
+      rb_encoding *enc = rb_to_encoding(new_encoding);
+      rb_enc_associate(val, enc);
+    } else {
+      // otherwise fall-back to the connection's encoding
+      rb_enc_associate(val, conn_enc);
+    }
+    if (default_internal_enc) {
+      val = rb_str_export_to_enc(val, default_internal_enc);
+    }
+  }
+  return val;
+}
+#endif
+
+
+static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast) {
   VALUE rowVal;
   mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
@@ -141,7 +166,19 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
     VALUE field = rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     if (row[i]) {
       VALUE val = Qnil;
-      switch(fields[i].type) {
+      enum enum_field_types type = fields[i].type;
+
+      if(!cast) {
+        if (type == MYSQL_TYPE_NULL) {
+          val = Qnil;
+        } else {
+          val = rb_str_new(row[i], fieldLengths[i]);
+#ifdef HAVE_RUBY_ENCODING_H
+          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+#endif
+        }
+      } else {
+        switch(type) {
         case MYSQL_TYPE_NULL:       // NULL-type field
           val = Qnil;
           break;
@@ -260,26 +297,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
 #ifdef HAVE_RUBY_ENCODING_H
-          // if binary flag is set, respect it's wishes
-          if (fields[i].flags & BINARY_FLAG && fields[i].charsetnr == 63) {
-            rb_enc_associate(val, binaryEncoding);
-          } else {
-            // lookup the encoding configured on this field
-            VALUE new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset_code, 1, INT2NUM(fields[i].charsetnr));
-            if (new_encoding != Qnil) {
-              // use the field encoding we were able to match
-              rb_encoding *enc = rb_to_encoding(new_encoding);
-              rb_enc_associate(val, enc);
-            } else {
-              // otherwise fall-back to the connection's encoding
-              rb_enc_associate(val, conn_enc);
-            }
-            if (default_internal_enc) {
-              val = rb_str_export_to_enc(val, default_internal_enc);
-            }
-          }
+          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
 #endif
           break;
+        }
       }
       if (asArray) {
         rb_ary_push(rowVal, val);
@@ -329,7 +350,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   ID db_timezone, app_timezone, dbTz, appTz;
   mysql2_result_wrapper * wrapper;
   unsigned long i;
-  int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1;
+  int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1;
 
   GetMysql2Result(self, wrapper);
 
@@ -354,6 +375,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (rb_hash_aref(opts, sym_cache_rows) == Qfalse) {
     cacheRows = 0;
+  }
+
+  if (rb_hash_aref(opts, sym_cast) == Qfalse) {
+    cast = 0;
   }
 
   dbTz = rb_hash_aref(opts, sym_database_timezone);
@@ -400,7 +425,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       if (cacheRows && i < rowsProcessed) {
         row = rb_ary_entry(wrapper->rows, i);
       } else {
-        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool);
+        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
         if (cacheRows) {
           rb_ary_store(wrapper->rows, i, row);
         }
@@ -473,6 +498,7 @@ void init_mysql2_result() {
   sym_database_timezone     = ID2SYM(rb_intern("database_timezone"));
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
+  sym_cast           = ID2SYM(rb_intern("cast"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); //never GC

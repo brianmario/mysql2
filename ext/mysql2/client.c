@@ -1,6 +1,9 @@
 #include <mysql2_ext.h>
 #include <client.h>
 #include <errno.h>
+#ifndef _WIN32
+#include <sys/socket.h>
+#endif
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
@@ -9,7 +12,7 @@ static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_arr
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #define REQUIRE_OPEN_DB(wrapper) \
-  if(wrapper->closed) { \
+  if(!wrapper->reconnect_enabled && wrapper->closed) { \
     rb_raise(cMysql2Error, "closed MySQL connection"); \
   }
 
@@ -131,7 +134,7 @@ static VALUE nogvl_close(void *ptr) {
   wrapper = ptr;
   if (!wrapper->closed) {
     wrapper->closed = 1;
-
+    wrapper->active = 0;
     /*
      * we'll send a QUIT message to the server, but that message is more of a
      * formality than a hard requirement since the socket is getting shutdown
@@ -168,6 +171,7 @@ static VALUE allocate(VALUE klass) {
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
   wrapper->active = 0;
+  wrapper->reconnect_enabled = 0;
   wrapper->closed = 1;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
@@ -311,10 +315,26 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   return resultObj;
 }
 
+#ifndef _WIN32
 struct async_query_args {
   int fd;
   VALUE self;
 };
+
+static VALUE disconnect_and_raise(VALUE self, VALUE error) {
+  GET_CLIENT(self);
+
+  wrapper->closed = 1;
+  wrapper->active = 0;
+
+  // manually close the socket for read/write
+  // this feels dirty, but is there another way?
+  shutdown(wrapper->client->net.fd, 2);
+
+  rb_exc_raise(error);
+  return Qnil;
+}
+#endif
 
 static VALUE do_query(void *args) {
   struct async_query_args *async_args;
@@ -420,7 +440,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     async_args.fd = wrapper->client->net.fd;
     async_args.self = self;
 
-    return rb_ensure(do_query, (VALUE)&async_args, rb_mysql_client_async_result, self);
+    return rb_rescue2(do_query, (VALUE)&async_args, disconnect_and_raise, self, rb_eException, (VALUE)0);
   } else {
     return Qnil;
   }
@@ -591,6 +611,7 @@ static VALUE set_reconnect(VALUE self, VALUE value) {
   if(!NIL_P(value)) {
     reconnect = value == Qfalse ? 0 : 1;
 
+    wrapper->reconnect_enabled = reconnect;
     /* set default reconnect behavior */
     if (mysql_options(wrapper->client, MYSQL_OPT_RECONNECT, &reconnect)) {
       /* TODO: warning - unable to set reconnect behavior */

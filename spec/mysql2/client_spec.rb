@@ -165,6 +165,19 @@ describe Mysql2::Client do
         end
       end
 
+      it "should handle Timeouts without leaving the connection hanging" do
+        begin
+          Timeout.timeout(1) do
+            @client.query("SELECT sleep(2)")
+          end
+        rescue Timeout::Error
+        end
+
+        lambda {
+          @client.query("SELECT 1")
+        }.should_not raise_error(Mysql2::Error)
+      end
+
       it "#socket should return a Fixnum (file descriptor from C)" do
         @client.socket.class.should eql(Fixnum)
         @client.socket.should_not eql(0)

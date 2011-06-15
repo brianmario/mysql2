@@ -271,6 +271,10 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 #endif
   GET_CLIENT(self);
 
+  // if we're not waiting on a result, do nothing
+  if (!wrapper->active)
+    return Qnil;
+
   REQUIRE_OPEN_DB(wrapper);
   if (rb_thread_blocking_region(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     // an error occurred, mark this connection inactive
@@ -301,19 +305,72 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   return resultObj;
 }
 
-static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
-  struct nogvl_send_query_args args;
-  fd_set fdset;
-  int fd, retval;
-  int async = 0;
-  VALUE opts, defaults, read_timeout;
-#ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *conn_enc;
-#endif
+struct async_query_args {
+  int fd;
+  VALUE self;
+};
+
+static VALUE do_query(void *args) {
+  struct async_query_args *async_args;
   struct timeval tv;
   struct timeval* tvp;
   long int sec;
-  VALUE result;
+  fd_set fdset;
+  int retval;
+  int fd_set_fd;
+  VALUE read_timeout;
+
+  async_args = (struct async_query_args *)args;
+  read_timeout = rb_iv_get(async_args->self, "@read_timeout");
+
+  tvp = NULL;
+  if (!NIL_P(read_timeout)) {
+    Check_Type(read_timeout, T_FIXNUM);
+    tvp = &tv;
+    sec = FIX2INT(read_timeout);
+    // TODO: support partial seconds?
+    // also, this check is here for sanity, we also check up in Ruby
+    if (sec >= 0) {
+      tvp->tv_sec = sec;
+    } else {
+      rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %ld", sec);
+    }
+    tvp->tv_usec = 0;
+  }
+
+  fd_set_fd = async_args->fd;
+  for(;;) {
+    // the below code is largely from do_mysql
+    // http://github.com/datamapper/do
+    FD_ZERO(&fdset);
+    FD_SET(fd_set_fd, &fdset);
+
+    retval = rb_thread_select(fd_set_fd + 1, &fdset, NULL, NULL, tvp);
+
+    if (retval == 0) {
+      rb_raise(cMysql2Error, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
+    }
+
+    if (retval < 0) {
+      rb_sys_fail(0);
+    }
+
+    if (retval > 0) {
+      break;
+    }
+  }
+
+  return rb_mysql_client_async_result(async_args->self);
+}
+
+static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
+  struct async_query_args async_args;
+  struct nogvl_send_query_args args;
+  int async = 0;
+  VALUE opts, defaults;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *conn_enc;
+#endif
   GET_CLIENT(self);
 
   REQUIRE_OPEN_DB(wrapper);
@@ -353,51 +410,11 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 
 #ifndef _WIN32
-  read_timeout = rb_iv_get(self, "@read_timeout");
-
-  tvp = NULL;
-  if (!NIL_P(read_timeout)) {
-    Check_Type(read_timeout, T_FIXNUM);
-    tvp = &tv;
-    sec = FIX2INT(read_timeout);
-    // TODO: support partial seconds?
-    // also, this check is here for sanity, we also check up in Ruby
-    if (sec >= 0) {
-      tvp->tv_sec = sec;
-    } else {
-      rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %ld", sec);
-    }
-    tvp->tv_usec = 0;
-  }
-
   if (!async) {
-    // the below code is largely from do_mysql
-    // http://github.com/datamapper/do
-    fd = wrapper->client->net.fd;
-    for(;;) {
-      int fd_set_fd = fd;
+    async_args.fd = wrapper->client->net.fd;
+    async_args.self = self;
 
-      FD_ZERO(&fdset);
-      FD_SET(fd_set_fd, &fdset);
-
-      retval = rb_thread_select(fd_set_fd + 1, &fdset, NULL, NULL, tvp);
-
-      if (retval == 0) {
-        rb_raise(cMysql2Error, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
-      }
-
-      if (retval < 0) {
-        rb_sys_fail(0);
-      }
-
-      if (retval > 0) {
-        break;
-      }
-    }
-
-    result = rb_mysql_client_async_result(self);
-
-    return result;
+    return rb_ensure(do_query, (VALUE)&async_args, rb_mysql_client_async_result, self);
   } else {
     return Qnil;
   }

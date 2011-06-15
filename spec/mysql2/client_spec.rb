@@ -116,13 +116,6 @@ describe Mysql2::Client do
       @client.query("SELECT 1", :symbolize_keys => true).first.keys[0].class.should eql(Symbol)
     end
 
-    it "should not allow another query to be sent without fetching a result first" do
-      @client.query("SELECT 1", :async => true)
-      lambda {
-        @client.query("SELECT 1")
-      }.should raise_error(Mysql2::Error)
-    end
-
     it "should require an open connection" do
       @client.close
       lambda {
@@ -130,16 +123,23 @@ describe Mysql2::Client do
       }.should raise_error(Mysql2::Error)
     end
 
-    it "should timeout if we wait longer than :read_timeout" do
-      client = Mysql2::Client.new(:read_timeout => 1)
-      lambda {
-        client.query("SELECT sleep(2)")
-      }.should raise_error(Mysql2::Error)
-    end
-
-    # XXX this test is not deterministic (because Unix signal handling is not)
-    # and may fail on a loaded system
     if RUBY_PLATFORM !~ /mingw|mswin/
+      it "should not allow another query to be sent without fetching a result first" do
+        @client.query("SELECT 1", :async => true)
+        lambda {
+          @client.query("SELECT 1")
+        }.should raise_error(Mysql2::Error)
+      end
+
+      it "should timeout if we wait longer than :read_timeout" do
+        client = Mysql2::Client.new(:read_timeout => 1)
+        lambda {
+          client.query("SELECT sleep(2)")
+        }.should raise_error(Mysql2::Error)
+      end
+
+      # XXX this test is not deterministic (because Unix signal handling is not)
+      # and may fail on a loaded system
       it "should run signal handlers while waiting for a response" do
         mark = {}
         trap(:USR1) { mark[:USR1] = Time.now }
@@ -164,6 +164,65 @@ describe Mysql2::Client do
           trap(:USR1, 'DEFAULT')
         end
       end
+
+      it "#socket should return a Fixnum (file descriptor from C)" do
+        @client.socket.class.should eql(Fixnum)
+        @client.socket.should_not eql(0)
+      end
+
+      it "#socket should require an open connection" do
+        @client.close
+        lambda {
+          @client.socket
+        }.should raise_error(Mysql2::Error)
+      end
+
+      it "threaded queries should be supported" do
+        threads, results = [], {}
+        connect = lambda{ Mysql2::Client.new(:host => "localhost", :username => "root") }
+        Timeout.timeout(0.7) do
+          5.times {
+            threads << Thread.new do
+              results[Thread.current.object_id] = connect.call.query("SELECT sleep(0.5) as result")
+            end
+          }
+        end
+        threads.each{|t| t.join }
+        results.keys.sort.should eql(threads.map{|t| t.object_id }.sort)
+      end
+
+      it "evented async queries should be supported" do
+        # should immediately return nil
+        @client.query("SELECT sleep(0.1)", :async => true).should eql(nil)
+
+        io_wrapper = IO.for_fd(@client.socket)
+        loops = 0
+        loop do
+          if IO.select([io_wrapper], nil, nil, 0.05)
+            break
+          else
+            loops += 1
+          end
+        end
+
+        # make sure we waited some period of time
+        (loops >= 1).should be_true
+
+        result = @client.async_result
+        result.class.should eql(Mysql2::Result)
+      end
+    end
+  end
+
+  it "should respond to #socket" do
+    @client.should respond_to(:socket)
+  end
+
+  if RUBY_PLATFORM =~ /mingw|mswin/
+    it "#socket should raise as it's not supported" do
+      lambda {
+        @client.socket
+      }.should raise_error(Mysql2::Error)
     end
   end
 
@@ -311,22 +370,6 @@ describe Mysql2::Client do
     end
   end
 
-  it "should respond to #socket" do
-    @client.should respond_to(:socket)
-  end
-
-  it "#socket should return a Fixnum (file descriptor from C)" do
-    @client.socket.class.should eql(Fixnum)
-    @client.socket.should_not eql(0)
-  end
-
-  it "#socket should require an open connection" do
-    @client.close
-    lambda {
-      @client.socket
-    }.should raise_error(Mysql2::Error)
-  end
-
   it "should raise a Mysql2::Error exception upon connection failure" do
     lambda {
       bad_client = Mysql2::Client.new :host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42'
@@ -335,41 +378,6 @@ describe Mysql2::Client do
     lambda {
       good_client = Mysql2::Client.new
     }.should_not raise_error(Mysql2::Error)
-  end
-
-  it "threaded queries should be supported" do
-    threads, results = [], {}
-    connect = lambda{ Mysql2::Client.new(:host => "localhost", :username => "root") }
-    Timeout.timeout(0.7) do
-      5.times {
-        threads << Thread.new do
-          results[Thread.current.object_id] = connect.call.query("SELECT sleep(0.5) as result")
-        end
-      }
-    end
-    threads.each{|t| t.join }
-    results.keys.sort.should eql(threads.map{|t| t.object_id }.sort)
-  end
-
-  it "evented async queries should be supported" do
-    # should immediately return nil
-    @client.query("SELECT sleep(0.1)", :async => true).should eql(nil)
-
-    io_wrapper = IO.for_fd(@client.socket)
-    loops = 0
-    loop do
-      if IO.select([io_wrapper], nil, nil, 0.05)
-        break
-      else
-        loops += 1
-      end
-    end
-
-    # make sure we waited some period of time
-    (loops >= 1).should be_true
-
-    result = @client.async_result
-    result.class.should eql(Mysql2::Result)
   end
 
   context 'write operations api' do

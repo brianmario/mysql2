@@ -5,9 +5,9 @@ require 'rational' unless RUBY_VERSION >= '1.9.2'
 
 require 'mysql2/version' unless defined? Mysql2::VERSION
 require 'mysql2/error'
+require 'mysql2/result'
 require 'mysql2/mysql2'
 require 'mysql2/client'
-require 'mysql2/result'
 
 # = Mysql2
 #

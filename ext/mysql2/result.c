@@ -464,6 +464,14 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   return wrapper->rows;
 }
 
+static VALUE rb_mysql_result_count(VALUE self) {
+  mysql2_result_wrapper *wrapper;
+
+  GetMysql2Result(self, wrapper);
+
+  return INT2FIX(mysql_num_rows(wrapper->result));
+}
+
 /* Mysql2::Result */
 VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   VALUE obj;
@@ -489,6 +497,8 @@ void init_mysql2_result() {
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
+  rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
+  rb_define_alias(cMysql2Result, "size", "count");
 
   intern_encoding_from_charset = rb_intern("encoding_from_charset");
   intern_encoding_from_charset_code = rb_intern("encoding_from_charset_code");

@@ -4,13 +4,26 @@
 static rb_encoding *binaryEncoding;
 #endif
 
-#define MYSQL2_MAX_YEAR 2038
+#if SIZEOF_INT < SIZEOF_LONG
+/**
+ * on 64bit platforms we can handle dates way outside 2038-01-19T03:14:07
+ * because of how I'm performing the math below, this will allow a maximum
+ * timestamp of 9846-12-12T11:5999:59
+*/
+#define MYSQL2_MAX_YEAR 9999
+#else
+/**
+ * on 32bit platforms the maximum date the Time class can handle is 2038-01-19T03:14:07
+ * 2082 = 2038+1+19+3+14+7
+ */
+#define MYSQL2_MAX_YEAR 2082
+#endif
 
 #ifdef NEGATIVE_TIME_T
-  /* 1901-12-13 20:45:52 UTC : The oldest time in 32-bit signed time_t. */
+/* 1901-12-13 20:45:52 UTC : The oldest time in 32-bit signed time_t. */
 #define MYSQL2_MIN_YEAR 1902
 #else
- /* 1970-01-01 00:00:00 UTC : The Unix epoch - the oldest time in portable time_t. */
+/* 1970-01-01 00:00:00 UTC : The Unix epoch - the oldest time in portable time_t. */
 #define MYSQL2_MIN_YEAR 1970
 #endif
 
@@ -240,7 +253,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
               val = Qnil;
             } else {
-              if (year < MYSQL2_MIN_YEAR || year+month+day > MYSQL2_MAX_YEAR) { // use DateTime instead
+              if (year < MYSQL2_MIN_YEAR || year+month+day+hour+min+sec > MYSQL2_MAX_YEAR) { // use DateTime instead
                 VALUE offset = INT2NUM(0);
                 if (db_timezone == intern_local) {
                   offset = rb_funcall(cMysql2Client, intern_local_offset, 0);

@@ -4,27 +4,40 @@
 static rb_encoding *binaryEncoding;
 #endif
 
-#if SIZEOF_INT < SIZEOF_LONG
-/**
- * on 64bit platforms we can handle dates way outside 2038-01-19T03:14:07
- * because of how I'm performing the math below, this will allow a maximum
- * timestamp of 9846-12-12T11:5999:59
-*/
-#define MYSQL2_MAX_YEAR 9999
+#if (SIZEOF_INT < SIZEOF_LONG) || defined(HAVE_RUBY_ENCODING_H)
+/* on 64bit platforms we can handle dates way outside 2038-01-19T03:14:07
+ *
+ * (9999*31557600) + (12*2592000) + (31*86400) + (11*3600) + (59*60) + 59
+ */
+#define MYSQL2_MAX_TIME 315578267999ULL
 #else
 /**
- * on 32bit platforms the maximum date the Time class can handle is 2038-01-19T03:14:07
- * 2082 = 2038+1+19+3+14+7
+ * On 32bit platforms the maximum date the Time class can handle is 2038-01-19T03:14:07
+ * 2038 years + 1 month + 19 days + 3 hours + 14 minutes + 7 seconds = 64318634047 seconds
+ *
+ * (2038*31557600) + (1*2592000) + (19*86400) + (3*3600) + (14*60) + 7
  */
-#define MYSQL2_MAX_YEAR 2082
+#define MYSQL2_MAX_TIME 64318634047ULL
 #endif
 
-#ifdef NEGATIVE_TIME_T
-/* 1901-12-13 20:45:52 UTC : The oldest time in 32-bit signed time_t. */
-#define MYSQL2_MIN_YEAR 1902
+#if defined(HAVE_RUBY_ENCODING_H)
+/* 0000-1-1 00:00:00 UTC
+ *
+ * (0*31557600) + (1*2592000) + (1*86400) + (0*3600) + (0*60) + 0
+ */
+#define MYSQL2_MIN_TIME 2678400ULL
+#elif defined(NEGATIVE_TIME_T)
+/* 1901-12-13 20:45:52 UTC : The oldest time in 32-bit signed time_t.
+ *
+ * (1901*31557600) + (12*2592000) + (13*86400) + (20*3600) + (45*60) + 52
+ */
+#define MYSQL2_MIN_TIME 60023299552ULL
 #else
-/* 1970-01-01 00:00:00 UTC : The Unix epoch - the oldest time in portable time_t. */
-#define MYSQL2_MIN_YEAR 1970
+/* 1970-01-01 00:00:01 UTC : The Unix epoch - the oldest time in portable time_t.
+ *
+ * (1970*31557600) + (1*2592000) + (1*86400) + (0*3600) + (0*60) + 1
+ */
+#define MYSQL2_MIN_TIME 62171150401ULL
 #endif
 
 static VALUE cMysql2Result;
@@ -244,16 +257,20 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         }
         case MYSQL_TYPE_TIMESTAMP:  // TIMESTAMP field
         case MYSQL_TYPE_DATETIME: { // DATETIME field
-          int year, month, day, hour, min, sec, tokens;
+          unsigned int year, month, day, hour, min, sec, tokens;
+          uint64_t seconds;
+
           tokens = sscanf(row[i], "%4d-%2d-%2d %2d:%2d:%2d", &year, &month, &day, &hour, &min, &sec);
-          if (year+month+day+hour+min+sec == 0) {
+          seconds = (year*31557600ULL) + (month*2592000ULL) + (day*86400ULL) + (hour*3600ULL) + (min*60ULL) + sec;
+
+          if (seconds == 0) {
             val = Qnil;
           } else {
             if (month < 1 || day < 1) {
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
               val = Qnil;
             } else {
-              if (year < MYSQL2_MIN_YEAR || year+month+day+hour+min+sec > MYSQL2_MAX_YEAR) { // use DateTime instead
+              if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
                 VALUE offset = INT2NUM(0);
                 if (db_timezone == intern_local) {
                   offset = rb_funcall(cMysql2Client, intern_local_offset, 0);

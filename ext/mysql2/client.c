@@ -335,7 +335,6 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
 
   return Qnil;
 }
-#endif
 
 static VALUE do_query(void *args) {
   struct async_query_args *async_args;
@@ -389,6 +388,7 @@ static VALUE do_query(void *args) {
 
   return Qnil;
 }
+#endif
 
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   struct async_query_args async_args;

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.10 (June 15th, 2011)
+* bug fix for Time/DateTime usage depending on 32/64bit Ruby
+
 ## 0.2.9 (June 15th, 2011)
 * fix a long standing bug where a signal would interrupt rb_thread_select and put the connection in a permanently broken state
 * turn on casting in the ActiveRecord again, users can disable it if they need to for performance reasons

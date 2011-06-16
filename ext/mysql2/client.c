@@ -385,7 +385,9 @@ static VALUE do_query(void *args) {
 #endif
 
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
+#ifndef _WIN32
   struct async_query_args async_args;
+#endif
   struct nogvl_send_query_args args;
   int async = 0;
   VALUE opts, defaults;

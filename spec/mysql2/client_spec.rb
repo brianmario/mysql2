@@ -177,18 +177,17 @@ describe Mysql2::Client do
         }.should raise_error(Mysql2::Error)
       end
 
-      it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
-        client = Mysql2::Client.new(:reconnect => true)
+      it "should close the connection when an exception is raised" do
         begin
           Timeout.timeout(1) do
-            client.query("SELECT sleep(2)")
+            @client.query("SELECT sleep(2)")
           end
         rescue Timeout::Error
         end
-
+        
         lambda {
-          client.query("SELECT 1")
-        }.should_not raise_error(Mysql2::Error)
+          @client.query("SELECT 1")
+        }.should raise_error(Mysql2::Error, 'closed MySQL connection')
       end
 
       it "threaded queries should be supported" do

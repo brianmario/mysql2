@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4 (June 15th, 2011)
+* fix a long standing bug where a signal would interrupt rb_thread_select and put the connection in a permanently broken state
+* turn on casting in the ActiveRecord again, users can disable it if they need to for performance reasons
+
 ## 0.3.3 (June 14th, 2011)
 * disable async support, and access to the underlying file descriptor under Windows. It's never worked reliably and ruby-core has a lot of work to do in order to make it possible.
 * added support for turning eager-casting off. This is especially useful in ORMs that will lazily cast values upon access.
@@ -18,6 +22,10 @@
 * win32 bugfixes
 * BREAKING CHANGE: the ActiveRecord adapter has been pulled into Rails 3.1 and is no longer part of the gem
 * added Mysql2::Client.escape (class-level) for raw one-off non-encoding-aware escaping
+
+## 0.2.9 (June 15th, 2011)
+* fix a long standing bug where a signal would interrupt rb_thread_select and put the connection in a permanently broken state
+* turn on casting in the ActiveRecord again, users can disable it if they need to for performance reasons
 
 ## 0.2.8 (June 14th, 2011)
 * disable async support, and access to the underlying file descriptor under Windows. It's never worked reliably and ruby-core has a lot of work to do in order to make it possible.

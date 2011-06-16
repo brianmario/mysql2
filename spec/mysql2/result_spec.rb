@@ -28,6 +28,18 @@ describe Mysql2::Result do
     }.should_not raise_error(Mysql2::Error)
   end
 
+  it "should respond to #count, which is aliased as #size" do
+    r = @client.query "SELECT 1"
+    r.should respond_to :count
+    r.should respond_to :size
+  end
+
+  it "should be able to return the number of rows in the result set" do
+    r = @client.query "SELECT 1"
+    r.count.should eql(1)
+    r.size.should eql(1)
+  end
+
   context "metadata queries" do
     it "should show tables" do
       @result = @client.query "SHOW TABLES"

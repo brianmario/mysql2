@@ -332,6 +332,7 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   shutdown(wrapper->client->net.fd, 2);
 
   rb_exc_raise(error);
+
   return Qnil;
 }
 #endif
@@ -386,7 +387,7 @@ static VALUE do_query(void *args) {
     }
   }
 
-  return rb_mysql_client_async_result(async_args->self);
+  return Qnil;
 }
 
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
@@ -440,7 +441,9 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     async_args.fd = wrapper->client->net.fd;
     async_args.self = self;
 
-    return rb_rescue2(do_query, (VALUE)&async_args, disconnect_and_raise, self, rb_eException, (VALUE)0);
+    rb_rescue2(do_query, (VALUE)&async_args, disconnect_and_raise, self, rb_eException, (VALUE)0);
+
+    return rb_mysql_client_async_result(self);
   } else {
     return Qnil;
   }

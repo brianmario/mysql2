@@ -189,9 +189,18 @@ describe Mysql2::Result do
       r.first['test'].class.should eql(DateTime)
     end
 
-    it "should return DateTime when time > year 2038" do
-      r = @client.query("SELECT CAST('2039-01-01 01:01:01' AS DATETIME) as test")
-      r.first['test'].class.should eql(DateTime)
+    if 1.size == 4 # 32bit
+      it "should return DateTime when timestamp is > 2038-01-19T03:14:07" do
+                                      # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
+        r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+        r.first['test'].class.should eql(DateTime)
+      end
+    elsif 1.size == 8 # 64bit
+      it "should return Time when timestamp is > 2038-01-19T03:14:07" do
+                                      # 2038-01-19 03:14:07 is the max for 32bit Ruby 1.8
+        r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+        r.first['test'].class.should eql(Time)
+      end
     end
 
     it "should return Time for a TIMESTAMP value when within the supported range" do

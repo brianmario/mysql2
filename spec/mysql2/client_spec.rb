@@ -410,7 +410,7 @@ describe Mysql2::Client do
   context 'write operations api' do
     before(:each) do
       @client.query "USE test"
-      @client.query "CREATE TABLE lastIdTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
+      @client.query "CREATE TABLE IF NOT EXISTS lastIdTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
     end
 
     after(:each) do

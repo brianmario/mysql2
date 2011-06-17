@@ -1,4 +1,5 @@
 #include <mysql2_ext.h>
+#include <stdint.h>
 
 #ifdef HAVE_RUBY_ENCODING_H
 static rb_encoding *binaryEncoding;

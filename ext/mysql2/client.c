@@ -269,8 +269,17 @@ static VALUE nogvl_read_query_result(void *ptr) {
 
 /* mysql_store_result may (unlikely) read rows off the socket */
 static VALUE nogvl_store_result(void *ptr) {
-  MYSQL * client = ptr;
-  return (VALUE)mysql_store_result(client);
+  mysql_client_wrapper *wrapper;
+  MYSQL_RES *result;
+
+  wrapper = (mysql_client_wrapper *)ptr;
+  result = mysql_store_result(wrapper->client);
+
+  // once our result is stored off, this connection is
+  // ready for another command to be issued
+  wrapper->active = 0;
+
+  return (VALUE)result;
 }
 
 static VALUE rb_mysql_client_async_result(VALUE self) {
@@ -292,10 +301,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
-  result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper->client, RUBY_UBF_IO, 0);
-
-  // we have our result, mark this connection inactive
-  MARK_CONN_INACTIVE(self);
+  result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
 
   if (result == NULL) {
     if (mysql_field_count(wrapper->client) != 0) {
@@ -388,6 +394,27 @@ static VALUE do_query(void *args) {
 
   return Qnil;
 }
+#else
+static VALUE finish_and_mark_inactive(void *args) {
+  VALUE self;
+  MYSQL_RES *result;
+
+  self = (VALUE)args;
+
+  GET_CLIENT(self);
+
+  if (wrapper->active) {
+    // if we got here, the result hasn't been read off the wire yet
+    // so lets do that and then throw it away because we have no way
+    // of getting it back up to the caller from here
+    result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+    mysql_free_result(result);
+
+    wrapper->active = 0;
+  }
+
+  return Qnil;
+}
 #endif
 
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
@@ -451,7 +478,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 #else
   // this will just block until the result is ready
-  return rb_mysql_client_async_result(self);
+  return rb_ensure(rb_mysql_client_async_result, self, finish_and_mark_inactive, self);
 #endif
 }
 

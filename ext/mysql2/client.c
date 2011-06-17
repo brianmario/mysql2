@@ -263,8 +263,17 @@ static VALUE nogvl_read_query_result(void *ptr) {
 
 /* mysql_store_result may (unlikely) read rows off the socket */
 static VALUE nogvl_store_result(void *ptr) {
-  MYSQL * client = ptr;
-  return (VALUE)mysql_store_result(client);
+  mysql_client_wrapper *wrapper;
+  MYSQL_RES *result;
+
+  wrapper = (mysql_client_wrapper *)ptr;
+  result = mysql_store_result(wrapper->client);
+
+  // once our result is stored off, this connection is
+  // ready for another command to be issued
+  wrapper->active = 0;
+
+  return (VALUE)result;
 }
 
 static VALUE rb_mysql_client_async_result(VALUE self) {
@@ -286,10 +295,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
-  result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper->client, RUBY_UBF_IO, 0);
-
-  // we have our result, mark this connection inactive
-  MARK_CONN_INACTIVE(self);
+  result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
 
   if (result == NULL) {
     if (mysql_field_count(wrapper->client) != 0) {

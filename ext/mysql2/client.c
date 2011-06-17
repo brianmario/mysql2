@@ -171,7 +171,7 @@ static VALUE allocate(VALUE klass) {
   return obj;
 }
 
-static VALUE rb_mysql_client_escape(VALUE klass, VALUE str) {
+static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
   unsigned char *newStr;
   VALUE rb_str;
   unsigned long newLen, oldLen;

@@ -178,7 +178,7 @@ describe Mysql2::Result do
 
     it "should return Time for a DATETIME value when within the supported range" do
       @test_result['date_time_test'].class.should eql(Time)
-      @test_result['date_time_test'].strftime("%F %T").should eql('2010-04-04 11:44:00')
+      @test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S").should eql('2010-04-04 11:44:00')
     end
 
     if 1.size == 4 # 32bit
@@ -230,17 +230,17 @@ describe Mysql2::Result do
 
     it "should return Time for a TIMESTAMP value when within the supported range" do
       @test_result['timestamp_test'].class.should eql(Time)
-      @test_result['timestamp_test'].strftime("%F %T").should eql('2010-04-04 11:44:00')
+      @test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S").should eql('2010-04-04 11:44:00')
     end
 
     it "should return Time for a TIME value" do
       @test_result['time_test'].class.should eql(Time)
-      @test_result['time_test'].strftime("%F %T").should eql('2000-01-01 11:44:00')
+      @test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S").should eql('2000-01-01 11:44:00')
     end
 
     it "should return Date for a DATE value" do
       @test_result['date_test'].class.should eql(Date)
-      @test_result['date_test'].strftime("%F").should eql('2010-04-04')
+      @test_result['date_test'].strftime("%Y-%m-%d").should eql('2010-04-04')
     end
 
     it "should return String for an ENUM value" do

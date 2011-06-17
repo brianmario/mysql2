@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.11 (June 17th, 2011)
+* fix bug in Time/DateTime range detection
+* (win32) fix bug where the Mysql2::Client object wasn't cleaned up properly if interrupted during a query
+* add Mysql2::Result#count (aliased as size) to get the row count for the dataset
+  this can be especially helpful if you want to get the number of rows without having to inflate
+  the entire dataset into ruby (since this happens lazily)
+
 ## 0.2.10 (June 15th, 2011)
 * bug fix for Time/DateTime usage depending on 32/64bit Ruby
 

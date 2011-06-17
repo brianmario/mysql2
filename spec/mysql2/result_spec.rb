@@ -181,37 +181,50 @@ describe Mysql2::Result do
       @test_result['date_time_test'].strftime("%F %T").should eql('2010-04-04 11:44:00')
     end
 
-    it "should return DateTime for a DATETIME value when outside the supported range, Time if otherwise" do
-      if RUBY_PLATFORM =~ /mswin/
-        inside_year = 1970
-        outside_year = inside_year-1
-      else
-        inside_year = 1902
-        outside_year = inside_year-1
-      end
-      r = @client.query("SELECT CAST('#{inside_year}-1-1 01:01:01' AS DATETIME) as test")
-      if defined?(RUBY_ENGINE) && RUBY_ENGINE =~ /rbx/
-        klass = DateTime
-      else
-        klass = Time
-      end
-      r.first['test'].class.should eql(klass)
-
-      r = @client.query("SELECT CAST('#{outside_year}-1-1 01:01:01' AS DATETIME) as test")
-      r.first['test'].class.should eql(DateTime)
-    end
-
     if 1.size == 4 # 32bit
+      if RUBY_VERSION =~ /1.9/
+        klass = Time
+      else
+        klass = DateTime
+      end
+
+      it "should return DateTime when timestamp is < 1901-12-13 20:45:52" do
+                                      # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
+        r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
+        r.first['test'].class.should eql(klass)
+      end
+
       it "should return DateTime when timestamp is > 2038-01-19T03:14:07" do
                                       # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-        r.first['test'].class.should eql(DateTime)
+        r.first['test'].class.should eql(klass)
       end
     elsif 1.size == 8 # 64bit
-      it "should return Time when timestamp is > 2038-01-19T03:14:07" do
-                                      # 2038-01-19 03:14:07 is the max for 32bit Ruby 1.8
-        r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-        r.first['test'].class.should eql(Time)
+      if RUBY_VERSION =~ /1.9/
+        it "should return Time when timestamp is < 1901-12-13 20:45:52" do
+          r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
+          r.first['test'].class.should eql(Time)
+        end
+
+        it "should return Time when timestamp is > 2038-01-19T03:14:07" do
+          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+          r.first['test'].class.should eql(Time)
+        end
+      else
+        it "should return Time when timestamp is > 0138-12-31 11:59:59" do
+          r = @client.query("SELECT CAST('0139-1-1 00:00:00' AS DATETIME) as test")
+          r.first['test'].class.should eql(Time)
+        end
+
+        it "should return DateTime when timestamp is < 0139-1-1T00:00:00" do
+          r = @client.query("SELECT CAST('0138-12-31 11:59:59' AS DATETIME) as test")
+          r.first['test'].class.should eql(DateTime)
+        end
+
+        it "should return Time when timestamp is > 2038-01-19T03:14:07" do
+          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+          r.first['test'].class.should eql(Time)
+        end
       end
     end
 

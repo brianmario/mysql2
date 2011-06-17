@@ -26,6 +26,12 @@ static rb_encoding *binaryEncoding;
  * (0*31557600) + (1*2592000) + (1*86400) + (0*3600) + (0*60) + 0
  */
 #define MYSQL2_MIN_TIME 2678400ULL
+#elif SIZEOF_INT < SIZEOF_LONG // 64bit Ruby 1.8
+/* 0139-1-1 00:00:00 UTC
+ *
+ * (139*31557600) + (1*2592000) + (1*86400) + (0*3600) + (0*60) + 0
+ */
+#define MYSQL2_MIN_TIME 4389184800ULL
 #elif defined(NEGATIVE_TIME_T)
 /* 1901-12-13 20:45:52 UTC : The oldest time in 32-bit signed time_t.
  *

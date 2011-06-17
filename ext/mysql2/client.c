@@ -388,6 +388,27 @@ static VALUE do_query(void *args) {
 
   return Qnil;
 }
+#else
+static VALUE finish_and_mark_inactive(void *args) {
+  VALUE self;
+  MYSQL_RES *result;
+
+  self = (VALUE)args;
+
+  GET_CLIENT(self);
+
+  if (wrapper->active) {
+    // if we got here, the result hasn't been read off the wire yet
+    // so lets do that and then throw it away because we have no way
+    // of getting it back up to the caller from here
+    result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+    mysql_free_result(result);
+
+    wrapper->active = 0;
+  }
+
+  return Qnil;
+}
 #endif
 
 static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
@@ -451,7 +472,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 #else
   // this will just block until the result is ready
-  return rb_mysql_client_async_result(self);
+  return rb_ensure(rb_mysql_client_async_result, self, finish_and_mark_inactive, self);
 #endif
 }
 

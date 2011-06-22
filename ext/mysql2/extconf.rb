@@ -25,9 +25,9 @@ dirs = ENV['PATH'].split(File::PATH_SEPARATOR) + %w[
 
 GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5}"
 
-if RUBY_PLATFORM =~ /mswin|mingw/
+if RUBY_PLATFORM =~ /(mswin)|mingw/
   inc, lib = dir_config('mysql')
-  exit 1 unless have_library("libmysql")
+  exit 1 unless have_library($1 ? "libmysql" : "mysql")
 elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   mc = Dir[GLOB].first if mc == true
   cflags = `#{mc} --cflags`.chomp

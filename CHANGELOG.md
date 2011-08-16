@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.12 (August 16th, 2011)
+* ensure symbolized column names support encodings in 1.9
+* plugging sql vulnerability in mysql2 adapter
+
 ## 0.2.11 (June 17th, 2011)
 * fix bug in Time/DateTime range detection
 * (win32) fix bug where the Mysql2::Client object wasn't cleaned up properly if interrupted during a query

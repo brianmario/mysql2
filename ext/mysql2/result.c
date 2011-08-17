@@ -122,7 +122,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
 #ifdef HAVE_RUBY_ENCODING_H
       rb_enc_associate(colStr, rb_utf8_encoding());
 #endif
-      rb_field = ID2SYM(colStr);
+      rb_field = ID2SYM(rb_to_id(colStr));
     } else {
       rb_field = rb_str_new(field->name, field->name_length);
 #ifdef HAVE_RUBY_ENCODING_H

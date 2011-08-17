@@ -114,10 +114,15 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
+      VALUE colStr;
       char buf[field->name_length+1];
       memcpy(buf, field->name, field->name_length);
       buf[field->name_length] = 0;
-      rb_field = ID2SYM(rb_intern(buf));
+      colStr = rb_str_new2(buf);
+#ifdef HAVE_RUBY_ENCODING_H
+      rb_enc_associate(colStr, rb_utf8_encoding());
+#endif
+      rb_field = ID2SYM(rb_to_id(colStr));
     } else {
       rb_field = rb_str_new(field->name, field->name_length);
 #ifdef HAVE_RUBY_ENCODING_H

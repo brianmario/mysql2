@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.13 (August 16th, 2011)
+* fix stupid bug around symbol encoding support (thanks coderrr!)
+
 ## 0.2.12 (August 16th, 2011)
 * ensure symbolized column names support encodings in 1.9
 * plugging sql vulnerability in mysql2 adapter

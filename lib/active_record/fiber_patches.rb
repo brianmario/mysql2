@@ -89,6 +89,12 @@ module ActiveRecord
             [col.name, col]
           }]
         end
+        
+        @column_defaults = Hash.new do |h, table_name|
+          h[table_name] = Hash[columns[table_name].map { |col|
+            [col.name, col.default]
+          }]
+        end
 
         @primary_keys = Hash.new do |h, table_name|
           h[table_name] = with_connection do |conn|

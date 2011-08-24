@@ -4,6 +4,7 @@
 #ifndef _WIN32
 #include <sys/socket.h>
 #endif
+#include "wait_for_single_fd.h"
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
@@ -341,9 +342,7 @@ static VALUE do_query(void *args) {
   struct timeval tv;
   struct timeval* tvp;
   long int sec;
-  fd_set fdset;
   int retval;
-  int fd_set_fd;
   VALUE read_timeout;
 
   async_args = (struct async_query_args *)args;
@@ -364,14 +363,8 @@ static VALUE do_query(void *args) {
     tvp->tv_usec = 0;
   }
 
-  fd_set_fd = async_args->fd;
   for(;;) {
-    // the below code is largely from do_mysql
-    // http://github.com/datamapper/do
-    FD_ZERO(&fdset);
-    FD_SET(fd_set_fd, &fdset);
-
-    retval = rb_thread_select(fd_set_fd + 1, &fdset, NULL, NULL, tvp);
+    retval = rb_wait_for_single_fd(async_args->fd, RB_WAITFD_IN, tvp);
 
     if (retval == 0) {
       rb_raise(cMysql2Error, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));

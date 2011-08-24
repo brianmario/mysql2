@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.7 (August 16th, 2011)
+* ensure symbolized column names support encodings in 1.9
+
 ## 0.3.6 (June 17th, 2011)
 * fix bug in Time/DateTime range detection
 * (win32) fix bug where the Mysql2::Client object wasn't cleaned up properly if interrupted during a query
@@ -32,6 +35,13 @@
 * win32 bugfixes
 * BREAKING CHANGE: the ActiveRecord adapter has been pulled into Rails 3.1 and is no longer part of the gem
 * added Mysql2::Client.escape (class-level) for raw one-off non-encoding-aware escaping
+
+## 0.2.13 (August 16th, 2011)
+* fix stupid bug around symbol encoding support (thanks coderrr!)
+
+## 0.2.12 (August 16th, 2011)
+* ensure symbolized column names support encodings in 1.9
+* plugging sql vulnerability in mysql2 adapter
 
 ## 0.2.11 (June 17th, 2011)
 * fix bug in Time/DateTime range detection

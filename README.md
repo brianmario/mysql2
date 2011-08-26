@@ -6,7 +6,7 @@ This one is not.
 
 It also forces the use of UTF-8 [or binary] for the connection [and all strings in 1.9, unless Encoding.default_internal is set then it'll convert from UTF-8 to that encoding] and uses encoding-aware MySQL API calls where it can.
 
-The API consists of two clases:
+The API consists of two classes:
 
 Mysql2::Client - your connection to the database
 

@@ -1,6 +1,7 @@
 # encoding: UTF-8
-if defined? EventMachine
-  require 'spec_helper'
+require 'spec_helper'
+begin
+  require 'eventmachine'
   require 'mysql2/em'
 
   describe Mysql2::EM::Client do
@@ -44,6 +45,6 @@ if defined? EventMachine
       results[1].keys.should include("second_query")
     end
   end
-else
+rescue LoadError
   puts "EventMachine not installed, skipping the specs that use it"
 end

@@ -30,7 +30,7 @@ module Mysql2
         raise Mysql2::Error, "read_timeout must be a positive integer, you passed #{@read_timeout}"
       end
 
-      ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslciper))
+      ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher))
 
       user     = opts[:username]
       pass     = opts[:password]

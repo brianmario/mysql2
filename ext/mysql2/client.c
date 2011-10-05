@@ -234,6 +234,21 @@ static VALUE rb_mysql_client_close(VALUE self) {
   return Qnil;
 }
 
+static VALUE disconnect_and_raise(VALUE self, VALUE error) {
+  GET_CLIENT(self);
+
+  wrapper->closed = 1;
+  wrapper->active = 0;
+
+  // manually close the socket for read/write
+  // this feels dirty, but is there another way?
+  shutdown(wrapper->client->net.fd, 2);
+
+  rb_exc_raise(error);
+
+  return Qnil;
+}
+
 /*
  * mysql_send_query is unlikely to block since most queries are small
  * enough to fit in a socket buffer, but sometimes large UPDATE and
@@ -246,8 +261,11 @@ static VALUE nogvl_send_query(void *ptr) {
   long sql_len = RSTRING_LEN(args->sql);
 
   rv = mysql_send_query(args->mysql, sql, sql_len);
-
   return rv == 0 ? Qtrue : Qfalse;
+}
+
+static VALUE gvl_send_query(void *ptr) {
+  return rb_thread_blocking_region(nogvl_send_query, ptr, RUBY_UBF_IO, 0);
 }
 
 /*
@@ -321,21 +339,6 @@ struct async_query_args {
   int fd;
   VALUE self;
 };
-
-static VALUE disconnect_and_raise(VALUE self, VALUE error) {
-  GET_CLIENT(self);
-
-  wrapper->closed = 1;
-  wrapper->active = 0;
-
-  // manually close the socket for read/write
-  // this feels dirty, but is there another way?
-  shutdown(wrapper->client->net.fd, 2);
-
-  rb_exc_raise(error);
-
-  return Qnil;
-}
 
 static VALUE do_query(void *args) {
   struct async_query_args *async_args;
@@ -446,7 +449,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
 
-  if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
+  if (rb_rescue2(gvl_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0) == Qfalse) {
     // an error occurred, we're not active anymore
     MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(wrapper);

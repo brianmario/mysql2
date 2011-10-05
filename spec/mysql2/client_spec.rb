@@ -459,7 +459,6 @@ describe Mysql2::Client do
 
   it "shouldn't crash be left active with abort_on_exception" do
     client = Mysql2::Client.new(:reconnect => true)
-    class MyE < RuntimeError; end;
     Thread.abort_on_exception.should eql(false)
     lambda {
       Thread.abort_on_exception = true

@@ -457,7 +457,7 @@ describe Mysql2::Client do
     @client.ping.should eql(false)
   end
 
-  it "shouldn't crash be left active with abort_on_exception" do
+  it "should not get into an inconsistent state, if an exception is raised in the thread when we are in a blocking region" do
     client = Mysql2::Client.new(:reconnect => true)
     Thread.abort_on_exception.should eql(false)
     lambda {

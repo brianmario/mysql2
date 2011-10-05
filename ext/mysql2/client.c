@@ -299,6 +299,10 @@ static VALUE nogvl_store_result(void *ptr) {
   return (VALUE)result;
 }
 
+static VALUE gvl_store_result(void *ptr) {
+  return rb_thread_blocking_region(nogvl_store_result, ptr, RUBY_UBF_IO, 0);
+}
+
 static VALUE rb_mysql_client_async_result(VALUE self) {
   MYSQL_RES * result;
   VALUE resultObj;
@@ -318,7 +322,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
-  result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+  result = (MYSQL_RES *)rb_rescue2(gvl_store_result, (VALUE)wrapper, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
   if (result == NULL) {
     if (mysql_field_count(wrapper->client) != 0) {

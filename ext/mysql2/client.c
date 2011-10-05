@@ -280,6 +280,10 @@ static VALUE nogvl_read_query_result(void *ptr) {
   return res == 0 ? Qtrue : Qfalse;
 }
 
+static VALUE gvl_read_query_result(void *ptr) {
+  return rb_thread_blocking_region(nogvl_read_query_result, ptr, RUBY_UBF_IO, 0);
+}
+
 /* mysql_store_result may (unlikely) read rows off the socket */
 static VALUE nogvl_store_result(void *ptr) {
   mysql_client_wrapper *wrapper;
@@ -308,7 +312,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
 
   REQUIRE_OPEN_DB(wrapper);
-  if (rb_thread_blocking_region(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
+  if (rb_rescue2(gvl_read_query_result, (VALUE)wrapper->client, disconnect_and_raise, self, rb_eException, (VALUE)0) == Qfalse) {
     // an error occurred, mark this connection inactive
     MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(wrapper);

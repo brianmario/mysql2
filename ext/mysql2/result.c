@@ -80,7 +80,7 @@ static void rb_mysql_result_free(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   /* FIXME: this may call flush_use_result, which can hit the socket */
   rb_mysql_result_free_result(w);
-  xfree(wrapper);
+  free(wrapper);
 }
 
 /*

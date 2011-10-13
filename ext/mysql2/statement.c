@@ -38,10 +38,10 @@ static VALUE nogvl_execute(void *ptr) {
 #define FREE_BINDS                  \
  for (i = 0; i < argc; i++) {       \
    if (bind_buffers[i].buffer) {    \
-     xfree(bind_buffers[i].buffer); \
+     free(bind_buffers[i].buffer);  \
    }                                \
  }                                  \
- xfree(bind_buffers);
+ free(bind_buffers);
 
 /* call-seq: stmt.execute
  *
@@ -74,22 +74,22 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
         case T_FIXNUM:
 #if SIZEOF_INT < SIZEOF_LONG
           bind_buffers[i].buffer_type = MYSQL_TYPE_LONGLONG;
-          bind_buffers[i].buffer = xmalloc(sizeof(long long int));
+          bind_buffers[i].buffer = malloc(sizeof(long long int));
           *(long*)(bind_buffers[i].buffer) = FIX2LONG(argv[i]);
 #else
           bind_buffers[i].buffer_type = MYSQL_TYPE_LONG;
-          bind_buffers[i].buffer = xmalloc(sizeof(int));
+          bind_buffers[i].buffer = malloc(sizeof(int));
           *(long*)(bind_buffers[i].buffer) = FIX2INT(argv[i]);
 #endif
           break;
         case T_BIGNUM:
           bind_buffers[i].buffer_type = MYSQL_TYPE_LONGLONG;
-          bind_buffers[i].buffer = xmalloc(sizeof(long long int));
+          bind_buffers[i].buffer = malloc(sizeof(long long int));
           *(LONG_LONG*)(bind_buffers[i].buffer) = rb_big2ll(argv[i]);
           break;
         case T_FLOAT:
           bind_buffers[i].buffer_type = MYSQL_TYPE_DOUBLE;
-          bind_buffers[i].buffer = xmalloc(sizeof(double));
+          bind_buffers[i].buffer = malloc(sizeof(double));
           *(double*)(bind_buffers[i].buffer) = NUM2DBL(argv[i]);
           break;
         case T_STRING:
@@ -103,7 +103,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           // TODO: what Ruby type should support MYSQL_TYPE_TIME
           if (CLASS_OF(argv[i]) == rb_cTime || CLASS_OF(argv[i]) == cDateTime) {
             bind_buffers[i].buffer_type = MYSQL_TYPE_DATETIME;
-            bind_buffers[i].buffer = xmalloc(sizeof(MYSQL_TIME));
+            bind_buffers[i].buffer = malloc(sizeof(MYSQL_TIME));
 
             MYSQL_TIME t;
             VALUE rb_time = argv[i];
@@ -120,7 +120,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
             *(MYSQL_TIME*)(bind_buffers[i].buffer) = t;
           } else if (CLASS_OF(argv[i]) == cDate) {
             bind_buffers[i].buffer_type = MYSQL_TYPE_NEWDATE;
-            bind_buffers[i].buffer = xmalloc(sizeof(MYSQL_TIME));
+            bind_buffers[i].buffer = malloc(sizeof(MYSQL_TIME));
 
             MYSQL_TIME t;
             VALUE rb_time = argv[i];
@@ -271,7 +271,7 @@ static VALUE each(VALUE self) {
         case MYSQL_TYPE_SET:          // char[]
         case MYSQL_TYPE_ENUM:         // char[]
         case MYSQL_TYPE_GEOMETRY:     // char[]
-          result_buffers[i].buffer = xmalloc(fields[i].max_length);
+          result_buffers[i].buffer = malloc(fields[i].max_length);
           result_buffers[i].buffer_length = fields[i].max_length;
           break;
         default:
@@ -287,13 +287,13 @@ static VALUE each(VALUE self) {
     if(mysql_stmt_bind_result(stmt, result_buffers)) {
       for(i = 0; i < field_count; i++) {
         if (result_buffers[i].buffer) {
-          xfree(result_buffers[i].buffer);
+          free(result_buffers[i].buffer);
         }
       }
-      xfree(result_buffers);
-      xfree(is_null);
-      xfree(error);
-      xfree(length);
+      free(result_buffers);
+      free(is_null);
+      free(error);
+      free(length);
       rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
     }
 
@@ -404,10 +404,10 @@ static VALUE each(VALUE self) {
       rb_yield(row);
     }
 
-    xfree(result_buffers);
-    xfree(is_null);
-    xfree(error);
-    xfree(length);
+    free(result_buffers);
+    free(is_null);
+    free(error);
+    free(length);
   }
 
   return self;

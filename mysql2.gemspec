@@ -10,7 +10,7 @@ Gem::Specification.new do |s|
   s.files = `git ls-files`.split("\n")
   s.homepage = %q{http://github.com/brianmario/mysql2}
   s.rdoc_options = ["--charset=UTF-8"]
-  s.require_paths = ["lib", "ext"]
+  s.require_paths = ["lib"]
   s.rubygems_version = %q{1.4.2}
   s.summary = %q{A simple, fast Mysql library for Ruby, binding to libmysql}
   s.test_files = `git ls-files spec examples`.split("\n")
@@ -18,6 +18,7 @@ Gem::Specification.new do |s|
   # tests
   s.add_development_dependency 'eventmachine'
   s.add_development_dependency 'rake-compiler', "~> 0.7.7"
+  s.add_development_dependency 'rake', '0.8.7' # NB: 0.8.7 required by rake-compiler 0.7.9
   s.add_development_dependency 'rspec'
   # benchmarks
   s.add_development_dependency 'activerecord'

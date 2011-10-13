@@ -6,7 +6,7 @@ This one is not.
 
 It also forces the use of UTF-8 [or binary] for the connection [and all strings in 1.9, unless Encoding.default_internal is set then it'll convert from UTF-8 to that encoding] and uses encoding-aware MySQL API calls where it can.
 
-The API consists of two clases:
+The API consists of two classes:
 
 Mysql2::Client - your connection to the database
 
@@ -214,7 +214,7 @@ This would be helpful if you wanted to iterate over the results in a streaming m
 
 ## ActiveRecord
 
-To use the ActiveRecord driver (with our without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
+To use the ActiveRecord driver (with or without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
 That was easy right? :)
 
 NOTE: as of 0.3.0, and ActiveRecord 3.1 - the ActiveRecord adapter has been pulled out of this gem and into ActiveRecord itself. If you need to use mysql2 with
@@ -222,8 +222,7 @@ Rails versions < 3.1 make sure and specify `gem "mysql2", "~> 0.2.7"` in your Ge
 
 ## Asynchronous ActiveRecord
 
-You can also use Mysql2 with asynchronous Rails (first introduced at http://www.mikeperham.com/2010/04/03/introducing-phat-an-asynchronous-rails-app/) by
-setting the adapter in your database.yml to "em_mysql2".  You must be running Ruby 1.9, thin and the rack-fiber_pool middleware for it to work.
+Please see the [em-synchrony](https://github.com/igrigorik/em-synchrony) project for details about using EventMachine with mysql2 and Rails.
 
 ## Sequel
 

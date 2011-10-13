@@ -1,5 +1,9 @@
 # Changelog
 
+## HEAD
+* remove fiber support from mysql2, the code has moved to the
+  em-synchrony gem.
+
 ## 0.3.7 (August 16th, 2011)
 * ensure symbolized column names support encodings in 1.9
 

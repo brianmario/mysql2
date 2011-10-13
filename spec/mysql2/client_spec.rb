@@ -457,6 +457,24 @@ describe Mysql2::Client do
     @client.ping.should eql(false)
   end
 
+  it "should not get into an inconsistent state, if an exception is raised in the thread when we are in a blocking region" do
+    client = Mysql2::Client.new(:reconnect => true)
+    Thread.abort_on_exception.should eql(false)
+    lambda {
+      Thread.abort_on_exception = true
+      th = Thread.new do
+        raise Mysql2::Error, "race condition"
+      end
+      client.query("select sleep (2)")
+    }.should raise_error(Mysql2::Error)
+      
+    lambda {
+      client.query("SELECT 1")
+    }.should_not raise_error(Mysql2::Error)
+
+    Thread.abort_on_exception = false
+  end
+
 if RUBY_VERSION =~ /1.9/
   it "should respond to #encoding" do
     @client.should respond_to(:encoding)

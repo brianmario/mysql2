@@ -15,6 +15,7 @@ module Mysql2
 
     def initialize(opts = {})
       @query_options = @@default_query_options.dup
+      @query_options.merge! opts
 
       init_connection
 

@@ -431,13 +431,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   REQUIRE_OPEN_DB(wrapper);
   args.mysql = wrapper->client;
 
-  // see if this connection is still waiting on a result from a previous query
-  if (wrapper->active == 0) {
-    // mark this connection active
-    wrapper->active = 1;
-  } else {
-    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
-  }
 
   defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
@@ -457,6 +450,14 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   // ensure the string is in the encoding the connection is expecting
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
+
+  // see if this connection is still waiting on a result from a previous query
+  if (wrapper->active == 0) {
+    // mark this connection active
+    wrapper->active = 1;
+  } else {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  }
 
   args.wrapper = wrapper;
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);

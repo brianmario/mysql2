@@ -46,6 +46,7 @@ struct nogvl_connect_args {
 struct nogvl_send_query_args {
   MYSQL *mysql;
   VALUE sql;
+  mysql_client_wrapper *wrapper;
 };
 
 /*
@@ -250,6 +251,17 @@ static VALUE nogvl_send_query(void *ptr) {
   return rv == 0 ? Qtrue : Qfalse;
 }
 
+static VALUE do_send_query(void *args) {
+  struct nogvl_send_query_args *query_args = args;
+  mysql_client_wrapper *wrapper = query_args->wrapper;
+  if (rb_thread_blocking_region(nogvl_send_query, args, RUBY_UBF_IO, 0) == Qfalse) {
+    // an error occurred, we're not active anymore
+    MARK_CONN_INACTIVE(self);
+    return rb_raise_mysql2_error(wrapper);
+  }
+  return Qnil;
+}
+
 /*
  * even though we did rb_thread_select before calling this, a large
  * response can overflow the socket buffers and cause us to eventually
@@ -419,13 +431,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   REQUIRE_OPEN_DB(wrapper);
   args.mysql = wrapper->client;
 
-  // see if this connection is still waiting on a result from a previous query
-  if (wrapper->active == 0) {
-    // mark this connection active
-    wrapper->active = 1;
-  } else {
-    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
-  }
 
   defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
@@ -446,11 +451,16 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
 
-  if (rb_thread_blocking_region(nogvl_send_query, &args, RUBY_UBF_IO, 0) == Qfalse) {
-    // an error occurred, we're not active anymore
-    MARK_CONN_INACTIVE(self);
-    return rb_raise_mysql2_error(wrapper);
+  // see if this connection is still waiting on a result from a previous query
+  if (wrapper->active == 0) {
+    // mark this connection active
+    wrapper->active = 1;
+  } else {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
   }
+
+  args.wrapper = wrapper;
+  rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
 #ifndef _WIN32
   if (!async) {

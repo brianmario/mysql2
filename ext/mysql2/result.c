@@ -139,7 +139,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
 }
 
 #ifdef HAVE_RUBY_ENCODING_H
-inline VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc) {
+static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc) {
   // if binary flag is set, respect it's wishes
   if (field.flags & BINARY_FLAG && field.charsetnr == 63) {
     rb_enc_associate(val, binaryEncoding);

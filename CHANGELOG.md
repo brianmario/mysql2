@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.17 (November 9th, 2011)
+
+## 0.2.16 (November 9th, 2011)
+
+## 0.2.15 (November 9th, 2011)
+
 ## 0.2.14 (November 9th, 2011)
 * use rb_wait_for_single_fd() if available
 * fixed a bug with inheriting query options

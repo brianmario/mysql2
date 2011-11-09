@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.14 (November 9th, 2011)
+* use rb_wait_for_single_fd() if available
+* fixed a bug with inheriting query options
+* remove ext/ from the default loadpath
+* fix build issues on OSX with Xcode 4.2 (gcc-llvm compiler)
+
 ## 0.2.13 (August 16th, 2011)
 * fix stupid bug around symbol encoding support (thanks coderrr!)
 

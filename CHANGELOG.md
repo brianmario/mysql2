@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.10 (November 9th, 2011)
+
+## 0.3.9 (November 9th, 2011)
+
 ## 0.3.8 (November 9th, 2011)
 * remove fiber support from mysql2, the code has moved to the
   em-synchrony gem.
@@ -43,6 +47,12 @@
 * win32 bugfixes
 * BREAKING CHANGE: the ActiveRecord adapter has been pulled into Rails 3.1 and is no longer part of the gem
 * added Mysql2::Client.escape (class-level) for raw one-off non-encoding-aware escaping
+
+## 0.2.17 (November 9th, 2011)
+
+## 0.2.16 (November 9th, 2011)
+
+## 0.2.15 (November 9th, 2011)
 
 ## 0.2.14 (November 9th, 2011)
 * use rb_wait_for_single_fd() if available

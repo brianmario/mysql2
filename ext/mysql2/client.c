@@ -460,9 +460,10 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   }
 
   args.wrapper = wrapper;
-  rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
 #ifndef _WIN32
+  rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
+
   if (!async) {
     async_args.fd = wrapper->client->net.fd;
     async_args.self = self;
@@ -474,6 +475,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     return Qnil;
   }
 #else
+  rb_ensure(do_send_query, (VALUE)&args, finish_and_mark_inactive, self);
   // this will just block until the result is ready
   return rb_ensure(rb_mysql_client_async_result, self, finish_and_mark_inactive, self);
 #endif

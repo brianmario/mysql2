@@ -475,7 +475,8 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
     return Qnil;
   }
 #else
-  rb_ensure(do_send_query, (VALUE)&args, finish_and_mark_inactive, self);
+  do_send_query(&args);
+
   // this will just block until the result is ready
   return rb_ensure(rb_mysql_client_async_result, self, finish_and_mark_inactive, self);
 #endif

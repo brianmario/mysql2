@@ -214,15 +214,15 @@ This would be helpful if you wanted to iterate over the results in a streaming m
 
 ### Streaming
 
-`Mysql2::Client` can optionally only fetch rows from the server on demand by setting `:streaming => true`. This is handy when handling very large result sets which might not fit in memory on the client.
+`Mysql2::Client` can optionally only fetch rows from the server on demand by setting `:stream => true`. This is handy when handling very large result sets which might not fit in memory on the client.
 
 ``` ruby
-result = client.query("SELECT * FROM really_big_Table", :streaming => true)
+result = client.query("SELECT * FROM really_big_Table", :stream => true)
 ```
 
 There are a few things that need to be kept in mind while using streaming:
 
-* `:cache_rows` is ignored currently. (if you want to use `:cache_rows` you probably don't want to be using `:streaming`)
+* `:cache_rows` is ignored currently. (if you want to use `:cache_rows` you probably don't want to be using `:stream`)
 * You must fetch all rows in the result set of your query before you can make new queries. (i.e. with `Mysql2::Result#each`)
 
 Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html.

@@ -471,12 +471,12 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       VALUE row;
 
       do {
-      row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
+        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
 
-      if (block != Qnil) {
-        rb_yield(row);
-        wrapper->lastRowProcessed++;
-      }
+        if (block != Qnil) {
+          rb_yield(row);
+          wrapper->lastRowProcessed++;
+        }
       } while(row != Qnil);
 
       rb_mysql_result_free_result(wrapper);
@@ -491,36 +491,36 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       // we've already read the entire dataset from the C result into our
       // internal array. Lets hand that over to the user since it's ready to go
       for (i = 0; i < wrapper->numberOfRows; i++) {
-      rb_yield(rb_ary_entry(wrapper->rows, i));
+        rb_yield(rb_ary_entry(wrapper->rows, i));
       }
     } else {
       unsigned long rowsProcessed = 0;
       rowsProcessed = RARRAY_LEN(wrapper->rows);
       for (i = 0; i < wrapper->numberOfRows; i++) {
-      VALUE row;
-      if (cacheRows && i < rowsProcessed) {
-        row = rb_ary_entry(wrapper->rows, i);
-      } else {
-        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
-        if (cacheRows) {
-        rb_ary_store(wrapper->rows, i, row);
+        VALUE row;
+        if (cacheRows && i < rowsProcessed) {
+          row = rb_ary_entry(wrapper->rows, i);
+        } else {
+          row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
+          if (cacheRows) {
+            rb_ary_store(wrapper->rows, i, row);
+          }
+          wrapper->lastRowProcessed++;
         }
-        wrapper->lastRowProcessed++;
-      }
 
-      if (row == Qnil) {
-        // we don't need the mysql C dataset around anymore, peace it
-        rb_mysql_result_free_result(wrapper);
-        return Qnil;
-      }
+        if (row == Qnil) {
+          // we don't need the mysql C dataset around anymore, peace it
+          rb_mysql_result_free_result(wrapper);
+          return Qnil;
+        }
 
-      if (block != Qnil) {
-        rb_yield(row);
-      }
+        if (block != Qnil) {
+          rb_yield(row);
+        }
       }
       if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
-      // we don't need the mysql C dataset around anymore, peace it
-      rb_mysql_result_free_result(wrapper);
+        // we don't need the mysql C dataset around anymore, peace it
+        rb_mysql_result_free_result(wrapper);
       }
     }
   }

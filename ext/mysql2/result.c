@@ -424,11 +424,11 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   if(rb_hash_aref(opts, sym_streaming) == Qtrue) {
-	streaming = 1;
+    streaming = 1;
   }
 
   if(streaming && cacheRows) {
-	rb_warn("cacheRows is ignored if streaming is true");
+    rb_warn("cacheRows is ignored if streaming is true");
   }
 
   dbTz = rb_hash_aref(opts, sym_database_timezone);
@@ -460,69 +460,69 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     }
     wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
   } else {
-	// We can't get number of rows if we're streaming,
-	// until we've finished fetching all rows
-	wrapper->numberOfRows = 0;
-	wrapper->rows = rb_ary_new();
+    // We can't get number of rows if we're streaming,
+    // until we've finished fetching all rows
+    wrapper->numberOfRows = 0;
+    wrapper->rows = rb_ary_new();
   }
 
   if (streaming) {
-	if(!wrapper->streamingComplete) {
-	  VALUE row;
+    if(!wrapper->streamingComplete) {
+      VALUE row;
 
-	  do {
-		row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
+      do {
+      row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
 
-		if (block != Qnil) {
-		  rb_yield(row);
-		  wrapper->lastRowProcessed++;
-		}
-	  } while(row != Qnil);
+      if (block != Qnil) {
+        rb_yield(row);
+        wrapper->lastRowProcessed++;
+      }
+      } while(row != Qnil);
 
-	  rb_mysql_result_free_result(wrapper);
+      rb_mysql_result_free_result(wrapper);
 
-	  wrapper->numberOfRows = wrapper->lastRowProcessed;
-	  wrapper->streamingComplete = 1;
-	} else {
-	  rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
-	}
+      wrapper->numberOfRows = wrapper->lastRowProcessed;
+      wrapper->streamingComplete = 1;
+    } else {
+      rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
+    }
   } else {
-	if (cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
-	  // we've already read the entire dataset from the C result into our
-	  // internal array. Lets hand that over to the user since it's ready to go
-	  for (i = 0; i < wrapper->numberOfRows; i++) {
-		rb_yield(rb_ary_entry(wrapper->rows, i));
-	  }
-	} else {
-	  unsigned long rowsProcessed = 0;
-	  rowsProcessed = RARRAY_LEN(wrapper->rows);
-	  for (i = 0; i < wrapper->numberOfRows; i++) {
-		VALUE row;
-		if (cacheRows && i < rowsProcessed) {
-		  row = rb_ary_entry(wrapper->rows, i);
-		} else {
-		  row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
-		  if (cacheRows) {
-			rb_ary_store(wrapper->rows, i, row);
-		  }
-		  wrapper->lastRowProcessed++;
-		}
+    if (cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
+      // we've already read the entire dataset from the C result into our
+      // internal array. Lets hand that over to the user since it's ready to go
+      for (i = 0; i < wrapper->numberOfRows; i++) {
+      rb_yield(rb_ary_entry(wrapper->rows, i));
+      }
+    } else {
+      unsigned long rowsProcessed = 0;
+      rowsProcessed = RARRAY_LEN(wrapper->rows);
+      for (i = 0; i < wrapper->numberOfRows; i++) {
+      VALUE row;
+      if (cacheRows && i < rowsProcessed) {
+        row = rb_ary_entry(wrapper->rows, i);
+      } else {
+        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
+        if (cacheRows) {
+        rb_ary_store(wrapper->rows, i, row);
+        }
+        wrapper->lastRowProcessed++;
+      }
 
-		if (row == Qnil) {
-		  // we don't need the mysql C dataset around anymore, peace it
-		  rb_mysql_result_free_result(wrapper);
-		  return Qnil;
-		}
+      if (row == Qnil) {
+        // we don't need the mysql C dataset around anymore, peace it
+        rb_mysql_result_free_result(wrapper);
+        return Qnil;
+      }
 
-		if (block != Qnil) {
-		  rb_yield(row);
-		}
-	  }
-	  if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
-		// we don't need the mysql C dataset around anymore, peace it
-		rb_mysql_result_free_result(wrapper);
-	  }
-	}
+      if (block != Qnil) {
+        rb_yield(row);
+      }
+      }
+      if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
+      // we don't need the mysql C dataset around anymore, peace it
+      rb_mysql_result_free_result(wrapper);
+      }
+    }
   }
 
   return wrapper->rows;

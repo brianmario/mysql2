@@ -806,7 +806,7 @@ void init_mysql2_client() {
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
-  sym_stream		  = ID2SYM(rb_intern("stream"));
+  sym_stream          = ID2SYM(rb_intern("stream"));
 
   intern_merge = rb_intern("merge");
   intern_error_number_eql = rb_intern("error_number=");

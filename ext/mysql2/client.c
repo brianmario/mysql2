@@ -9,7 +9,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE intern_encoding_from_charset;
-static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array;
+static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_streaming;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #define REQUIRE_OPEN_DB(wrapper) \
@@ -274,19 +274,32 @@ static VALUE nogvl_read_query_result(void *ptr) {
   return res == 0 ? Qtrue : Qfalse;
 }
 
-/* mysql_store_result may (unlikely) read rows off the socket */
-static VALUE nogvl_store_result(void *ptr) {
+static VALUE nogvl_do_result(void *ptr, char use_result) {
   mysql_client_wrapper *wrapper;
   MYSQL_RES *result;
 
   wrapper = (mysql_client_wrapper *)ptr;
-  result = mysql_store_result(wrapper->client);
+  if(use_result) {
+    result = mysql_use_result(wrapper->client);
+    // new commands can't be issued until this cursor is read all the way through
+  } else {
+    result = mysql_store_result(wrapper->client);
 
-  // once our result is stored off, this connection is
-  // ready for another command to be issued
-  wrapper->active = 0;
+    // once our result is stored off, this connection is
+    // ready for another command to be issued
+    wrapper->active = 0;
+  }
 
   return (VALUE)result;
+}
+
+/* mysql_store_result may (unlikely) read rows off the socket */
+static VALUE nogvl_store_result(void *ptr) {
+  return nogvl_do_result(ptr, 0);
+}
+
+static VALUE nogvl_use_result(void *ptr) {
+  return nogvl_do_result(ptr, 1);
 }
 
 static VALUE rb_mysql_client_async_result(VALUE self) {
@@ -308,7 +321,12 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
-  result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+  VALUE is_streaming = rb_hash_aref(rb_iv_get(self, "@query_options"), sym_streaming);
+  if(is_streaming == Qtrue) {
+    result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
+  } else {
+    result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+  }
 
   if (result == NULL) {
     if (mysql_field_count(wrapper->client) != 0) {
@@ -780,6 +798,7 @@ void init_mysql2_client() {
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
+  sym_streaming       = ID2SYM(rb_intern("streaming"));
 
   intern_merge = rb_intern("merge");
   intern_error_number_eql = rb_intern("error_number=");

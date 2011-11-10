@@ -9,7 +9,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE intern_encoding_from_charset;
-static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_streaming;
+static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #define REQUIRE_OPEN_DB(wrapper) \
@@ -321,7 +321,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
-  VALUE is_streaming = rb_hash_aref(rb_iv_get(self, "@query_options"), sym_streaming);
+  VALUE is_streaming = rb_hash_aref(rb_iv_get(self, "@query_options"), sym_stream);
   if(is_streaming == Qtrue) {
     result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
   } else {
@@ -798,7 +798,7 @@ void init_mysql2_client() {
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
-  sym_streaming       = ID2SYM(rb_intern("streaming"));
+  sym_stream		  = ID2SYM(rb_intern("stream"));
 
   intern_merge = rb_intern("merge");
   intern_error_number_eql = rb_intern("error_number=");

@@ -55,7 +55,7 @@ static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
           intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
-          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_streaming;
+          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream;
 static ID intern_merge;
 
 static void rb_mysql_result_mark(void * wrapper) {
@@ -423,7 +423,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     cast = 0;
   }
 
-  if(rb_hash_aref(opts, sym_streaming) == Qtrue) {
+  if(rb_hash_aref(opts, sym_stream) == Qtrue) {
     streaming = 1;
   }
 
@@ -587,7 +587,7 @@ void init_mysql2_result() {
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
   sym_cast           = ID2SYM(rb_intern("cast"));
-  sym_streaming		 = ID2SYM(rb_intern("streaming"));
+  sym_stream		 = ID2SYM(rb_intern("stream"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); //never GC

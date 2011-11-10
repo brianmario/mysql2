@@ -311,9 +311,10 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
 
   if (result == NULL) {
-    if (mysql_field_count(wrapper->client) != 0) {
+    if (mysql_errno(wrapper->client) != 0) {
       rb_raise_mysql2_error(wrapper);
     }
+    // no data and no error, so query was not a SELECT
     return Qnil;
   }
 

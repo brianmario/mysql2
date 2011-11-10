@@ -587,7 +587,7 @@ void init_mysql2_result() {
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
   sym_cast           = ID2SYM(rb_intern("cast"));
-  sym_stream		 = ID2SYM(rb_intern("stream"));
+  sym_stream         = ID2SYM(rb_intern("stream"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); //never GC

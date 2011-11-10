@@ -317,6 +317,15 @@ bundle install
 rake
 ```
 
+The tests require the "test" database to exist, and expect to connect
+both as root and the running user, both with a blank password:
+
+``` sql
+CREATE DATABASE test;
+CREATE USER '<user>'@'localhost' IDENTIFIED BY '';
+GRANT ALL PRIVILEGES ON test.* TO '<user>'@'localhost';
+```
+
 ## Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude

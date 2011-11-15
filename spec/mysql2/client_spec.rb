@@ -239,6 +239,32 @@ describe Mysql2::Client do
         result.class.should eql(Mysql2::Result)
       end
     end
+    
+    context "Multiple results sets" do
+      before(:each) do
+        @multi_client = Mysql2::Client.new( :flags => Mysql2::Client::MULTI_STATEMENTS)
+      end
+
+      it "returns multiple result sets" do
+        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'").first.should == { 'set_1' => 1 }
+
+        @multi_client.next_result.should == true
+        @multi_client.store_result.first.should == { 'set_2' => 2 }
+
+        @multi_client.next_result.should == false
+      end
+
+      it "does not interfere with other statements" do
+        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")
+        while( @multi_client.next_result )
+          @multi_client.store_result
+        end
+
+        @multi_client.query( "select 3 as 'next'").first.should == { 'next' => 3 }
+      end    
+    end
+    
+    
   end
 
   it "should respond to #socket" do

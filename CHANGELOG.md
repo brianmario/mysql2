@@ -1,8 +1,16 @@
 # Changelog
 
-## HEAD
+## 0.3.10 (November 9th, 2011)
+
+## 0.3.9 (November 9th, 2011)
+
+## 0.3.8 (November 9th, 2011)
 * remove fiber support from mysql2, the code has moved to the
   em-synchrony gem.
+* use rb_wait_for_single_fd() if available
+* fixed a bug with inheriting query options
+* remove ext/ from the default loadpath
+* fix build issues on OSX with Xcode 4.2 (gcc-llvm compiler)
 
 ## 0.3.7 (August 16th, 2011)
 * ensure symbolized column names support encodings in 1.9
@@ -39,6 +47,18 @@
 * win32 bugfixes
 * BREAKING CHANGE: the ActiveRecord adapter has been pulled into Rails 3.1 and is no longer part of the gem
 * added Mysql2::Client.escape (class-level) for raw one-off non-encoding-aware escaping
+
+## 0.2.17 (November 9th, 2011)
+
+## 0.2.16 (November 9th, 2011)
+
+## 0.2.15 (November 9th, 2011)
+
+## 0.2.14 (November 9th, 2011)
+* use rb_wait_for_single_fd() if available
+* fixed a bug with inheriting query options
+* remove ext/ from the default loadpath
+* fix build issues on OSX with Xcode 4.2 (gcc-llvm compiler)
 
 ## 0.2.13 (August 16th, 2011)
 * fix stupid bug around symbol encoding support (thanks coderrr!)

@@ -312,6 +312,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   if (result == NULL) {
     if (mysql_errno(wrapper->client) != 0) {
+      MARK_CONN_INACTIVE(self);
       rb_raise_mysql2_error(wrapper);
     }
     // no data and no error, so query was not a SELECT

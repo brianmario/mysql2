@@ -655,6 +655,10 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 {
   MYSQL_RES * result;
   VALUE resultObj;
+#ifdef HAVE_RUBY_ENCODING_H
+  mysql2_result_wrapper * result_wrapper;
+#endif
+  
   
   GET_CLIENT(self);
   // MYSQL_RES* res = mysql_store_result(wrapper->client);

@@ -46,6 +46,8 @@ struct nogvl_connect_args {
 struct nogvl_send_query_args {
   MYSQL *mysql;
   VALUE sql;
+  const char *sql_ptr;
+  long sql_len;
   mysql_client_wrapper *wrapper;
 };
 
@@ -243,10 +245,8 @@ static VALUE rb_mysql_client_close(VALUE self) {
 static VALUE nogvl_send_query(void *ptr) {
   struct nogvl_send_query_args *args = ptr;
   int rv;
-  const char *sql = StringValuePtr(args->sql);
-  long sql_len = RSTRING_LEN(args->sql);
 
-  rv = mysql_send_query(args->mysql, sql, sql_len);
+  rv = mysql_send_query(args->mysql, args->sql_ptr, args->sql_len);
 
   return rv == 0 ? Qtrue : Qfalse;
 }
@@ -452,6 +452,8 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   // ensure the string is in the encoding the connection is expecting
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
+  args.sql_ptr = StringValuePtr(args.sql);
+  args.sql_len = RSTRING_LEN(args.sql);
 
   // see if this connection is still waiting on a result from a previous query
   if (wrapper->active == 0) {

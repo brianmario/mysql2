@@ -114,12 +114,10 @@ static VALUE nogvl_connect(void *ptr) {
   struct nogvl_connect_args *args = ptr;
   MYSQL *client;
 
-  do {
-    client = mysql_real_connect(args->mysql, args->host,
-                                args->user, args->passwd,
-                                args->db, args->port, args->unix_socket,
-                                args->client_flag);
-  } while (! client && errno == EINTR && (errno = 0) == 0);
+  client = mysql_real_connect(args->mysql, args->host,
+                              args->user, args->passwd,
+                              args->db, args->port, args->unix_socket,
+                              args->client_flag);
 
   return client ? Qtrue : Qfalse;
 }
@@ -202,6 +200,7 @@ static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
 
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
+  VALUE rv;
   GET_CLIENT(self);
 
   args.host = NIL_P(host) ? "localhost" : StringValuePtr(host);
@@ -213,9 +212,14 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.mysql = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
 
-  if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
-    // unable to connect
-    return rb_raise_mysql2_error(wrapper);
+  rv = rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0);
+  if (rv == Qfalse) {
+    while (rv == Qfalse && errno == EINTR) {
+      errno = 0;
+      rv = rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0);
+    }
+    if (rv == Qfalse)
+      return rb_raise_mysql2_error(wrapper);
   }
 
   return self;

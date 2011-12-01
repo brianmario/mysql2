@@ -147,7 +147,7 @@ static VALUE nogvl_close(void *ptr) {
 #endif
 
     mysql_close(wrapper->client);
-    free(wrapper->client);
+    xfree(wrapper->client);
   }
 
   return Qnil;
@@ -158,7 +158,7 @@ static void rb_mysql_client_free(void * ptr) {
 
   nogvl_close(wrapper);
 
-  free(ptr);
+  xfree(ptr);
 }
 
 static VALUE allocate(VALUE klass) {
@@ -169,7 +169,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->active = 0;
   wrapper->reconnect_enabled = 0;
   wrapper->closed = 1;
-  wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
+  wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
 }
 
@@ -181,19 +181,19 @@ static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
   Check_Type(str, T_STRING);
 
   oldLen = RSTRING_LEN(str);
-  newStr = malloc(oldLen*2+1);
+  newStr = xmalloc(oldLen*2+1);
 
   newLen = mysql_escape_string((char *)newStr, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
-    free(newStr);
+    xfree(newStr);
     return str;
   } else {
     rb_str = rb_str_new((const char*)newStr, newLen);
 #ifdef HAVE_RUBY_ENCODING_H
     rb_enc_copy(rb_str, str);
 #endif
-    free(newStr);
+    xfree(newStr);
     return rb_str;
   }
 }
@@ -504,12 +504,12 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
 #endif
 
   oldLen = RSTRING_LEN(str);
-  newStr = malloc(oldLen*2+1);
+  newStr = xmalloc(oldLen*2+1);
 
   newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
-    free(newStr);
+    xfree(newStr);
     return str;
   } else {
     rb_str = rb_str_new((const char*)newStr, newLen);
@@ -519,7 +519,7 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
       rb_str = rb_str_export_to_enc(rb_str, default_internal_enc);
     }
 #endif
-    free(newStr);
+    xfree(newStr);
     return rb_str;
   }
 }

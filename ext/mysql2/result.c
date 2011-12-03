@@ -459,7 +459,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       return wrapper->rows;
     }
     wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
-  } else {
+  } else if (streaming == 1) {
     // We can't get number of rows if we're streaming,
     // until we've finished fetching all rows
     wrapper->numberOfRows = 0;

@@ -453,18 +453,18 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   if (wrapper->lastRowProcessed == 0) {
-    if(streaming == 0) {
+    if(streaming) {
+      // We can't get number of rows if we're streaming,
+      // until we've finished fetching all rows
+      wrapper->numberOfRows = 0;
+      wrapper->rows = rb_ary_new();
+    } else {
       wrapper->numberOfRows = mysql_num_rows(wrapper->result);
       if (wrapper->numberOfRows == 0) {
         wrapper->rows = rb_ary_new();
         return wrapper->rows;
       }
       wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
-    } else {
-      // We can't get number of rows if we're streaming,
-      // until we've finished fetching all rows
-      wrapper->numberOfRows = 0;
-      wrapper->rows = rb_ary_new();
     }
   }
 

@@ -46,6 +46,8 @@ struct nogvl_connect_args {
 struct nogvl_send_query_args {
   MYSQL *mysql;
   VALUE sql;
+  const char *sql_ptr;
+  long sql_len;
   mysql_client_wrapper *wrapper;
 };
 
@@ -118,12 +120,10 @@ static VALUE nogvl_connect(void *ptr) {
   struct nogvl_connect_args *args = ptr;
   MYSQL *client;
 
-  do {
-    client = mysql_real_connect(args->mysql, args->host,
-                                args->user, args->passwd,
-                                args->db, args->port, args->unix_socket,
-                                args->client_flag);
-  } while (! client && errno == EINTR && (errno = 0) == 0);
+  client = mysql_real_connect(args->mysql, args->host,
+                              args->user, args->passwd,
+                              args->db, args->port, args->unix_socket,
+                              args->client_flag);
 
   return client ? Qtrue : Qfalse;
 }
@@ -153,7 +153,7 @@ static VALUE nogvl_close(void *ptr) {
 #endif
 
     mysql_close(wrapper->client);
-    free(wrapper->client);
+    xfree(wrapper->client);
   }
 
   return Qnil;
@@ -164,7 +164,7 @@ static void rb_mysql_client_free(void * ptr) {
 
   nogvl_close(wrapper);
 
-  free(ptr);
+  xfree(ptr);
 }
 
 static VALUE allocate(VALUE klass) {
@@ -175,7 +175,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->active = 0;
   wrapper->reconnect_enabled = 0;
   wrapper->closed = 1;
-  wrapper->client = (MYSQL*)malloc(sizeof(MYSQL));
+  wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
 }
 
@@ -187,25 +187,26 @@ static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
   Check_Type(str, T_STRING);
 
   oldLen = RSTRING_LEN(str);
-  newStr = malloc(oldLen*2+1);
+  newStr = xmalloc(oldLen*2+1);
 
   newLen = mysql_escape_string((char *)newStr, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
-    free(newStr);
+    xfree(newStr);
     return str;
   } else {
     rb_str = rb_str_new((const char*)newStr, newLen);
 #ifdef HAVE_RUBY_ENCODING_H
     rb_enc_copy(rb_str, str);
 #endif
-    free(newStr);
+    xfree(newStr);
     return rb_str;
   }
 }
 
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
+  VALUE rv;
   GET_CLIENT(self);
 
   args.host = NIL_P(host) ? "localhost" : StringValuePtr(host);
@@ -217,9 +218,14 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.mysql = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
 
-  if (rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0) == Qfalse) {
-    // unable to connect
-    return rb_raise_mysql2_error(wrapper);
+  rv = rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0);
+  if (rv == Qfalse) {
+    while (rv == Qfalse && errno == EINTR) {
+      errno = 0;
+      rv = rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0);
+    }
+    if (rv == Qfalse)
+      return rb_raise_mysql2_error(wrapper);
   }
 
   return self;
@@ -249,10 +255,8 @@ static VALUE rb_mysql_client_close(VALUE self) {
 static VALUE nogvl_send_query(void *ptr) {
   struct nogvl_send_query_args *args = ptr;
   int rv;
-  const char *sql = StringValuePtr(args->sql);
-  long sql_len = RSTRING_LEN(args->sql);
 
-  rv = mysql_send_query(args->mysql, sql, sql_len);
+  rv = mysql_send_query(args->mysql, args->sql_ptr, args->sql_len);
 
   return rv == 0 ? Qtrue : Qfalse;
 }
@@ -458,6 +462,8 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   // ensure the string is in the encoding the connection is expecting
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
+  args.sql_ptr = StringValuePtr(args.sql);
+  args.sql_len = RSTRING_LEN(args.sql);
 
   // see if this connection is still waiting on a result from a previous query
   if (wrapper->active == 0) {
@@ -510,12 +516,12 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
 #endif
 
   oldLen = RSTRING_LEN(str);
-  newStr = malloc(oldLen*2+1);
+  newStr = xmalloc(oldLen*2+1);
 
   newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
     // no need to return a new ruby string if nothing changed
-    free(newStr);
+    xfree(newStr);
     return str;
   } else {
     rb_str = rb_str_new((const char*)newStr, newLen);
@@ -525,7 +531,7 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
       rb_str = rb_str_export_to_enc(rb_str, default_internal_enc);
     }
 #endif
-    free(newStr);
+    xfree(newStr);
     return rb_str;
   }
 }

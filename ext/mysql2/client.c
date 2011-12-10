@@ -285,15 +285,13 @@ static VALUE nogvl_do_result(void *ptr, char use_result) {
   wrapper = (mysql_client_wrapper *)ptr;
   if(use_result) {
     result = mysql_use_result(wrapper->client);
-    // new commands can't be issued until this cursor is read all the way through
   } else {
     result = mysql_store_result(wrapper->client);
-
-    // once our result is stored off, this connection is
-    // ready for another command to be issued
-    wrapper->active = 0;
   }
 
+  // once our result is stored off, this connection is
+  // ready for another command to be issued
+  wrapper->active = 0;
   return (VALUE)result;
 }
 

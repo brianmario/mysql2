@@ -92,6 +92,22 @@ describe Mysql2::Client do
   end
 
   context "#query" do
+    it "should let you query again if iterating is finished when streaming" do
+      @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).each {}
+
+      expect {
+        @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false)
+      }.to_not raise_exception(Mysql2::Error)
+    end
+
+    it "should not let you query again if iterating is not finished when streaming" do
+      @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).first
+
+      expect {
+        @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false)
+      }.to raise_exception(Mysql2::Error)
+    end
+
     it "should only accept strings as the query parameter" do
       lambda {
         @client.query ["SELECT 'not right'"]

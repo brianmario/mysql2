@@ -73,6 +73,25 @@ describe Mysql2::Result do
       result = @client.query "SELECT 1", :cache_rows => false
       result.first.object_id.should_not eql(result.first.object_id)
     end
+
+    it "should yield different value for #first if streaming" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
+      result.first.should_not eql(result.first)
+    end
+
+    it "should yield the same value for #first if streaming is disabled" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :stream => false
+      result.first.should eql(result.first)
+    end
+
+    it "should throw an exception if we try to iterate twice when streaming is enabled" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
+
+      expect {
+        result.each {}
+        result.each {}
+      }.to raise_exception(Mysql2::Error)
+    end
   end
 
   context "#fields" do

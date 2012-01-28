@@ -571,6 +571,49 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
   }
 }
 
+static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
+  int result;
+  void *retval = NULL;
+  unsigned int intval = 0;
+  my_bool boolean;
+
+  GET_CLIENT(self);
+
+  REQUIRE_OPEN_DB(wrapper);
+
+  if (NIL_P(value))
+      return Qfalse;
+
+  switch(opt) {
+    case MYSQL_OPT_CONNECT_TIMEOUT:
+      intval = NUM2INT(value);
+      retval = &intval;
+      break;
+
+    case MYSQL_OPT_LOCAL_INFILE:
+    case MYSQL_OPT_RECONNECT:
+      intval = (value == Qfalse ? 0 : 1);
+      retval = &intval;
+      break;
+
+    default:
+      return Qfalse;
+  }
+
+  result = mysql_options(wrapper->client, opt, retval);
+  if (result)
+    rb_warn("%s\n", mysql_error(wrapper->client));
+
+  // Zero means success
+  return INT2NUM(result == 0);
+}
+
+static VALUE rb_mysql_client_options(VALUE self, VALUE option, VALUE value) {
+  Check_Type(option, T_FIXNUM);
+  int opt = NUM2INT(option);
+  return _mysql_client_options(self, opt, value);
+}
+
 /* call-seq:
  *    client.info
  *
@@ -820,37 +863,12 @@ static VALUE rb_mysql_client_encoding(VALUE self) {
 #endif
 
 static VALUE set_reconnect(VALUE self, VALUE value) {
-  my_bool reconnect;
-  GET_CLIENT(self);
+  return _mysql_client_options(self, MYSQL_OPT_RECONNECT, value);
 
-  if(!NIL_P(value)) {
-    reconnect = value == Qfalse ? 0 : 1;
-
-    wrapper->reconnect_enabled = reconnect;
-    /* set default reconnect behavior */
-    if (mysql_options(wrapper->client, MYSQL_OPT_RECONNECT, &reconnect)) {
-      /* TODO: warning - unable to set reconnect behavior */
-      rb_warn("%s\n", mysql_error(wrapper->client));
-    }
-  }
-  return value;
 }
 
 static VALUE set_connect_timeout(VALUE self, VALUE value) {
-  unsigned int connect_timeout = 0;
-  GET_CLIENT(self);
-
-  if(!NIL_P(value)) {
-    connect_timeout = NUM2INT(value);
-    if(0 == connect_timeout) return value;
-
-    /* set default connection timeout behavior */
-    if (mysql_options(wrapper->client, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout)) {
-      /* TODO: warning - unable to set connection timeout */
-      rb_warn("%s\n", mysql_error(wrapper->client));
-    }
-  }
-  return value;
+  return _mysql_client_options(self, MYSQL_OPT_CONNECT_TIMEOUT, value);
 }
 
 static VALUE set_charset_name(VALUE self, VALUE value) {
@@ -951,6 +969,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "more_results", rb_mysql_client_more_results, 0);
   rb_define_method(cMysql2Client, "next_result", rb_mysql_client_next_result, 0);
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
+  rb_define_method(cMysql2Client, "options", rb_mysql_client_options, 1);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif

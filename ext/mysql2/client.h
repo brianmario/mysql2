@@ -40,4 +40,3 @@ typedef struct {
 } mysql_client_wrapper;
 
 #endif
-

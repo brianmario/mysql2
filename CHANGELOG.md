@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.12 (December 26th, 2011)
+* add :local_infile option.
+
 ## 0.3.11 (December 6th, 2011)
 * change mysql error detection strategy from using mysql_field_count to the more explicit mysql_errno
 * bugfix to avoid race condition with active connections that error out

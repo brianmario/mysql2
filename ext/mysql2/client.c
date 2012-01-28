@@ -864,7 +864,10 @@ static VALUE rb_mysql_client_encoding(VALUE self) {
 
 static VALUE set_reconnect(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_OPT_RECONNECT, value);
+}
 
+static VALUE set_local_infile(VALUE self, VALUE value) {
+  return _mysql_client_options(self, MYSQL_OPT_LOCAL_INFILE, value);
 }
 
 static VALUE set_connect_timeout(VALUE self, VALUE value) {
@@ -976,6 +979,7 @@ void init_mysql2_client() {
 
   rb_define_private_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
+  rb_define_private_method(cMysql2Client, "local_infile=", set_local_infile, 1);
   rb_define_private_method(cMysql2Client, "charset_name=", set_charset_name, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "init_connection", init_connection, 0);

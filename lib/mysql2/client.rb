@@ -19,10 +19,12 @@ module Mysql2
 
       init_connection
 
-      [:reconnect, :connect_timeout].each do |key|
+      # Set MySQL connection options (each one is a call to mysql_options())
+      [:reconnect, :connect_timeout, :local_infile].each do |key|
         next unless opts.key?(key)
         send(:"#{key}=", opts[key])
       end
+
       # force the encoding to utf8
       self.charset_name = opts[:encoding] || 'utf8'
 

@@ -85,6 +85,27 @@ results.each(:as => :array) do |row|
 end
 ```
 
+## Connection options
+
+You may set the following connection options in Mysql2::Client.new(...):
+
+``` ruby
+Mysql2::Client.new(
+  :host,
+  :username,
+  :password,
+  :port,
+  :database,
+  :socket = '/path/to/mysql.sock',
+  :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
+  :encoding = 'utf8',
+  :read_timeout = seconds,
+  :connect_timeout = seconds,
+  :reconnect = true/false,
+  :local_infile = true/false,
+  )
+```
+
 ## Cascading config
 
 The default config hash is at:

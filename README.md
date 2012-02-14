@@ -85,6 +85,22 @@ results.each(:as => :array) do |row|
 end
 ```
 
+You can also retrieve multiple result sets. For this to work you need to connect with
+flags `Mysql2::Client::MULTI_STATEMENTS`. Using multiple result sets is normally used
+when calling stored procedures that return more than one result set
+
+``` ruby
+client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS )
+result = client.query( 'CALL sp_customer_list( 25, 10 )')
+# result now contains the first result set
+while ( client.next_result)
+    result = client.store_result
+    # result now contains the next result set
+end
+```
+
+See https://gist.github.com/1367987 for using MULTI_STATEMENTS with ActiveRecord.
+
 ## Cascading config
 
 The default config hash is at:

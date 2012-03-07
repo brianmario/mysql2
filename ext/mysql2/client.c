@@ -637,6 +637,20 @@ static VALUE rb_mysql_client_thread_id(VALUE self) {
   return ULL2NUM(retVal);
 }
 
+static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
+{
+  unsigned long retVal;
+  GET_CLIENT(self);
+  REQUIRE_OPEN_DB(wrapper);
+
+  retVal = mysql_select_db(wrapper->client, StringValuePtr(db));
+
+  if (retVal != 0) {
+    rb_raise_mysql2_error(wrapper);
+  }
+  return ULL2NUM(retVal);
+}
+
 static VALUE nogvl_ping(void *ptr) {
   MYSQL *client = ptr;
 
@@ -785,6 +799,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
+  rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif

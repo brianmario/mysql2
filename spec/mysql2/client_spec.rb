@@ -200,7 +200,7 @@ describe Mysql2::Client do
           end
         rescue Timeout::Error
         end
-        
+
         lambda {
           @client.query("SELECT 1")
         }.should raise_error(Mysql2::Error, 'closed MySQL connection')
@@ -465,6 +465,10 @@ describe Mysql2::Client do
 
   it "should respond to #ping" do
     @client.should respond_to(:ping)
+  end
+
+  it "should respond to #select_db" do
+    @client.should respond_to(:select_db)
   end
 
   it "#thread_id should return a boolean" do

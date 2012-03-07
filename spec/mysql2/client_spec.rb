@@ -467,9 +467,45 @@ describe Mysql2::Client do
     @client.should respond_to(:ping)
   end
 
-  it "should respond to #select_db" do
-    @client.should respond_to(:select_db)
+  context "select_db" do
+    before(:each) do
+      2.times do |i|
+        @client.query("CREATE DATABASE test_selectdb_#{i}")
+        @client.query("USE test_selectdb_#{i}")
+        @client.query("CREATE TABLE test#{i} (`id` int NOT NULL PRIMARY KEY)")
+      end
+    end
+
+    after(:each) do
+      2.times do |i|
+        @client.query("DROP DATABASE test_selectdb_#{i}")
+      end
+    end
+
+    it "should respond to #select_db" do
+      @client.should respond_to(:select_db)
+    end
+
+    it "should switch databases" do
+      @client.select_db("test_selectdb_0")
+      @client.query("SHOW TABLES").first.values.first.should eql("test0")
+      @client.select_db("test_selectdb_1")
+      @client.query("SHOW TABLES").first.values.first.should eql("test1")
+      @client.select_db("test_selectdb_0")
+      @client.query("SHOW TABLES").first.values.first.should eql("test0")
+    end
+
+    it "should raise a Mysql2::Error when the database doesn't exist" do
+      lambda {
+        @client.select_db("nopenothere")
+      }.should raise_error(Mysql2::Error)
+    end
+
+    it "should return the database switched to" do
+      @client.select_db("test_selectdb_1").should eq("test_selectdb_1")
+    end
   end
+
 
   it "#thread_id should return a boolean" do
     @client.ping.should eql(true)

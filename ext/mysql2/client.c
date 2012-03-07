@@ -648,7 +648,8 @@ static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
   if (retVal != 0) {
     rb_raise_mysql2_error(wrapper);
   }
-  return ULL2NUM(retVal);
+
+  return db;
 }
 
 static VALUE nogvl_ping(void *ptr) {

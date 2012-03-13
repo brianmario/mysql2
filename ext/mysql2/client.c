@@ -57,7 +57,7 @@ struct nogvl_send_query_args {
  */
 struct nogvl_select_db_args {
   MYSQL *mysql;
-  VALUE db;
+  char *db;
 };
 
 /*
@@ -649,7 +649,7 @@ static VALUE rb_mysql_client_thread_id(VALUE self) {
 static VALUE nogvl_select_db(void *ptr) {
   struct nogvl_select_db_args *args = ptr;
 
-  if (mysql_select_db(args->mysql, StringValuePtr(args->db)) == 0)
+  if (mysql_select_db(args->mysql, args->db) == 0)
     return Qtrue;
   else
     return Qfalse;
@@ -663,7 +663,7 @@ static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
   REQUIRE_OPEN_DB(wrapper);
 
   args.mysql = wrapper->client;
-  args.db = db;
+  args.db = StringValuePtr(db);
 
   if (rb_thread_blocking_region(nogvl_select_db, &args, RUBY_UBF_IO, 0) == Qfalse)
     rb_raise_mysql2_error(wrapper); 

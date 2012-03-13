@@ -52,6 +52,15 @@ struct nogvl_send_query_args {
 };
 
 /*
+ * used to pass all arguments to mysql_select_db while inside
+ * rb_thread_blocking_region
+ */
+struct nogvl_select_db_args {
+  MYSQL *mysql;
+  char *db;
+};
+
+/*
  * non-blocking mysql_*() functions that we won't be wrapping since
  * they do not appear to hit the network nor issue any interruptible
  * or blocking system calls.
@@ -637,6 +646,31 @@ static VALUE rb_mysql_client_thread_id(VALUE self) {
   return ULL2NUM(retVal);
 }
 
+static VALUE nogvl_select_db(void *ptr) {
+  struct nogvl_select_db_args *args = ptr;
+
+  if (mysql_select_db(args->mysql, args->db) == 0)
+    return Qtrue;
+  else
+    return Qfalse;
+}
+
+static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
+{
+  struct nogvl_select_db_args args;
+
+  GET_CLIENT(self);
+  REQUIRE_OPEN_DB(wrapper);
+
+  args.mysql = wrapper->client;
+  args.db = StringValuePtr(db);
+
+  if (rb_thread_blocking_region(nogvl_select_db, &args, RUBY_UBF_IO, 0) == Qfalse)
+    rb_raise_mysql2_error(wrapper); 
+
+  return db;
+}
+
 static VALUE nogvl_ping(void *ptr) {
   MYSQL *client = ptr;
 
@@ -785,6 +819,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
+  rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif

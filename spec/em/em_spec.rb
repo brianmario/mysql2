@@ -62,24 +62,47 @@ begin
       }.should raise_error
     end
 
-    it "should swallow exceptions raised in by the client" do
-      errors = []
-      error = StandardError.new('some error')
-      EM.run do
-        client = Mysql2::EM::Client.new
-        defer = client.query "SELECT sleep(0.1) as first_query"
-        client.stub(:async_result).and_raise(error)
-        defer.callback do |result|
-          # This _shouldn't_ be run, but it needed to prevent the specs from
-          # freezing if this test fails.
-          EM.stop_event_loop
+    context 'when an exception is raised by the client' do
+      let(:client) { Mysql2::EM::Client.new }
+      let(:error) { StandardError.new('some error') }
+      before { client.stub(:async_result).and_raise(error) }
+
+      it "should swallow exceptions raised in by the client" do
+        errors = []
+        EM.run do
+          defer = client.query "SELECT sleep(0.1) as first_query"
+          defer.callback do |result|
+            # This _shouldn't_ be run, but it is needed to prevent the specs from
+            # freezing if this test fails.
+            EM.stop_event_loop
+          end
+          defer.errback do |err|
+            errors << err
+            EM.stop_event_loop
+          end
         end
-        defer.errback do |err|
-          errors << err
-          EM.stop_event_loop
-        end
+        errors.should == [error]
       end
-      errors.should == [error]
+
+      it "should fail the deferrable" do
+        callbacks_run = []
+        EM.run do
+          defer = client.query "SELECT sleep(0.025) as first_query"
+          EM.add_timer(0.1) do
+            defer.callback do |result|
+              callbacks_run << :callback
+              # This _shouldn't_ be run, but it is needed to prevent the specs from
+              # freezing if this test fails.
+              EM.stop_event_loop
+            end
+            defer.errback do |err|
+              callbacks_run << :errback
+              EM.stop_event_loop
+            end
+          end
+        end
+        callbacks_run.should == [:errback]
+      end
     end
   end
 rescue LoadError

@@ -18,8 +18,9 @@ module Mysql2
             result = @client.async_result
           rescue Exception => e
             @deferable.fail(e)
+          else
+            @deferable.succeed(result)
           end
-          @deferable.succeed(result)
         end
       end
 

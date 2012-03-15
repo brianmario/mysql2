@@ -44,6 +44,43 @@ begin
       results[0].keys.should include("first_query")
       results[1].keys.should include("second_query")
     end
+
+    it "should not swallow exceptions raised in callbacks" do
+      lambda {
+        EM.run do
+          client = Mysql2::EM::Client.new
+          defer = client.query "SELECT sleep(0.1) as first_query"
+          defer.callback do |result|
+            raise 'some error'
+          end
+          defer.errback do |err|
+            # This _shouldn't_ be run, but it needed to prevent the specs from
+            # freezing if this test fails.
+            EM.stop_event_loop
+          end
+        end
+      }.should raise_error
+    end
+
+    it "should swallow exceptions raised in by the client" do
+      errors = []
+      error = StandardError.new('some error')
+      EM.run do
+        client = Mysql2::EM::Client.new
+        defer = client.query "SELECT sleep(0.1) as first_query"
+        client.stub(:async_result).and_raise(error)
+        defer.callback do |result|
+          # This _shouldn't_ be run, but it needed to prevent the specs from
+          # freezing if this test fails.
+          EM.stop_event_loop
+        end
+        defer.errback do |err|
+          errors << err
+          EM.stop_event_loop
+        end
+      end
+      errors.should == [error]
+    end
   end
 rescue LoadError
   puts "EventMachine not installed, skipping the specs that use it"

@@ -62,13 +62,13 @@ end
   asplode h unless have_header h
 end
 
-unless RUBY_PLATFORM =~ /mswin/ or RUBY_PLATFORM =~ /sparc/
+# GCC specific flags
+if RbConfig::MAKEFILE_CONFIG['CC'] =~ /gcc/
   $CFLAGS << ' -Wall -funroll-loops'
-end
-# $CFLAGS << ' -O0 -ggdb3 -Wextra'
 
-if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
-	$LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"
+  if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
+    $LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"
+  end
 end
 
 create_makefile('mysql2/mysql2')

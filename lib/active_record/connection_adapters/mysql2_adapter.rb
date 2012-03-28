@@ -386,6 +386,20 @@ module ActiveRecord
         tables
       end
 
+      def table_exists?(name)
+        return true if super
+
+        name          = name.to_s
+        schema, table = name.split('.', 2)
+
+        unless table # A table was provided without a schema
+          table  = schema
+          schema = nil
+        end
+
+        tables(nil, schema).include? table
+      end
+
       def drop_table(table_name, options = {})
         super(table_name, options)
       end

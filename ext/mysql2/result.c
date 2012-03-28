@@ -536,8 +536,11 @@ static VALUE rb_mysql_result_count(VALUE self) {
   mysql2_result_wrapper *wrapper;
 
   GetMysql2Result(self, wrapper);
-
-  return INT2FIX(mysql_num_rows(wrapper->result));
+  if(wrapper->resultFreed) {
+    return LONG2NUM(RARRAY_LEN(wrapper->rows));
+  } else {
+    return INT2FIX(mysql_num_rows(wrapper->result));
+  }
 }
 
 /* Mysql2::Result */

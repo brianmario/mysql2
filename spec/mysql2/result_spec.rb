@@ -10,6 +10,14 @@ describe Mysql2::Result do
     @result = @client.query "SELECT 1"
   end
 
+  it "should maintain a count while streaming" do
+    result = @client.query('SELECT 1')
+
+    result.count.should eql(1)
+    result.each { |r| }
+    result.count.should eql(1)
+  end
+
   it "should have included Enumerable" do
     Mysql2::Result.ancestors.include?(Enumerable).should be_true
   end

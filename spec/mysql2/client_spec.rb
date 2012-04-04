@@ -200,7 +200,7 @@ describe Mysql2::Client do
           end
         rescue Timeout::Error
         end
-        
+
         lambda {
           @client.query("SELECT 1")
         }.should raise_error(Mysql2::Error, 'closed MySQL connection')
@@ -255,6 +255,32 @@ describe Mysql2::Client do
         result.class.should eql(Mysql2::Result)
       end
     end
+    
+    context "Multiple results sets" do
+      before(:each) do
+        @multi_client = Mysql2::Client.new( :flags => Mysql2::Client::MULTI_STATEMENTS)
+      end
+
+      it "returns multiple result sets" do
+        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'").first.should == { 'set_1' => 1 }
+
+        @multi_client.next_result.should == true
+        @multi_client.store_result.first.should == { 'set_2' => 2 }
+
+        @multi_client.next_result.should == false
+      end
+
+      it "does not interfere with other statements" do
+        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")
+        while( @multi_client.next_result )
+          @multi_client.store_result
+        end
+
+        @multi_client.query( "select 3 as 'next'").first.should == { 'next' => 3 }
+      end    
+    end
+    
+    
   end
 
   it "should respond to #socket" do
@@ -466,6 +492,46 @@ describe Mysql2::Client do
   it "should respond to #ping" do
     @client.should respond_to(:ping)
   end
+
+  context "select_db" do
+    before(:each) do
+      2.times do |i|
+        @client.query("CREATE DATABASE test_selectdb_#{i}")
+        @client.query("USE test_selectdb_#{i}")
+        @client.query("CREATE TABLE test#{i} (`id` int NOT NULL PRIMARY KEY)")
+      end
+    end
+
+    after(:each) do
+      2.times do |i|
+        @client.query("DROP DATABASE test_selectdb_#{i}")
+      end
+    end
+
+    it "should respond to #select_db" do
+      @client.should respond_to(:select_db)
+    end
+
+    it "should switch databases" do
+      @client.select_db("test_selectdb_0")
+      @client.query("SHOW TABLES").first.values.first.should eql("test0")
+      @client.select_db("test_selectdb_1")
+      @client.query("SHOW TABLES").first.values.first.should eql("test1")
+      @client.select_db("test_selectdb_0")
+      @client.query("SHOW TABLES").first.values.first.should eql("test0")
+    end
+
+    it "should raise a Mysql2::Error when the database doesn't exist" do
+      lambda {
+        @client.select_db("nopenothere")
+      }.should raise_error(Mysql2::Error)
+    end
+
+    it "should return the database switched to" do
+      @client.select_db("test_selectdb_1").should eq("test_selectdb_1")
+    end
+  end
+
 
   it "#thread_id should return a boolean" do
     @client.ping.should eql(true)

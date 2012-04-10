@@ -223,7 +223,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 
   rv = rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0);
   if (rv == Qfalse) {
-    while (rv == Qfalse && errno == EINTR) {
+    while (rv == Qfalse && errno == EINTR && !mysql_errno(wrapper->client)) {
       errno = 0;
       rv = rb_thread_blocking_region(nogvl_connect, &args, RUBY_UBF_IO, 0);
     }

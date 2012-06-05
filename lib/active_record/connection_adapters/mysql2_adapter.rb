@@ -314,13 +314,13 @@ module ActiveRecord
       end
 
       def add_limit_offset!(sql, options)
-        limit, offset = options[:limit], options[:offset]
+        limit, offset = options.fetch(:limit, 99999999999), options[:offset]
         if limit && offset
           sql << " LIMIT #{offset.to_i}, #{sanitize_limit(limit)}"
         elsif limit
           sql << " LIMIT #{sanitize_limit(limit)}"
         elsif offset
-          sql << " OFFSET #{offset.to_i}"
+          sql << " LIMIT #{sanitize_limit(limit)} OFFSET #{offset.to_i}"
         end
         sql
       end

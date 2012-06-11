@@ -18,6 +18,14 @@ describe Mysql2::Result do
     result.count.should eql(1)
   end
 
+  it "should set the actual count of rows after streaming" do
+      @client.query "USE test"
+      result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
+      result.count.should eql(0)
+      result.each {|r|  }
+      result.count.should eql(1)
+  end
+
   it "should have included Enumerable" do
     Mysql2::Result.ancestors.include?(Enumerable).should be_true
   end

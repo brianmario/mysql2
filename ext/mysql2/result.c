@@ -478,7 +478,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       do {
         row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast, fields);
 
-        if (block != Qnil) {
+        if (block != Qnil && row != Qnil) {
           rb_yield(row);
           wrapper->lastRowProcessed++;
         }
@@ -541,12 +541,7 @@ static VALUE rb_mysql_result_count(VALUE self) {
   GetMysql2Result(self, wrapper);
   if(wrapper->resultFreed) {
     if (wrapper->streamingComplete){
-      if(wrapper->numberOfRows > 0){
-        // -1 is necessary because the final nil row is yielded
-        return LONG2NUM(wrapper->numberOfRows - 1);
-      }else{
-        return LONG2NUM(0);
-      }
+      return LONG2NUM(wrapper->numberOfRows);
     } else {
       return LONG2NUM(RARRAY_LEN(wrapper->rows));
     }

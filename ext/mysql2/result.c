@@ -541,7 +541,12 @@ static VALUE rb_mysql_result_count(VALUE self) {
   GetMysql2Result(self, wrapper);
   if(wrapper->resultFreed) {
     if (wrapper->streamingComplete){
-      return LONG2NUM(wrapper->numberOfRows);
+      if(wrapper->numberOfRows > 0){
+        // -1 is necessary because the final nil row is yielded
+        return LONG2NUM(wrapper->numberOfRows - 1);
+      }else{
+        return LONG2NUM(0);
+      }
     } else {
       return LONG2NUM(RARRAY_LEN(wrapper->rows));
     }

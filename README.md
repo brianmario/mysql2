@@ -28,7 +28,7 @@ Connect to a database:
 # this takes a hash of options, almost all of which map directly
 # to the familiar database.yml in rails
 # See http://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/MysqlAdapter.html
-client = Mysql2::Client.new(:host => "localhost", :username => "root")
+client = Mysql2::Client.new(:host => "localhost", :username => "root", :database => "github")
 ```
 
 Then query it:

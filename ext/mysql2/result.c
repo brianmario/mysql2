@@ -223,7 +223,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           break;
         case MYSQL_TYPE_TINY:       // TINYINT field
           if (castBool && fields[i].length == 1) {
-            val = *row[i] == '1' ? Qtrue : Qfalse;
+            val = *row[i] != '0' ? Qtrue : Qfalse;
             break;
           }
         case MYSQL_TYPE_SHORT:      // SMALLINT field

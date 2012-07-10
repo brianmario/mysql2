@@ -18,7 +18,7 @@ static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
   }
 
 #define MARK_CONN_INACTIVE(conn) \
-  wrapper->active = 0
+  wrapper->active_thread = Qnil;
 
 #define GET_CLIENT(self) \
   mysql_client_wrapper *wrapper; \
@@ -86,6 +86,7 @@ static void rb_mysql_client_mark(void * wrapper) {
   mysql_client_wrapper * w = wrapper;
   if (w) {
     rb_gc_mark(w->encoding);
+    rb_gc_mark(w->active_thread);
   }
 }
 
@@ -139,7 +140,7 @@ static VALUE nogvl_close(void *ptr) {
   wrapper = ptr;
   if (!wrapper->closed) {
     wrapper->closed = 1;
-    wrapper->active = 0;
+    wrapper->active_thread = Qnil;
     /*
      * we'll send a QUIT message to the server, but that message is more of a
      * formality than a hard requirement since the socket is getting shutdown
@@ -175,7 +176,7 @@ static VALUE allocate(VALUE klass) {
   mysql_client_wrapper * wrapper;
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
-  wrapper->active = 0;
+  wrapper->active_thread = Qnil;
   wrapper->reconnect_enabled = 0;
   wrapper->closed = 1;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
@@ -300,7 +301,8 @@ static VALUE nogvl_do_result(void *ptr, char use_result) {
 
   // once our result is stored off, this connection is
   // ready for another command to be issued
-  wrapper->active = 0;
+  wrapper->active_thread = Qnil;
+
   return (VALUE)result;
 }
 
@@ -327,7 +329,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   GET_CLIENT(self);
 
   // if we're not waiting on a result, do nothing
-  if (!wrapper->active)
+  if (NIL_P(wrapper->active_thread))
     return Qnil;
 
   REQUIRE_OPEN_DB(wrapper);
@@ -374,7 +376,7 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   GET_CLIENT(self);
 
   wrapper->closed = 1;
-  wrapper->active = 0;
+  wrapper->active_thread = Qnil;
 
   // manually close the socket for read/write
   // this feels dirty, but is there another way?
@@ -438,14 +440,14 @@ static VALUE finish_and_mark_inactive(void *args) {
 
   GET_CLIENT(self);
 
-  if (wrapper->active) {
+  if (!NIL_P(wrapper->active_thread)) {
     // if we got here, the result hasn't been read off the wire yet
     // so lets do that and then throw it away because we have no way
     // of getting it back up to the caller from here
     result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
     mysql_free_result(result);
 
-    wrapper->active = 0;
+    wrapper->active_thread = Qnil;
   }
 
   return Qnil;
@@ -465,6 +467,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   struct nogvl_send_query_args args;
   int async = 0;
   VALUE opts, defaults;
+  VALUE thread_current = rb_thread_current();
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
 #endif
@@ -496,11 +499,17 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   args.sql_len = RSTRING_LEN(args.sql);
 
   // see if this connection is still waiting on a result from a previous query
-  if (wrapper->active == 0) {
+  if (NIL_P(wrapper->active_thread)) {
     // mark this connection active
-    wrapper->active = 1;
-  } else {
+    wrapper->active_thread = thread_current;
+  } else if (wrapper->active_thread == thread_current) {
     rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  } else {
+    VALUE inspect = rb_inspect(wrapper->active_thread);
+    const char *thr = StringValueCStr(inspect);
+
+    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
+    RB_GC_GUARD(inspect);
   }
 
   args.wrapper = wrapper;

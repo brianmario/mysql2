@@ -154,13 +154,17 @@ describe Mysql2::Result do
       id1 = @client.last_id
       @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (0)'
       id2 = @client.last_id
+      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'
+      id3 = @client.last_id
 
       result1 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast_booleans => true
       result2 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 0 LIMIT 1', :cast_booleans => true
+      result3 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = -1 LIMIT 1', :cast_booleans => true
       result1.first['bool_cast_test'].should be_true
       result2.first['bool_cast_test'].should be_false
+      result3.first['bool_cast_test'].should be_true
 
-      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
+      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
     end
 
     it "should return Fixnum for a SMALLINT value" do

@@ -14,6 +14,7 @@ module Mysql2
     }
 
     def initialize(opts = {})
+      opts = Mysql2::Util.key_hash_as_symbols( opts )
       @query_options = @@default_query_options.dup
       @query_options.merge! opts
 
@@ -32,13 +33,20 @@ module Mysql2
       end
 
       ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher))
+      
+      if [:user,:pass,:hostname,:dbname,:db,:sock].any?{|k| @query_options.has_key?(k) }
+        warn "============= WARNING FROM mysql2 ============="
+        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock will be deprecated at some point in the future."
+        warn "Instead, please use :username, :password, :host, 'localhost', :port, :database, :socket, :flags for the options."
+        warn "============= END WARNING FROM mysql2 ========="
+      end
 
-      user     = opts[:username]
-      pass     = opts[:password]
-      host     = opts[:host] || 'localhost'
+      user     = opts[:username] || opts[:user]
+      pass     = opts[:password] || opts[:pass]
+      host     = opts[:host] || opts[:hostname] || 'localhost'
       port     = opts[:port] || 3306
-      database = opts[:database]
-      socket   = opts[:socket]
+      database = opts[:database] || opts[:dbname] || opts[:db]
+      socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
 
       connect user, pass, host, port, database, socket, flags
@@ -87,6 +95,7 @@ module Mysql2
         "ucs2"     => Encoding::UTF_16BE,
         "ujis"     => Encoding::EucJP_ms,
         "utf8"     => Encoding::UTF_8,
+        "utf8mb4"  => Encoding::UTF_8,
       }
 
       MYSQL_CHARSET_MAP = {
@@ -134,6 +143,8 @@ module Mysql2
         42 => {:name => "latin7",   :collation => "latin7_general_cs"},
         43 => {:name => "macce",    :collation => "macce_bin"},
         44 => {:name => "cp1250",   :collation => "cp1250_croatian_ci"},
+        45 => {:name => "utf8mb4",  :collation => "utf8mb4_general_ci"},
+        46 => {:name => "utf8mb4",  :collation => "utf8mb4_bin"},
         47 => {:name => "latin1",   :collation => "latin1_bin"},
         48 => {:name => "latin1",   :collation => "latin1_general_ci"},
         49 => {:name => "latin1",   :collation => "latin1_general_cs"},
@@ -218,6 +229,25 @@ module Mysql2
         208 => {:name => "utf8",    :collation => "utf8_persian_ci"},
         209 => {:name => "utf8",    :collation => "utf8_esperanto_ci"},
         210 => {:name => "utf8",    :collation => "utf8_hungarian_ci"},
+        224 => {:name => "utf8mb4", :collation => "utf8mb4_unicode_ci"},
+        225 => {:name => "utf8mb4", :collation => "utf8mb4_icelandic_ci"},
+        226 => {:name => "utf8mb4", :collation => "utf8mb4_latvian_ci"},
+        227 => {:name => "utf8mb4", :collation => "utf8mb4_romanian_ci"},
+        228 => {:name => "utf8mb4", :collation => "utf8mb4_slovenian_ci"},
+        229 => {:name => "utf8mb4", :collation => "utf8mb4_polish_ci"},
+        230 => {:name => "utf8mb4", :collation => "utf8mb4_estonian_ci"},
+        231 => {:name => "utf8mb4", :collation => "utf8mb4_spanish_ci"},
+        232 => {:name => "utf8mb4", :collation => "utf8mb4_swedish_ci"},
+        233 => {:name => "utf8mb4", :collation => "utf8mb4_turkish_ci"},
+        234 => {:name => "utf8mb4", :collation => "utf8mb4_czech_ci"},
+        235 => {:name => "utf8mb4", :collation => "utf8mb4_danish_ci"},
+        236 => {:name => "utf8mb4", :collation => "utf8mb4_lithuanian_ci"},
+        237 => {:name => "utf8mb4", :collation => "utf8mb4_slovak_ci"},
+        238 => {:name => "utf8mb4", :collation => "utf8mb4_spanish2_ci"},
+        239 => {:name => "utf8mb4", :collation => "utf8mb4_roman_ci"},
+        240 => {:name => "utf8mb4", :collation => "utf8mb4_persian_ci"},
+        241 => {:name => "utf8mb4", :collation => "utf8mb4_esperanto_ci"},
+        242 => {:name => "utf8mb4", :collation => "utf8mb4_hungarian_ci"},
         254 => {:name => "utf8",    :collation => "utf8_general_cs"}
       }
 

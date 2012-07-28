@@ -55,7 +55,7 @@ static VALUE intern_encoding_from_charset;
 static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
           intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
-          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast;
+          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream;
 static ID intern_merge;
 
 static void rb_mysql_result_mark(void * wrapper) {
@@ -163,11 +163,10 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
 #endif
 
 
-static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast) {
+static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast, MYSQL_FIELD * fields) {
   VALUE rowVal;
   mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
-  MYSQL_FIELD * fields = NULL;
   unsigned int i = 0;
   unsigned long * fieldLengths;
   void * ptr;
@@ -193,7 +192,6 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   } else {
     rowVal = rb_hash_new();
   }
-  fields = mysql_fetch_fields(wrapper->result);
   fieldLengths = mysql_fetch_lengths(wrapper->result);
   if (wrapper->fields == Qnil) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
@@ -225,7 +223,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           break;
         case MYSQL_TYPE_TINY:       // TINYINT field
           if (castBool && fields[i].length == 1) {
-            val = *row[i] == '1' ? Qtrue : Qfalse;
+            val = *row[i] != '0' ? Qtrue : Qfalse;
             break;
           }
         case MYSQL_TYPE_SHORT:      // SMALLINT field
@@ -237,7 +235,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           break;
         case MYSQL_TYPE_DECIMAL:    // DECIMAL or NUMERIC field
         case MYSQL_TYPE_NEWDECIMAL: // Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up)
-          if (strtod(row[i], NULL) == 0.000000){
+          if (fields[i].decimals == 0) {
+            val = rb_cstr2inum(row[i], 10);
+          } else if (strtod(row[i], NULL) == 0.000000){
             val = rb_funcall(cBigDecimal, intern_new, 1, opt_decimal_zero);
           }else{
             val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
@@ -392,7 +392,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   ID db_timezone, app_timezone, dbTz, appTz;
   mysql2_result_wrapper * wrapper;
   unsigned long i;
-  int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1;
+  int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1, streaming = 0;
+  MYSQL_FIELD * fields = NULL;
 
   GetMysql2Result(self, wrapper);
 
@@ -423,6 +424,14 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     cast = 0;
   }
 
+  if(rb_hash_aref(opts, sym_stream) == Qtrue) {
+    streaming = 1;
+  }
+
+  if(streaming && cacheRows) {
+    rb_warn("cacheRows is ignored if streaming is true");
+  }
+
   dbTz = rb_hash_aref(opts, sym_database_timezone);
   if (dbTz == sym_local) {
     db_timezone = intern_local;
@@ -445,48 +454,81 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   if (wrapper->lastRowProcessed == 0) {
-    wrapper->numberOfRows = mysql_num_rows(wrapper->result);
-    if (wrapper->numberOfRows == 0) {
+    if(streaming) {
+      // We can't get number of rows if we're streaming,
+      // until we've finished fetching all rows
+      wrapper->numberOfRows = 0;
       wrapper->rows = rb_ary_new();
-      return wrapper->rows;
+    } else {
+      wrapper->numberOfRows = mysql_num_rows(wrapper->result);
+      if (wrapper->numberOfRows == 0) {
+        wrapper->rows = rb_ary_new();
+        return wrapper->rows;
+      }
+      wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
     }
-    wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
   }
 
-  if (cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
-    // we've already read the entire dataset from the C result into our
-    // internal array. Lets hand that over to the user since it's ready to go
-    for (i = 0; i < wrapper->numberOfRows; i++) {
-      rb_yield(rb_ary_entry(wrapper->rows, i));
+  if (streaming) {
+    if(!wrapper->streamingComplete) {
+      VALUE row;
+
+      fields = mysql_fetch_fields(wrapper->result);
+
+      do {
+        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast, fields);
+
+        if (block != Qnil && row != Qnil) {
+          rb_yield(row);
+          wrapper->lastRowProcessed++;
+        }
+      } while(row != Qnil);
+
+      rb_mysql_result_free_result(wrapper);
+
+      wrapper->numberOfRows = wrapper->lastRowProcessed;
+      wrapper->streamingComplete = 1;
+    } else {
+      rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
     }
   } else {
-    unsigned long rowsProcessed = 0;
-    rowsProcessed = RARRAY_LEN(wrapper->rows);
-    for (i = 0; i < wrapper->numberOfRows; i++) {
-      VALUE row;
-      if (cacheRows && i < rowsProcessed) {
-        row = rb_ary_entry(wrapper->rows, i);
-      } else {
-        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
-        if (cacheRows) {
-          rb_ary_store(wrapper->rows, i, row);
-        }
-        wrapper->lastRowProcessed++;
+    if (cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
+      // we've already read the entire dataset from the C result into our
+      // internal array. Lets hand that over to the user since it's ready to go
+      for (i = 0; i < wrapper->numberOfRows; i++) {
+        rb_yield(rb_ary_entry(wrapper->rows, i));
       }
+    } else {
+      unsigned long rowsProcessed = 0;
+      rowsProcessed = RARRAY_LEN(wrapper->rows);
+      fields = mysql_fetch_fields(wrapper->result);
 
-      if (row == Qnil) {
+      for (i = 0; i < wrapper->numberOfRows; i++) {
+        VALUE row;
+        if (cacheRows && i < rowsProcessed) {
+          row = rb_ary_entry(wrapper->rows, i);
+        } else {
+          row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast, fields);
+          if (cacheRows) {
+            rb_ary_store(wrapper->rows, i, row);
+          }
+          wrapper->lastRowProcessed++;
+        }
+
+        if (row == Qnil) {
+          // we don't need the mysql C dataset around anymore, peace it
+          rb_mysql_result_free_result(wrapper);
+          return Qnil;
+        }
+
+        if (block != Qnil) {
+          rb_yield(row);
+        }
+      }
+      if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
         // we don't need the mysql C dataset around anymore, peace it
         rb_mysql_result_free_result(wrapper);
-        return Qnil;
       }
-
-      if (block != Qnil) {
-        rb_yield(row);
-      }
-    }
-    if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
-      // we don't need the mysql C dataset around anymore, peace it
-      rb_mysql_result_free_result(wrapper);
     }
   }
 
@@ -497,8 +539,15 @@ static VALUE rb_mysql_result_count(VALUE self) {
   mysql2_result_wrapper *wrapper;
 
   GetMysql2Result(self, wrapper);
-
-  return INT2FIX(mysql_num_rows(wrapper->result));
+  if(wrapper->resultFreed) {
+    if (wrapper->streamingComplete){
+      return LONG2NUM(wrapper->numberOfRows);
+    } else {
+      return LONG2NUM(RARRAY_LEN(wrapper->rows));
+    }
+  } else {
+    return INT2FIX(mysql_num_rows(wrapper->result));
+  }
 }
 
 /* Mysql2::Result */
@@ -514,6 +563,7 @@ VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   wrapper->fields = Qnil;
   wrapper->rows = Qnil;
   wrapper->encoding = Qnil;
+  wrapper->streamingComplete = 0;
   rb_obj_call_init(obj, 0, NULL);
   return obj;
 }
@@ -551,6 +601,7 @@ void init_mysql2_result() {
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
   sym_cast           = ID2SYM(rb_intern("cast"));
+  sym_stream         = ID2SYM(rb_intern("stream"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); //never GC

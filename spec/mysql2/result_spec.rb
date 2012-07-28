@@ -10,6 +10,35 @@ describe Mysql2::Result do
     @result = @client.query "SELECT 1"
   end
 
+  it "should maintain a count while streaming" do
+    result = @client.query('SELECT 1')
+
+    result.count.should eql(1)
+    result.each { |r| }
+    result.count.should eql(1)
+  end
+
+  it "should set the actual count of rows after streaming" do
+      @client.query "USE test"
+      result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
+      result.count.should eql(0)
+      result.each {|r|  }
+      result.count.should eql(1) 
+  end
+
+  it "should not yield nil at the end of streaming" do
+    result = @client.query('SELECT * FROM mysql2_test', :stream => true)
+    result.each { |r| r.should_not be_nil}
+  end
+
+  it "#count should be zero for rows after streaming when there were no results " do
+      @client.query "USE test"
+      result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
+      result.count.should eql(0)
+      result.each {|r|  }
+      result.count.should eql(0) 
+  end
+
   it "should have included Enumerable" do
     Mysql2::Result.ancestors.include?(Enumerable).should be_true
   end
@@ -73,6 +102,25 @@ describe Mysql2::Result do
       result = @client.query "SELECT 1", :cache_rows => false
       result.first.object_id.should_not eql(result.first.object_id)
     end
+
+    it "should yield different value for #first if streaming" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
+      result.first.should_not eql(result.first)
+    end
+
+    it "should yield the same value for #first if streaming is disabled" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :stream => false
+      result.first.should eql(result.first)
+    end
+
+    it "should throw an exception if we try to iterate twice when streaming is enabled" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
+
+      expect {
+        result.each {}
+        result.each {}
+      }.to raise_exception(Mysql2::Error)
+    end
   end
 
   context "#fields" do
@@ -127,13 +175,17 @@ describe Mysql2::Result do
       id1 = @client.last_id
       @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (0)'
       id2 = @client.last_id
+      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'
+      id3 = @client.last_id
 
       result1 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast_booleans => true
       result2 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 0 LIMIT 1', :cast_booleans => true
+      result3 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = -1 LIMIT 1', :cast_booleans => true
       result1.first['bool_cast_test'].should be_true
       result2.first['bool_cast_test'].should be_false
+      result3.first['bool_cast_test'].should be_true
 
-      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
+      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
     end
 
     it "should return Fixnum for a SMALLINT value" do

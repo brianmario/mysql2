@@ -69,12 +69,37 @@ describe Mysql2::Statement do
     list[1].should == '2'
   end
 
-  it "should let us execute our statement with a param" do
-    @client.query("USE test")
-    statement = @client.prepare 'SELECT a FROM t WHERE a = ?'
-    statement.execute 3
-    rows = []
-    statement.each { |row| rows << row }
-    p rows
+  # it "should let us execute our statement with a param" do
+  #   @client.query("USE test")
+  #   statement = @client.prepare 'SELECT a FROM t WHERE a = ?'
+  #   statement.execute 3
+  #   rows = []
+  #   statement.each { |row| rows << row }
+  #   p rows
+  # end
+  
+  context "utf8_db_field" do
+    before(:each) do
+      @client.query("DROP DATABASE IF EXISTS test_mysql2_stmt_utf8")
+      @client.query("CREATE DATABASE test_mysql2_stmt_utf8")
+      @client.query("USE test_mysql2_stmt_utf8")
+      @client.query("CREATE TABLE テーブル (整数 int, 文字列 varchar(32)) charset=utf8")
+      @client.query("INSERT INTO テーブル (整数, 文字列) VALUES (1, 'イチ'), (2, '弐'), (3, 'さん')")
+    end
+    
+    after(:each) do
+      @client.query("DROP DATABASE test_mysql2_stmt_utf8")
+    end
+    
+    it "should be able to retrieve utf8 field names correctly" do
+      stmt = @client.prepare 'SELECT * FROM `テーブル`'
+      stmt.fields.should == ['整数', '文字列']
+      stmt.execute
+      
+      rows = []
+      stmt.each { |row| rows << row }
+      p rows
+    end
   end
 end
+

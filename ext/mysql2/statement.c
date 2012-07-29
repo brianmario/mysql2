@@ -24,14 +24,15 @@ static void rb_mysql_stmt_free(void * ptr) {
  */
 struct nogvl_prepare_statement_args {
   MYSQL_STMT *stmt;
-  const char *sql;
+  VALUE sql;
+  const char *sql_ptr;
   unsigned long sql_len;
 };
 
 static VALUE nogvl_prepare_statement(void *ptr) {
   struct nogvl_prepare_statement_args *args = ptr;
 
-  if (mysql_stmt_prepare(args->stmt, args->sql, args->sql_len)) {
+  if (mysql_stmt_prepare(args->stmt, args->sql_ptr, args->sql_len)) {
     return Qfalse;
   } else {
     return Qtrue;
@@ -41,6 +42,11 @@ static VALUE nogvl_prepare_statement(void *ptr) {
 VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   mysql_stmt_wrapper* stmt_wrapper;
   VALUE rb_stmt;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *conn_enc;
+#endif
+  
+  Check_Type(sql, T_STRING);
 
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
   {
@@ -52,6 +58,9 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   {
     GET_CLIENT(rb_client);
     stmt_wrapper->stmt = mysql_stmt_init(wrapper->client);
+#ifdef HAVE_RUBY_ENCODING_H
+	conn_enc = rb_to_encoding(wrapper->encoding);
+#endif
   }
   if (stmt_wrapper->stmt == NULL) {
     rb_raise(cMysql2Error, "Unable to initialize prepared statement: out of memory");
@@ -69,7 +78,12 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   {
     struct nogvl_prepare_statement_args args;
     args.stmt = stmt_wrapper->stmt;
-    args.sql = StringValuePtr(sql);
+	args.sql = sql;
+#ifdef HAVE_RUBY_ENCODING_H
+	// ensure the string is in the encoding the connection is expecting
+	args.sql = rb_str_export_to_enc(args.sql, conn_enc);
+#endif
+    args.sql_ptr = StringValuePtr(sql);
     args.sql_len = RSTRING_LEN(sql);
 
     if (rb_thread_blocking_region(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
@@ -486,6 +500,7 @@ static VALUE each(VALUE self) {
             case MYSQL_TYPE_SET:          // char[]
             case MYSQL_TYPE_ENUM:         // char[]
             case MYSQL_TYPE_GEOMETRY:     // char[]
+              // FIXME: handle encoding
               column = rb_str_new(result_buffers[i].buffer, *(result_buffers[i].length));
               break;
             default:

@@ -39,4 +39,13 @@ typedef struct {
   MYSQL *client;
 } mysql_client_wrapper;
 
+#define GET_CLIENT(self) \
+  mysql_client_wrapper *wrapper; \
+  Data_Get_Struct(self, mysql_client_wrapper, wrapper)
+
+#define REQUIRE_OPEN_DB(wrapper) \
+  if(!wrapper->reconnect_enabled && wrapper->closed) { \
+    rb_raise(cMysql2Error, "closed MySQL connection"); \
+  }
+
 #endif

@@ -3,15 +3,95 @@
 VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
 
+static void rb_mysql_stmt_mark(void * ptr) {
+  mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
+  if(! stmt_wrapper) return;
+  
+  rb_gc_mark(stmt_wrapper->client);
+}
+
+static void rb_mysql_stmt_free(void * ptr) {
+  mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
+  
+  mysql_stmt_close(stmt_wrapper->stmt);
+
+  xfree(ptr);
+}
+
+/*
+ * used to pass all arguments to mysql_stmt_prepare while inside
+ * rb_thread_blocking_region
+ */
+struct nogvl_prepare_statement_args {
+  MYSQL_STMT *stmt;
+  const char *sql;
+  unsigned long sql_len;
+};
+
+static VALUE nogvl_prepare_statement(void *ptr) {
+  struct nogvl_prepare_statement_args *args = ptr;
+
+  if (mysql_stmt_prepare(args->stmt, args->sql, args->sql_len)) {
+    return Qfalse;
+  } else {
+    return Qtrue;
+  }
+}
+
+VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
+  mysql_stmt_wrapper* stmt_wrapper;
+  VALUE rb_stmt;
+
+  rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
+  {
+    stmt_wrapper->client = rb_client;
+    stmt_wrapper->stmt = NULL;
+  }
+
+  // instantiate stmt
+  {
+    GET_CLIENT(rb_client);
+    stmt_wrapper->stmt = mysql_stmt_init(wrapper->client);
+  }
+  if (stmt_wrapper->stmt == NULL) {
+    rb_raise(cMysql2Error, "Unable to initialize prepared statement: out of memory");
+  }
+
+  // set STMT_ATTR_UPDATE_MAX_LENGTH attr
+  {
+    my_bool truth = 1;
+    if (mysql_stmt_attr_set(stmt_wrapper->stmt, STMT_ATTR_UPDATE_MAX_LENGTH, &truth)) {
+      rb_raise(cMysql2Error, "Unable to initialize prepared statement: set STMT_ATTR_UPDATE_MAX_LENGTH");
+    }
+  }
+
+  // call mysql_stmt_prepare w/o gvl
+  {
+    struct nogvl_prepare_statement_args args;
+    args.stmt = stmt_wrapper->stmt;
+    args.sql = StringValuePtr(sql);
+    args.sql_len = RSTRING_LEN(sql);
+
+    if (rb_thread_blocking_region(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
+      rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt_wrapper->stmt));
+    }
+  }
+
+  return rb_stmt;
+}
+
+#define GET_STATEMENT(self) \
+  mysql_stmt_wrapper *stmt_wrapper; \
+  Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper)
+
 /* call-seq: stmt.param_count # => 2
  *
  * Returns the number of parameters the prepared statement expects.
  */
 static VALUE param_count(VALUE self) {
-  MYSQL_STMT *stmt;
-  Data_Get_Struct(self, MYSQL_STMT, stmt);
+  GET_STATEMENT(self);
 
-  return ULL2NUM(mysql_stmt_param_count(stmt));
+  return ULL2NUM(mysql_stmt_param_count(stmt_wrapper->stmt));
 }
 
 /* call-seq: stmt.field_count # => 2
@@ -19,10 +99,9 @@ static VALUE param_count(VALUE self) {
  * Returns the number of fields the prepared statement returns.
  */
 static VALUE field_count(VALUE self) {
-  MYSQL_STMT *stmt;
-  Data_Get_Struct(self, MYSQL_STMT, stmt);
+  GET_STATEMENT(self);
 
-  return UINT2NUM(mysql_stmt_field_count(stmt));
+  return UINT2NUM(mysql_stmt_field_count(stmt_wrapper->stmt));
 }
 
 static VALUE nogvl_execute(void *ptr) {
@@ -48,13 +127,14 @@ static VALUE nogvl_execute(void *ptr) {
  * Executes the current prepared statement, returns +stmt+.
  */
 static VALUE execute(int argc, VALUE *argv, VALUE self) {
-  MYSQL_STMT *stmt;
   MYSQL_BIND *bind_buffers;
   unsigned long bind_count;
   long i;
-
-  Data_Get_Struct(self, MYSQL_STMT, stmt);
-
+  MYSQL_STMT* stmt;
+  GET_STATEMENT(self);
+  
+  stmt = stmt_wrapper->stmt;
+  
   bind_count = mysql_stmt_param_count(stmt);
   if (argc != (long)bind_count) {
     rb_raise(cMysql2Error, "Bind parameter count (%ld) doesn't match number of arguments (%d)", bind_count, argc);
@@ -93,6 +173,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           *(double*)(bind_buffers[i].buffer) = NUM2DBL(argv[i]);
           break;
         case T_STRING:
+          // FIXME: convert encoding
           bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
           bind_buffers[i].buffer = RSTRING_PTR(argv[i]);
           bind_buffers[i].buffer_length = RSTRING_LEN(argv[i]);
@@ -163,40 +244,58 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
  * Returns a list of fields that will be returned by this statement.
  */
 static VALUE fields(VALUE self) {
-  MYSQL_STMT *stmt;
   MYSQL_FIELD *fields;
   MYSQL_RES *metadata;
   unsigned int field_count;
   unsigned int i;
   VALUE field_list;
-  VALUE cMysql2Field;
+  MYSQL_STMT* stmt;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc, *conn_enc;
+#endif
+  GET_STATEMENT(self);
+  stmt = stmt_wrapper->stmt;
+  
+#ifdef HAVE_RUBY_ENCODING_H
+  default_internal_enc = rb_default_internal_encoding();
+  {
+    GET_CLIENT(stmt_wrapper->client);     
+    conn_enc = rb_to_encoding(wrapper->encoding);
+  }
+#endif
 
-  Data_Get_Struct(self, MYSQL_STMT, stmt);
   metadata    = mysql_stmt_result_metadata(stmt);
   fields      = mysql_fetch_fields(metadata);
   field_count = mysql_stmt_field_count(stmt);
   field_list  = rb_ary_new2((long)field_count);
 
-  cMysql2Field = rb_const_get(mMysql2, rb_intern("Field"));
-
   for(i = 0; i < field_count; i++) {
-    VALUE field;
+    VALUE rb_field;
 
-    /* FIXME: encoding.  Also, can this return null? */
-    field = rb_str_new(fields[i].name, fields[i].name_length);
+    rb_field = rb_str_new(fields[i].name, fields[i].name_length);
+#ifdef HAVE_RUBY_ENCODING_H
+    rb_enc_associate(rb_field, conn_enc);
+    if (default_internal_enc) {
+	    rb_field = rb_str_export_to_enc(rb_field, default_internal_enc);
+	  }
+#endif
 
-    rb_ary_store(field_list, (long)i, field);
+    rb_ary_store(field_list, (long)i, rb_field);
   }
 
   return field_list;
 }
 
 static VALUE each(VALUE self) {
-  VALUE block;
   MYSQL_STMT *stmt;
   MYSQL_RES *result;
-
-  Data_Get_Struct(self, MYSQL_STMT, stmt);
+  GET_STATEMENT(self);
+  stmt = stmt_wrapper->stmt;
+  
+  if(! rb_block_given_p())
+  {
+    rb_raise(cMysql2Error, "FIXME: current limitation: each require block");
+  }
 
   result = mysql_stmt_result_metadata(stmt);
   if (result) {
@@ -296,8 +395,6 @@ static VALUE each(VALUE self) {
       free(length);
       rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
     }
-
-    block = rb_block_proc();
 
     while(!mysql_stmt_fetch(stmt)) {
       VALUE row = rb_ary_new2((long)field_count);

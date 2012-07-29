@@ -68,4 +68,13 @@ describe Mysql2::Statement do
     list.first.should == 'foo'
     list[1].should == '2'
   end
+
+  it "should let us execute our statement with a param" do
+    @client.query("USE test")
+    statement = @client.prepare 'SELECT a FROM t WHERE a = ?'
+    statement.execute 3
+    rows = []
+    statement.each { |row| rows << row }
+    p rows
+  end
 end

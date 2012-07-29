@@ -1244,7 +1244,7 @@ static void *nogvl_prepare_statement(void *ptr) {
  *
  * Create a new prepared statement.
  */
-static VALUE prepare_statement(VALUE self, VALUE sql) {
+static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
   GET_CLIENT(self);
   REQUIRE_CONNECTED(wrapper);
 
@@ -1320,7 +1320,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
-  rb_define_method(cMysql2Client, "prepare", prepare_statement, 1);
+  rb_define_method(cMysql2Client, "prepare", rb_mysql_client_prepare_statement, 1);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);

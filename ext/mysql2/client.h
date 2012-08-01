@@ -35,7 +35,9 @@ typedef struct {
   VALUE encoding;
   VALUE active_thread; /* rb_thread_current() or Qnil */
   int reconnect_enabled;
-  int closed;
+  int active;
+  int connected;
+  int initialized;
   MYSQL *client;
 } mysql_client_wrapper;
 

@@ -18,12 +18,14 @@ module Mysql2
       @query_options = @@default_query_options.dup
       @query_options.merge! opts
 
-      init_connection
+      initialize_ext
 
-      [:reconnect, :connect_timeout].each do |key|
+      # Set MySQL connection options (each one is a call to mysql_options())
+      [:reconnect, :connect_timeout, :local_infile].each do |key|
         next unless opts.key?(key)
         send(:"#{key}=", opts[key])
       end
+
       # force the encoding to utf8
       self.charset_name = opts[:encoding] || 'utf8'
 

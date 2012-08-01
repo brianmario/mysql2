@@ -638,7 +638,7 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       wrapper->reconnect_enabled = boolval;
   }
 
-  return INT2NUM(result == 0);
+  return (result == 0) ? Qtrue : Qfalse;
 }
 
 static VALUE rb_mysql_client_options(VALUE self, VALUE option, VALUE value) {

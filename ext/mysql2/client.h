@@ -33,6 +33,7 @@ void init_mysql2_client();
 
 typedef struct {
   VALUE encoding;
+  VALUE active_thread; /* rb_thread_current() or Qnil */
   int reconnect_enabled;
   int active;
   int connected;

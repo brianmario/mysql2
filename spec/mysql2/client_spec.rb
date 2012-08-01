@@ -147,6 +147,19 @@ describe Mysql2::Client do
         }.should raise_error(Mysql2::Error)
       end
 
+      it "should describe the thread holding the active query" do
+        thr = Thread.new { @client.query("SELECT 1", :async => true) }
+
+        thr.join
+        begin
+          @client.query("SELECT 1")
+        rescue Mysql2::Error => e
+          message = e.message
+        end
+        re = Regexp.escape(thr.inspect)
+        message.should match(Regexp.new(re))
+      end
+
       it "should timeout if we wait longer than :read_timeout" do
         client = Mysql2::Client.new(:read_timeout => 1)
         lambda {

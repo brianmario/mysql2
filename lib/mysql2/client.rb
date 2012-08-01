@@ -14,6 +14,7 @@ module Mysql2
     }
 
     def initialize(opts = {})
+      opts = Mysql2::Util.key_hash_as_symbols( opts )
       @query_options = @@default_query_options.dup
       @query_options.merge! opts
 
@@ -34,13 +35,20 @@ module Mysql2
       end
 
       ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher))
+      
+      if [:user,:pass,:hostname,:dbname,:db,:sock].any?{|k| @query_options.has_key?(k) }
+        warn "============= WARNING FROM mysql2 ============="
+        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock will be deprecated at some point in the future."
+        warn "Instead, please use :username, :password, :host, 'localhost', :port, :database, :socket, :flags for the options."
+        warn "============= END WARNING FROM mysql2 ========="
+      end
 
-      user     = opts[:username]
-      pass     = opts[:password]
-      host     = opts[:host] || 'localhost'
+      user     = opts[:username] || opts[:user]
+      pass     = opts[:password] || opts[:pass]
+      host     = opts[:host] || opts[:hostname] || 'localhost'
       port     = opts[:port] || 3306
-      database = opts[:database]
-      socket   = opts[:socket]
+      database = opts[:database] || opts[:dbname] || opts[:db]
+      socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
 
       connect user, pass, host, port, database, socket, flags

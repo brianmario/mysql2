@@ -298,10 +298,8 @@ describe Mysql2::Client do
         end
 
         @multi_client.query( "select 3 as 'next'").first.should == { 'next' => 3 }
-      end    
+      end
     end
-    
-    
   end
 
   it "should respond to #socket" do
@@ -553,16 +551,15 @@ describe Mysql2::Client do
     end
   end
 
-
   it "#thread_id should return a boolean" do
     @client.ping.should eql(true)
     @client.close
     @client.ping.should eql(false)
   end
 
-if RUBY_VERSION =~ /1.9/
-  it "should respond to #encoding" do
-    @client.should respond_to(:encoding)
+  if RUBY_VERSION =~ /1.9/
+    it "should respond to #encoding" do
+      @client.should respond_to(:encoding)
+    end
   end
-end
 end

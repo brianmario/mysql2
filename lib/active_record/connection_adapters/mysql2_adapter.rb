@@ -378,9 +378,13 @@ module ActiveRecord
         show_variable 'collation_database'
       end
 
-      def tables(name = nil)
+      def tables(name = nil, database = nil)
         tables = []
-        execute("SHOW TABLES", name).each do |field|
+
+        sql = "SHOW TABLES "
+        sql << "IN #{quote_table_name(database)} " if database
+
+        execute(sql, 'SCHEMA').each do |field|
           tables << field.first
         end
         tables

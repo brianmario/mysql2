@@ -613,6 +613,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval = &intval;
       break;
 
+    case MYSQL_OPT_READ_TIMEOUT:
+      intval = NUM2INT(value);
+      retval = &intval;
+      break;
+
     case MYSQL_OPT_LOCAL_INFILE:
       intval = (value == Qfalse ? 0 : 1);
       retval = &intval;
@@ -907,6 +912,20 @@ static VALUE set_connect_timeout(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_OPT_CONNECT_TIMEOUT, value);
 }
 
+static VALUE set_read_timeout(VALUE self, VALUE value) {
+  long int sec;
+  Check_Type(value, T_FIXNUM);
+  sec = FIX2INT(value);
+  if (sec < 0) {
+    rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %ld", sec);
+  }
+  // Set the instance variable here even though _mysql_client_options
+  // might not succeed, because the timeout is used in other ways
+  // elsewhere
+  rb_iv_set(self, "@read_timeout", value);
+  return _mysql_client_options(self, MYSQL_OPT_READ_TIMEOUT, value);
+}
+
 static VALUE set_charset_name(VALUE self, VALUE value) {
   char * charset_name;
 #ifdef HAVE_RUBY_ENCODING_H
@@ -1012,6 +1031,7 @@ void init_mysql2_client() {
 
   rb_define_private_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
+  rb_define_private_method(cMysql2Client, "read_timeout=", set_read_timeout, 1);
   rb_define_private_method(cMysql2Client, "local_infile=", set_local_infile, 1);
   rb_define_private_method(cMysql2Client, "charset_name=", set_charset_name, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);

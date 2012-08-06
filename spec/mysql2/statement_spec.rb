@@ -35,7 +35,7 @@ describe Mysql2::Statement do
 
   it "should let us execute our statement" do
     statement = @client.prepare 'SELECT 1'
-    statement.execute.should == statement
+    statement.execute.should_not == nil
   end
 
   it "should raise an exception without a block" do
@@ -46,18 +46,16 @@ describe Mysql2::Statement do
 
   it "should let us iterate over results" do
     statement = @client.prepare 'SELECT 1'
-    statement.execute
+    result = statement.execute
     rows = []
-    statement.each { |row| rows << row }
+    result.each {|r| rows << r}
     rows.should == [[1]]
   end
 
   it "should select dates" do
     statement = @client.prepare 'SELECT NOW()'
-    statement.execute
-    rows = []
-    statement.each { |row| rows << row }
-    rows.first.first.should be_kind_of Time
+    result = statement.execute
+    result.first.first.should be_kind_of Time
   end
 
   it "should tell us about the fields" do
@@ -94,11 +92,9 @@ describe Mysql2::Statement do
     it "should be able to retrieve utf8 field names correctly" do
       stmt = @client.prepare 'SELECT * FROM `テーブル`'
       stmt.fields.should == ['整数', '文字列']
-      stmt.execute
+      result = stmt.execute
       
-      rows = []
-      stmt.each { |row| rows << row }
-      p rows
+      p result.to_a 
     end
   end
 end

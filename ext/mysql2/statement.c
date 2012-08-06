@@ -141,10 +141,12 @@ static VALUE nogvl_execute(void *ptr) {
  * Executes the current prepared statement, returns +stmt+.
  */
 static VALUE execute(int argc, VALUE *argv, VALUE self) {
-  MYSQL_BIND *bind_buffers;
+  MYSQL_BIND *bind_buffers = NULL;
   unsigned long bind_count;
   long i;
   MYSQL_STMT* stmt;
+  MYSQL_RES *result;
+  VALUE resultObj;
   GET_STATEMENT(self);
   
   stmt = stmt_wrapper->stmt;
@@ -249,8 +251,30 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   if (bind_count > 0) {
     FREE_BINDS;
   }
+  
+  result = mysql_stmt_result_metadata(stmt);
+  if(result == NULL) {
+	if(mysql_stmt_errno(stmt) != 0) {
+	  // FIXME: MARK_CONN_INACTIVE(wrapper->client);
+	  // FIXME: rb_raise_mysql2_stmt_error(self);
+	}
+    // no data and no error, so query was not a SELECT
+    return Qnil;
+  }
+  
+  resultObj = rb_mysql_result_to_obj(result, stmt);
+  rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(stmt_wrapper->client, "@query_options"), rb_intern("dup"), 0));
+#ifdef HAVE_RUBY_ENCODING_H
+  {
+    mysql2_result_wrapper* result_wrapper;
 
-  return self;
+    GET_CLIENT(stmt_wrapper->client);
+    GetMysql2Result(resultObj, result_wrapper);
+    result_wrapper->encoding = wrapper->encoding;
+  }
+#endif
+
+  return resultObj;
 }
 
 /* call-seq: stmt.fields # => array
@@ -300,9 +324,9 @@ static VALUE fields(VALUE self) {
   return field_list;
 }
 
+#if 0
 static VALUE each(VALUE self) {
   MYSQL_STMT *stmt;
-  MYSQL_RES *result;
   GET_STATEMENT(self);
   stmt = stmt_wrapper->stmt;
   
@@ -311,7 +335,6 @@ static VALUE each(VALUE self) {
     rb_raise(cMysql2Error, "FIXME: current limitation: each require block");
   }
 
-  result = mysql_stmt_result_metadata(stmt);
   if (result) {
     MYSQL_BIND *result_buffers;
     my_bool *is_null;
@@ -524,6 +547,7 @@ static VALUE each(VALUE self) {
 
   return self;
 }
+#endif
 
 void init_mysql2_statement() {
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
@@ -531,6 +555,5 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "param_count", param_count, 0);
   rb_define_method(cMysql2Statement, "field_count", field_count, 0);
   rb_define_method(cMysql2Statement, "execute", execute, -1);
-  rb_define_method(cMysql2Statement, "each", each, 0);
   rb_define_method(cMysql2Statement, "fields", fields, 0);
 }

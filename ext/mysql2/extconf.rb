@@ -64,7 +64,7 @@ end
 
 # GCC specific flags
 if RbConfig::MAKEFILE_CONFIG['CC'] =~ /gcc/
-  $CFLAGS << ' -Wall -funroll-loops'
+  $CFLAGS << ' -Wall -funroll-loops -O0'
 
   if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
     $LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"

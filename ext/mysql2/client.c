@@ -346,7 +346,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
+  resultObj = rb_mysql_result_to_obj(result, NULL);
   // pass-through query options for result construction later
   rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
 
@@ -795,7 +795,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
+  resultObj = rb_mysql_result_to_obj(result, NULL);
   // pass-through query options for result construction later
   rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
 

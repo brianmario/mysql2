@@ -163,11 +163,10 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
 #endif
 
 
-static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast) {
+static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast, MYSQL_FIELD * fields) {
   VALUE rowVal;
   mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
-  MYSQL_FIELD * fields = NULL;
   unsigned int i = 0;
   unsigned long * fieldLengths;
   void * ptr;
@@ -193,7 +192,6 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   } else {
     rowVal = rb_hash_new();
   }
-  fields = mysql_fetch_fields(wrapper->result);
   fieldLengths = mysql_fetch_lengths(wrapper->result);
   if (wrapper->fields == Qnil) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
@@ -225,7 +223,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           break;
         case MYSQL_TYPE_TINY:       // TINYINT field
           if (castBool && fields[i].length == 1) {
-            val = *row[i] == '1' ? Qtrue : Qfalse;
+            val = *row[i] != '0' ? Qtrue : Qfalse;
             break;
           }
         case MYSQL_TYPE_SHORT:      // SMALLINT field
@@ -237,7 +235,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           break;
         case MYSQL_TYPE_DECIMAL:    // DECIMAL or NUMERIC field
         case MYSQL_TYPE_NEWDECIMAL: // Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up)
-          if (strtod(row[i], NULL) == 0.000000){
+          if (fields[i].decimals == 0) {
+            val = rb_cstr2inum(row[i], 10);
+          } else if (strtod(row[i], NULL) == 0.000000){
             val = rb_funcall(cBigDecimal, intern_new, 1, opt_decimal_zero);
           }else{
             val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
@@ -393,6 +393,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   mysql2_result_wrapper * wrapper;
   unsigned long i;
   int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1, streaming = 0;
+  MYSQL_FIELD * fields = NULL;
 
   GetMysql2Result(self, wrapper);
 
@@ -472,10 +473,12 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     if(!wrapper->streamingComplete) {
       VALUE row;
 
-      do {
-        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
+      fields = mysql_fetch_fields(wrapper->result);
 
-        if (block != Qnil) {
+      do {
+        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast, fields);
+
+        if (block != Qnil && row != Qnil) {
           rb_yield(row);
           wrapper->lastRowProcessed++;
         }
@@ -498,12 +501,14 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     } else {
       unsigned long rowsProcessed = 0;
       rowsProcessed = RARRAY_LEN(wrapper->rows);
+      fields = mysql_fetch_fields(wrapper->result);
+
       for (i = 0; i < wrapper->numberOfRows; i++) {
         VALUE row;
         if (cacheRows && i < rowsProcessed) {
           row = rb_ary_entry(wrapper->rows, i);
         } else {
-          row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast);
+          row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast, fields);
           if (cacheRows) {
             rb_ary_store(wrapper->rows, i, row);
           }
@@ -534,8 +539,15 @@ static VALUE rb_mysql_result_count(VALUE self) {
   mysql2_result_wrapper *wrapper;
 
   GetMysql2Result(self, wrapper);
-
-  return INT2FIX(mysql_num_rows(wrapper->result));
+  if(wrapper->resultFreed) {
+    if (wrapper->streamingComplete){
+      return LONG2NUM(wrapper->numberOfRows);
+    } else {
+      return LONG2NUM(RARRAY_LEN(wrapper->rows));
+    }
+  } else {
+    return INT2FIX(mysql_num_rows(wrapper->result));
+  }
 }
 
 /* Mysql2::Result */

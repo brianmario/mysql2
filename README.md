@@ -6,7 +6,7 @@ This one is not.
 
 It also forces the use of UTF-8 [or binary] for the connection [and all strings in 1.9, unless Encoding.default_internal is set then it'll convert from UTF-8 to that encoding] and uses encoding-aware MySQL API calls where it can.
 
-The API consists of two clases:
+The API consists of two classes:
 
 Mysql2::Client - your connection to the database
 
@@ -84,6 +84,43 @@ results.each(:as => :array) do |row|
 # An otter's den is called a "holt" or "couch"
 end
 ```
+
+## Connection options
+
+You may set the following connection options in Mysql2::Client.new(...):
+
+``` ruby
+Mysql2::Client.new(
+  :host,
+  :username,
+  :password,
+  :port,
+  :database,
+  :socket = '/path/to/mysql.sock',
+  :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | MULTI_STATEMENTS,
+  :encoding = 'utf8',
+  :read_timeout = seconds,
+  :connect_timeout = seconds,
+  :reconnect = true/false,
+  :local_infile = true/false,
+  )
+```
+
+You can also retrieve multiple result sets. For this to work you need to connect with
+flags `Mysql2::Client::MULTI_STATEMENTS`. Using multiple result sets is normally used
+when calling stored procedures that return more than one result set
+
+``` ruby
+client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS )
+result = client.query( 'CALL sp_customer_list( 25, 10 )')
+# result now contains the first result set
+while ( client.next_result)
+    result = client.store_result
+    # result now contains the next result set
+end
+```
+
+See https://gist.github.com/1367987 for using MULTI_STATEMENTS with ActiveRecord.
 
 ## Cascading config
 
@@ -229,7 +266,7 @@ Read more about the consequences of using `mysql_use_result` (what streaming is 
 
 ## ActiveRecord
 
-To use the ActiveRecord driver (with our without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
+To use the ActiveRecord driver (with or without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
 That was easy right? :)
 
 NOTE: as of 0.3.0, and ActiveRecord 3.1 - the ActiveRecord adapter has been pulled out of this gem and into ActiveRecord itself. If you need to use mysql2 with
@@ -237,8 +274,7 @@ Rails versions < 3.1 make sure and specify `gem "mysql2", "~> 0.2.7"` in your Ge
 
 ## Asynchronous ActiveRecord
 
-You can also use Mysql2 with asynchronous Rails (first introduced at http://www.mikeperham.com/2010/04/03/introducing-phat-an-asynchronous-rails-app/) by
-setting the adapter in your database.yml to "em_mysql2".  You must be running Ruby 1.9, thin and the rack-fiber_pool middleware for it to work.
+Please see the [em-synchrony](https://github.com/igrigorik/em-synchrony) project for details about using EventMachine with mysql2 and Rails.
 
 ## Sequel
 
@@ -332,6 +368,21 @@ Use 'bundle install' to install the necessary development and testing gems:
 bundle install
 rake
 ```
+
+The tests require the "test" database to exist, and expect to connect
+both as root and the running user, both with a blank password:
+
+``` sql
+CREATE DATABASE test;
+CREATE USER '<user>'@'localhost' IDENTIFIED BY '';
+GRANT ALL PRIVILEGES ON test.* TO '<user>'@'localhost';
+```
+
+You can change these defaults in the spec/configuration.yml which is generated
+automatically when you run rake (or explicitly `rake spec/configuration.yml`).
+
+For a normal installation on a Mac, you most likely do not need to do anything,
+though.
 
 ## Special Thanks
 

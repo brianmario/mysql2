@@ -378,6 +378,12 @@ CREATE USER '<user>'@'localhost' IDENTIFIED BY '';
 GRANT ALL PRIVILEGES ON test.* TO '<user>'@'localhost';
 ```
 
+You can change these defaults in the spec/configuration.yml which is generated
+automatically when you run rake (or explicitly `rake spec/configuration.yml`).
+
+For a normal installation on a Mac, you most likely do not need to do anything,
+though.
+
 ## Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude

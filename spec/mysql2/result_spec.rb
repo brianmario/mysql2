@@ -3,7 +3,7 @@ require 'spec_helper'
 
 describe Mysql2::Result do
   before(:each) do
-    @client = Mysql2::Client.new :host => "localhost", :username => "root", :database => 'test'
+    @client = Mysql2::Client.new DatabaseCredentials['root']
   end
 
   before(:each) do
@@ -23,7 +23,7 @@ describe Mysql2::Result do
       result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
       result.count.should eql(0)
       result.each {|r|  }
-      result.count.should eql(1) 
+      result.count.should eql(1)
   end
 
   it "should not yield nil at the end of streaming" do
@@ -36,7 +36,7 @@ describe Mysql2::Result do
       result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
       result.count.should eql(0)
       result.each {|r|  }
-      result.count.should eql(0) 
+      result.count.should eql(0)
   end
 
   it "should have included Enumerable" do

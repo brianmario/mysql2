@@ -307,7 +307,7 @@ describe Mysql2::Result do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['enum_test'].encoding.should eql(Encoding.find('utf-8'))
 
-          client2 = Mysql2::Client.new :encoding => 'ascii'
+          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
           client2.query "USE test"
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
@@ -336,7 +336,7 @@ describe Mysql2::Result do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['set_test'].encoding.should eql(Encoding.find('utf-8'))
 
-          client2 = Mysql2::Client.new :encoding => 'ascii'
+          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
           client2.query "USE test"
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
@@ -418,7 +418,7 @@ describe Mysql2::Result do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               result[field].encoding.should eql(Encoding.find('utf-8'))
 
-              client2 = Mysql2::Client.new :encoding => 'ascii'
+              client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
               client2.query "USE test"
               result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               result[field].encoding.should eql(Encoding.find('us-ascii'))

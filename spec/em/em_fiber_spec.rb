@@ -8,7 +8,7 @@ if defined? EventMachine && defined? Fiber
       results = []
       EM.run do
         Fiber.new {
-          client1 = Mysql2::EM::Fiber::Client.new
+          client1 = Mysql2::EM::Fiber::Client.new DatabaseCredentials['root']
           results = client1.query "SELECT sleep(0.1) as first_query"
           EM.stop_event_loop
         }.resume

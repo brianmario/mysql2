@@ -128,13 +128,13 @@ static VALUE nogvl_execute(void *ptr) {
   }
 }
 
-#define FREE_BINDS                  \
- for (i = 0; i < argc; i++) {       \
-   if (bind_buffers[i].buffer) {    \
-     /*free(bind_buffers[i].buffer); FIXME: This should not free RSTRING_PTR */  \
-   }                                \
- }                                  \
- free(bind_buffers);
+#define FREE_BINDS                                        \
+ for (i = 0; i < argc; i++) {                             \
+   if (bind_buffers[i].buffer && NIL_P(params_enc[i])) {  \
+     xfree(bind_buffers[i].buffer);                        \
+   }                                                      \
+ }                                                        \
+ xfree(bind_buffers);
 
 /* call-seq: stmt.execute
  *
@@ -144,10 +144,21 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   MYSQL_BIND *bind_buffers = NULL;
   unsigned long bind_count;
   long i;
-  MYSQL_STMT* stmt;
+  MYSQL_STMT *stmt;
   MYSQL_RES *metadata;
   VALUE resultObj;
+  VALUE *params_enc = alloca(sizeof(VALUE) * argc);
+  unsigned long* length_buffers = NULL;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *conn_enc;
+#endif
   GET_STATEMENT(self);
+#ifdef HAVE_RUBY_ENCODING_H
+  {
+    GET_CLIENT(stmt_wrapper->client);
+    conn_enc = rb_to_encoding(wrapper->encoding);
+  }
+#endif
   
   stmt = stmt_wrapper->stmt;
   
@@ -159,9 +170,11 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   // setup any bind variables in the query
   if (bind_count > 0) {
     bind_buffers = xcalloc(bind_count, sizeof(MYSQL_BIND));
+    length_buffers = xcalloc(bind_count, sizeof(unsigned long));
 
     for (i = 0; i < argc; i++) {
       bind_buffers[i].buffer = NULL;
+      params_enc[i] = Qnil;
 
       switch (TYPE(argv[i])) {
         case T_NIL:
@@ -189,12 +202,14 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           *(double*)(bind_buffers[i].buffer) = NUM2DBL(argv[i]);
           break;
         case T_STRING:
-          // FIXME: convert encoding
-          bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
-          bind_buffers[i].buffer = RSTRING_PTR(argv[i]);
-          bind_buffers[i].buffer_length = RSTRING_LEN(argv[i]);
-          unsigned long len = RSTRING_LEN(argv[i]);
-          bind_buffers[i].length = &len;
+          {
+            params_enc[i] = rb_str_export_to_enc(argv[i], conn_enc);  
+            bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
+            bind_buffers[i].buffer = RSTRING_PTR(params_enc[i]);
+            bind_buffers[i].buffer_length = RSTRING_LEN(params_enc[i]);
+            length_buffers[i] = bind_buffers[i].buffer_length;
+            bind_buffers[i].length = &length_buffers[i];
+          }
           break;
         default:
           // TODO: what Ruby type should support MYSQL_TYPE_TIME

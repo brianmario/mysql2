@@ -85,6 +85,43 @@ results.each(:as => :array) do |row|
 end
 ```
 
+## Connection options
+
+You may set the following connection options in Mysql2::Client.new(...):
+
+``` ruby
+Mysql2::Client.new(
+  :host,
+  :username,
+  :password,
+  :port,
+  :database,
+  :socket = '/path/to/mysql.sock',
+  :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | MULTI_STATEMENTS,
+  :encoding = 'utf8',
+  :read_timeout = seconds,
+  :connect_timeout = seconds,
+  :reconnect = true/false,
+  :local_infile = true/false,
+  )
+```
+
+You can also retrieve multiple result sets. For this to work you need to connect with
+flags `Mysql2::Client::MULTI_STATEMENTS`. Using multiple result sets is normally used
+when calling stored procedures that return more than one result set
+
+``` ruby
+client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS )
+result = client.query( 'CALL sp_customer_list( 25, 10 )')
+# result now contains the first result set
+while ( client.next_result)
+    result = client.store_result
+    # result now contains the next result set
+end
+```
+
+See https://gist.github.com/1367987 for using MULTI_STATEMENTS with ActiveRecord.
+
 ## Cascading config
 
 The default config hash is at:
@@ -212,6 +249,21 @@ This is especially helpful since it saves the cost of creating the row in Ruby i
 If you only plan on using each row once, then it's much more efficient to disable this behavior by setting the `:cache_rows` option to false.
 This would be helpful if you wanted to iterate over the results in a streaming manner. Meaning the GC would cleanup rows you don't need anymore as you're iterating over the result set.
 
+### Streaming
+
+`Mysql2::Client` can optionally only fetch rows from the server on demand by setting `:stream => true`. This is handy when handling very large result sets which might not fit in memory on the client.
+
+``` ruby
+result = client.query("SELECT * FROM really_big_Table", :stream => true)
+```
+
+There are a few things that need to be kept in mind while using streaming:
+
+* `:cache_rows` is ignored currently. (if you want to use `:cache_rows` you probably don't want to be using `:stream`)
+* You must fetch all rows in the result set of your query before you can make new queries. (i.e. with `Mysql2::Result#each`)
+
+Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html.
+
 ## ActiveRecord
 
 To use the ActiveRecord driver (with or without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
@@ -325,6 +377,12 @@ CREATE DATABASE test;
 CREATE USER '<user>'@'localhost' IDENTIFIED BY '';
 GRANT ALL PRIVILEGES ON test.* TO '<user>'@'localhost';
 ```
+
+You can change these defaults in the spec/configuration.yml which is generated
+automatically when you run rake (or explicitly `rake spec/configuration.yml`).
+
+For a normal installation on a Mac, you most likely do not need to do anything,
+though.
 
 ## Special Thanks
 

@@ -18,6 +18,22 @@ module Mysql2
 end
 
 if defined?(ActiveRecord::VERSION::STRING) && ActiveRecord::VERSION::STRING < "3.1"
-  puts "WARNING: This version of mysql2 (#{Mysql2::VERSION}) doesn't ship with the ActiveRecord adapter bundled anymore as it's now part of Rails 3.1"
-  puts "WARNING: Please use the 0.2.x releases if you plan on using it in Rails <= 3.0.x"
+  warn "============= WARNING FROM mysql2 ============="
+  warn "This version of mysql2 (#{Mysql2::VERSION}) doesn't ship with the ActiveRecord adapter."
+  warn "In Rails version 3.1.0 and up, the mysql2 ActiveRecord adapter is included with rails."
+  warn "If you want to use the mysql2 gem with Rails <= 3.0.x, please use the latest mysql2 in the 0.2.x series."
+  warn "============= END WARNING FROM mysql2 ============="
+end
+
+# For holding utility methods
+module Mysql2::Util
+
+  #
+  # Rekey a string-keyed hash with equivalent symbols.
+  #
+  def self.key_hash_as_symbols(hash)
+    return nil unless hash
+    Hash[hash.map { |k,v| [k.to_sym, v] }]
+  end
+	
 end

@@ -17,8 +17,10 @@ end
 
 file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
   CLEAN.exclude task.name
-  cp task.prerequisites.first, task.name
-  sh "sed -i 's/LOCALUSERNAME/#{ENV['USER']}/' #{task.name}"
+  src_path = File.expand_path("../../#{task.prerequisites.first}", __FILE__)
+  dst_path = File.expand_path("../../#{task.name}", __FILE__)
+  cp src_path, dst_path
+  sh "sed -i 's/LOCALUSERNAME/#{ENV['USER']}/' #{dst_path}"
 end
 
-task :spec => :'spec/configuration.yml'
+Rake::Task[:spec].prerequisites << :'spec/configuration.yml'

@@ -3,14 +3,14 @@ require 'spec_helper'
 
 describe Mysql2::Error do
   before(:each) do
-    @client = Mysql2::Client.new :encoding => "utf8"
+    @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
     begin
       @client.query("HAHAHA")
     rescue Mysql2::Error => e
       @error = e
     end
 
-    @client2 = Mysql2::Client.new :encoding => "big5"
+    @client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
     begin
       @client2.query("HAHAHA")
     rescue Mysql2::Error => e

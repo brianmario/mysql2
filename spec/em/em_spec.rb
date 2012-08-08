@@ -8,14 +8,14 @@ begin
     it "should support async queries" do
       results = []
       EM.run do
-        client1 = Mysql2::EM::Client.new
+        client1 = Mysql2::EM::Client.new DatabaseCredentials['root']
         defer1 = client1.query "SELECT sleep(0.1) as first_query"
         defer1.callback do |result|
           results << result.first
           EM.stop_event_loop
         end
 
-        client2 = Mysql2::EM::Client.new
+        client2 = Mysql2::EM::Client.new DatabaseCredentials['root']
         defer2 = client2.query "SELECT sleep(0.025) second_query"
         defer2.callback do |result|
           results << result.first
@@ -29,7 +29,7 @@ begin
     it "should support queries in callbacks" do
       results = []
       EM.run do
-        client = Mysql2::EM::Client.new
+        client = Mysql2::EM::Client.new DatabaseCredentials['root']
         defer1 = client.query "SELECT sleep(0.025) as first_query"
         defer1.callback do |result|
           results << result.first
@@ -48,7 +48,7 @@ begin
     it "should not swallow exceptions raised in callbacks" do
       lambda {
         EM.run do
-          client = Mysql2::EM::Client.new
+          client = Mysql2::EM::Client.new DatabaseCredentials['root']
           defer = client.query "SELECT sleep(0.1) as first_query"
           defer.callback do |result|
             raise 'some error'
@@ -63,7 +63,7 @@ begin
     end
 
     context 'when an exception is raised by the client' do
-      let(:client) { Mysql2::EM::Client.new }
+      let(:client) { Mysql2::EM::Client.new DatabaseCredentials['root'] }
       let(:error) { StandardError.new('some error') }
       before { client.stub(:async_result).and_raise(error) }
 

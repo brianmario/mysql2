@@ -53,17 +53,15 @@ describe Mysql2::Statement do
   it "should let us iterate over results" do
     statement = @client.prepare 'SELECT 1'
     result = statement.execute
-    puts "result.count: #{result.count}"
     rows = []
     result.each {|r| rows << r}
-    p rows
-    rows.should == [[1]]
+    rows.should == [{"1"=>1}]
   end
 
   it "should select dates" do
     statement = @client.prepare 'SELECT NOW()'
     result = statement.execute
-    result.first.first.should be_kind_of Time
+    result.first.first[1].should be_kind_of Time
   end
 
   it "should tell us about the fields" do

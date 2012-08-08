@@ -836,7 +836,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       wrapper->numberOfRows = 0;
       wrapper->rows = rb_ary_new();
     } else {
-      wrapper->numberOfRows = mysql_num_rows(wrapper->result);
+      wrapper->numberOfRows = wrapper->stmt ? mysql_stmt_num_rows(wrapper->stmt) : mysql_num_rows(wrapper->result);
       if (wrapper->numberOfRows == 0) {
         wrapper->rows = rb_ary_new();
         return wrapper->rows;

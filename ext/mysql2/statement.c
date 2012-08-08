@@ -131,7 +131,7 @@ static VALUE nogvl_execute(void *ptr) {
 #define FREE_BINDS                  \
  for (i = 0; i < argc; i++) {       \
    if (bind_buffers[i].buffer) {    \
-     free(bind_buffers[i].buffer);  \
+     /*free(bind_buffers[i].buffer); FIXME: This should not free RSTRING_PTR */  \
    }                                \
  }                                  \
  free(bind_buffers);

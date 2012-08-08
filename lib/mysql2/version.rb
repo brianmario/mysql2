@@ -1,3 +1,3 @@
 module Mysql2
-  VERSION = "0.2.18"
+  VERSION = "0.2.19b1"
 end

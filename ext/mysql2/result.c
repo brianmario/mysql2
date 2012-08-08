@@ -69,10 +69,16 @@ static void rb_mysql_result_mark(void * wrapper) {
 
 /* this may be called manually or during GC */
 static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
-  if (wrapper && wrapper->resultFreed != 1) {
+  if (!wrapper) return;
+  
+  if (wrapper->resultFreed != 1) {
+    if (wrapper->stmt) {
+      mysql_stmt_free_result(wrapper->stmt); 
+    }
     mysql_free_result(wrapper->result);
     wrapper->resultFreed = 1;
   }
+
 }
 
 /* this is called during GC */
@@ -162,6 +168,236 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
 }
 #endif
 
+static VALUE rb_mysql_result_stmt_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast, MYSQL_FIELD * fields) {
+  VALUE rowVal;
+  mysql2_result_wrapper * wrapper;
+  unsigned int i = 0;
+  MYSQL_BIND *result_buffers; // FIXME: don't do this every time
+  my_bool *is_null;
+  my_bool *error;
+  unsigned long *length;
+
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc;
+  rb_encoding *conn_enc;
+#endif
+  GetMysql2Result(self, wrapper);
+
+#ifdef HAVE_RUBY_ENCODING_H
+  default_internal_enc = rb_default_internal_encoding();
+  conn_enc = rb_to_encoding(wrapper->encoding);
+#endif
+
+  if (asArray) {
+    rowVal = rb_ary_new2(wrapper->numberOfFields);
+  } else {
+    rowVal = rb_hash_new();
+  }
+  if (wrapper->fields == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
+  }
+  
+  result_buffers = xcalloc(wrapper->numberOfFields, sizeof(MYSQL_BIND));
+  is_null = xcalloc(wrapper->numberOfFields, sizeof(my_bool));
+  error = xcalloc(wrapper->numberOfFields, sizeof(my_bool));
+  length = xcalloc(wrapper->numberOfFields, sizeof(unsigned long));
+
+  for (i = 0; i < wrapper->numberOfFields; i++) {
+    result_buffers[i].buffer_type = fields[i].type;
+
+    //      mysql type    |            C type
+    switch(fields[i].type) {
+      case MYSQL_TYPE_NULL:         // NULL
+        break;
+      case MYSQL_TYPE_TINY:         // signed char
+        result_buffers[i].buffer = xcalloc(1, sizeof(signed char));
+        result_buffers[i].buffer_length = sizeof(signed char);
+        break;
+      case MYSQL_TYPE_SHORT:        // short int
+        result_buffers[i].buffer = xcalloc(1, sizeof(short int));
+        result_buffers[i].buffer_length = sizeof(short int);
+        break;
+      case MYSQL_TYPE_INT24:        // int
+      case MYSQL_TYPE_LONG:         // int
+      case MYSQL_TYPE_YEAR:         // int
+        result_buffers[i].buffer = xcalloc(1, sizeof(int));
+        result_buffers[i].buffer_length = sizeof(int);
+        break;
+      case MYSQL_TYPE_LONGLONG:     // long long int
+        result_buffers[i].buffer = xcalloc(1, sizeof(long long int));
+        result_buffers[i].buffer_length = sizeof(long long int);
+        break;
+      case MYSQL_TYPE_FLOAT:        // float
+      case MYSQL_TYPE_DOUBLE:       // double
+        result_buffers[i].buffer = xcalloc(1, sizeof(double));
+        result_buffers[i].buffer_length = sizeof(double);
+        break;
+      case MYSQL_TYPE_TIME:         // MYSQL_TIME
+      case MYSQL_TYPE_DATE:         // MYSQL_TIME
+      case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
+      case MYSQL_TYPE_DATETIME:     // MYSQL_TIME
+      case MYSQL_TYPE_TIMESTAMP:    // MYSQL_TIME
+        result_buffers[i].buffer = xcalloc(1, sizeof(MYSQL_TIME));
+        result_buffers[i].buffer_length = sizeof(MYSQL_TIME);
+        break;
+      case MYSQL_TYPE_DECIMAL:      // char[]
+      case MYSQL_TYPE_NEWDECIMAL:   // char[]
+      case MYSQL_TYPE_STRING:       // char[]
+      case MYSQL_TYPE_VAR_STRING:   // char[]
+      case MYSQL_TYPE_VARCHAR:      // char[]
+      case MYSQL_TYPE_TINY_BLOB:    // char[]
+      case MYSQL_TYPE_BLOB:         // char[]
+      case MYSQL_TYPE_MEDIUM_BLOB:  // char[]
+      case MYSQL_TYPE_LONG_BLOB:    // char[]
+      case MYSQL_TYPE_BIT:          // char[]
+      case MYSQL_TYPE_SET:          // char[]
+      case MYSQL_TYPE_ENUM:         // char[]
+      case MYSQL_TYPE_GEOMETRY:     // char[]
+        result_buffers[i].buffer = malloc(fields[i].max_length);
+        result_buffers[i].buffer_length = fields[i].max_length;
+        break;
+      default:
+        rb_raise(cMysql2Error, "unhandled mysql type: %d", fields[i].type);
+    }
+
+    result_buffers[i].is_null = &is_null[i];
+    result_buffers[i].length  = &length[i];
+    result_buffers[i].error   = &error[i];
+    result_buffers[i].is_unsigned = ((fields[i].flags & UNSIGNED_FLAG) != 0);
+  }
+
+  if(mysql_stmt_bind_result(wrapper->stmt, result_buffers)) {
+    // FIXME: goto this
+    for(i = 0; i < wrapper->numberOfFields; i++) {
+      if (result_buffers[i].buffer) {
+        free(result_buffers[i].buffer);
+      }
+    }
+    free(result_buffers);
+    free(is_null);
+    free(error);
+    free(length);
+    rb_raise(cMysql2Error, "%s", mysql_stmt_error(wrapper->stmt));
+  }
+  
+  if(mysql_stmt_fetch(wrapper->stmt)) {
+    return Qnil;
+  }
+
+  for (i = 0; i < wrapper->numberOfFields; i++) {
+    VALUE field = rb_mysql_result_fetch_field(self, i, symbolizeKeys);
+    VALUE val = Qnil;
+    MYSQL_TIME *ts;
+
+    if (is_null[i]) {
+      val = Qnil;
+    } else {
+      switch(result_buffers[i].buffer_type) {
+        case MYSQL_TYPE_TINY:         // signed char
+          if (result_buffers[i].is_unsigned) {
+            val = UINT2NUM(*((unsigned char*)result_buffers[i].buffer));
+          } else {
+            val = INT2NUM(*((signed char*)result_buffers[i].buffer));
+          }
+          break;
+        case MYSQL_TYPE_SHORT:        // short int
+          if (result_buffers[i].is_unsigned) {
+            val = UINT2NUM(*((unsigned short int*)result_buffers[i].buffer));
+          } else  {
+            val = INT2NUM(*((short int*)result_buffers[i].buffer));
+          }
+          break;
+        case MYSQL_TYPE_INT24:        // int
+        case MYSQL_TYPE_LONG:         // int
+        case MYSQL_TYPE_YEAR:         // int
+          if (result_buffers[i].is_unsigned) {
+            val = UINT2NUM(*((unsigned int*)result_buffers[i].buffer));
+          } else {
+            val = INT2NUM(*((int*)result_buffers[i].buffer));
+          }
+          break;
+        case MYSQL_TYPE_LONGLONG:     // long long int
+          if (result_buffers[i].is_unsigned) {
+            val = ULL2NUM(*((unsigned long long int*)result_buffers[i].buffer));
+          } else {
+            val = LL2NUM(*((long long int*)result_buffers[i].buffer));
+          }
+          break;
+        case MYSQL_TYPE_FLOAT:        // float
+          val = rb_float_new((double)(*((float*)result_buffers[i].buffer)));
+          break;
+        case MYSQL_TYPE_DOUBLE:       // double
+          val = rb_float_new((double)(*((double*)result_buffers[i].buffer)));
+          break;
+        case MYSQL_TYPE_DATE:         // MYSQL_TIME
+          ts = (MYSQL_TIME*)result_buffers[i].buffer;
+          val = rb_funcall(cDate, rb_intern("new"), 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
+          break;
+        case MYSQL_TYPE_TIME:         // MYSQL_TIME
+          ts = (MYSQL_TIME*)result_buffers[i].buffer;
+          val = rb_funcall(rb_cTime,
+              rb_intern("mktime"), 6,
+              UINT2NUM(Qnil),
+              UINT2NUM(Qnil),
+              UINT2NUM(Qnil),
+              UINT2NUM(ts->hour),
+              UINT2NUM(ts->minute),
+              UINT2NUM(ts->second));
+          break;
+        case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
+        case MYSQL_TYPE_DATETIME:     // MYSQL_TIME
+        case MYSQL_TYPE_TIMESTAMP:    // MYSQL_TIME
+          ts = (MYSQL_TIME*)result_buffers[i].buffer;
+          val = rb_funcall(rb_cTime,
+              rb_intern("mktime"), 6,
+              UINT2NUM(ts->year),
+              UINT2NUM(ts->month),
+              UINT2NUM(ts->day),
+              UINT2NUM(ts->hour),
+              UINT2NUM(ts->minute),
+              UINT2NUM(ts->second));
+          break;
+        case MYSQL_TYPE_DECIMAL:      // char[]
+        case MYSQL_TYPE_NEWDECIMAL:   // char[]
+          val = rb_funcall(cBigDecimal, rb_intern("new"), 1, rb_str_new(result_buffers[i].buffer, *(result_buffers[i].length)));
+          break;
+        case MYSQL_TYPE_STRING:       // char[]
+        case MYSQL_TYPE_VAR_STRING:   // char[]
+        case MYSQL_TYPE_VARCHAR:      // char[]
+        case MYSQL_TYPE_TINY_BLOB:    // char[]
+        case MYSQL_TYPE_BLOB:         // char[]
+        case MYSQL_TYPE_MEDIUM_BLOB:  // char[]
+        case MYSQL_TYPE_LONG_BLOB:    // char[]
+        case MYSQL_TYPE_BIT:          // char[]
+        case MYSQL_TYPE_SET:          // char[]
+        case MYSQL_TYPE_ENUM:         // char[]
+        case MYSQL_TYPE_GEOMETRY:     // char[]
+          val = rb_str_new(result_buffers[i].buffer, *(result_buffers[i].length));
+#ifdef HAVE_RUBY_ENCODING_H
+          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+#endif
+          break;
+        default:
+          rb_raise(cMysql2Error, "unhandled buffer type: %d",
+              result_buffers[i].buffer_type);
+          break;
+      }
+    }
+
+    if (asArray) {
+      rb_ary_push(rowVal, val);
+    } else {
+      rb_hash_aset(rowVal, field, val);
+    }
+  }
+  
+  free(result_buffers);
+  free(is_null);
+  free(error);
+  free(length);
+  return rowVal;
+}
 
 static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast, MYSQL_FIELD * fields) {
   VALUE rowVal;
@@ -518,7 +754,7 @@ static VALUE rb_mysql_result_each_stmt(VALUE self, const result_each_args* args)
         if (args->cacheRows && i < rowsProcessed) {
           row = rb_ary_entry(wrapper->rows, i);
         } else {
-          row = rb_mysql_result_fetch_row(self, args->db_timezone, args->app_timezone, args->symbolizeKeys, args->asArray, args->castBool, args->cast, fields);
+          row = rb_mysql_result_stmt_fetch_row(self, args->db_timezone, args->app_timezone, args->symbolizeKeys, args->asArray, args->castBool, args->cast, fields);
           if (args->cacheRows) {
             rb_ary_store(wrapper->rows, i, row);
           }
@@ -630,14 +866,14 @@ static VALUE rb_mysql_result_count(VALUE self) {
       return LONG2NUM(RARRAY_LEN(wrapper->rows));
     }
   } else {
-	if(wrapper->stmt)
-	{
+    if(wrapper->stmt)
+    {
       return INT2FIX(mysql_stmt_num_rows(wrapper->stmt));
-	}
-	else
-	{
+    }
+    else
+    {
       return INT2FIX(mysql_num_rows(wrapper->result));
-	}
+    }
   }
 }
 

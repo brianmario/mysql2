@@ -43,12 +43,20 @@ describe Mysql2::Statement do
     statement.execute
     lambda { statement.each }.should raise_error
   end
+  
+  it "should tell us the result count" do
+    statement = @client.prepare 'SELECT 1'
+    result = statement.execute
+    result.count.should == 1
+  end
 
   it "should let us iterate over results" do
     statement = @client.prepare 'SELECT 1'
     result = statement.execute
+    puts "result.count: #{result.count}"
     rows = []
     result.each {|r| rows << r}
+    p rows
     rows.should == [[1]]
   end
 

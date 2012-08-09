@@ -801,7 +801,7 @@ static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
   args.db = StringValuePtr(db);
 
   if (rb_thread_blocking_region(nogvl_select_db, &args, RUBY_UBF_IO, 0) == Qfalse)
-    rb_raise_mysql2_error(wrapper); 
+    rb_raise_mysql2_error(wrapper);
 
   return db;
 }
@@ -858,14 +858,14 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 #ifdef HAVE_RUBY_ENCODING_H
   mysql2_result_wrapper * result_wrapper;
 #endif
-  
-  
+
+
   GET_CLIENT(self);
   // MYSQL_RES* res = mysql_store_result(wrapper->client);
   // if (res == NULL)
   //    mysql_raise(wrapper->client);
   // return mysqlres2obj(res);
-  
+
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
 
   if (result == NULL) {
@@ -885,7 +885,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   result_wrapper->encoding = wrapper->encoding;
 #endif
   return resultObj;
-  
+
 }
 
 #ifdef HAVE_RUBY_ENCODING_H

@@ -193,7 +193,7 @@ static void *nogvl_stmt_store_result(void *ptr) {
 
 /* call-seq: stmt.execute
  *
- * Executes the current prepared statement, returns +stmt+.
+ * Executes the current prepared statement, returns +result+.
  */
 static VALUE execute(int argc, VALUE *argv, VALUE self) {
   MYSQL_BIND *bind_buffers = NULL;
@@ -345,9 +345,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
   GET_CLIENT(stmt_wrapper->client);
 
-  if(is_streaming) {
-    rb_raise(cMysql2Error, "TODO: streaming stmt execute not yet impl.");
-  } else {
+  if (!is_streaming) {
     // recieve the whole result set from the server
     if (rb_thread_call_without_gvl(nogvl_stmt_store_result, stmt, RUBY_UBF_IO, 0) == Qfalse) {
       rb_raise_mysql2_stmt_error(self);

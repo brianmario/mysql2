@@ -130,6 +130,16 @@ static void *nogvl_execute(void *ptr) {
   }
 }
 
+static void *nogvl_stmt_store_result(void *ptr) {
+  MYSQL_STMT *stmt = ptr;
+
+  if(mysql_stmt_store_result(stmt)) {
+    return (void *)Qfalse;
+  } else {
+    return (void *)Qtrue;
+  }
+}
+
 #define FREE_BINDS                                          \
   for (i = 0; i < argc; i++) {                              \
     if (bind_buffers[i].buffer && NIL_P(params_enc[i])) {   \
@@ -295,8 +305,8 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   if(is_streaming) {
     rb_raise(cMysql2Error, "TODO: streaming stmt execute not yet impl.");
   } else {
-    // recieve the whole result set from ther server
-    if (mysql_stmt_store_result(stmt)) {
+    // recieve the whole result set from the server
+    if (rb_thread_call_without_gvl(nogvl_stmt_store_result, stmt, RUBY_UBF_IO, 0) == Qfalse) {
       rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
     }
     MARK_CONN_INACTIVE(stmt_wrapper->client);

@@ -12,9 +12,6 @@ static VALUE intern_encoding_from_charset;
 static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
-#define MARK_CONN_INACTIVE(conn) \
-  wrapper->active_thread = Qnil;
-
 /*
  * used to pass all arguments to mysql_real_connect while inside
  * rb_thread_blocking_region
@@ -445,6 +442,25 @@ static VALUE finish_and_mark_inactive(void *args) {
 }
 #endif
 
+void rb_mysql_client_set_active_thread(VALUE self) {
+  VALUE thread_current = rb_thread_current();
+  GET_CLIENT(self);
+
+  // see if this connection is still waiting on a result from a previous query
+  if (NIL_P(wrapper->active_thread)) {
+    // mark this connection active
+    wrapper->active_thread = thread_current;
+  } else if (wrapper->active_thread == thread_current) {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  } else {
+    VALUE inspect = rb_inspect(wrapper->active_thread);
+    const char *thr = StringValueCStr(inspect);
+
+    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
+    RB_GC_GUARD(inspect);
+  }
+}
+
 /* call-seq:
  *    client.query(sql, options = {})
  *
@@ -458,7 +474,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   struct nogvl_send_query_args args;
   int async = 0;
   VALUE opts, defaults;
-  VALUE thread_current = rb_thread_current();
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
 #endif
@@ -466,7 +481,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 
   REQUIRE_OPEN_DB(wrapper);
   args.mysql = wrapper->client;
-
 
   defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
@@ -488,22 +502,9 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #endif
   args.sql_ptr = StringValuePtr(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
-
-  // see if this connection is still waiting on a result from a previous query
-  if (NIL_P(wrapper->active_thread)) {
-    // mark this connection active
-    wrapper->active_thread = thread_current;
-  } else if (wrapper->active_thread == thread_current) {
-    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
-  } else {
-    VALUE inspect = rb_inspect(wrapper->active_thread);
-    const char *thr = StringValueCStr(inspect);
-
-    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
-    RB_GC_GUARD(inspect);
-  }
-
   args.wrapper = wrapper;
+  
+  rb_mysql_client_set_active_thread(self);
 
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);

@@ -48,4 +48,11 @@ typedef struct {
     rb_raise(cMysql2Error, "closed MySQL connection"); \
   }
 
+void rb_mysql_client_set_active_thread(VALUE self);
+
+#define MARK_CONN_INACTIVE(conn) do {\
+    GET_CLIENT(conn); \
+    wrapper->active_thread = Qnil; \
+  } while(0)
+
 #endif

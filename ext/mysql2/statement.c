@@ -131,10 +131,10 @@ static VALUE nogvl_execute(void *ptr) {
 #define FREE_BINDS                                        \
  for (i = 0; i < argc; i++) {                             \
    if (bind_buffers[i].buffer && NIL_P(params_enc[i])) {  \
-     xfree(bind_buffers[i].buffer);                        \
+     xfree(bind_buffers[i].buffer);                       \
    }                                                      \
  }                                                        \
- xfree(bind_buffers);
+ if(argc > 0) xfree(bind_buffers);
 
 /* call-seq: stmt.execute
  *
@@ -257,21 +257,22 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
       rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
     }
   }
-
+ 
+  rb_mysql_client_set_active_thread(stmt_wrapper->client);
   if (rb_thread_blocking_region(nogvl_execute, stmt, RUBY_UBF_IO, 0) == Qfalse) {
     FREE_BINDS;
     rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
   }
 
-  if (bind_count > 0) {
-    FREE_BINDS;
-  }
+  FREE_BINDS;
 
   metadata = mysql_stmt_result_metadata(stmt);
   if(metadata == NULL) {
     if(mysql_stmt_errno(stmt) != 0) {
-      // FIXME: MARK_CONN_INACTIVE(wrapper->client);
-      // FIXME: rb_raise_mysql2_stmt_error(self);
+      // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
+	  
+      MARK_CONN_INACTIVE(stmt_wrapper->client);
+      rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
     }
     // no data and no error, so query was not a SELECT
     return Qnil;
@@ -281,6 +282,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   if (mysql_stmt_store_result(stmt)) {
     rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
   }
+  MARK_CONN_INACTIVE(stmt_wrapper->client);
   
   resultObj = rb_mysql_result_to_obj(metadata, stmt);
   rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(stmt_wrapper->client, "@query_options"), rb_intern("dup"), 0));

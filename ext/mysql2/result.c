@@ -263,7 +263,7 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
   }
 }
 
-static VALUE rb_mysql_result_stmt_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast, MYSQL_FIELD * fields) {
+static VALUE rb_mysql_result_stmt_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, MYSQL_FIELD * fields) {
   VALUE rowVal;
   mysql2_result_wrapper * wrapper;
   unsigned int i = 0;
@@ -784,7 +784,7 @@ static VALUE rb_mysql_result_each_stmt(VALUE self, const result_each_args* args)
       fields = mysql_fetch_fields(wrapper->result);
 
       do {
-        row = rb_mysql_result_stmt_fetch_row(self, args->db_timezone, args->app_timezone, args->symbolizeKeys, args->asArray, args->castBool, args->cast, fields);
+        row = rb_mysql_result_stmt_fetch_row(self, args->db_timezone, args->app_timezone, args->symbolizeKeys, args->asArray, args->castBool, fields);
 
         if (args->block_given && row != Qnil) {
           rb_yield(row);
@@ -816,7 +816,7 @@ static VALUE rb_mysql_result_each_stmt(VALUE self, const result_each_args* args)
         if (args->cacheRows && i < rowsProcessed) {
           row = rb_ary_entry(wrapper->rows, i);
         } else {
-          row = rb_mysql_result_stmt_fetch_row(self, args->db_timezone, args->app_timezone, args->symbolizeKeys, args->asArray, args->castBool, args->cast, fields);
+          row = rb_mysql_result_stmt_fetch_row(self, args->db_timezone, args->app_timezone, args->symbolizeKeys, args->asArray, args->castBool, fields);
           if (args->cacheRows) {
             rb_ary_store(wrapper->rows, i, row);
           }
@@ -871,6 +871,9 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
   if(wrapper->stmt && !args.cacheRows && !args.streaming) {
     rb_warn("cacheRows is forced for prepared statements (if not streaming)");
+  }
+  if(wrapper->stmt && !args.cast) {
+    rb_wran("cast is forced for prepared statements"); 
   }
 
   dbTz = rb_hash_aref(opts, sym_database_timezone);

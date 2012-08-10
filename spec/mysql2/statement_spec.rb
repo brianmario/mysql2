@@ -174,13 +174,19 @@ describe Mysql2::Statement do
       id2 = @client.last_id
       @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'
       id3 = @client.last_id
+      
+      @client.query_options[:cast_booleans] = true
+      
+      stmt = @client.prepare('SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = ? LIMIT 1')
 
-      result1 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast_booleans => true
-      result2 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 0 LIMIT 1', :cast_booleans => true
-      result3 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = -1 LIMIT 1', :cast_booleans => true
+      result1 = stmt.execute(1)
       result1.first['bool_cast_test'].should be_true
+      result2 = stmt.execute(0)
       result2.first['bool_cast_test'].should be_false
+      result3 = stmt.execute(-1)
       result3.first['bool_cast_test'].should be_true
+      
+      @client.query_options[:cast_booleans] = false
 
       @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
     end
@@ -239,39 +245,39 @@ describe Mysql2::Statement do
 
       it "should return DateTime when timestamp is < 1901-12-13 20:45:52" do
                                       # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
-        r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
+        r = @client.prepare("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test").execute
         r.first['test'].class.should eql(klass)
       end
 
       it "should return DateTime when timestamp is > 2038-01-19T03:14:07" do
                                       # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
-        r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+        r = @client.prepare("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test").execute
         r.first['test'].class.should eql(klass)
       end
     elsif 1.size == 8 # 64bit
       if RUBY_VERSION =~ /1.9/
         it "should return Time when timestamp is < 1901-12-13 20:45:52" do
-          r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
+          r = @client.prepare("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test").execute
           r.first['test'].class.should eql(Time)
         end
 
         it "should return Time when timestamp is > 2038-01-19T03:14:07" do
-          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+          r = @client.prepare("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test").execute
           r.first['test'].class.should eql(Time)
         end
       else
         it "should return Time when timestamp is > 0138-12-31 11:59:59" do
-          r = @client.query("SELECT CAST('0139-1-1 00:00:00' AS DATETIME) as test")
+          r = @client.prepare("SELECT CAST('0139-1-1 00:00:00' AS DATETIME) as test").execute
           r.first['test'].class.should eql(Time)
         end
 
         it "should return DateTime when timestamp is < 0139-1-1T00:00:00" do
-          r = @client.query("SELECT CAST('0138-12-31 11:59:59' AS DATETIME) as test")
+          r = @client.prepare("SELECT CAST('0138-12-31 11:59:59' AS DATETIME) as test").execute
           r.first['test'].class.should eql(DateTime)
         end
 
         it "should return Time when timestamp is > 2038-01-19T03:14:07" do
-          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+          r = @client.prepare("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test").execute
           r.first['test'].class.should eql(Time)
         end
       end
@@ -301,21 +307,21 @@ describe Mysql2::Statement do
       context "string encoding for ENUM values" do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do
           Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['enum_test'].encoding.should eql(Encoding.find('utf-8'))
 
           client2 = Mysql2::Client.new :encoding => 'ascii'
           client2.query "USE test"
-          result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = client2.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
         end
 
         it "should use Encoding.default_internal" do
           Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['enum_test'].encoding.should eql(Encoding.default_internal)
           Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['enum_test'].encoding.should eql(Encoding.default_internal)
         end
       end
@@ -330,21 +336,21 @@ describe Mysql2::Statement do
       context "string encoding for SET values" do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do
           Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['set_test'].encoding.should eql(Encoding.find('utf-8'))
 
           client2 = Mysql2::Client.new :encoding => 'ascii'
           client2.query "USE test"
-          result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = client2.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
         end
 
         it "should use Encoding.default_internal" do
           Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['set_test'].encoding.should eql(Encoding.default_internal)
           Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['set_test'].encoding.should eql(Encoding.default_internal)
         end
       end
@@ -359,16 +365,16 @@ describe Mysql2::Statement do
       context "string encoding for BINARY values" do
         it "should default to binary if Encoding.default_internal is nil" do
           Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['binary_test'].encoding.should eql(Encoding.find('binary'))
         end
 
         it "should not use Encoding.default_internal" do
           Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['binary_test'].encoding.should eql(Encoding.find('binary'))
           Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+          result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
           result['binary_test'].encoding.should eql(Encoding.find('binary'))
         end
       end
@@ -397,36 +403,36 @@ describe Mysql2::Statement do
           if ['VARBINARY', 'TINYBLOB', 'BLOB', 'MEDIUMBLOB', 'LONGBLOB'].include?(type)
             it "should default to binary if Encoding.default_internal is nil" do
               Encoding.default_internal = nil
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+              result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
               result['binary_test'].encoding.should eql(Encoding.find('binary'))
             end
 
             it "should not use Encoding.default_internal" do
               Encoding.default_internal = Encoding.find('utf-8')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+              result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
               result['binary_test'].encoding.should eql(Encoding.find('binary'))
               Encoding.default_internal = Encoding.find('us-ascii')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+              result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
               result['binary_test'].encoding.should eql(Encoding.find('binary'))
             end
           else
             it "should default to utf-8 if Encoding.default_internal is nil" do
               Encoding.default_internal = nil
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+              result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
               result[field].encoding.should eql(Encoding.find('utf-8'))
 
               client2 = Mysql2::Client.new :encoding => 'ascii'
               client2.query "USE test"
-              result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+              result = client2.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
               result[field].encoding.should eql(Encoding.find('us-ascii'))
             end
 
             it "should use Encoding.default_internal" do
               Encoding.default_internal = Encoding.find('utf-8')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+              result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
               result[field].encoding.should eql(Encoding.default_internal)
               Encoding.default_internal = Encoding.find('us-ascii')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+              result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
               result[field].encoding.should eql(Encoding.default_internal)
             end
           end

@@ -107,7 +107,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     REQUIRE_CONNECTED(wrapper);
     stmt_wrapper->stmt = mysql_stmt_init(wrapper->client);
 #ifdef HAVE_RUBY_ENCODING_H
-	conn_enc = rb_to_encoding(wrapper->encoding);
+    conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
   }
   if (stmt_wrapper->stmt == NULL) {
@@ -128,7 +128,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     args.stmt = stmt_wrapper->stmt;
 	  args.sql = sql;
 #ifdef HAVE_RUBY_ENCODING_H
-	// ensure the string is in the encoding the connection is expecting
+    // ensure the string is in the encoding the connection is expecting
     args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
     args.sql_ptr = StringValuePtr(sql);

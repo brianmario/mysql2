@@ -380,9 +380,9 @@ static VALUE rb_mysql_result_stmt_fetch_row(VALUE self, ID db_timezone, ID app_t
           ts = (MYSQL_TIME*)result_buffer->buffer;
           val = rb_funcall(rb_cTime,
               rb_intern("mktime"), 6,
-              UINT2NUM(Qnil),
-              UINT2NUM(Qnil),
-              UINT2NUM(Qnil),
+              opt_time_year,
+              opt_time_month,
+              opt_time_month,
               UINT2NUM(ts->hour),
               UINT2NUM(ts->minute),
               UINT2NUM(ts->second));

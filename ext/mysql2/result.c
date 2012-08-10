@@ -941,6 +941,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     rb_warn("cacheRows is ignored if streaming is true");
   }
 
+  if(wrapper->stmt && !args.cacheRows && !args.streaming) {
+    rb_warn("cacheRows is forced for prepared statements (if not streaming)");
+  }
+
   dbTz = rb_hash_aref(opts, sym_database_timezone);
   if (dbTz == sym_local) {
     db_timezone = intern_local;

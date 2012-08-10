@@ -148,6 +148,91 @@ describe Mysql2::Statement do
     end
   end
 
+  context "#each" do
+    # note: The current impl. of prepared statement requires results to be cached on #execute except for streaming queries
+    #       The drawback of this is that args of Result#each is ignored...
+
+    it "should yield rows as hash's" do
+      @result = @client.prepare("SELECT 1").execute
+      @result.each do |row|
+        row.class.should eql(Hash)
+      end
+    end
+
+    it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
+      @client.query_options[:symbolize_keys] = true
+      @result = @client.prepare("SELECT 1").execute
+      @result.each do |row|
+        row.keys.first.class.should eql(Symbol)
+      end
+      @client.query_options[:symbolize_keys] = false
+    end
+
+    it "should be able to return results as an array" do
+      @client.query_options[:as] = :array
+
+      @result = @client.prepare("SELECT 1").execute
+      @result.each do |row|
+        row.class.should eql(Array)
+      end
+
+      @client.query_options[:as] = :hash
+    end
+
+    it "should cache previously yielded results by default" do
+      @result = @client.prepare("SELECT 1").execute
+      @result.first.object_id.should eql(@result.first.object_id)
+    end
+
+    it "should yield different value for #first if streaming" do
+      @client.query_options[:stream] = true
+      @client.query_options[:cache_rows] = false
+
+      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
+      result.first.should_not eql(result.first)
+
+      @client.query_options[:stream] = false
+      @client.query_options[:cache_rows] = true
+    end
+
+    it "should yield the same value for #first if streaming is disabled" do
+      @client.query_options[:stream] = false
+      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
+      result.first.should eql(result.first)
+    end
+
+    it "should throw an exception if we try to iterate twice when streaming is enabled" do
+      @client.query_options[:stream] = true
+      @client.query_options[:cache_rows] = false
+
+      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
+
+      expect {
+        result.each {}
+        result.each {}
+      }.to raise_exception(Mysql2::Error)
+
+      @client.query_options[:stream] = false
+      @client.query_options[:cache_rows] = true
+    end
+  end
+
+  context "#fields" do
+    before(:each) do
+      @client.query "USE test"
+      @test_result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute
+    end
+
+    it "method should exist" do
+      @test_result.should respond_to(:fields)
+    end
+
+    it "should return an array of field names in proper order" do
+      result = @client.prepare("SELECT 'a', 'b', 'c'").execute
+      result.fields.should eql(['a', 'b', 'c'])
+    end
+  end
+
   context "row data type mapping" do
     before(:each) do
       @client.query "USE test"

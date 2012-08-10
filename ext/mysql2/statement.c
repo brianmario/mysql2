@@ -265,7 +265,10 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           break;
         case T_STRING:
           {
-            params_enc[i] = rb_str_export_to_enc(argv[i], conn_enc);
+            params_enc[i] = argv[i];
+#ifdef HAVE_RUBY_ENCODING_H
+            params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
+#endif
             bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
             bind_buffers[i].buffer = RSTRING_PTR(params_enc[i]);
             bind_buffers[i].buffer_length = RSTRING_LEN(params_enc[i]);

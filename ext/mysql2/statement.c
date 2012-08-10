@@ -2,7 +2,7 @@
 
 VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
-static VALUE sym_stream, intern_error_number_eql, intern_sql_state_eql;
+static VALUE sym_stream, intern_error_number_eql, intern_sql_state_eql, intern_dup, intern_each;
 
 #define GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
@@ -347,7 +347,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   }
   
   resultObj = rb_mysql_result_to_obj(metadata, stmt);
-  rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(stmt_wrapper->client, "@query_options"), rb_intern("dup"), 0));
+  rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(stmt_wrapper->client, "@query_options"), intern_dup, 0));
 #ifdef HAVE_RUBY_ENCODING_H
   {
     mysql2_result_wrapper* result_wrapper;
@@ -357,6 +357,11 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
     result_wrapper->encoding = wrapper->encoding;
   }
 #endif
+  
+  if(! is_streaming) {
+    // cache all result
+    rb_funcall(resultObj, intern_each, 0);
+  }
 
   return resultObj;
 }
@@ -420,4 +425,6 @@ void init_mysql2_statement() {
   
   intern_error_number_eql = rb_intern("error_number=");
   intern_sql_state_eql = rb_intern("sql_state=");
+  intern_dup = rb_intern("dup");
+  intern_each = rb_intern("each");
 }

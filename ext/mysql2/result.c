@@ -317,8 +317,11 @@ static VALUE rb_mysql_result_stmt_fetch_row(VALUE self, ID db_timezone, ID app_t
   }
 
   if(mysql_stmt_bind_result(wrapper->stmt, wrapper->result_buffers)) {
-
-    rb_raise(cMysql2Error, "%s", mysql_stmt_error(wrapper->stmt));
+    rb_raise_mysql2_stmt_error2(wrapper->stmt
+#ifdef HAVE_RUBY_ENCODING_H
+      , conn_enc
+#endif
+      );
   }
 
   if(mysql_stmt_fetch(wrapper->stmt)) {

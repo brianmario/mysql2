@@ -112,6 +112,12 @@ static VALUE nogvl_fetch_row(void *ptr) {
   return (VALUE)mysql_fetch_row(result);
 }
 
+static VALUE nogvl_stmt_fetch(void *ptr) {
+  MYSQL_STMT *stmt = ptr;
+  
+  return (VALUE)mysql_stmt_fetch(stmt);
+}
+
 static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
   mysql2_result_wrapper * wrapper;
   VALUE rb_field;
@@ -295,8 +301,28 @@ static VALUE rb_mysql_result_stmt_fetch_row(VALUE self, ID db_timezone, ID app_t
       );
   }
   
-  if(mysql_stmt_fetch(wrapper->stmt)) {
-    return Qnil;
+  {
+    int r = (int)rb_thread_blocking_region(nogvl_stmt_fetch, wrapper->stmt, RUBY_UBF_IO, 0);
+    switch(r) {
+      case 0:
+        /* success */
+        break;
+        
+      case 1:
+        /* error */
+        rb_raise_mysql2_stmt_error2(wrapper->stmt
+#ifdef HAVE_RUBY_ENCODING_H 
+          , conn_enc
+#endif
+          );
+
+      case MYSQL_NO_DATA:
+        /* no more row */
+        return Qnil;
+        
+      case MYSQL_DATA_TRUNCATED:
+        rb_raise(cMysql2Error, "IMPLBUG: caught MYSQL_DATA_TRUNCATED. should not come here as buffer_length is set to fields[i].max_length.");
+    }
   }
 
   for (i = 0; i < wrapper->numberOfFields; i++) {

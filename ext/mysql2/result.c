@@ -377,33 +377,54 @@ static VALUE rb_mysql_result_stmt_fetch_row(VALUE self, ID db_timezone, ID app_t
           val = rb_float_new((double)(*((double*)result_buffer->buffer)));
           break;
         case MYSQL_TYPE_DATE:         // MYSQL_TIME
+        case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
           val = rb_funcall(cDate, rb_intern("new"), 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
           break;
         case MYSQL_TYPE_TIME:         // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          val = rb_funcall(rb_cTime,
-              rb_intern("mktime"), 6,
-              opt_time_year,
-              opt_time_month,
-              opt_time_month,
-              UINT2NUM(ts->hour),
-              UINT2NUM(ts->minute),
-              UINT2NUM(ts->second));
+          val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second));
+          if (!NIL_P(app_timezone)) {
+            if (app_timezone == intern_local) {
+              val = rb_funcall(val, intern_localtime, 0);
+            } else { // utc
+              val = rb_funcall(val, intern_utc, 0);
+            }
+          }
           break;
-        case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
         case MYSQL_TYPE_DATETIME:     // MYSQL_TIME
-        case MYSQL_TYPE_TIMESTAMP:    // MYSQL_TIME
+        case MYSQL_TYPE_TIMESTAMP: {  // MYSQL_TIME
+          uint64_t seconds;
+
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          val = rb_funcall(rb_cTime,
-              rb_intern("mktime"), 6,
-              UINT2NUM(ts->year),
-              UINT2NUM(ts->month),
-              UINT2NUM(ts->day),
-              UINT2NUM(ts->hour),
-              UINT2NUM(ts->minute),
-              UINT2NUM(ts->second));
+          seconds = (ts->year*31557600ULL) + (ts->month*2592000ULL) + (ts->day*86400ULL) + (ts->hour*3600ULL) + (ts->minute*60ULL) + ts->second;
+          
+          if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
+            VALUE offset = INT2NUM(0);
+            if (db_timezone == intern_local) {
+              offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
+            }
+            val = rb_funcall(cDateTime, intern_civil, 7, UINT2NUM(ts->year), UINT2NUM(ts->month), UINT2NUM(ts->day), UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second), offset);
+            if (!NIL_P(app_timezone)) {
+              if (app_timezone == intern_local) {
+                offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
+                val = rb_funcall(val, intern_new_offset, 1, offset);
+              } else { // utc
+                val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
+              }
+            }
+          } else {
+            val = rb_funcall(rb_cTime, db_timezone, 6, UINT2NUM(ts->year), UINT2NUM(ts->month), UINT2NUM(ts->day), UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second));
+            if (!NIL_P(app_timezone)) {
+              if (app_timezone == intern_local) {
+                val = rb_funcall(val, intern_localtime, 0);
+              } else { // utc
+                val = rb_funcall(val, intern_utc, 0);
+              }
+            }
+          }
           break;
+        }
         case MYSQL_TYPE_DECIMAL:      // char[]
         case MYSQL_TYPE_NEWDECIMAL:   // char[]
           val = rb_funcall(cBigDecimal, rb_intern("new"), 1, rb_str_new(result_buffer->buffer, *(result_buffer->length)));

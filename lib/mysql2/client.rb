@@ -18,19 +18,16 @@ module Mysql2
       @query_options = @@default_query_options.dup
       @query_options.merge! opts
 
-      init_connection
+      initialize_ext
 
-      [:reconnect, :connect_timeout].each do |key|
+      # Set MySQL connection options (each one is a call to mysql_options())
+      [:reconnect, :connect_timeout, :local_infile, :read_timeout].each do |key|
         next unless opts.key?(key)
         send(:"#{key}=", opts[key])
       end
+
       # force the encoding to utf8
       self.charset_name = opts[:encoding] || 'utf8'
-
-      @read_timeout = opts[:read_timeout]
-      if @read_timeout and @read_timeout < 0
-        raise Mysql2::Error, "read_timeout must be a positive integer, you passed #{@read_timeout}"
-      end
 
       ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher))
       

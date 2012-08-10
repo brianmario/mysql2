@@ -104,6 +104,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   // instantiate stmt
   {
     GET_CLIENT(rb_client);
+    REQUIRE_CONNECTED(wrapper);
     stmt_wrapper->stmt = mysql_stmt_init(wrapper->client);
 #ifdef HAVE_RUBY_ENCODING_H
 	conn_enc = rb_to_encoding(wrapper->encoding);

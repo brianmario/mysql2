@@ -35,18 +35,32 @@ typedef struct {
   VALUE encoding;
   VALUE active_thread; /* rb_thread_current() or Qnil */
   int reconnect_enabled;
-  int closed;
+  int active;
+  int connected;
+  int initialized;
   MYSQL *client;
 } mysql_client_wrapper;
+
+#define REQUIRE_INITIALIZED(wrapper) \
+  if (!wrapper->initialized) { \
+    rb_raise(cMysql2Error, "MySQL client is not initialized"); \
+  }
+
+#define REQUIRE_CONNECTED(wrapper) \
+  REQUIRE_INITIALIZED(wrapper) \
+  if (!wrapper->connected && !wrapper->reconnect_enabled) { \
+    rb_raise(cMysql2Error, "closed MySQL connection"); \
+  }
+
+#define REQUIRE_NOT_CONNECTED(wrapper) \
+  REQUIRE_INITIALIZED(wrapper) \
+  if (wrapper->connected) { \
+    rb_raise(cMysql2Error, "MySQL connection is already open"); \
+  }
 
 #define GET_CLIENT(self) \
   mysql_client_wrapper *wrapper; \
   Data_Get_Struct(self, mysql_client_wrapper, wrapper)
-
-#define REQUIRE_OPEN_DB(wrapper) \
-  if(!wrapper->reconnect_enabled && wrapper->closed) { \
-    rb_raise(cMysql2Error, "closed MySQL connection"); \
-  }
 
 void rb_mysql_client_set_active_thread(VALUE self);
 

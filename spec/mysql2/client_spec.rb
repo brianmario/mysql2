@@ -3,7 +3,7 @@ require 'spec_helper'
 
 describe Mysql2::Client do
   before(:each) do
-    @client = Mysql2::Client.new
+    @client = Mysql2::Client.new DatabaseCredentials['root']
   end
 
   if defined? Encoding
@@ -161,7 +161,7 @@ describe Mysql2::Client do
       end
 
       it "should timeout if we wait longer than :read_timeout" do
-        client = Mysql2::Client.new(:read_timeout => 1)
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => 1))
         lambda {
           client.query("SELECT sleep(2)")
         }.should raise_error(Mysql2::Error)
@@ -220,7 +220,7 @@ describe Mysql2::Client do
       end
 
       it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
-        client = Mysql2::Client.new(:reconnect => true)
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
         begin
           Timeout.timeout(1) do
             client.query("SELECT sleep(2)")
@@ -235,7 +235,9 @@ describe Mysql2::Client do
 
       it "threaded queries should be supported" do
         threads, results = [], {}
-        connect = lambda{ Mysql2::Client.new(:host => "localhost", :username => "root") }
+        connect = lambda{
+          Mysql2::Client.new(DatabaseCredentials['root'])
+        }
         Timeout.timeout(0.7) do
           5.times {
             threads << Thread.new do
@@ -267,11 +269,19 @@ describe Mysql2::Client do
         result = @client.async_result
         result.class.should eql(Mysql2::Result)
       end
+
+      it "should not allow options to be set on an open connection" do
+        lambda {
+          @client.escape ""
+          @client.query("SELECT 1")
+          @client.options(0, 0)
+        }.should raise_error(Mysql2::Error)
+      end
     end
-    
+
     context "Multiple results sets" do
       before(:each) do
-        @multi_client = Mysql2::Client.new( :flags => Mysql2::Client::MULTI_STATEMENTS)
+        @multi_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:flags => Mysql2::Client::MULTI_STATEMENTS))
       end
 
       it "returns multiple result sets" do
@@ -290,10 +300,8 @@ describe Mysql2::Client do
         end
 
         @multi_client.query( "select 3 as 'next'").first.should == { 'next' => 3 }
-      end    
+      end
     end
-    
-    
   end
 
   it "should respond to #socket" do
@@ -400,7 +408,7 @@ describe Mysql2::Client do
         Encoding.default_internal = nil
         @client.info[:version].encoding.should eql(Encoding.find('utf-8'))
 
-        client2 = Mysql2::Client.new :encoding => 'ascii'
+        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
         client2.info[:version].encoding.should eql(Encoding.find('us-ascii'))
       end
 
@@ -439,7 +447,7 @@ describe Mysql2::Client do
         Encoding.default_internal = nil
         @client.server_info[:version].encoding.should eql(Encoding.find('utf-8'))
 
-        client2 = Mysql2::Client.new :encoding => 'ascii'
+        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
         client2.server_info[:version].encoding.should eql(Encoding.find('us-ascii'))
       end
 
@@ -458,7 +466,7 @@ describe Mysql2::Client do
     }.should raise_error(Mysql2::Error)
 
     lambda {
-      good_client = Mysql2::Client.new
+      good_client = Mysql2::Client.new DatabaseCredentials['root']
     }.should_not raise_error(Mysql2::Error)
   end
 
@@ -545,16 +553,15 @@ describe Mysql2::Client do
     end
   end
 
-
   it "#thread_id should return a boolean" do
     @client.ping.should eql(true)
     @client.close
     @client.ping.should eql(false)
   end
 
-if RUBY_VERSION =~ /1.9/
-  it "should respond to #encoding" do
-    @client.should respond_to(:encoding)
+  if RUBY_VERSION =~ /1.9/
+    it "should respond to #encoding" do
+      @client.should respond_to(:encoding)
+    end
   end
-end
 end

@@ -211,7 +211,6 @@ static unsigned int msec_char_to_uint(char *msec_char, size_t len)
 
 static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields) {
   unsigned int i;
-  VALUE rowVal;
   mysql2_result_wrapper * wrapper;
   GetMysql2Result(self, wrapper);
 

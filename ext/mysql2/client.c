@@ -36,9 +36,6 @@ static VALUE rb_hash_dup(VALUE other) {
     rb_raise(cMysql2Error, "MySQL connection is already open"); \
   }
 
-#define MARK_CONN_INACTIVE(conn) \
-  wrapper->active_thread = Qnil;
-
 /*
  * compatability with mysql-connector-c, where LIBMYSQL_VERSION is the correct
  * variable to use, but MYSQL_SERVER_VERSION gives the correct numbers when
@@ -407,7 +404,7 @@ static VALUE do_send_query(void *args) {
   mysql_client_wrapper *wrapper = query_args->wrapper;
   if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, args, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, we're not active anymore */
-    MARK_CONN_INACTIVE(self);
+    wrapper->active_thread = Qnil;
     return rb_raise_mysql2_error(wrapper);
   }
   return Qnil;
@@ -590,6 +587,25 @@ static VALUE finish_and_mark_inactive(void *args) {
 }
 #endif
 
+void rb_mysql_client_set_active_thread(VALUE self) {
+  VALUE thread_current = rb_thread_current();
+  GET_CLIENT(self);
+
+  // see if this connection is still waiting on a result from a previous query
+  if (NIL_P(wrapper->active_thread)) {
+    // mark this connection active
+    wrapper->active_thread = thread_current;
+  } else if (wrapper->active_thread == thread_current) {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  } else {
+    VALUE inspect = rb_inspect(wrapper->active_thread);
+    const char *thr = StringValueCStr(inspect);
+
+    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
+    RB_GC_GUARD(inspect);
+  }
+}
+
 /* call-seq:
  *    client.abandon_results!
  *
@@ -633,7 +649,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   struct nogvl_send_query_args args;
   int async = 0;
   VALUE opts, current;
-  VALUE thread_current = rb_thread_current();
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
 #endif
@@ -663,22 +678,9 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #endif
   args.sql_ptr = StringValuePtr(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
-
-  /* see if this connection is still waiting on a result from a previous query */
-  if (NIL_P(wrapper->active_thread)) {
-    /* mark this connection active */
-    wrapper->active_thread = thread_current;
-  } else if (wrapper->active_thread == thread_current) {
-    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
-  } else {
-    VALUE inspect = rb_inspect(wrapper->active_thread);
-    const char *thr = StringValueCStr(inspect);
-
-    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
-    RB_GC_GUARD(inspect);
-  }
-
   args.wrapper = wrapper;
+
+  rb_mysql_client_set_active_thread(self);
 
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);

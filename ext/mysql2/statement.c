@@ -2,6 +2,7 @@
 
 VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
+static VALUE sym_stream;
 
 static void rb_mysql_stmt_mark(void * ptr) {
   mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
@@ -150,6 +151,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   VALUE resultObj;
   VALUE *params_enc = alloca(sizeof(VALUE) * argc);
   unsigned long* length_buffers = NULL;
+  int is_streaming = 0;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
 #endif
@@ -160,6 +162,12 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
     conn_enc = rb_to_encoding(wrapper->encoding);
   }
 #endif
+  {
+    VALUE valStreaming = rb_hash_aref(rb_iv_get(stmt_wrapper->client, "@query_options"), sym_stream);
+    if(valStreaming == Qtrue) {
+      is_streaming = 1;
+    }
+  }
 
   stmt = stmt_wrapper->stmt;
 
@@ -284,11 +292,15 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
   GET_CLIENT(stmt_wrapper->client);
 
-  // FIXME: don't do this if streaming opt.
-  if (mysql_stmt_store_result(stmt)) {
-    rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+  if(is_streaming) {
+    rb_raise(cMysql2Error, "TODO: streaming stmt execute not yet impl.");
+  } else {
+    // recieve the whole result set from ther server
+    if (mysql_stmt_store_result(stmt)) {
+      rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+    }
+    MARK_CONN_INACTIVE(stmt_wrapper->client);
   }
-  MARK_CONN_INACTIVE(stmt_wrapper->client);
 
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, stmt);
 
@@ -360,4 +372,6 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "field_count", field_count, 0);
   rb_define_method(cMysql2Statement, "execute", execute, -1);
   rb_define_method(cMysql2Statement, "fields", fields, 0);
+
+  sym_stream = ID2SYM(rb_intern("stream"));
 }

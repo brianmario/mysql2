@@ -2,7 +2,11 @@
 
 VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
-static VALUE sym_stream;
+static VALUE sym_stream, intern_error_number_eql, intern_sql_state_eql;
+
+#define GET_STATEMENT(self) \
+  mysql_stmt_wrapper *stmt_wrapper; \
+  Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper)
 
 static void rb_mysql_stmt_mark(void * ptr) {
   mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
@@ -17,6 +21,48 @@ static void rb_mysql_stmt_free(void * ptr) {
   mysql_stmt_close(stmt_wrapper->stmt);
 
   xfree(ptr);
+}
+
+VALUE rb_raise_mysql2_stmt_error2(MYSQL_STMT *stmt
+#ifdef HAVE_RUBY_ENCODING_H
+  , rb_encoding *conn_enc
+#endif
+  ) {
+  VALUE rb_error_msg = rb_str_new2(mysql_stmt_error(stmt));
+  VALUE rb_sql_state = rb_tainted_str_new2(mysql_stmt_sqlstate(stmt));
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+
+  rb_enc_associate(rb_error_msg, conn_enc);
+  rb_enc_associate(rb_sql_state, conn_enc);
+  if (default_internal_enc) {
+    rb_error_msg = rb_str_export_to_enc(rb_error_msg, default_internal_enc);
+    rb_sql_state = rb_str_export_to_enc(rb_sql_state, default_internal_enc);
+  }
+#endif
+
+  VALUE e = rb_exc_new3(cMysql2Error, rb_error_msg);
+  rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_stmt_errno(stmt)));
+  rb_funcall(e, intern_sql_state_eql, 1, rb_sql_state);
+  rb_exc_raise(e);
+  return Qnil;
+}
+
+static void rb_raise_mysql2_stmt_error(VALUE self) {
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *conn_enc;
+#endif
+  GET_STATEMENT(self);
+  {
+    GET_CLIENT(stmt_wrapper->client);
+    conn_enc = rb_to_encoding(wrapper->encoding);
+  }
+
+  rb_raise_mysql2_stmt_error2(stmt_wrapper->stmt
+#ifdef HAVE_RUBY_ENCODING_H
+  , conn_enc
+#endif
+  );
 }
 
 /*
@@ -79,25 +125,21 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   {
     struct nogvl_prepare_statement_args args;
     args.stmt = stmt_wrapper->stmt;
-	args.sql = sql;
+	  args.sql = sql;
 #ifdef HAVE_RUBY_ENCODING_H
 	// ensure the string is in the encoding the connection is expecting
-	args.sql = rb_str_export_to_enc(args.sql, conn_enc);
+    args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
     args.sql_ptr = StringValuePtr(sql);
     args.sql_len = RSTRING_LEN(sql);
 
     if (rb_thread_blocking_region(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
-      rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt_wrapper->stmt));
+      rb_raise_mysql2_stmt_error(rb_stmt);
     }
   }
 
   return rb_stmt;
 }
-
-#define GET_STATEMENT(self) \
-  mysql_stmt_wrapper *stmt_wrapper; \
-  Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper)
 
 /* call-seq: stmt.param_count # => 2
  *
@@ -272,14 +314,14 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
     // copies bind_buffers into internal storage
     if (mysql_stmt_bind_param(stmt, bind_buffers)) {
       FREE_BINDS;
-      rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+      rb_raise_mysql2_stmt_error(self);
     }
   }
  
   rb_mysql_client_set_active_thread(stmt_wrapper->client);
   if (rb_thread_blocking_region(nogvl_execute, stmt, RUBY_UBF_IO, 0) == Qfalse) {
     FREE_BINDS;
-    rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+    rb_raise_mysql2_stmt_error(self);
   }
 
   FREE_BINDS;
@@ -290,7 +332,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
 	  
       MARK_CONN_INACTIVE(stmt_wrapper->client);
-      rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+      rb_raise_mysql2_stmt_error(self);
     }
     // no data and no error, so query was not a SELECT
     return Qnil;
@@ -301,7 +343,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   } else {
     // recieve the whole result set from ther server
     if (rb_thread_blocking_region(nogvl_stmt_store_result, stmt, RUBY_UBF_IO, 0) == Qfalse) {
-      rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
+      rb_raise_mysql2_stmt_error(self);
     }
     MARK_CONN_INACTIVE(stmt_wrapper->client);
   }
@@ -377,4 +419,7 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "fields", fields, 0);
   
   sym_stream = ID2SYM(rb_intern("stream"));
+  
+  intern_error_number_eql = rb_intern("error_number=");
+  intern_sql_state_eql = rb_intern("sql_state=");
 }

@@ -9,4 +9,5 @@ void Init_mysql2() {
 
   init_mysql2_client();
   init_mysql2_result();
+  init_mysql2_statement();
 }

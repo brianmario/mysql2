@@ -12,30 +12,6 @@ static VALUE intern_encoding_from_charset;
 static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
-#define REQUIRE_INITIALIZED(wrapper) \
-  if (!wrapper->initialized) { \
-    rb_raise(cMysql2Error, "MySQL client is not initialized"); \
-  }
-
-#define REQUIRE_CONNECTED(wrapper) \
-  REQUIRE_INITIALIZED(wrapper) \
-  if (!wrapper->connected && !wrapper->reconnect_enabled) { \
-    rb_raise(cMysql2Error, "closed MySQL connection"); \
-  }
-
-#define REQUIRE_NOT_CONNECTED(wrapper) \
-  REQUIRE_INITIALIZED(wrapper) \
-  if (wrapper->connected) { \
-    rb_raise(cMysql2Error, "MySQL connection is already open"); \
-  }
-
-#define MARK_CONN_INACTIVE(conn) \
-  wrapper->active_thread = Qnil;
-
-#define GET_CLIENT(self) \
-  mysql_client_wrapper *wrapper; \
-  Data_Get_Struct(self, mysql_client_wrapper, wrapper)
-
 /*
  * used to pass all arguments to mysql_real_connect while inside
  * rb_thread_blocking_region
@@ -284,7 +260,7 @@ static VALUE do_send_query(void *args) {
   mysql_client_wrapper *wrapper = query_args->wrapper;
   if (rb_thread_blocking_region(nogvl_send_query, args, RUBY_UBF_IO, 0) == Qfalse) {
     // an error occurred, we're not active anymore
-    MARK_CONN_INACTIVE(self);
+    wrapper->active_thread = Qnil;
     return rb_raise_mysql2_error(wrapper);
   }
   return Qnil;
@@ -369,7 +345,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
+  resultObj = rb_mysql_result_to_obj(result, NULL);
   // pass-through query options for result construction later
   rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
 
@@ -468,6 +444,25 @@ static VALUE finish_and_mark_inactive(void *args) {
 }
 #endif
 
+void rb_mysql_client_set_active_thread(VALUE self) {
+  VALUE thread_current = rb_thread_current();
+  GET_CLIENT(self);
+
+  // see if this connection is still waiting on a result from a previous query
+  if (NIL_P(wrapper->active_thread)) {
+    // mark this connection active
+    wrapper->active_thread = thread_current;
+  } else if (wrapper->active_thread == thread_current) {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  } else {
+    VALUE inspect = rb_inspect(wrapper->active_thread);
+    const char *thr = StringValueCStr(inspect);
+
+    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
+    RB_GC_GUARD(inspect);
+  }
+}
+
 /* call-seq:
  *    client.query(sql, options = {})
  *
@@ -481,7 +476,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   struct nogvl_send_query_args args;
   int async = 0;
   VALUE opts, defaults;
-  VALUE thread_current = rb_thread_current();
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
 #endif
@@ -489,7 +483,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
-
 
   defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
@@ -511,22 +504,9 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #endif
   args.sql_ptr = StringValuePtr(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
-
-  // see if this connection is still waiting on a result from a previous query
-  if (NIL_P(wrapper->active_thread)) {
-    // mark this connection active
-    wrapper->active_thread = thread_current;
-  } else if (wrapper->active_thread == thread_current) {
-    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
-  } else {
-    VALUE inspect = rb_inspect(wrapper->active_thread);
-    const char *thr = StringValueCStr(inspect);
-
-    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
-    RB_GC_GUARD(inspect);
-  }
-
   args.wrapper = wrapper;
+  
+  rb_mysql_client_set_active_thread(self);
 
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
@@ -876,7 +856,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
+  resultObj = rb_mysql_result_to_obj(result, NULL);
   // pass-through query options for result construction later
   rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
 
@@ -982,6 +962,17 @@ static VALUE initialize_ext(VALUE self) {
   return self;
 }
 
+/* call-seq: client.prepare # => Mysql2::Statement
+ *
+ * Create a new prepared statement.
+ */
+static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
+  GET_CLIENT(self);
+  REQUIRE_CONNECTED(wrapper);
+  
+  return rb_mysql_stmt_new(self, sql);
+}
+
 void init_mysql2_client() {
   // verify the libmysql we're about to use was the version we were built against
   // https://github.com/luislavena/mysql-gem/commit/a600a9c459597da0712f70f43736e24b484f8a99
@@ -1018,6 +1009,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
+  rb_define_method(cMysql2Client, "prepare", rb_mysql_client_prepare_statement, 1);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);

@@ -15,6 +15,11 @@ typedef struct {
   char resultFreed;
   MYSQL_RES *result;
   MYSQL_STMT *stmt;
+  /* statement result bind buffers */
+  MYSQL_BIND *result_buffers;
+  my_bool *is_null;
+  my_bool *error;
+  unsigned long *length;
 } mysql2_result_wrapper;
 
 #define GetMysql2Result(obj, sval) (sval = (mysql2_result_wrapper*)DATA_PTR(obj));

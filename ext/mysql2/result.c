@@ -873,7 +873,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     rb_warn("cacheRows is forced for prepared statements (if not streaming)");
   }
   if(wrapper->stmt && !args.cast) {
-    rb_wran("cast is forced for prepared statements"); 
+    rb_warn("cast is forced for prepared statements"); 
   }
 
   dbTz = rb_hash_aref(opts, sym_database_timezone);

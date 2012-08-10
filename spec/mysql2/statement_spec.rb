@@ -123,5 +123,27 @@ describe Mysql2::Statement do
     end
 
   end
+  
+  context "streaming result" do
+    it "should be able to stream query result" do
+      n = 1
+      stmt = @client.prepare("SELECT 1 UNION SELECT 2")
+
+      @client.query_options.merge!({:stream => true, :cache_rows => false, :as => :array})
+
+      stmt.execute.each do |r|
+        case n
+        when 1
+          r.should == [1]
+        when 2
+          r.should == [2]
+        else
+          violated "returned more than two rows"
+        end
+        n += 1
+      end
+    end
+  end
+  
 end
 

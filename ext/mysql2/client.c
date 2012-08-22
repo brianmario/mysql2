@@ -914,6 +914,12 @@ static VALUE set_local_infile(VALUE self, VALUE value) {
 }
 
 static VALUE set_connect_timeout(VALUE self, VALUE value) {
+  long int sec;
+  Check_Type(value, T_FIXNUM);
+  sec = FIX2INT(value);
+  if (sec < 0) {
+    rb_raise(cMysql2Error, "connect_timeout must be a positive integer, you passed %ld", sec);
+  }
   return _mysql_client_options(self, MYSQL_OPT_CONNECT_TIMEOUT, value);
 }
 

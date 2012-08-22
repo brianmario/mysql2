@@ -85,6 +85,12 @@ describe Mysql2::Client do
     @client.should respond_to(:query)
   end
 
+  it "should expect connect_timeout to be a positive integer" do
+    lambda {
+      Mysql2::Client.new(:connect_timeout => -1)
+    }.should raise_error(Mysql2::Error)
+  end
+
   it "should expect read_timeout to be a positive integer" do
     lambda {
       Mysql2::Client.new(:read_timeout => -1)

@@ -91,6 +91,12 @@ describe Mysql2::Client do
     }.should raise_error(Mysql2::Error)
   end
 
+  it "should expect write_timeout to be a positive integer" do
+    lambda {
+      Mysql2::Client.new(:write_timeout => -1)
+    }.should raise_error(Mysql2::Error)
+  end
+
   context "#query" do
     it "should let you query again if iterating is finished when streaming" do
       @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).each {}

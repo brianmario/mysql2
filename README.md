@@ -100,6 +100,7 @@ Mysql2::Client.new(
   :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | MULTI_STATEMENTS,
   :encoding = 'utf8',
   :read_timeout = seconds,
+  :write_timeout = seconds,
   :connect_timeout = seconds,
   :reconnect = true/false,
   :local_infile = true/false,

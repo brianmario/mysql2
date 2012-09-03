@@ -27,7 +27,7 @@ static rb_encoding *binaryEncoding;
  * (0*31557600) + (1*2592000) + (1*86400) + (0*3600) + (0*60) + 0
  */
 #define MYSQL2_MIN_TIME 2678400ULL
-#elif SIZEOF_INT < SIZEOF_LONG // 64bit Ruby 1.8
+#elif SIZEOF_INT < SIZEOF_LONG /* 64bit Ruby 1.8 */
 /* 0139-1-1 00:00:00 UTC
  *
  * (139*31557600) + (1*2592000) + (1*86400) + (0*3600) + (0*60) + 0
@@ -140,18 +140,18 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
 
 #ifdef HAVE_RUBY_ENCODING_H
 static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc) {
-  // if binary flag is set, respect it's wishes
+  /* if binary flag is set, respect it's wishes */
   if (field.flags & BINARY_FLAG && field.charsetnr == 63) {
     rb_enc_associate(val, binaryEncoding);
   } else {
-    // lookup the encoding configured on this field
+    /* lookup the encoding configured on this field */
     VALUE new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset_code, 1, INT2NUM(field.charsetnr));
     if (new_encoding != Qnil) {
-      // use the field encoding we were able to match
+      /* use the field encoding we were able to match */
       rb_encoding *enc = rb_to_encoding(new_encoding);
       rb_enc_associate(val, enc);
     } else {
-      // otherwise fall-back to the connection's encoding
+      /* otherwise fall-back to the connection's encoding */
       rb_enc_associate(val, conn_enc);
     }
     if (default_internal_enc) {
@@ -215,26 +215,26 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         }
       } else {
         switch(type) {
-        case MYSQL_TYPE_NULL:       // NULL-type field
+        case MYSQL_TYPE_NULL:       /* NULL-type field */
           val = Qnil;
           break;
-        case MYSQL_TYPE_BIT:        // BIT field (MySQL 5.0.3 and up)
+        case MYSQL_TYPE_BIT:        /* BIT field (MySQL 5.0.3 and up) */
           val = rb_str_new(row[i], fieldLengths[i]);
           break;
-        case MYSQL_TYPE_TINY:       // TINYINT field
+        case MYSQL_TYPE_TINY:       /* TINYINT field */
           if (castBool && fields[i].length == 1) {
             val = *row[i] != '0' ? Qtrue : Qfalse;
             break;
           }
-        case MYSQL_TYPE_SHORT:      // SMALLINT field
-        case MYSQL_TYPE_LONG:       // INTEGER field
-        case MYSQL_TYPE_INT24:      // MEDIUMINT field
-        case MYSQL_TYPE_LONGLONG:   // BIGINT field
-        case MYSQL_TYPE_YEAR:       // YEAR field
+        case MYSQL_TYPE_SHORT:      /* SMALLINT field */
+        case MYSQL_TYPE_LONG:       /* INTEGER field */
+        case MYSQL_TYPE_INT24:      /* MEDIUMINT field */
+        case MYSQL_TYPE_LONGLONG:   /* BIGINT field */
+        case MYSQL_TYPE_YEAR:       /* YEAR field */
           val = rb_cstr2inum(row[i], 10);
           break;
-        case MYSQL_TYPE_DECIMAL:    // DECIMAL or NUMERIC field
-        case MYSQL_TYPE_NEWDECIMAL: // Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up)
+        case MYSQL_TYPE_DECIMAL:    /* DECIMAL or NUMERIC field */
+        case MYSQL_TYPE_NEWDECIMAL: /* Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up) */
           if (fields[i].decimals == 0) {
             val = rb_cstr2inum(row[i], 10);
           } else if (strtod(row[i], NULL) == 0.000000){
@@ -243,8 +243,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
             val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
           }
           break;
-        case MYSQL_TYPE_FLOAT:      // FLOAT field
-        case MYSQL_TYPE_DOUBLE: {     // DOUBLE or REAL field
+        case MYSQL_TYPE_FLOAT:      /* FLOAT field */
+        case MYSQL_TYPE_DOUBLE: {     /* DOUBLE or REAL field */
           double column_to_double;
           column_to_double = strtod(row[i], NULL);
           if (column_to_double == 0.000000){
@@ -254,21 +254,21 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           }
           break;
         }
-        case MYSQL_TYPE_TIME: {     // TIME field
+        case MYSQL_TYPE_TIME: {     /* TIME field */
           int hour, min, sec, tokens;
           tokens = sscanf(row[i], "%2d:%2d:%2d", &hour, &min, &sec);
           val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
           if (!NIL_P(app_timezone)) {
             if (app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);
-            } else { // utc
+            } else { /* utc */
               val = rb_funcall(val, intern_utc, 0);
             }
           }
           break;
         }
-        case MYSQL_TYPE_TIMESTAMP:  // TIMESTAMP field
-        case MYSQL_TYPE_DATETIME: { // DATETIME field
+        case MYSQL_TYPE_TIMESTAMP:  /* TIMESTAMP field */
+        case MYSQL_TYPE_DATETIME: { /* DATETIME field */
           unsigned int year, month, day, hour, min, sec, tokens;
           uint64_t seconds;
 
@@ -282,7 +282,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
               val = Qnil;
             } else {
-              if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
+              if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { /* use DateTime instead */
                 VALUE offset = INT2NUM(0);
                 if (db_timezone == intern_local) {
                   offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
@@ -292,7 +292,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
                   if (app_timezone == intern_local) {
                     offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
                     val = rb_funcall(val, intern_new_offset, 1, offset);
-                  } else { // utc
+                  } else { /* utc */
                     val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
                   }
                 }
@@ -301,7 +301,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
                 if (!NIL_P(app_timezone)) {
                   if (app_timezone == intern_local) {
                     val = rb_funcall(val, intern_localtime, 0);
-                  } else { // utc
+                  } else { /* utc */
                     val = rb_funcall(val, intern_utc, 0);
                   }
                 }
@@ -310,8 +310,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           }
           break;
         }
-        case MYSQL_TYPE_DATE:       // DATE field
-        case MYSQL_TYPE_NEWDATE: {  // Newer const used > 5.0
+        case MYSQL_TYPE_DATE:       /* DATE field */
+        case MYSQL_TYPE_NEWDATE: {  /* Newer const used > 5.0 */
           int year, month, day, tokens;
           tokens = sscanf(row[i], "%4d-%2d-%2d", &year, &month, &day);
           if (year+month+day == 0) {
@@ -332,10 +332,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         case MYSQL_TYPE_BLOB:
         case MYSQL_TYPE_VAR_STRING:
         case MYSQL_TYPE_VARCHAR:
-        case MYSQL_TYPE_STRING:     // CHAR or BINARY field
-        case MYSQL_TYPE_SET:        // SET field
-        case MYSQL_TYPE_ENUM:       // ENUM field
-        case MYSQL_TYPE_GEOMETRY:   // Spatial fielda
+        case MYSQL_TYPE_STRING:     /* CHAR or BINARY field */
+        case MYSQL_TYPE_SET:        /* SET field */
+        case MYSQL_TYPE_ENUM:       /* ENUM field */
+        case MYSQL_TYPE_GEOMETRY:   /* Spatial fielda */
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
 #ifdef HAVE_RUBY_ENCODING_H
@@ -455,8 +455,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (wrapper->lastRowProcessed == 0) {
     if(streaming) {
-      // We can't get number of rows if we're streaming,
-      // until we've finished fetching all rows
+      /* We can't get number of rows if we're streaming, */
+      /* until we've finished fetching all rows */
       wrapper->numberOfRows = 0;
       wrapper->rows = rb_ary_new();
     } else {
@@ -493,8 +493,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     }
   } else {
     if (cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
-      // we've already read the entire dataset from the C result into our
-      // internal array. Lets hand that over to the user since it's ready to go
+      /* we've already read the entire dataset from the C result into our */
+      /* internal array. Lets hand that over to the user since it's ready to go */
       for (i = 0; i < wrapper->numberOfRows; i++) {
         rb_yield(rb_ary_entry(wrapper->rows, i));
       }
@@ -516,7 +516,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
         }
 
         if (row == Qnil) {
-          // we don't need the mysql C dataset around anymore, peace it
+          /* we don't need the mysql C dataset around anymore, peace it */
           rb_mysql_result_free_result(wrapper);
           return Qnil;
         }
@@ -526,7 +526,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
         }
       }
       if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
-        // we don't need the mysql C dataset around anymore, peace it
+        /* we don't need the mysql C dataset around anymore, peace it */
         rb_mysql_result_free_result(wrapper);
       }
     }
@@ -604,7 +604,7 @@ void init_mysql2_result() {
   sym_stream         = ID2SYM(rb_intern("stream"));
 
   opt_decimal_zero = rb_str_new2("0.0");
-  rb_global_variable(&opt_decimal_zero); //never GC
+  rb_global_variable(&opt_decimal_zero); /*never GC */
   opt_float_zero = rb_float_new((double)0);
   rb_global_variable(&opt_float_zero);
   opt_time_year = INT2NUM(2000);

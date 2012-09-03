@@ -190,8 +190,8 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active_thread = Qnil;
   wrapper->reconnect_enabled = 0;
-  wrapper->connected = 0; // means that a database connection is open
-  wrapper->initialized = 0; // means that that the wrapper is initialized
+  wrapper->connected = 0; /* means that a database connection is open */
+  wrapper->initialized = 0; /* means that that the wrapper is initialized */
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
 }
@@ -208,7 +208,7 @@ static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
 
   newLen = mysql_escape_string((char *)newStr, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
-    // no need to return a new ruby string if nothing changed
+    /* no need to return a new ruby string if nothing changed */
     xfree(newStr);
     return str;
   } else {
@@ -283,7 +283,7 @@ static VALUE do_send_query(void *args) {
   struct nogvl_send_query_args *query_args = args;
   mysql_client_wrapper *wrapper = query_args->wrapper;
   if (rb_thread_blocking_region(nogvl_send_query, args, RUBY_UBF_IO, 0) == Qfalse) {
-    // an error occurred, we're not active anymore
+    /* an error occurred, we're not active anymore */
     MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(wrapper);
   }
@@ -313,8 +313,8 @@ static VALUE nogvl_do_result(void *ptr, char use_result) {
     result = mysql_store_result(wrapper->client);
   }
 
-  // once our result is stored off, this connection is
-  // ready for another command to be issued
+  /* once our result is stored off, this connection is 
+     ready for another command to be issued */
   wrapper->active_thread = Qnil;
 
   return (VALUE)result;
@@ -342,13 +342,13 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 #endif
   GET_CLIENT(self);
 
-  // if we're not waiting on a result, do nothing
+  /* if we're not waiting on a result, do nothing */
   if (NIL_P(wrapper->active_thread))
     return Qnil;
 
   REQUIRE_CONNECTED(wrapper);
   if (rb_thread_blocking_region(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
-    // an error occurred, mark this connection inactive
+    /* an error occurred, mark this connection inactive */
     MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(wrapper);
   }
@@ -365,12 +365,12 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
       MARK_CONN_INACTIVE(self);
       rb_raise_mysql2_error(wrapper);
     }
-    // no data and no error, so query was not a SELECT
+    /* no data and no error, so query was not a SELECT */
     return Qnil;
   }
 
   resultObj = rb_mysql_result_to_obj(result);
-  // pass-through query options for result construction later
+  /* pass-through query options for result construction later */
   rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
 
 #ifdef HAVE_RUBY_ENCODING_H
@@ -392,8 +392,8 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   wrapper->active_thread = Qnil;
   wrapper->connected = 0;
 
-  // manually close the socket for read/write
-  // this feels dirty, but is there another way?
+  /* manually close the socket for read/write
+     this feels dirty, but is there another way? */
   shutdown(wrapper->client->net.fd, 2);
 
   rb_exc_raise(error);
@@ -417,8 +417,8 @@ static VALUE do_query(void *args) {
     Check_Type(read_timeout, T_FIXNUM);
     tvp = &tv;
     sec = FIX2INT(read_timeout);
-    // TODO: support partial seconds?
-    // also, this check is here for sanity, we also check up in Ruby
+    /* TODO: support partial seconds?
+       also, this check is here for sanity, we also check up in Ruby */
     if (sec >= 0) {
       tvp->tv_sec = sec;
     } else {
@@ -455,9 +455,9 @@ static VALUE finish_and_mark_inactive(void *args) {
   GET_CLIENT(self);
 
   if (!NIL_P(wrapper->active_thread)) {
-    // if we got here, the result hasn't been read off the wire yet
-    // so lets do that and then throw it away because we have no way
-    // of getting it back up to the caller from here
+    /* if we got here, the result hasn't been read off the wire yet
+       so lets do that and then throw it away because we have no way
+       of getting it back up to the caller from here */
     result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
     mysql_free_result(result);
 
@@ -506,15 +506,15 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   Check_Type(args.sql, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
   conn_enc = rb_to_encoding(wrapper->encoding);
-  // ensure the string is in the encoding the connection is expecting
+  /* ensure the string is in the encoding the connection is expecting */
   args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
   args.sql_ptr = StringValuePtr(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
 
-  // see if this connection is still waiting on a result from a previous query
+  /* see if this connection is still waiting on a result from a previous query */
   if (NIL_P(wrapper->active_thread)) {
-    // mark this connection active
+    /* mark this connection active */
     wrapper->active_thread = thread_current;
   } else if (wrapper->active_thread == thread_current) {
     rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
@@ -544,7 +544,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #else
   do_send_query(&args);
 
-  // this will just block until the result is ready
+  /* this will just block until the result is ready */
   return rb_ensure(rb_mysql_client_async_result, self, finish_and_mark_inactive, self);
 #endif
 }
@@ -569,7 +569,7 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
 #ifdef HAVE_RUBY_ENCODING_H
   default_internal_enc = rb_default_internal_encoding();
   conn_enc = rb_to_encoding(wrapper->encoding);
-  // ensure the string is in the encoding the connection is expecting
+  /* ensure the string is in the encoding the connection is expecting */
   str = rb_str_export_to_enc(str, conn_enc);
 #endif
 
@@ -578,7 +578,7 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
 
   newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, StringValuePtr(str), oldLen);
   if (newLen == oldLen) {
-    // no need to return a new ruby string if nothing changed
+    /* no need to return a new ruby string if nothing changed */
     xfree(newStr);
     return str;
   } else {
@@ -639,11 +639,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
 
   result = mysql_options(wrapper->client, opt, retval);
 
-  // Zero means success
+  /* Zero means success */
   if (result != 0) {
     rb_warn("%s\n", mysql_error(wrapper->client));
   } else {
-    // Special case for reconnect, this option is also stored in the wrapper struct
+    /* Special case for reconnect, this option is also stored in the wrapper struct */
     if (opt == MYSQL_OPT_RECONNECT)
       wrapper->reconnect_enabled = boolval;
   }
@@ -866,10 +866,10 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 
 
   GET_CLIENT(self);
-  // MYSQL_RES* res = mysql_store_result(wrapper->client);
-  // if (res == NULL)
-  //    mysql_raise(wrapper->client);
-  // return mysqlres2obj(res);
+  /* MYSQL_RES* res = mysql_store_result(wrapper->client);
+    if (res == NULL)
+       mysql_raise(wrapper->client);
+    return mysqlres2obj(res); */
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
 
@@ -877,12 +877,12 @@ static VALUE rb_mysql_client_store_result(VALUE self)
     if (mysql_errno(wrapper->client) != 0) {
       rb_raise_mysql2_error(wrapper);
     }
-    // no data and no error, so query was not a SELECT
+    /* no data and no error, so query was not a SELECT */
     return Qnil;
   }
 
   resultObj = rb_mysql_result_to_obj(result);
-  // pass-through query options for result construction later
+  /* pass-through query options for result construction later */
   rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
 
 #ifdef HAVE_RUBY_ENCODING_H
@@ -930,9 +930,9 @@ static VALUE set_read_timeout(VALUE self, VALUE value) {
   if (sec < 0) {
     rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %ld", sec);
   }
-  // Set the instance variable here even though _mysql_client_options
-  // might not succeed, because the timeout is used in other ways
-  // elsewhere
+  /* Set the instance variable here even though _mysql_client_options
+     might not succeed, because the timeout is used in other ways
+     elsewhere */
   rb_iv_set(self, "@read_timeout", value);
   return _mysql_client_options(self, MYSQL_OPT_READ_TIMEOUT, value);
 }
@@ -1004,15 +1004,15 @@ static VALUE initialize_ext(VALUE self) {
 }
 
 void init_mysql2_client() {
-  // verify the libmysql we're about to use was the version we were built against
-  // https://github.com/luislavena/mysql-gem/commit/a600a9c459597da0712f70f43736e24b484f8a99
+  /* verify the libmysql we're about to use was the version we were built against
+     https://github.com/luislavena/mysql-gem/commit/a600a9c459597da0712f70f43736e24b484f8a99 */
   int i;
   int dots = 0;
   const char *lib = mysql_get_client_info();
   for (i = 0; lib[i] != 0 && MYSQL_SERVER_VERSION[i] != 0; i++) {
     if (lib[i] == '.') {
       dots++;
-              // we only compare MAJOR and MINOR
+              /* we only compare MAJOR and MINOR */
       if (dots == 2) break;
     }
     if (lib[i] != MYSQL_SERVER_VERSION[i]) {

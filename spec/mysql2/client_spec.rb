@@ -245,6 +245,34 @@ describe Mysql2::Client do
         }.should_not raise_error(Mysql2::Error)
       end
 
+      it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction true" do
+        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        begin
+          Timeout.timeout(1) do
+            client.query("SELECT sleep(2)")
+          end
+        rescue Timeout::Error
+        end
+
+        lambda {
+          client.query("SELECT 1")
+        }.should raise_error(Mysql2::Error)
+
+        client.reconnect = true
+
+        begin
+          Timeout.timeout(1) do
+            client.query("SELECT sleep(2)")
+          end
+        rescue Timeout::Error
+        end
+
+        lambda {
+          client.query("SELECT 1")
+        }.should_not raise_error(Mysql2::Error)
+
+      end
+
       it "threaded queries should be supported" do
         threads, results = [], {}
         connect = lambda{

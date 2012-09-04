@@ -1046,11 +1046,11 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "next_result", rb_mysql_client_next_result, 0);
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
   rb_define_method(cMysql2Client, "options", rb_mysql_client_options, 2);
+  rb_define_method(cMysql2Client, "reconnect=", set_reconnect, 1);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif
 
-  rb_define_private_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
   rb_define_private_method(cMysql2Client, "read_timeout=", set_read_timeout, 1);
   rb_define_private_method(cMysql2Client, "write_timeout=", set_write_timeout, 1);

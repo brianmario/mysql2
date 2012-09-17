@@ -270,7 +270,7 @@ To use the ActiveRecord driver (with or without rails), all you should need to d
 That was easy right? :)
 
 NOTE: as of 0.3.0, and ActiveRecord 3.1 - the ActiveRecord adapter has been pulled out of this gem and into ActiveRecord itself. If you need to use mysql2 with
-Rails versions < 3.1 make sure and specify `gem "mysql2", "~> 0.2.7"` in your Gemfile
+Rails versions < 3.1 make sure and specify `gem "mysql2", "~> 0.2.18"` in your Gemfile
 
 ## Asynchronous ActiveRecord
 

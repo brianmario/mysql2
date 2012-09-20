@@ -1,0 +1,61 @@
+PATH
+  remote: .
+  specs:
+    mysql2 (0.3.12b4)
+
+GEM
+  remote: http://rubygems.org/
+  specs:
+    activemodel (3.2.1)
+      activesupport (= 3.2.1)
+      builder (~> 3.0.0)
+    activerecord (3.2.1)
+      activemodel (= 3.2.1)
+      activesupport (= 3.2.1)
+      arel (~> 3.0.0)
+      tzinfo (~> 0.3.29)
+    activesupport (3.2.1)
+      i18n (~> 0.6)
+      multi_json (~> 1.0)
+    addressable (2.2.6)
+    arel (3.0.0)
+    builder (3.0.0)
+    data_objects (0.10.8)
+      addressable (~> 2.1)
+    diff-lcs (1.1.3)
+    do_mysql (0.10.8)
+      data_objects (= 0.10.8)
+    eventmachine (0.12.10)
+    faker (1.0.1)
+      i18n (~> 0.4)
+    i18n (0.6.0)
+    multi_json (1.0.4)
+    mysql (2.8.1)
+    rake (0.8.7)
+    rake-compiler (0.7.9)
+      rake
+    rspec (2.8.0)
+      rspec-core (~> 2.8.0)
+      rspec-expectations (~> 2.8.0)
+      rspec-mocks (~> 2.8.0)
+    rspec-core (2.8.0)
+    rspec-expectations (2.8.0)
+      diff-lcs (~> 1.1.2)
+    rspec-mocks (2.8.0)
+    sequel (3.32.0)
+    tzinfo (0.3.31)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  activerecord
+  do_mysql
+  eventmachine
+  faker
+  mysql
+  mysql2!
+  rake (= 0.8.7)
+  rake-compiler (~> 0.7.7)
+  rspec
+  sequel

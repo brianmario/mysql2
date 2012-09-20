@@ -1,3 +1,4 @@
+bin/
 Makefile
 *.dSYM
 *.o
@@ -10,3 +11,4 @@ pkg/
 tmp
 vendor
 lib/mysql2/mysql2.rb
+spec/configuration.yml

@@ -11,6 +11,7 @@ typedef struct {
   unsigned int numberOfFields;
   unsigned long numberOfRows;
   unsigned long lastRowProcessed;
+  char streamingComplete;
   char resultFreed;
   MYSQL_RES *result;
 } mysql2_result_wrapper;

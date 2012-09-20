@@ -17,6 +17,7 @@ dirs = ENV['PATH'].split(File::PATH_SEPARATOR) + %w[
   /opt/local/mysql
   /opt/local/lib/mysql5
   /usr
+  /usr/mysql
   /usr/local
   /usr/local/mysql
   /usr/local/mysql-*
@@ -30,10 +31,12 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   exit 1 unless have_library("libmysql")
 elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   mc = Dir[GLOB].first if mc == true
+  ver = `#{mc} --version`.chomp.to_f
   cflags = `#{mc} --cflags`.chomp
   exit 1 if $? != 0
   libs = `#{mc} --libs_r`.chomp
-  if libs.empty?
+  # MySQL 5.5 and above already have re-entrant code in libmysqlclient (no _r).
+  if ver >= 5.5 || libs.empty?
     libs = `#{mc} --libs`.chomp
   end
   exit 1 if $? != 0
@@ -61,13 +64,13 @@ end
   asplode h unless have_header h
 end
 
-unless RUBY_PLATFORM =~ /mswin/ or RUBY_PLATFORM =~ /sparc/
+# GCC specific flags
+if RbConfig::MAKEFILE_CONFIG['CC'] =~ /gcc/
   $CFLAGS << ' -Wall -funroll-loops'
-end
-# $CFLAGS << ' -O0 -ggdb3 -Wextra'
 
-if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
-	$LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"
+  if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
+    $LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"
+  end
 end
 
 create_makefile('mysql2/mysql2')

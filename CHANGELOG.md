@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.11 (December 6th, 2011)
+* change mysql error detection strategy from using mysql_field_count to the more explicit mysql_errno
+* bugfix to avoid race condition with active connections that error out
+* revert back to using xmalloc/xfree for allocations
+* avoid potentially unsafe Ruby C API usage w/o GVL
+* reacquire GVL before retrying on EINTR on connect
+
 ## 0.3.10 (November 9th, 2011)
 
 ## 0.3.9 (November 9th, 2011)
@@ -47,6 +54,13 @@
 * win32 bugfixes
 * BREAKING CHANGE: the ActiveRecord adapter has been pulled into Rails 3.1 and is no longer part of the gem
 * added Mysql2::Client.escape (class-level) for raw one-off non-encoding-aware escaping
+
+## 0.2.18 (December 6th, 2011)
+* change mysql error detection strategy from using mysql_field_count to the more explicit mysql_errno
+* bugfix to avoid race condition with active connections that error out
+* revert back to using xmalloc/xfree for allocations
+* avoid potentially unsafe Ruby C API usage w/o GVL
+* reacquire GVL before retrying on EINTR on connect
 
 ## 0.2.17 (November 9th, 2011)
 

@@ -206,7 +206,7 @@ describe Mysql2::Client do
 
       it "threaded queries should be supported" do
         threads, results = [], {}
-        connect = lambda{ Mysql2::Client.new(:host => "localhost", :username => "root") }
+        connect = lambda{ Mysql2::Client.new(:host => "localhost", :username => "test") }
         Timeout.timeout(0.7) do
           5.times {
             threads << Thread.new do

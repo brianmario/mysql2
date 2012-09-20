@@ -3,7 +3,7 @@ require 'spec_helper'
 
 describe Mysql2::Result do
   before(:each) do
-    @client = Mysql2::Client.new :host => "localhost", :username => "root", :database => 'test'
+    @client = Mysql2::Client.new :host => "localhost", :username => "test", :database => 'test'
   end
 
   before(:each) do

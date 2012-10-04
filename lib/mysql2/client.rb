@@ -23,7 +23,14 @@ module Mysql2
       # Set MySQL connection options (each one is a call to mysql_options())
       [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout].each do |key|
         next unless opts.key?(key)
-        send(:"#{key}=", opts[key])
+        case key
+        when :reconnect, :local_infile
+          send(:"#{key}=", !!opts[key])
+        when :connect_timeout, :read_timeout, :write_timeout
+          send(:"#{key}=", opts[key].to_i)
+        else
+          send(:"#{key}=", opts[key])
+        end
       end
 
       # force the encoding to utf8

@@ -18,7 +18,9 @@ Mysql2::Result - returned from issuing a #query on the connection. It includes E
 gem install mysql2
 ```
 
-You may have to specify --with-mysql-config=/some/random/path/bin/mysql_config
+This gem links against MySQL's `libmysqlclient` C shared library. You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`, or other appropriate package for your system.
+
+If you have installed MySQL to a non-standard location, add `gem install mysql2 --with-mysql-config=/some/random/path/bin/mysql_config`
 
 ## Usage
 

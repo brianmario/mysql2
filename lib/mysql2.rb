@@ -38,5 +38,5 @@ module Mysql2::Util
     return nil unless hash
     Hash[hash.map { |k,v| [k.to_sym, v] }]
   end
-	
+
 end

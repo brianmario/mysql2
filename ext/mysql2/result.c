@@ -51,12 +51,11 @@ static VALUE cMysql2Result;
 static VALUE cBigDecimal, cDate, cDateTime;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
-static VALUE intern_encoding_from_charset;
-static ID intern_new, intern_utc, intern_local, intern_encoding_from_charset_code,
-          intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
+static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
-          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream;
+          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream, sym_name;
 static ID intern_merge;
+static VALUE charset_map, charset_code_map;
 
 static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
@@ -145,8 +144,9 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
     rb_enc_associate(val, binaryEncoding);
   } else {
     /* lookup the encoding configured on this field */
-    VALUE new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset_code, 1, INT2NUM(field.charsetnr));
-    if (new_encoding != Qnil) {
+    VALUE new_encoding_code = rb_hash_aref(charset_code_map, INT2NUM(field.charsetnr));
+    VALUE new_encoding = rb_hash_aref(charset_map, rb_hash_aref(new_encoding_code, sym_name));
+    if (!NIL_P(new_encoding)) {
       /* use the field encoding we were able to match */
       rb_encoding *enc = rb_to_encoding(new_encoding);
       rb_enc_associate(val, enc);
@@ -579,8 +579,10 @@ void init_mysql2_result() {
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
   rb_define_alias(cMysql2Result, "size", "count");
 
-  intern_encoding_from_charset = rb_intern("encoding_from_charset");
-  intern_encoding_from_charset_code = rb_intern("encoding_from_charset_code");
+#ifdef HAVE_RUBY_ENCODING_H
+  charset_map = rb_const_get(mMysql2, rb_intern("CHARSET_MAP"));
+  charset_code_map = rb_const_get(mMysql2, rb_intern("MYSQL_CHARSET_MAP"));
+#endif
 
   intern_new          = rb_intern("new");
   intern_utc          = rb_intern("utc");
@@ -602,6 +604,7 @@ void init_mysql2_result() {
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
   sym_cast           = ID2SYM(rb_intern("cast"));
   sym_stream         = ID2SYM(rb_intern("stream"));
+  sym_name           = ID2SYM(rb_intern("name"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); /*never GC */

@@ -319,7 +319,7 @@ static VALUE nogvl_do_result(void *ptr, char use_result) {
     result = mysql_store_result(wrapper->client);
   }
 
-  /* once our result is stored off, this connection is 
+  /* once our result is stored off, this connection is
      ready for another command to be issued */
   wrapper->active_thread = Qnil;
 

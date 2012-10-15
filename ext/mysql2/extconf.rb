@@ -8,6 +8,7 @@ end
 # 1.9-only
 have_func('rb_thread_blocking_region')
 have_func('rb_wait_for_single_fd')
+have_func('rb_hash_dup')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
@@ -31,10 +32,12 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   exit 1 unless have_library("libmysql")
 elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   mc = Dir[GLOB].first if mc == true
+  ver = `#{mc} --version`.chomp.to_f
   cflags = `#{mc} --cflags`.chomp
   exit 1 if $? != 0
   libs = `#{mc} --libs_r`.chomp
-  if libs.empty?
+  # MySQL 5.5 and above already have re-entrant code in libmysqlclient (no _r).
+  if ver >= 5.5 || libs.empty?
     libs = `#{mc} --libs`.chomp
   end
   exit 1 if $? != 0

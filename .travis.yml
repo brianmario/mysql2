@@ -3,5 +3,3 @@ rvm:
   - 1.9.2
   - 1.9.3
   - ree
-before_script:
-  - "mysql -e 'create database test;' >/dev/null"

@@ -12,6 +12,12 @@ static VALUE intern_encoding_from_charset;
 static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
+#ifndef HAVE_RB_HASH_DUP
+static VALUE rb_hash_dup(VALUE other) {
+  return rb_funcall(rb_cHash, rb_intern("[]"), 1, other);
+}
+#endif
+
 #define REQUIRE_INITIALIZED(wrapper) \
   if (!wrapper->initialized) { \
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
@@ -371,7 +377,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   resultObj = rb_mysql_result_to_obj(result);
   /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
+  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@query_options")));
 
 #ifdef HAVE_RUBY_ENCODING_H
   GetMysql2Result(resultObj, result_wrapper);
@@ -883,7 +889,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 
   resultObj = rb_mysql_result_to_obj(result);
   /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(self, "@query_options"), rb_intern("dup"), 0));
+  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@query_options")));
 
 #ifdef HAVE_RUBY_ENCODING_H
   GetMysql2Result(resultObj, result_wrapper);

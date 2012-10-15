@@ -8,6 +8,7 @@ end
 # 1.9-only
 have_func('rb_thread_blocking_region')
 have_func('rb_wait_for_single_fd')
+have_func('rb_hash_dup')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb

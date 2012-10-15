@@ -8,8 +8,7 @@
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
-static VALUE intern_encoding_from_charset;
-static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
+static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream, charset_map;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
@@ -961,8 +960,8 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
   GET_CLIENT(self);
 
 #ifdef HAVE_RUBY_ENCODING_H
-  new_encoding = rb_funcall(cMysql2Client, intern_encoding_from_charset, 1, value);
-  if (new_encoding == Qnil) {
+  new_encoding = rb_hash_aref(charset_map, value);
+  if (NIL_P(new_encoding)) {
     VALUE inspect = rb_inspect(value);
     rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(inspect));
   } else {
@@ -1066,7 +1065,9 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
 
-  intern_encoding_from_charset = rb_intern("encoding_from_charset");
+#ifdef HAVE_RUBY_ENCODING_H
+  charset_map = rb_const_get(mMysql2, rb_intern("CHARSET_MAP"));
+#endif
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));

@@ -1,6 +1,8 @@
 #include <mysql2_ext.h>
 #include <stdint.h>
 
+#include "mysql_enc_to_ruby.h"
+
 #ifdef HAVE_RUBY_ENCODING_H
 static rb_encoding *binaryEncoding;
 #endif
@@ -144,16 +146,19 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
     rb_enc_associate(val, binaryEncoding);
   } else {
     /* lookup the encoding configured on this field */
-    VALUE new_encoding_code = rb_hash_aref(charset_code_map, INT2NUM(field.charsetnr));
-    VALUE new_encoding = rb_hash_aref(charset_map, rb_hash_aref(new_encoding_code, sym_name));
-    if (!NIL_P(new_encoding)) {
+    const char *enc_name;
+    int enc_index;
+
+    enc_name = mysql2_mysql_to_rb[field.charsetnr-1];
+    if (enc_name != NULL) {
       /* use the field encoding we were able to match */
-      rb_encoding *enc = rb_to_encoding(new_encoding);
-      rb_enc_associate(val, enc);
+      enc_index = rb_enc_find_index(enc_name);
+      rb_enc_set_index(val, enc_index);
     } else {
       /* otherwise fall-back to the connection's encoding */
       rb_enc_associate(val, conn_enc);
     }
+
     if (default_internal_enc) {
       val = rb_str_export_to_enc(val, default_internal_enc);
     }

@@ -341,6 +341,21 @@ describe Mysql2::Client do
 
         @multi_client.query( "select 3 as 'next'").first.should == { 'next' => 3 }
       end
+
+      it "will raise on query if there are outstanding results to read" do
+        @multi_client.query("SELECT 1; SELECT 2; SELECT 3")
+        lambda {
+          @multi_client.query("SELECT 4")
+        }.should raise_error(Mysql2::Error)
+      end
+
+      it "#abandon_results! should work" do
+        @multi_client.query("SELECT 1; SELECT 2; SELECT 3")
+        @multi_client.abandon_results!
+        lambda {
+          @multi_client.query("SELECT 4")
+        }.should_not raise_error(Mysql2::Error)
+      end
     end
   end
 

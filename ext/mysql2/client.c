@@ -854,10 +854,14 @@ static VALUE rb_mysql_client_next_result(VALUE self)
     GET_CLIENT(self);
     int ret;
     ret = mysql_next_result(wrapper->client);
-    if (ret == 0)
-      return Qtrue;
-    else
+    if (ret > 0) {
+      rb_raise_mysql2_error(wrapper);
       return Qfalse;
+    } else if (ret == 0) {
+      return Qtrue;
+    } else {
+      return Qfalse;
+    }
 }
 
 

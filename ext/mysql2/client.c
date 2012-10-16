@@ -6,9 +6,11 @@
 #endif
 #include "wait_for_single_fd.h"
 
+#include "mysql_enc_name_to_ruby.h"
+
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
-static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream, charset_map;
+static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
@@ -978,25 +980,29 @@ static VALUE set_write_timeout(VALUE self, VALUE value) {
 }
 
 static VALUE set_charset_name(VALUE self, VALUE value) {
-  char * charset_name;
+  char *charset_name;
+  size_t charset_name_len;
+  const struct mysql2_mysql_enc_name_to_rb_map *mysql2rb;
 #ifdef HAVE_RUBY_ENCODING_H
-  VALUE new_encoding;
+  rb_encoding *enc;
+  VALUE rb_enc;
 #endif
   GET_CLIENT(self);
 
+  charset_name = RSTRING_PTR(value);
+  charset_name_len = RSTRING_LEN(value);
+
 #ifdef HAVE_RUBY_ENCODING_H
-  new_encoding = rb_hash_aref(charset_map, value);
-  if (NIL_P(new_encoding)) {
+  mysql2rb = mysql2_mysql_enc_name_to_rb(charset_name, charset_name_len);
+  if (mysql2rb == NULL || mysql2rb->rb_name == NULL) {
     VALUE inspect = rb_inspect(value);
     rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(inspect));
   } else {
-    if (wrapper->encoding == Qnil) {
-      wrapper->encoding = new_encoding;
-    }
+    enc = rb_enc_find(mysql2rb->rb_name);
+    rb_enc = rb_enc_from_encoding(enc);
+    wrapper->encoding = rb_enc;
   }
 #endif
-
-  charset_name = StringValuePtr(value);
 
   if (mysql_options(wrapper->client, MYSQL_SET_CHARSET_NAME, charset_name)) {
     /* TODO: warning - unable to set charset */
@@ -1090,10 +1096,6 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
-
-#ifdef HAVE_RUBY_ENCODING_H
-  charset_map = rb_const_get(mMysql2, rb_intern("CHARSET_MAP"));
-#endif
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));

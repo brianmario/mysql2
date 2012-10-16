@@ -76,7 +76,7 @@ end
 
 # start printing output
 
-puts "const char *mysql2_mysql_to_rb[] = {"
+puts "const char *mysql2_mysql_enc_to_rb[] = {"
 puts encodings_with_nil.join(",\n")
 puts "};"
 puts

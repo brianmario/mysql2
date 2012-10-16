@@ -57,7 +57,6 @@ static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_o
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
           sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream, sym_name;
 static ID intern_merge;
-static VALUE charset_map, charset_code_map;
 
 static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
@@ -583,11 +582,6 @@ void init_mysql2_result() {
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
   rb_define_alias(cMysql2Result, "size", "count");
-
-#ifdef HAVE_RUBY_ENCODING_H
-  charset_map = rb_const_get(mMysql2, rb_intern("CHARSET_MAP"));
-  charset_code_map = rb_const_get(mMysql2, rb_intern("MYSQL_CHARSET_MAP"));
-#endif
 
   intern_new          = rb_intern("new");
   intern_utc          = rb_intern("utc");

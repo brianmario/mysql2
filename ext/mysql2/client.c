@@ -203,6 +203,13 @@ static VALUE allocate(VALUE klass) {
   return obj;
 }
 
+/* call-seq:
+ *    Mysql2::Client.escape(string)
+ *
+ * Escape +string+ so that it may be used in a SQL statement.
+ * Note that this escape method is not connection encoding aware.
+ * If you need encoding support use Mysql2::Client#escape instead.
+ */
 static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
   unsigned char *newStr;
   VALUE rb_str;
@@ -475,6 +482,14 @@ static VALUE finish_and_mark_inactive(void *args) {
 }
 #endif
 
+/* call-seq:
+ *    client.abandon_results!
+ *
+ * When using MULTI_STATEMENTS support, calling this will throw
+ * away any unprocessed results as fast as it can in order to
+ * put the connection back into a state where queries can be issued
+ * again.
+ */
 static VALUE rb_mysql_client_abandon_results(VALUE self) {
   GET_CLIENT(self);
 
@@ -863,6 +878,11 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   }
 }
 
+/* call-seq:
+ *    client.more_results?
+ *
+ * Returns true or false if there are more results to process.
+ */
 static VALUE rb_mysql_client_more_results(VALUE self)
 {
   GET_CLIENT(self);
@@ -872,6 +892,12 @@ static VALUE rb_mysql_client_more_results(VALUE self)
       return Qtrue;
 }
 
+/* call-seq:
+ *    client.next_result
+ *
+ * Fetch the next result set from the server.
+ * Returns nothing.
+ */
 static VALUE rb_mysql_client_next_result(VALUE self)
 {
     GET_CLIENT(self);
@@ -887,7 +913,12 @@ static VALUE rb_mysql_client_next_result(VALUE self)
     }
 }
 
-
+/* call-seq:
+ *    client.store_result
+ *
+ * Return the next result object from a query which
+ * yielded multiple result sets.
+ */
 static VALUE rb_mysql_client_store_result(VALUE self)
 {
   MYSQL_RES * result;
@@ -896,12 +927,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   mysql2_result_wrapper * result_wrapper;
 #endif
 
-
   GET_CLIENT(self);
-  /* MYSQL_RES* res = mysql_store_result(wrapper->client);
-    if (res == NULL)
-       mysql_raise(wrapper->client);
-    return mysqlres2obj(res); */
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
 
@@ -937,6 +963,13 @@ static VALUE rb_mysql_client_encoding(VALUE self) {
 }
 #endif
 
+/* call-seq:
+ *    client.reconnect = true
+ *
+ * Enable or disable the automatic reconnect behavior of libmysql.
+ * Read http://dev.mysql.com/doc/refman/5.5/en/auto-reconnect.html
+ * for more information.
+ */
 static VALUE set_reconnect(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_OPT_RECONNECT, value);
 }

@@ -495,7 +495,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
 
-
   defaults = rb_iv_get(self, "@query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
     opts = rb_funcall(defaults, intern_merge, 1, opts);

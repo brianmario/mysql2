@@ -203,6 +203,13 @@ static VALUE allocate(VALUE klass) {
   return obj;
 }
 
+/* call-seq:
+ *    Mysql2::Client.escape(string)
+ *
+ * Escape +string+ so that it may be used in a SQL statement.
+ * Note that this escape method is not connection encoding aware.
+ * If you need encoding support use Mysql2::Client#escape instead.
+ */
 static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
   unsigned char *newStr;
   VALUE rb_str;

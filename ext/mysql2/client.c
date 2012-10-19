@@ -694,12 +694,6 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   return (result == 0) ? Qtrue : Qfalse;
 }
 
-static VALUE rb_mysql_client_options(VALUE self, VALUE option, VALUE value) {
-  Check_Type(option, T_FIXNUM);
-  int opt = NUM2INT(option);
-  return _mysql_client_options(self, opt, value);
-}
-
 /* call-seq:
  *    client.info
  *
@@ -1115,7 +1109,6 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "more_results?", rb_mysql_client_more_results, 0);
   rb_define_method(cMysql2Client, "next_result", rb_mysql_client_next_result, 0);
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
-  rb_define_method(cMysql2Client, "options", rb_mysql_client_options, 2);
   rb_define_method(cMysql2Client, "reconnect=", set_reconnect, 1);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);

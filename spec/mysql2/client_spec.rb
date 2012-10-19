@@ -319,14 +319,6 @@ describe Mysql2::Client do
         result = @client.async_result
         result.class.should eql(Mysql2::Result)
       end
-
-      it "should not allow options to be set on an open connection" do
-        lambda {
-          @client.escape ""
-          @client.query("SELECT 1")
-          @client.options(0, 0)
-        }.should raise_error(Mysql2::Error)
-      end
     end
 
     context "Multiple results sets" do

@@ -6,6 +6,12 @@ describe Mysql2::Client do
     @client = Mysql2::Client.new DatabaseCredentials['root']
   end
 
+  it "should raise an exception upon connection failure" do
+    lambda {
+      Mysql2::Client.new DatabaseCredentials['root'].merge(:port => 999999)
+    }.should raise_error(Mysql2::Error)
+  end
+
   if defined? Encoding
     it "should raise an exception on create for invalid encodings" do
       lambda {
@@ -318,14 +324,6 @@ describe Mysql2::Client do
 
         result = @client.async_result
         result.class.should eql(Mysql2::Result)
-      end
-
-      it "should not allow options to be set on an open connection" do
-        lambda {
-          @client.escape ""
-          @client.query("SELECT 1")
-          @client.options(0, 0)
-        }.should raise_error(Mysql2::Error)
       end
     end
 

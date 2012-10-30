@@ -4,6 +4,7 @@
 #ifndef _WIN32
 #include <sys/socket.h>
 #endif
+#include <unistd.h>
 #include "wait_for_single_fd.h"
 
 #include "mysql_enc_name_to_ruby.h"
@@ -409,6 +410,7 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   /* manually close the socket for read/write
      this feels dirty, but is there another way? */
   shutdown(wrapper->client->net.fd, 2);
+  close(wrapper->client->net.fd);
 
   rb_exc_raise(error);
 

@@ -409,8 +409,8 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
 
   /* manually close the socket for read/write
      this feels dirty, but is there another way? */
-  shutdown(wrapper->client->net.fd, 2);
   close(wrapper->client->net.fd);
+  wrapper->client->net.fd = -1;
 
   rb_exc_raise(error);
 

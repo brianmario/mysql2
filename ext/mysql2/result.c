@@ -275,10 +275,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         case MYSQL_TYPE_TIMESTAMP:  /* TIMESTAMP field */
         case MYSQL_TYPE_DATETIME: { /* DATETIME field */
           int tokens;
-          unsigned int year=0, month=0, day=0, hour=0, min=0, sec=0;
+          unsigned int year=0, month=0, day=0, hour=0, min=0, sec=0, msec=0;
           uint64_t seconds;
 
-          tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u", &year, &month, &day, &hour, &min, &sec);
+          tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6u", &year, &month, &day, &hour, &min, &sec, &msec);
           seconds = (year*31557600ULL) + (month*2592000ULL) + (day*86400ULL) + (hour*3600ULL) + (min*60ULL) + sec;
 
           if (seconds == 0) {
@@ -288,7 +288,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
               val = Qnil;
             } else {
-              if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { /* use DateTime instead */
+              if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { /* use DateTime for larger date range, does not support microseconds */
                 VALUE offset = INT2NUM(0);
                 if (db_timezone == intern_local) {
                   offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
@@ -302,8 +302,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
                     val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
                   }
                 }
-              } else {
-                val = rb_funcall(rb_cTime, db_timezone, 6, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec));
+              } else { /* use Time, supports microseconds */
+                val = rb_funcall(rb_cTime, db_timezone, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
                 if (!NIL_P(app_timezone)) {
                   if (app_timezone == intern_local) {
                     val = rb_funcall(val, intern_localtime, 0);

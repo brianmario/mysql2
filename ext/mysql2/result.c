@@ -259,9 +259,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           break;
         }
         case MYSQL_TYPE_TIME: {     /* TIME field */
-          int hour, min, sec, tokens;
-          tokens = sscanf(row[i], "%2d:%2d:%2d", &hour, &min, &sec);
-          val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
+          int tokens;
+          unsigned int hour=0, min=0, sec=0;
+          tokens = sscanf(row[i], "%2u:%2u:%2u", &hour, &min, &sec);
+          val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec));
           if (!NIL_P(app_timezone)) {
             if (app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);
@@ -273,10 +274,11 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         }
         case MYSQL_TYPE_TIMESTAMP:  /* TIMESTAMP field */
         case MYSQL_TYPE_DATETIME: { /* DATETIME field */
-          unsigned int year, month, day, hour, min, sec, tokens;
+          int tokens;
+          unsigned int year=0, month=0, day=0, hour=0, min=0, sec=0;
           uint64_t seconds;
 
-          tokens = sscanf(row[i], "%4d-%2d-%2d %2d:%2d:%2d", &year, &month, &day, &hour, &min, &sec);
+          tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u", &year, &month, &day, &hour, &min, &sec);
           seconds = (year*31557600ULL) + (month*2592000ULL) + (day*86400ULL) + (hour*3600ULL) + (min*60ULL) + sec;
 
           if (seconds == 0) {
@@ -291,7 +293,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
                 if (db_timezone == intern_local) {
                   offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
                 }
-                val = rb_funcall(cDateTime, intern_civil, 7, INT2NUM(year), INT2NUM(month), INT2NUM(day), INT2NUM(hour), INT2NUM(min), INT2NUM(sec), offset);
+                val = rb_funcall(cDateTime, intern_civil, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), offset);
                 if (!NIL_P(app_timezone)) {
                   if (app_timezone == intern_local) {
                     offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
@@ -301,7 +303,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
                   }
                 }
               } else {
-                val = rb_funcall(rb_cTime, db_timezone, 6, INT2NUM(year), INT2NUM(month), INT2NUM(day), INT2NUM(hour), INT2NUM(min), INT2NUM(sec));
+                val = rb_funcall(rb_cTime, db_timezone, 6, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec));
                 if (!NIL_P(app_timezone)) {
                   if (app_timezone == intern_local) {
                     val = rb_funcall(val, intern_localtime, 0);
@@ -316,8 +318,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         }
         case MYSQL_TYPE_DATE:       /* DATE field */
         case MYSQL_TYPE_NEWDATE: {  /* Newer const used > 5.0 */
-          int year, month, day, tokens;
-          tokens = sscanf(row[i], "%4d-%2d-%2d", &year, &month, &day);
+          int tokens;
+          unsigned int year=0, month=0, day=0;
+          tokens = sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
           if (year+month+day == 0) {
             val = Qnil;
           } else {
@@ -325,7 +328,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
               rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
               val = Qnil;
             } else {
-              val = rb_funcall(cDate, intern_new, 3, INT2NUM(year), INT2NUM(month), INT2NUM(day));
+              val = rb_funcall(cDate, intern_new, 3, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day));
             }
           }
           break;

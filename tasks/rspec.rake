@@ -22,6 +22,7 @@ file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
   dst_path = File.expand_path("../../#{task.name}", __FILE__)
   cp src_path, dst_path
   sh "sed -i 's/LOCALUSERNAME/#{ENV['USER']}/' #{dst_path}"
+  true
 end
 
 Rake::Task[:spec].prerequisites << :'spec/configuration.yml'

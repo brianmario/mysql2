@@ -363,6 +363,7 @@ describe Mysql2::Client do
         lambda {
           @multi_client.query("SELECT 4")
         }.should_not raise_error(Mysql2::Error)
+      end
 
       it "#more_results? should work" do
         @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")

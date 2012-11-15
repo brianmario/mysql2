@@ -8,5 +8,4 @@ rvm:
   - rbx-19mode
 services: mysql
 script:
-  - bundle exec rake spec
-  - cat spec/configuration.yml
+  - bundle exec rake spec --trace

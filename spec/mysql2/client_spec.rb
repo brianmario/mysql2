@@ -8,7 +8,9 @@ describe Mysql2::Client do
 
   it "should raise an exception upon connection failure" do
     lambda {
-      Mysql2::Client.new DatabaseCredentials['root'].merge(:port => 999999)
+      # The odd local host IP address forces the mysql client library to
+      # use a TCP socket rather than a domain socket.
+      Mysql2::Client.new DatabaseCredentials['root'].merge(:host => '127.0.0.2', :port => 999999)
     }.should raise_error(Mysql2::Error)
   end
 

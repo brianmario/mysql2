@@ -10,10 +10,7 @@ module Mysql2
       :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller
       :cache_rows => true,            # tells Mysql2 to use it's internal row cache for results
       :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
-      :cast => true,
-      :encoding => 'utf8',
-      :host => 'localhost',
-      :port => 3306
+      :cast => true
     }
 
     def initialize(opts = {})
@@ -36,7 +33,8 @@ module Mysql2
         end
       end
 
-      self.charset_name = opts[:encoding]
+      # force the encoding to utf8
+      self.charset_name = opts[:encoding] || 'utf8'
 
       ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher))
 
@@ -49,8 +47,8 @@ module Mysql2
 
       user     = opts[:username] || opts[:user]
       pass     = opts[:password] || opts[:pass]
-      host     = opts[:host] || opts[:hostname]
-      port     = opts[:port]
+      host     = opts[:host] || opts[:hostname] || 'localhost'
+      port     = opts[:port] || 3306
       database = opts[:database] || opts[:dbname] || opts[:db]
       socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]

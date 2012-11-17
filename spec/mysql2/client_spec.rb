@@ -10,7 +10,7 @@ describe Mysql2::Client do
     lambda {
       # The odd local host IP address forces the mysql client library to
       # use a TCP socket rather than a domain socket.
-      Mysql2::Client.new DatabaseCredentials['root'].merge(:host => '127.0.0.2', :port => 999999)
+      Mysql2::Client.new DatabaseCredentials['root'].merge('host' => '127.0.0.2', 'port' => 999999)
     }.should raise_error(Mysql2::Error)
   end
 

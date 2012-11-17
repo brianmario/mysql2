@@ -293,13 +293,17 @@ describe Mysql2::Client do
 
       it "threaded queries should be supported" do
         threads, results = [], {}
+        lock = Mutex.new
         connect = lambda{
           Mysql2::Client.new(DatabaseCredentials['root'])
         }
         Timeout.timeout(0.7) do
           5.times {
             threads << Thread.new do
-              results[Thread.current.object_id] = connect.call.query("SELECT sleep(0.5) as result")
+              result = connect.call.query("SELECT sleep(0.5) as result")
+              lock.synchronize do
+                results[Thread.current.object_id] = result
+              end
             end
           }
         end

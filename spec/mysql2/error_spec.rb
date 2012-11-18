@@ -35,7 +35,7 @@ describe Mysql2::Error do
     @error.should respond_to(:error)
   end
 
-  if RUBY_VERSION =~ /1.9/
+  unless RUBY_VERSION =~ /1.8/
     it "#message encoding should match the connection's encoding, or Encoding.default_internal if set" do
       if Encoding.default_internal.nil?
         @error.message.encoding.should eql(@client.encoding)

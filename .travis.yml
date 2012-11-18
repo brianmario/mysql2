@@ -10,6 +10,7 @@ rvm:
 matrix:
   allow_failures:
     - rvm: ruby-head
+bundler_args: --without benchmarks
 script:
   - bundle exec rake
   - bundle exec rspec

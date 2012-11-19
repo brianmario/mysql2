@@ -234,7 +234,7 @@ describe Mysql2::Result do
     end
 
     if 1.size == 4 # 32bit
-      if RUBY_VERSION =~ /1.9/
+      unless RUBY_VERSION =~ /1.8/
         klass = Time
       else
         klass = DateTime
@@ -252,7 +252,7 @@ describe Mysql2::Result do
         r.first['test'].class.should eql(klass)
       end
     elsif 1.size == 8 # 64bit
-      if RUBY_VERSION =~ /1.9/
+      unless RUBY_VERSION =~ /1.8/
         it "should return Time when timestamp is < 1901-12-13 20:45:52" do
           r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
           r.first['test'].class.should eql(Time)

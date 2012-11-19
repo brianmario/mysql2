@@ -17,13 +17,7 @@ Gem::Specification.new do |s|
 
   # tests
   s.add_development_dependency 'eventmachine'
-  s.add_development_dependency 'rake-compiler', "~> 0.7.7"
-  s.add_development_dependency 'rake', '0.8.7' # NB: 0.8.7 required by rake-compiler 0.7.9
-  s.add_development_dependency 'rspec'
-  # benchmarks
-  s.add_development_dependency 'activerecord'
-  s.add_development_dependency 'mysql'
-  s.add_development_dependency 'do_mysql'
-  s.add_development_dependency 'sequel'
-  s.add_development_dependency 'faker'
+  s.add_development_dependency 'rake-compiler', "~> 0.8.1"
+  s.add_development_dependency 'rake', '~> 0.9.3'
+  s.add_development_dependency 'rspec', '~> 2.8.0'
 end

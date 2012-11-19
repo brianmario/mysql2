@@ -421,7 +421,7 @@ describe Mysql2::Client do
       }.should_not raise_error(SystemStackError)
     end
 
-    if RUBY_VERSION =~ /1.9/
+    unless RUBY_VERSION =~ /1.8/
       it "should carry over the original string's encoding" do
         str = "abc'def\"ghi\0jkl%mno"
         escaped = Mysql2::Client.escape(str)
@@ -638,7 +638,7 @@ describe Mysql2::Client do
     @client.ping.should eql(false)
   end
 
-  if RUBY_VERSION =~ /1.9/
+  unless RUBY_VERSION =~ /1.8/
     it "should respond to #encoding" do
       @client.should respond_to(:encoding)
     end

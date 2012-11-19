@@ -8,7 +8,9 @@ describe Mysql2::Client do
 
   it "should raise an exception upon connection failure" do
     lambda {
-      Mysql2::Client.new DatabaseCredentials['root'].merge(:port => 999999)
+      # The odd local host IP address forces the mysql client library to
+      # use a TCP socket rather than a domain socket.
+      Mysql2::Client.new DatabaseCredentials['root'].merge('host' => '127.0.0.2', 'port' => 999999)
     }.should raise_error(Mysql2::Error)
   end
 
@@ -22,11 +24,11 @@ describe Mysql2::Client do
     it "should not raise an exception on create for a valid encoding" do
       lambda {
         c = Mysql2::Client.new(:encoding => "utf8")
-      }.should raise_error(Mysql2::Error)
+      }.should_not raise_error(Mysql2::Error)
 
       lambda {
         c = Mysql2::Client.new(:encoding => "big5")
-      }.should raise_error(Mysql2::Error)
+      }.should_not raise_error(Mysql2::Error)
     end
   end
 
@@ -291,13 +293,17 @@ describe Mysql2::Client do
 
       it "threaded queries should be supported" do
         threads, results = [], {}
+        lock = Mutex.new
         connect = lambda{
           Mysql2::Client.new(DatabaseCredentials['root'])
         }
         Timeout.timeout(0.7) do
           5.times {
             threads << Thread.new do
-              results[Thread.current.object_id] = connect.call.query("SELECT sleep(0.5) as result")
+              result = connect.call.query("SELECT sleep(0.5) as result")
+              lock.synchronize do
+                results[Thread.current.object_id] = result
+              end
             end
           }
         end
@@ -363,6 +369,16 @@ describe Mysql2::Client do
         lambda {
           @multi_client.query("SELECT 4")
         }.should_not raise_error(Mysql2::Error)
+      end
+
+      it "#more_results? should work" do
+        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")
+        @multi_client.more_results?.should == true
+ 
+        @multi_client.next_result
+        @multi_client.store_result
+ 
+        @multi_client.more_results?.should == false
       end
     end
   end

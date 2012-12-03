@@ -144,9 +144,26 @@ describe Mysql2::Client do
       }.should raise_error(TypeError)
     end
 
-    it "should accept an options hash that inherits from Mysql2::Client.default_query_options" do
-      @client.query "SELECT 1", :something => :else
-      @client.query_options.should eql(@client.query_options.merge(:something => :else))
+    it "should not retain query options set on a query for subsequent queries, but should retain it in the result" do
+      result = @client.query "SELECT 1", :something => :else
+      @client.query_options[:something].should be_nil
+      result.instance_variable_get('@query_options').should eql(@client.query_options.merge(:something => :else))
+      @client.instance_variable_get('@current_query_options').should eql(@client.query_options.merge(:something => :else))
+
+      result = @client.query "SELECT 1"
+      result.instance_variable_get('@query_options').should eql(@client.query_options)
+      @client.instance_variable_get('@current_query_options').should eql(@client.query_options)
+    end
+
+    it "should allow changing query options for subsequent queries" do
+      @client.query_options.merge!(:something => :else)
+      result = @client.query "SELECT 1"
+      @client.query_options[:something].should eql(:else)
+      result.instance_variable_get('@query_options')[:something].should eql(:else)
+
+      # Clean up after this test
+      @client.query_options.delete(:something)
+      @client.query_options[:something].should be_nil
     end
 
     it "should return results as a hash by default" do

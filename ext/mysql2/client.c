@@ -12,7 +12,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
-static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
+static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
 static VALUE rb_hash_dup(VALUE other) {
@@ -368,7 +368,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
-  VALUE is_streaming = rb_hash_aref(rb_iv_get(self, "@query_options"), sym_stream);
+  VALUE is_streaming = rb_hash_aref(rb_iv_get(self, "@current_query_options"), sym_stream);
   if(is_streaming == Qtrue) {
     result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
   } else {
@@ -386,7 +386,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   resultObj = rb_mysql_result_to_obj(result);
   /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@query_options")));
+  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
 
 #ifdef HAVE_RUBY_ENCODING_H
   GetMysql2Result(resultObj, result_wrapper);
@@ -526,7 +526,7 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #endif
   struct nogvl_send_query_args args;
   int async = 0;
-  VALUE opts, defaults;
+  VALUE opts, current;
   VALUE thread_current = rb_thread_current();
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
@@ -536,16 +536,14 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
 
-  defaults = rb_iv_get(self, "@query_options");
+  rb_iv_set(self, "@current_query_options", rb_hash_dup(rb_iv_get(self, "@query_options")));
+  current = rb_iv_get(self, "@current_query_options");
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
-    opts = rb_funcall(defaults, intern_merge, 1, opts);
-    rb_iv_set(self, "@query_options", opts);
+    opts = rb_funcall(current, intern_merge_bang, 1, opts);
 
-    if (rb_hash_aref(opts, sym_async) == Qtrue) {
+    if (rb_hash_aref(current, sym_async) == Qtrue) {
       async = 1;
     }
-  } else {
-    opts = defaults;
   }
 
   Check_Type(args.sql, T_STRING);
@@ -937,7 +935,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 
   resultObj = rb_mysql_result_to_obj(result);
   /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@query_options")));
+  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
 
 #ifdef HAVE_RUBY_ENCODING_H
   GetMysql2Result(resultObj, result_wrapper);
@@ -1134,6 +1132,7 @@ void init_mysql2_client() {
   sym_stream          = ID2SYM(rb_intern("stream"));
 
   intern_merge = rb_intern("merge");
+  intern_merge_bang = rb_intern("merge!");
   intern_error_number_eql = rb_intern("error_number=");
   intern_sql_state_eql = rb_intern("sql_state=");
 

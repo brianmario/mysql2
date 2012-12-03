@@ -1,5 +1,7 @@
 # Mysql2 - A modern, simple and very fast Mysql library for Ruby - binding to libmysql
 
+[![Build Status](https://travis-ci.org/brianmario/mysql2.png)](https://travis-ci.org/brianmario/mysql2)
+
 The Mysql2 gem is meant to serve the extremely common use-case of connecting, querying and iterating on results.
 Some database libraries out there serve as direct 1:1 mappings of the already complex C API's available.
 This one is not.
@@ -393,3 +395,4 @@ though.
 * Yury Korolev (http://github.com/yury) - for TONS of help testing the Active Record adapter
 * Aaron Patterson (http://github.com/tenderlove) - tons of contributions, suggestions and general badassness
 * Mike Perham (http://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
+* Aaron Stone (http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support.

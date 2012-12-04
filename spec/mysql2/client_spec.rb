@@ -103,6 +103,31 @@ describe Mysql2::Client do
     @client.should respond_to(:query)
   end
 
+  it "should respond to #warning_count" do
+    @client.should respond_to(:warning_count)
+  end
+
+  context "#warning_count" do
+    context "when no warnings" do
+      before(:each) do
+        @client.query('select 1')
+      end
+      it "should 0" do
+        @client.warning_count.should == 0
+      end
+    end
+    context "when has a warnings" do
+      before(:each) do
+        # "the statement produces extra information that can be viewed by issuing a SHOW WARNINGS"
+        # http://dev.mysql.com/doc/refman/5.0/en/explain-extended.html
+        @client.query("explain extended select 1")
+      end
+      it "should > 0" do
+        @client.warning_count.should > 0
+      end
+    end
+  end
+
   it "should expect connect_timeout to be a positive integer" do
     lambda {
       Mysql2::Client.new(:connect_timeout => -1)

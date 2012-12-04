@@ -236,6 +236,15 @@ static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
   }
 }
 
+static VALUE rb_mysql_client_warning_count(VALUE self) {
+  unsigned int warning_count;
+  GET_CLIENT(self);
+
+  warning_count = mysql_warning_count(wrapper->client);
+
+  return UINT2NUM(warning_count);
+}
+
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
   VALUE rv;
@@ -1110,6 +1119,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "next_result", rb_mysql_client_next_result, 0);
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
   rb_define_method(cMysql2Client, "reconnect=", set_reconnect, 1);
+  rb_define_method(cMysql2Client, "warning_count", rb_mysql_client_warning_count, 0);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.12 (not yet released)
+## 0.3.12b5 (not yet released)
+* builds on Ruby 2.0-head and Rubinius 2.0-dev
+* encoding names now stored in a Gperf lookup rather than an array
+* long-standing bug fix: options set on a single query must not be applied to subsequent queries
+* add method warning_count
+* add method abandon_results!
+* add setter for reconnect option
+* remove options method (added in 0.3.12b1)
+* support microsecond Time resolution
+* several INT / UINT fixes
+
+## 0.3.12b4 (August 22, 2012)
+* add write_timeout as well
+
+## 0.3.12b3 (August 22, 2012)
+* several INT / LONG fixes
+* fix linking to MySQL 5.5
+
+## 0.3.12b2 (August 10, 2012)
+* more_results is now more_results?
+
+## 0.3.12b1 (August 8, 2012)
+* several threading and async bug fixes
+* better handling of read and write timeouts
+* add :local_infile connection option
+* add MULTI_STATEMENTS connection flag and methods store_result, next_result, more_results
+* add select_db and options methods
+* add :stream query option
+* add support for utf8mb4 encoding
+* deprecation warnings for the :user, :pass, :hostname, :dbname, :db, :sock connection options
+
 ## 0.3.11 (December 6th, 2011)
 * change mysql error detection strategy from using mysql_field_count to the more explicit mysql_errno
 * bugfix to avoid race condition with active connections that error out

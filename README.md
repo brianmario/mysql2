@@ -1,5 +1,7 @@
 # Mysql2 - A modern, simple and very fast Mysql library for Ruby - binding to libmysql
 
+[![Build Status](https://travis-ci.org/brianmario/mysql2.png)](https://travis-ci.org/brianmario/mysql2)
+
 The Mysql2 gem is meant to serve the extremely common use-case of connecting, querying and iterating on results.
 Some database libraries out there serve as direct 1:1 mappings of the already complex C API's available.
 This one is not.
@@ -123,7 +125,7 @@ while ( client.next_result)
 end
 ```
 
-See https://gist.github.com/1367987 for using MULTI_STATEMENTS with ActiveRecord.
+See https://gist.github.com/1367987 for using MULTI_STATEMENTS with Active Record.
 
 ## Cascading config
 
@@ -267,15 +269,15 @@ There are a few things that need to be kept in mind while using streaming:
 
 Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html.
 
-## ActiveRecord
+## Active Record
 
-To use the ActiveRecord driver (with or without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
+To use the Active Record driver (with or without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
 That was easy right? :)
 
-NOTE: as of 0.3.0, and ActiveRecord 3.1 - the ActiveRecord adapter has been pulled out of this gem and into ActiveRecord itself. If you need to use mysql2 with
+NOTE: as of 0.3.0, and Active Record 3.1 - the Active Record adapter has been pulled out of this gem and into Active Record itself. If you need to use mysql2 with
 Rails versions < 3.1 make sure and specify `gem "mysql2", "~> 0.2.7"` in your Gemfile
 
-## Asynchronous ActiveRecord
+## Asynchronous Active Record
 
 Please see the [em-synchrony](https://github.com/igrigorik/em-synchrony) project for details about using EventMachine with mysql2 and Rails.
 
@@ -331,7 +333,7 @@ The specs pass on my system (SL 10.6.3, x86_64) in these rubies:
 * ruby-trunk
 * rbx-head - broken at the moment, working with the rbx team for a solution
 
-The ActiveRecord driver should work on 2.3.5 and 3.0
+The Active Record driver should work on 2.3.5 and 3.0
 
 ## Yeah... but why?
 
@@ -390,6 +392,7 @@ though.
 ## Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude
-* Yury Korolev (http://github.com/yury) - for TONS of help testing the ActiveRecord adapter
+* Yury Korolev (http://github.com/yury) - for TONS of help testing the Active Record adapter
 * Aaron Patterson (http://github.com/tenderlove) - tons of contributions, suggestions and general badassness
-* Mike Perham (http://github.com/mperham) - Async ActiveRecord adapter (uses Fibers and EventMachine)
+* Mike Perham (http://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
+* Aaron Stone (http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support.

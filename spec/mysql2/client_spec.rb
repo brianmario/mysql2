@@ -103,6 +103,31 @@ describe Mysql2::Client do
     @client.should respond_to(:query)
   end
 
+  it "should respond to #warning_count" do
+    @client.should respond_to(:warning_count)
+  end
+
+  context "#warning_count" do
+    context "when no warnings" do
+      before(:each) do
+        @client.query('select 1')
+      end
+      it "should 0" do
+        @client.warning_count.should == 0
+      end
+    end
+    context "when has a warnings" do
+      before(:each) do
+        # "the statement produces extra information that can be viewed by issuing a SHOW WARNINGS"
+        # http://dev.mysql.com/doc/refman/5.0/en/explain-extended.html
+        @client.query("explain extended select 1")
+      end
+      it "should > 0" do
+        @client.warning_count.should > 0
+      end
+    end
+  end
+
   it "should expect connect_timeout to be a positive integer" do
     lambda {
       Mysql2::Client.new(:connect_timeout => -1)
@@ -144,9 +169,26 @@ describe Mysql2::Client do
       }.should raise_error(TypeError)
     end
 
-    it "should accept an options hash that inherits from Mysql2::Client.default_query_options" do
-      @client.query "SELECT 1", :something => :else
-      @client.query_options.should eql(@client.query_options.merge(:something => :else))
+    it "should not retain query options set on a query for subsequent queries, but should retain it in the result" do
+      result = @client.query "SELECT 1", :something => :else
+      @client.query_options[:something].should be_nil
+      result.instance_variable_get('@query_options').should eql(@client.query_options.merge(:something => :else))
+      @client.instance_variable_get('@current_query_options').should eql(@client.query_options.merge(:something => :else))
+
+      result = @client.query "SELECT 1"
+      result.instance_variable_get('@query_options').should eql(@client.query_options)
+      @client.instance_variable_get('@current_query_options').should eql(@client.query_options)
+    end
+
+    it "should allow changing query options for subsequent queries" do
+      @client.query_options.merge!(:something => :else)
+      result = @client.query "SELECT 1"
+      @client.query_options[:something].should eql(:else)
+      result.instance_variable_get('@query_options')[:something].should eql(:else)
+
+      # Clean up after this test
+      @client.query_options.delete(:something)
+      @client.query_options[:something].should be_nil
     end
 
     it "should return results as a hash by default" do

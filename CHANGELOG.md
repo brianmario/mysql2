@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.3.12 (not yet released)
-## 0.3.12b5 (not yet released)
+## 0.3.12b5 (December 14, 2012)
 * builds on Ruby 2.0-head and Rubinius 2.0-dev
 * encoding names now stored in a Gperf lookup rather than an array
 * long-standing bug fix: options set on a single query must not be applied to subsequent queries

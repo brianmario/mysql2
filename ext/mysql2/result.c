@@ -755,6 +755,37 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   return wrapper->fields;
 }
 
+static void rb_mysql_row_query_options(VALUE opts, ID *db_timezone, ID *app_timezone, int *symbolizeKeys, int *asArray, int *castBool, int *cast, int *cacheRows) {
+  ID dbTz, appTz;
+
+   *symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
+   *asArray       = rb_hash_aref(opts, sym_as) == sym_array;
+   *castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
+   *cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
+   *cast          = RTEST(rb_hash_aref(opts, sym_cast));
+
+  dbTz = rb_hash_aref(opts, sym_database_timezone);
+  if (dbTz == sym_local) {
+    *db_timezone = intern_local;
+  } else if (dbTz == sym_utc) {
+    *db_timezone = intern_utc;
+  } else {
+    if (!NIL_P(dbTz)) {
+      rb_warn(":database_timezone option must be :utc or :local - defaulting to :local");
+    }
+    *db_timezone = intern_local;
+  }
+
+  appTz = rb_hash_aref(opts, sym_application_timezone);
+  if (appTz == sym_local) {
+    *app_timezone = intern_local;
+  } else if (appTz == sym_utc) {
+    *app_timezone = intern_utc;
+  } else {
+    *app_timezone = Qnil;
+  }
+}
+
 static VALUE rb_mysql_result_each_(VALUE self,
                                    VALUE(*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args),
                                    const result_each_args *args)

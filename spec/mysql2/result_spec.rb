@@ -98,6 +98,37 @@ RSpec.describe Mysql2::Result do
     end
   end
 
+  context "#[]" do
+    it "should return results when accessed by [offset]" do
+      result = @client.query "SELECT 1 UNION SELECT 2"
+      result[1][result.fields.first].should eql(2)
+      result[0][result.fields.first].should eql(1)
+    end
+
+    it "should return results when accessed by negative [offset]" do
+      result = @client.query "SELECT 1 UNION SELECT 2"
+      result[-1][result.fields.first].should eql(2)
+      result[-2][result.fields.first].should eql(1)
+    end
+
+    it "should return nil if we use too large [offset]" do
+      result = @client.query "SELECT 1 UNION SELECT 2"
+      result[2].should be_nil
+      result[200].should be_nil
+    end
+
+    it "should return nil if we use too negative [offset]" do
+      result = @client.query "SELECT 1 UNION SELECT 2"
+      result[-3].should be_nil
+      result[-300].should be_nil
+    end
+
+    it "should throw an exception if we use an [offset] in streaming mode" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :stream => true
+      expect { result[0] }.to raise_exception(Mysql2::Error)
+    end
+  end
+
   context "#fields" do
     before(:each) do
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1")

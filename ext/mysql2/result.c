@@ -786,6 +786,66 @@ static void rb_mysql_row_query_options(VALUE opts, ID *db_timezone, ID *app_time
   }
 }
 
+static VALUE rb_mysql_result_element(VALUE self, VALUE seek) {
+  result_each_args args;
+  MYSQL_FIELD *fields = NULL;
+  long offset;
+  ID db_timezone, app_timezone;
+  int symbolizeKeys, asArray, castBool, cacheRows, cast;
+  VALUE opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+
+  GET_RESULT(self);
+
+  offset = NUM2LONG(seek);
+
+  if (!wrapper->numberOfRows) {
+    wrapper->numberOfRows = mysql_num_rows(wrapper->result);
+  }
+
+  opts = rb_iv_get(self, "@query_options");
+  rb_mysql_row_query_options(opts, &db_timezone, &app_timezone, &symbolizeKeys, &asArray, &castBool, &cast, &cacheRows);
+
+  if (wrapper->is_streaming) {
+    rb_raise(cMysql2Error, "Element reference operator #[] cannot be used in streaming mode.");
+  }
+
+  /* count back from the end if passed a negative number */
+  if (offset < 0) {
+    offset = wrapper->numberOfRows + offset;
+  }
+
+  /* negative offset was too big */
+  if (offset < 0) {
+    return Qnil;
+    /* rb_raise(cMysql2Error, "Out of range: offset %ld is beyond %lu rows (offset begins at 0).", offset, wrapper->numberOfRows); */
+  }
+
+  if (wrapper->numberOfRows <= (unsigned long)offset) {
+    return Qnil;
+    /* rb_raise(cMysql2Error, "Out of range: offset %ld is beyond %lu rows (offset begins at 0).", offset, wrapper->numberOfRows); */
+  }
+
+  mysql_data_seek(wrapper->result, offset);
+
+  // Backward compat
+  args.symbolizeKeys = symbolizeKeys;
+  args.asArray = asArray;
+  args.castBool = castBool;
+  args.cacheRows = cacheRows;
+  args.cast = cast;
+  args.db_timezone = db_timezone;
+  args.app_timezone = app_timezone;
+  args.block_given = Qnil;
+
+  if (wrapper->stmt) {
+    fetch_row_func = rb_mysql_result_fetch_row_stmt;
+  } else {
+    fetch_row_func = rb_mysql_result_fetch_row;
+  }
+
+  return fetch_row_func(self, fields, &args);
+}
+
 static VALUE rb_mysql_result_each_(VALUE self,
                                    VALUE(*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args),
                                    const result_each_args *args)
@@ -878,7 +938,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
   VALUE defaults, opts, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
-  ID db_timezone, app_timezone, dbTz, appTz;
+  ID db_timezone, app_timezone;
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
 
   GET_RESULT(self);
@@ -891,44 +951,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     opts = defaults;
   }
 
-  symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
-  asArray       = rb_hash_aref(opts, sym_as) == sym_array;
-  castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
-  cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
-  cast          = RTEST(rb_hash_aref(opts, sym_cast));
-
-  if (wrapper->is_streaming && cacheRows) {
-    rb_warn(":cache_rows is ignored if :stream is true");
-  }
-
-  if (wrapper->stmt && !cacheRows && !wrapper->is_streaming) {
-    rb_warn(":cache_rows is forced for prepared statements (if not streaming)");
-  }
-
-  if (wrapper->stmt && !cast) {
-    rb_warn(":cast is forced for prepared statements");
-  }
-
-  dbTz = rb_hash_aref(opts, sym_database_timezone);
-  if (dbTz == sym_local) {
-    db_timezone = intern_local;
-  } else if (dbTz == sym_utc) {
-    db_timezone = intern_utc;
-  } else {
-    if (!NIL_P(dbTz)) {
-      rb_warn(":database_timezone option must be :utc or :local - defaulting to :local");
-    }
-    db_timezone = intern_local;
-  }
-
-  appTz = rb_hash_aref(opts, sym_application_timezone);
-  if (appTz == sym_local) {
-    app_timezone = intern_local;
-  } else if (appTz == sym_utc) {
-    app_timezone = intern_utc;
-  } else {
-    app_timezone = Qnil;
-  }
+  rb_mysql_row_query_options(opts, &db_timezone, &app_timezone, &symbolizeKeys, &asArray, &castBool, &cast, &cacheRows);
 
   if (wrapper->lastRowProcessed == 0 && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt ? mysql_stmt_num_rows(wrapper->stmt) : mysql_num_rows(wrapper->result);
@@ -1019,6 +1042,7 @@ void init_mysql2_result() {
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
+  rb_define_method(cMysql2Result, "[]", rb_mysql_result_element, 1);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);

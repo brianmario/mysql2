@@ -100,31 +100,46 @@ RSpec.describe Mysql2::Result do
 
   context "#[]" do
     it "should return results when accessed by [offset]" do
-      result = @client.query "SELECT 1 UNION SELECT 2"
-      result[1][result.fields.first].should eql(2)
-      result[0][result.fields.first].should eql(1)
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      result[1].should eql({"col" => 2})
+      result[0].should eql({"col" => 1})
     end
 
     it "should return results when accessed by negative [offset]" do
-      result = @client.query "SELECT 1 UNION SELECT 2"
-      result[-1][result.fields.first].should eql(2)
-      result[-2][result.fields.first].should eql(1)
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      result[-1].should eql({"col" => 2})
+      result[-2].should eql({"col" => 1})
+    end
+
+    it "should return array of results when accessed by [offset, count]" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      result[1, 1].should eql([{"col" => 2}])
+      result[-2, 10].should eql([{"col" => 1}, {"col" => 2}])
     end
 
     it "should return nil if we use too large [offset]" do
-      result = @client.query "SELECT 1 UNION SELECT 2"
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
       result[2].should be_nil
       result[200].should be_nil
     end
 
     it "should return nil if we use too negative [offset]" do
-      result = @client.query "SELECT 1 UNION SELECT 2"
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
       result[-3].should be_nil
       result[-300].should be_nil
     end
 
+    it "should accept hash args in [offset, {:foo => bar}] and [offset, count, {:foo => bar}]" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      result[1, {:symbolize_keys => true}].should eql({:col => 2})
+      result[1, 1, {:symbolize_keys => true}].should eql([{:col => 2}])
+      # This syntax does not work in Ruby 1.8:
+      # result[1, :symbolize_keys => true].should eql({:col => 2})
+      # result[1, 1, :symbolize_keys => true].should eql([{:col => 2}])
+    end
+
     it "should throw an exception if we use an [offset] in streaming mode" do
-      result = @client.query "SELECT 1 UNION SELECT 2", :stream => true
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col", :stream => true
       expect { result[0] }.to raise_exception(Mysql2::Error)
     end
   end

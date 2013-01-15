@@ -245,6 +245,25 @@ static VALUE rb_mysql_client_warning_count(VALUE self) {
   return UINT2NUM(warning_count);
 }
 
+static VALUE rb_mysql_info(VALUE self) {
+  const char *info;
+  VALUE rb_str;
+  GET_CLIENT(self);
+
+  info = mysql_info(wrapper->client);
+
+  if (info == NULL) {
+    return Qnil;
+  }
+
+  rb_str = rb_str_new2(info);
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_enc_associate(rb_str, rb_utf8_encoding());
+#endif
+
+  return rb_str;
+}
+
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
   VALUE rv;
@@ -1120,6 +1139,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
   rb_define_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_method(cMysql2Client, "warning_count", rb_mysql_client_warning_count, 0);
+  rb_define_method(cMysql2Client, "query_info", rb_mysql_info, 0);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif

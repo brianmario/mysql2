@@ -177,7 +177,6 @@ static VALUE nogvl_close(void *ptr) {
 #endif
 
     mysql_close(wrapper->client);
-    xfree(wrapper->client);
   }
 
   return Qnil;
@@ -188,6 +187,7 @@ static void rb_mysql_client_free(void * ptr) {
 
   nogvl_close(wrapper);
 
+  xfree(wrapper->client);
   xfree(ptr);
 }
 

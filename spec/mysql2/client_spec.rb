@@ -17,17 +17,17 @@ describe Mysql2::Client do
   if defined? Encoding
     it "should raise an exception on create for invalid encodings" do
       lambda {
-        c = Mysql2::Client.new(:encoding => "fake")
+        c = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "fake"))
       }.should raise_error(Mysql2::Error)
     end
 
     it "should not raise an exception on create for a valid encoding" do
       lambda {
-        c = Mysql2::Client.new(:encoding => "utf8")
+        c = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
       }.should_not raise_error(Mysql2::Error)
 
       lambda {
-        c = Mysql2::Client.new(:encoding => "big5")
+        c = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
       }.should_not raise_error(Mysql2::Error)
     end
   end
@@ -416,10 +416,10 @@ describe Mysql2::Client do
       it "#more_results? should work" do
         @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")
         @multi_client.more_results?.should == true
- 
+
         @multi_client.next_result
         @multi_client.store_result
- 
+
         @multi_client.more_results?.should == false
       end
     end

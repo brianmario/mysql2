@@ -223,7 +223,11 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           val = Qnil;
           break;
         case MYSQL_TYPE_BIT:        /* BIT field (MySQL 5.0.3 and up) */
-          val = rb_str_new(row[i], fieldLengths[i]);
+          if (castBool && fields[i].length == 1) {
+            val = *row[i] == 1 ? Qtrue : Qfalse;
+          }else{
+            val = rb_str_new(row[i], fieldLengths[i]);
+          }
           break;
         case MYSQL_TYPE_TINY:       /* TINYINT field */
           if (castBool && fields[i].length == 1) {

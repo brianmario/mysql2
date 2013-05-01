@@ -81,11 +81,13 @@ describe Mysql2::Client do
     results = ssl_client.query("SHOW STATUS WHERE Variable_name = \"Ssl_version\" OR Variable_name = \"Ssl_cipher\"").to_a
     results[0]['Variable_name'].should eql('Ssl_cipher')
     results[0]['Value'].should_not be_nil
-    results[0]['Value'].class.should eql(String)
+    results[0]['Value'].should be_kind_of(String)
+    results[0]['Value'].should_not be_empty
 
     results[1]['Variable_name'].should eql('Ssl_version')
     results[1]['Value'].should_not be_nil
-    results[1]['Value'].class.should eql(String)
+    results[1]['Value'].should be_kind_of(String)
+    results[1]['Value'].should_not be_empty
   end
 
   it "should respond to #close" do

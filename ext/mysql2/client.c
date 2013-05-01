@@ -1051,14 +1051,12 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
 static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE capath, VALUE cipher) {
   GET_CLIENT(self);
 
-  if(!NIL_P(ca) || !NIL_P(key)) {
-    mysql_ssl_set(wrapper->client,
-        NIL_P(key) ? NULL : StringValuePtr(key),
-        NIL_P(cert) ? NULL : StringValuePtr(cert),
-        NIL_P(ca) ? NULL : StringValuePtr(ca),
-        NIL_P(capath) ? NULL : StringValuePtr(capath),
-        NIL_P(cipher) ? NULL : StringValuePtr(cipher));
-  }
+  mysql_ssl_set(wrapper->client,
+      NIL_P(key) ? NULL : StringValuePtr(key),
+      NIL_P(cert) ? NULL : StringValuePtr(cert),
+      NIL_P(ca) ? NULL : StringValuePtr(ca),
+      NIL_P(capath) ? NULL : StringValuePtr(capath),
+      NIL_P(cipher) ? NULL : StringValuePtr(cipher));
 
   return self;
 }

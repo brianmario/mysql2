@@ -355,14 +355,14 @@ static VALUE nogvl_use_result(void *ptr) {
 }
 
 /* call-seq:
- *    client.abandon_results!
+ *    client.discard_results!
  *
  * When using MULTI_STATEMENTS support, calling this will throw
  * away any unprocessed results as fast as it can in order to
  * put the connection back into a state where queries can be issued
  * again.
  */
-static VALUE rb_mysql_client_abandon_results(VALUE self) {
+static VALUE rb_mysql_client_discard_results(VALUE self) {
   GET_CLIENT(self);
 
   MYSQL_RES *result;
@@ -434,7 +434,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   if (discard_result) {
     mysql_free_result(result);
-    (void)rb_mysql_client_abandon_results(self);
+    (void)rb_mysql_client_discard_results(self);
     return Qnil;
   } else {
     resultObj = rb_mysql_result_to_obj(result);
@@ -1117,7 +1117,7 @@ void init_mysql2_client() {
 
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
-  rb_define_method(cMysql2Client, "abandon_results!", rb_mysql_client_abandon_results, 0);
+  rb_define_method(cMysql2Client, "discard_results!", rb_mysql_client_discard_results, 0);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_real_escape, 1);
   rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);

@@ -418,9 +418,9 @@ describe Mysql2::Client do
         }.should raise_error(Mysql2::Error)
       end
 
-      it "#abandon_results! should work" do
+      it "#discard_results! should work" do
         @multi_client.query("SELECT 1; SELECT 2; SELECT 3")
-        @multi_client.abandon_results!
+        @multi_client.discard_results!
         lambda {
           @multi_client.query("SELECT 4")
         }.should_not raise_error(Mysql2::Error)

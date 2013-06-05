@@ -377,6 +377,17 @@ describe Mysql2::Client do
       end
     end
 
+    it "discarding results works" do
+      result = @client.query("SELECT 4", :discard_result => true)
+      result.should be_nil
+
+      lambda {
+        result = @client.query("SELECT 4", :as => :array)
+      }.should_not raise_error(Mysql2::Error)
+      result.should_not be_nil
+      result.to_a[0][0].should eql(4)
+    end
+
     context "Multiple results sets" do
       before(:each) do
         @multi_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:flags => Mysql2::Client::MULTI_STATEMENTS))
@@ -413,6 +424,18 @@ describe Mysql2::Client do
         lambda {
           @multi_client.query("SELECT 4")
         }.should_not raise_error(Mysql2::Error)
+      end
+
+      it "discarding results should work" do
+        result = @multi_client.query("SELECT 1; SELECT 2; SELECT 3", :discard_result => true)
+        result.should be_nil
+        @multi_client.more_results?.should eql(false)
+
+        lambda {
+          result = @multi_client.query("SELECT 4", :as => :array)
+        }.should_not raise_error(Mysql2::Error)
+        result.should_not be_nil
+        result.to_a[0][0].should eql(4)
       end
 
       it "#more_results? should work" do

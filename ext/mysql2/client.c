@@ -11,7 +11,8 @@
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
-static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
+static VALUE sym_id, sym_version, sym_async, sym_discard_result,
+             sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
@@ -354,6 +355,36 @@ static VALUE nogvl_use_result(void *ptr) {
 }
 
 /* call-seq:
+ *    client.abandon_results!
+ *
+ * When using MULTI_STATEMENTS support, calling this will throw
+ * away any unprocessed results as fast as it can in order to
+ * put the connection back into a state where queries can be issued
+ * again.
+ */
+static VALUE rb_mysql_client_abandon_results(VALUE self) {
+  GET_CLIENT(self);
+
+  MYSQL_RES *result;
+  int ret;
+
+  while (mysql_more_results(wrapper->client) == 1) {
+    ret = mysql_next_result(wrapper->client);
+    if (ret > 0) {
+      rb_raise_mysql2_error(wrapper);
+    }
+
+    result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+
+    if (result != NULL) {
+      mysql_free_result(result);
+    }
+  }
+
+  return Qnil;
+}
+
+/* call-seq:
  *    client.async_result
  *
  * Returns the result for the last async issued query.
@@ -361,6 +392,8 @@ static VALUE nogvl_use_result(void *ptr) {
 static VALUE rb_mysql_client_async_result(VALUE self) {
   MYSQL_RES * result;
   VALUE resultObj;
+  VALUE current_query_options;
+  int discard_result;
 #ifdef HAVE_RUBY_ENCODING_H
   mysql2_result_wrapper * result_wrapper;
 #endif
@@ -377,8 +410,14 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
-  VALUE is_streaming = rb_hash_aref(rb_iv_get(self, "@current_query_options"), sym_stream);
-  if(is_streaming == Qtrue) {
+  current_query_options = rb_iv_get(self, "@current_query_options");
+
+  discard_result = 0;
+  if (rb_hash_aref(current_query_options, sym_discard_result) == Qtrue) {
+    discard_result = 1;
+  }
+
+  if(rb_hash_aref(current_query_options, sym_stream) == Qtrue) {
     result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
   } else {
     result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
@@ -393,15 +432,21 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
-  /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
+  if (discard_result) {
+    mysql_free_result(result);
+    (void)rb_mysql_client_abandon_results(self);
+    return Qnil;
+  } else {
+    resultObj = rb_mysql_result_to_obj(result);
+    /* pass-through query options for result construction later */
+    rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
 
-#ifdef HAVE_RUBY_ENCODING_H
-  GetMysql2Result(resultObj, result_wrapper);
-  result_wrapper->encoding = wrapper->encoding;
-#endif
-  return resultObj;
+  #ifdef HAVE_RUBY_ENCODING_H
+    GetMysql2Result(resultObj, result_wrapper);
+    result_wrapper->encoding = wrapper->encoding;
+  #endif
+    return resultObj;
+  }
 }
 
 #ifndef _WIN32
@@ -492,36 +537,6 @@ static VALUE finish_and_mark_inactive(void *args) {
   return Qnil;
 }
 #endif
-
-/* call-seq:
- *    client.abandon_results!
- *
- * When using MULTI_STATEMENTS support, calling this will throw
- * away any unprocessed results as fast as it can in order to
- * put the connection back into a state where queries can be issued
- * again.
- */
-static VALUE rb_mysql_client_abandon_results(VALUE self) {
-  GET_CLIENT(self);
-
-  MYSQL_RES *result;
-  int ret;
-
-  while (mysql_more_results(wrapper->client) == 1) {
-    ret = mysql_next_result(wrapper->client);
-    if (ret > 0) {
-      rb_raise_mysql2_error(wrapper);
-    }
-
-    result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
-
-    if (result != NULL) {
-      mysql_free_result(result);
-    }
-  }
-
-  return Qnil;
-}
 
 /* call-seq:
  *    client.query(sql, options = {})
@@ -1134,6 +1149,7 @@ void init_mysql2_client() {
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));
   sym_async           = ID2SYM(rb_intern("async"));
+  sym_discard_result  = ID2SYM(rb_intern("discard_result"));
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));

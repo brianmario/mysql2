@@ -185,10 +185,12 @@ static VALUE nogvl_close(void *ptr) {
 static void rb_mysql_client_free(void * ptr) {
   mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
 
-  nogvl_close(wrapper);
+  if (wrapper->refcount == 0) {
+    nogvl_close(wrapper);
 
-  xfree(wrapper->client);
-  xfree(ptr);
+    xfree(wrapper->client);
+    xfree(ptr);
+  }
 }
 
 static VALUE allocate(VALUE klass) {
@@ -200,6 +202,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->reconnect_enabled = 0;
   wrapper->connected = 0; /* means that a database connection is open */
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
+  wrapper->refcount = 0;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
 }
@@ -393,7 +396,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
+  resultObj = rb_mysql_result_to_obj(wrapper, result);
   /* pass-through query options for result construction later */
   rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
 
@@ -942,7 +945,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
+  resultObj = rb_mysql_result_to_obj(wrapper, result);
   /* pass-through query options for result construction later */
   rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
 

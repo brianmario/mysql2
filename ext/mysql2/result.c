@@ -72,6 +72,7 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
   if (wrapper && wrapper->resultFreed != 1) {
     mysql_free_result(wrapper->result);
     wrapper->resultFreed = 1;
+    wrapper->client_wrapper->refcount--;
   }
 }
 
@@ -562,7 +563,7 @@ static VALUE rb_mysql_result_count(VALUE self) {
 }
 
 /* Mysql2::Result */
-VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
+VALUE rb_mysql_result_to_obj(mysql_client_wrapper *client_wrapper, MYSQL_RES *r) {
   VALUE obj;
   mysql2_result_wrapper * wrapper;
   obj = Data_Make_Struct(cMysql2Result, mysql2_result_wrapper, rb_mysql_result_mark, rb_mysql_result_free, wrapper);
@@ -575,6 +576,8 @@ VALUE rb_mysql_result_to_obj(MYSQL_RES * r) {
   wrapper->rows = Qnil;
   wrapper->encoding = Qnil;
   wrapper->streamingComplete = 0;
+  wrapper->client_wrapper = client_wrapper;
+  wrapper->client_wrapper->refcount++;
   rb_obj_call_init(obj, 0, NULL);
   return obj;
 }

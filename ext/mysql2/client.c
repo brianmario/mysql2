@@ -185,9 +185,10 @@ static VALUE nogvl_close(void *ptr) {
 static void rb_mysql_client_free(void * ptr) {
   mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
 
-  if (wrapper->refcount == 0) {
-    nogvl_close(wrapper);
+  wrapper->freed = 1;
+  nogvl_close(wrapper);
 
+  if (wrapper->refcount == 0) {
     xfree(wrapper->client);
     xfree(ptr);
   }
@@ -203,6 +204,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->connected = 0; /* means that a database connection is open */
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
   wrapper->refcount = 0;
+  wrapper->freed = 0;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
 }

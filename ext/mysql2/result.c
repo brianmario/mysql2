@@ -73,6 +73,10 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
     mysql_free_result(wrapper->result);
     wrapper->resultFreed = 1;
     wrapper->client_wrapper->refcount--;
+    if (wrapper->client_wrapper->refcount == 0 && wrapper->client_wrapper->freed) {
+      xfree(wrapper->client_wrapper->client);
+      xfree(wrapper->client_wrapper);
+    }
   }
 }
 

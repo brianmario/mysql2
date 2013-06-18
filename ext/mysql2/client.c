@@ -364,9 +364,6 @@ static VALUE nogvl_use_result(void *ptr) {
 static VALUE rb_mysql_client_async_result(VALUE self) {
   MYSQL_RES * result;
   VALUE resultObj;
-#ifdef HAVE_RUBY_ENCODING_H
-  mysql2_result_wrapper * result_wrapper;
-#endif
   GET_CLIENT(self);
 
   /* if we're not waiting on a result, do nothing */
@@ -396,14 +393,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(self, result);
-  /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
-
-#ifdef HAVE_RUBY_ENCODING_H
-  GetMysql2Result(resultObj, result_wrapper);
-  result_wrapper->encoding = wrapper->encoding;
-#endif
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, rb_hash_dup(rb_iv_get(self, "@current_query_options")), result);
   return resultObj;
 }
 
@@ -929,10 +919,6 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 {
   MYSQL_RES * result;
   VALUE resultObj;
-#ifdef HAVE_RUBY_ENCODING_H
-  mysql2_result_wrapper * result_wrapper;
-#endif
-
   GET_CLIENT(self);
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
@@ -945,14 +931,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(self, result);
-  /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
-
-#ifdef HAVE_RUBY_ENCODING_H
-  GetMysql2Result(resultObj, result_wrapper);
-  result_wrapper->encoding = wrapper->encoding;
-#endif
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, rb_hash_dup(rb_iv_get(self, "@current_query_options")), result);
   return resultObj;
 
 }

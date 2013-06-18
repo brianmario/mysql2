@@ -573,7 +573,7 @@ static VALUE rb_mysql_result_count(VALUE self) {
 }
 
 /* Mysql2::Result */
-VALUE rb_mysql_result_to_obj(VALUE client, MYSQL_RES *r) {
+VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r) {
   VALUE obj;
   mysql2_result_wrapper * wrapper;
   obj = Data_Make_Struct(cMysql2Result, mysql2_result_wrapper, rb_mysql_result_mark, rb_mysql_result_free, wrapper);
@@ -584,13 +584,16 @@ VALUE rb_mysql_result_to_obj(VALUE client, MYSQL_RES *r) {
   wrapper->result = r;
   wrapper->fields = Qnil;
   wrapper->rows = Qnil;
-  wrapper->encoding = Qnil;
+  wrapper->encoding = encoding;
   wrapper->streamingComplete = 0;
   wrapper->client = client;
   wrapper->client_wrapper = DATA_PTR(client);
   wrapper->client_wrapper->refcount++;
 
   rb_obj_call_init(obj, 0, NULL);
+
+  rb_iv_set(obj, "@query_options", options);
+
   return obj;
 }
 

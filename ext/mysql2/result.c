@@ -64,27 +64,33 @@ static void rb_mysql_result_mark(void * wrapper) {
     rb_gc_mark(w->fields);
     rb_gc_mark(w->rows);
     rb_gc_mark(w->encoding);
+    rb_gc_mark(w->client);
   }
 }
 
 /* this may be called manually or during GC */
 static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
   if (wrapper && wrapper->resultFreed != 1) {
+    /* FIXME: this may call flush_use_result, which can hit the socket */
     mysql_free_result(wrapper->result);
     wrapper->resultFreed = 1;
-    wrapper->client_wrapper->refcount--;
-    if (wrapper->client_wrapper->refcount == 0 && wrapper->client_wrapper->freed) {
-      xfree(wrapper->client_wrapper->client);
-      xfree(wrapper->client_wrapper);
-    }
   }
 }
 
 /* this is called during GC */
-static void rb_mysql_result_free(void * wrapper) {
-  mysql2_result_wrapper * w = wrapper;
-  /* FIXME: this may call flush_use_result, which can hit the socket */
-  rb_mysql_result_free_result(w);
+static void rb_mysql_result_free(void *ptr) {
+  mysql2_result_wrapper * wrapper = ptr;
+  rb_mysql_result_free_result(wrapper);
+
+  // If the GC gets to client first it will be nil
+  if (wrapper->client != Qnil) {
+    wrapper->client_wrapper->refcount--;
+    if (wrapper->client_wrapper->refcount == 0) {
+      xfree(wrapper->client_wrapper->client);
+      xfree(wrapper->client_wrapper);
+    }
+  }
+
   xfree(wrapper);
 }
 
@@ -567,7 +573,7 @@ static VALUE rb_mysql_result_count(VALUE self) {
 }
 
 /* Mysql2::Result */
-VALUE rb_mysql_result_to_obj(mysql_client_wrapper *client_wrapper, MYSQL_RES *r) {
+VALUE rb_mysql_result_to_obj(VALUE client, MYSQL_RES *r) {
   VALUE obj;
   mysql2_result_wrapper * wrapper;
   obj = Data_Make_Struct(cMysql2Result, mysql2_result_wrapper, rb_mysql_result_mark, rb_mysql_result_free, wrapper);
@@ -580,8 +586,10 @@ VALUE rb_mysql_result_to_obj(mysql_client_wrapper *client_wrapper, MYSQL_RES *r)
   wrapper->rows = Qnil;
   wrapper->encoding = Qnil;
   wrapper->streamingComplete = 0;
-  wrapper->client_wrapper = client_wrapper;
+  wrapper->client = client;
+  wrapper->client_wrapper = DATA_PTR(client);
   wrapper->client_wrapper->refcount++;
+
   rb_obj_call_init(obj, 0, NULL);
   return obj;
 }

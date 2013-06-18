@@ -2,11 +2,12 @@
 #define MYSQL2_RESULT_H
 
 void init_mysql2_result();
-VALUE rb_mysql_result_to_obj(mysql_client_wrapper *client_wrapper, MYSQL_RES * r);
+VALUE rb_mysql_result_to_obj(VALUE client, MYSQL_RES * r);
 
 typedef struct {
   VALUE fields;
   VALUE rows;
+  VALUE client;
   VALUE encoding;
   unsigned int numberOfFields;
   unsigned long numberOfRows;

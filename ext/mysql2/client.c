@@ -25,6 +25,17 @@ static ID intern_merge, intern_error_number_eql, intern_sql_state_eql;
   Data_Get_Struct(self, mysql_client_wrapper, wrapper)
 
 /*
+ * compatability with mysql-connector-c, where LIBMYSQL_VERSION is the correct
+ * variable to use, but MYSQL_SERVER_VERSION gives the correct numbers when
+ * linking against the server itself
+ */
+#ifdef LIBMYSQL_VERSION
+  #define MYSQL_LINK_VERSION LIBMYSQL_VERSION
+#else
+  #define MYSQL_LINK_VERSION MYSQL_SERVER_VERSION
+#endif
+
+/*
  * used to pass all arguments to mysql_real_connect while inside
  * rb_thread_blocking_region
  */
@@ -740,14 +751,15 @@ void init_mysql2_client() {
   int i;
   int dots = 0;
   const char *lib = mysql_get_client_info();
-  for (i = 0; lib[i] != 0 && MYSQL_SERVER_VERSION[i] != 0; i++) {
+  
+  for (i = 0; lib[i] != 0 && MYSQL_LINK_VERSION[i] != 0; i++) {
     if (lib[i] == '.') {
       dots++;
               // we only compare MAJOR and MINOR
       if (dots == 2) break;
     }
-    if (lib[i] != MYSQL_SERVER_VERSION[i]) {
-      rb_raise(rb_eRuntimeError, "Incorrect MySQL client library version! This gem was compiled for %s but the client library is %s.", MYSQL_SERVER_VERSION, lib);
+    if (lib[i] != MYSQL_LINK_VERSION[i]) {
+      rb_raise(rb_eRuntimeError, "Incorrect MySQL client library version! This gem was compiled for %s but the client library is %s.", MYSQL_LINK_VERSION, lib);
       return;
     }
   }

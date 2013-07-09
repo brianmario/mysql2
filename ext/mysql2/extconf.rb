@@ -69,8 +69,13 @@ end
 if RbConfig::MAKEFILE_CONFIG['CC'] =~ /gcc/
   $CFLAGS << ' -Wall -funroll-loops'
 
-  if hard_mysql_path = $libs[%r{-L(/[^ ]+)}, 1]
-    $LDFLAGS << " -Wl,-rpath,#{hard_mysql_path}"
+  if libdir = $libs[%r{-L(/[^ ]+)}, 1]
+    # The following comment and test is borrowed from the Pg gem:
+    # Try to use runtime path linker option, even if RbConfig doesn't know about it.
+    # The rpath option is usually set implicit by dir_config(), but so far not on Mac OS X.
+    if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', " -Wl,-rpath,#{libdir}")
+      $LDFLAGS << " -Wl,-rpath,#{libdir}"
+    end
   end
 end
 

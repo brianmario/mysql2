@@ -257,10 +257,10 @@ describe Mysql2::Client do
           mark[:END] = Time.now
           mark.include?(:USR1).should be_true
           (mark[:USR1] - mark[:START]).should >= 1
-          (mark[:USR1] - mark[:START]).should < 1.1
+          (mark[:USR1] - mark[:START]).should < 1.2
           (mark[:END] - mark[:USR1]).should > 0.9
           (mark[:END] - mark[:START]).should >= 2
-          (mark[:END] - mark[:START]).should < 2.1
+          (mark[:END] - mark[:START]).should < 2.2
           Process.kill(:TERM, pid)
           Process.waitpid2(pid)
         ensure

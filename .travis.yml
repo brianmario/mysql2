@@ -9,6 +9,9 @@ rvm:
   - rbx-19mode
   - rbx-20mode
 bundler_args: --without benchmarks
+allow_failures:
+  - rvm: rbx-19mode
+  - rvm: rbx-20mode
 script:
   - bundle exec rake
   - bundle exec rspec

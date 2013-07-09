@@ -4,6 +4,7 @@ Gem::Specification.new do |s|
   s.name = %q{mysql2}
   s.version = Mysql2::VERSION
   s.authors = ["Brian Lopez"]
+  s.license = "MIT"
   s.email = %q{seniorlopez@gmail.com}
   s.extensions = ["ext/mysql2/extconf.rb"]
   s.homepage = %q{http://github.com/brianmario/mysql2}

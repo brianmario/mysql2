@@ -160,9 +160,14 @@ describe Mysql2::Result do
       @test_result['null_test'].should eql(nil)
     end
 
-    it "should return Fixnum for a BIT value" do
+    it "should return String for a BIT(64) value" do
       @test_result['bit_test'].class.should eql(String)
       @test_result['bit_test'].should eql("\000\000\000\000\000\000\000\005")
+    end
+
+    it "should return String for a BIT(1) value" do
+      @test_result['single_bit_test'].class.should eql(String)
+      @test_result['single_bit_test'].should eql("\001")
     end
 
     it "should return Fixnum for a TINYINT value" do
@@ -186,6 +191,20 @@ describe Mysql2::Result do
       result3.first['bool_cast_test'].should be_true
 
       @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
+    end
+
+    it "should return TrueClass or FalseClass for a BIT(1) value if :cast_booleans is enabled" do
+      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'
+      id1 = @client.last_id
+      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'
+      id2 = @client.last_id
+
+      result1 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id1}", :cast_booleans => true
+      result2 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id2}", :cast_booleans => true
+      result1.first['single_bit_test'].should be_true
+      result2.first['single_bit_test'].should be_false
+
+      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
     end
 
     it "should return Fixnum for a SMALLINT value" do

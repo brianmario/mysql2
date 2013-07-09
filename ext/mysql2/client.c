@@ -45,6 +45,17 @@ static VALUE rb_hash_dup(VALUE other) {
   Data_Get_Struct(self, mysql_client_wrapper, wrapper)
 
 /*
+ * compatability with mysql-connector-c, where LIBMYSQL_VERSION is the correct
+ * variable to use, but MYSQL_SERVER_VERSION gives the correct numbers when
+ * linking against the server itself
+ */
+#ifdef LIBMYSQL_VERSION
+  #define MYSQL_LINK_VERSION LIBMYSQL_VERSION
+#else
+  #define MYSQL_LINK_VERSION MYSQL_SERVER_VERSION
+#endif
+
+/*
  * used to pass all arguments to mysql_real_connect while inside
  * rb_thread_blocking_region
  */
@@ -182,13 +193,15 @@ static VALUE nogvl_close(void *ptr) {
   return Qnil;
 }
 
-static void rb_mysql_client_free(void * ptr) {
+static void rb_mysql_client_free(void *ptr) {
   mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
 
-  nogvl_close(wrapper);
-
-  xfree(wrapper->client);
-  xfree(ptr);
+  wrapper->refcount--;
+  if (wrapper->refcount == 0) {
+    nogvl_close(wrapper);
+    xfree(wrapper->client);
+    xfree(wrapper);
+  }
 }
 
 static VALUE allocate(VALUE klass) {
@@ -200,6 +213,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->reconnect_enabled = 0;
   wrapper->connected = 0; /* means that a database connection is open */
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
+  wrapper->refcount = 1;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   return obj;
 }
@@ -361,9 +375,6 @@ static VALUE nogvl_use_result(void *ptr) {
 static VALUE rb_mysql_client_async_result(VALUE self) {
   MYSQL_RES * result;
   VALUE resultObj;
-#ifdef HAVE_RUBY_ENCODING_H
-  mysql2_result_wrapper * result_wrapper;
-#endif
   GET_CLIENT(self);
 
   /* if we're not waiting on a result, do nothing */
@@ -393,14 +404,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
-  /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
-
-#ifdef HAVE_RUBY_ENCODING_H
-  GetMysql2Result(resultObj, result_wrapper);
-  result_wrapper->encoding = wrapper->encoding;
-#endif
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, rb_hash_dup(rb_iv_get(self, "@current_query_options")), result);
   return resultObj;
 }
 
@@ -926,10 +930,6 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 {
   MYSQL_RES * result;
   VALUE resultObj;
-#ifdef HAVE_RUBY_ENCODING_H
-  mysql2_result_wrapper * result_wrapper;
-#endif
-
   GET_CLIENT(self);
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
@@ -942,14 +942,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(result);
-  /* pass-through query options for result construction later */
-  rb_iv_set(resultObj, "@query_options", rb_hash_dup(rb_iv_get(self, "@current_query_options")));
-
-#ifdef HAVE_RUBY_ENCODING_H
-  GetMysql2Result(resultObj, result_wrapper);
-  result_wrapper->encoding = wrapper->encoding;
-#endif
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, rb_hash_dup(rb_iv_get(self, "@current_query_options")), result);
   return resultObj;
 
 }
@@ -1051,14 +1044,12 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
 static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE capath, VALUE cipher) {
   GET_CLIENT(self);
 
-  if(!NIL_P(ca) || !NIL_P(key)) {
-    mysql_ssl_set(wrapper->client,
-        NIL_P(key) ? NULL : StringValuePtr(key),
-        NIL_P(cert) ? NULL : StringValuePtr(cert),
-        NIL_P(ca) ? NULL : StringValuePtr(ca),
-        NIL_P(capath) ? NULL : StringValuePtr(capath),
-        NIL_P(cipher) ? NULL : StringValuePtr(cipher));
-  }
+  mysql_ssl_set(wrapper->client,
+      NIL_P(key) ? NULL : StringValuePtr(key),
+      NIL_P(cert) ? NULL : StringValuePtr(cert),
+      NIL_P(ca) ? NULL : StringValuePtr(ca),
+      NIL_P(capath) ? NULL : StringValuePtr(capath),
+      NIL_P(cipher) ? NULL : StringValuePtr(cipher));
 
   return self;
 }
@@ -1081,14 +1072,15 @@ void init_mysql2_client() {
   int i;
   int dots = 0;
   const char *lib = mysql_get_client_info();
-  for (i = 0; lib[i] != 0 && MYSQL_SERVER_VERSION[i] != 0; i++) {
+  
+  for (i = 0; lib[i] != 0 && MYSQL_LINK_VERSION[i] != 0; i++) {
     if (lib[i] == '.') {
       dots++;
               /* we only compare MAJOR and MINOR */
       if (dots == 2) break;
     }
-    if (lib[i] != MYSQL_SERVER_VERSION[i]) {
-      rb_raise(rb_eRuntimeError, "Incorrect MySQL client library version! This gem was compiled for %s but the client library is %s.", MYSQL_SERVER_VERSION, lib);
+    if (lib[i] != MYSQL_LINK_VERSION[i]) {
+      rb_raise(rb_eRuntimeError, "Incorrect MySQL client library version! This gem was compiled for %s but the client library is %s.", MYSQL_LINK_VERSION, lib);
       return;
     }
   }

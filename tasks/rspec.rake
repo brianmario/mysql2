@@ -2,10 +2,27 @@ begin
   require 'rspec'
   require 'rspec/core/rake_task'
 
+  desc " Run all examples with Valgrind"
+  namespace :spec do
+  task :valgrind do
+    VALGRIND_OPTS = %w{
+      --num-callers=50
+      --error-limit=no
+      --partial-loads-ok=yes
+      --undef-value-errors=no
+      --trace-children=yes
+    }
+    cmdline = "valgrind #{VALGRIND_OPTS.join(' ')} bundle exec rake spec"
+    puts cmdline
+    system cmdline
+  end
+  end
+
   desc "Run all examples with RCov"
   RSpec::Core::RakeTask.new('spec:rcov') do |t|
     t.rcov = true
   end
+
   RSpec::Core::RakeTask.new('spec') do |t|
     t.verbose = true
   end

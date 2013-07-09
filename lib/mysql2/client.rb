@@ -36,7 +36,8 @@ module Mysql2
       # force the encoding to utf8
       self.charset_name = opts[:encoding] || 'utf8'
 
-      ssl_set(*opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher))
+      ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
+      ssl_set(*ssl_options) if ssl_options.any?
 
       if [:user,:pass,:hostname,:dbname,:db,:sock].any?{|k| @query_options.has_key?(k) }
         warn "============= WARNING FROM mysql2 ============="

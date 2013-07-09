@@ -38,6 +38,8 @@ typedef struct {
   int active;
   int connected;
   int initialized;
+  int refcount;
+  int freed;
   MYSQL *client;
 } mysql_client_wrapper;
 

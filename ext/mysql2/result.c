@@ -394,6 +394,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   GetMysql2Result(self, wrapper);
 
   defaults = rb_iv_get(self, "@query_options");
+  Check_Type(defaults, T_HASH);
   if (rb_hash_aref(defaults, sym_symbolize_keys) == Qtrue) {
     symbolizeKeys = 1;
   }
@@ -423,6 +424,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   GetMysql2Result(self, wrapper);
 
   defaults = rb_iv_get(self, "@query_options");
+  Check_Type(defaults, T_HASH);
   if (rb_scan_args(argc, argv, "01&", &opts, &block) == 1) {
     opts = rb_funcall(defaults, intern_merge, 1, opts);
   } else {

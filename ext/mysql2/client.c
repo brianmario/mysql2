@@ -1143,7 +1143,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
   rb_define_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_method(cMysql2Client, "warning_count", rb_mysql_client_warning_count, 0);
-  rb_define_method(cMysql2Client, "query_info", rb_mysql_info, 0);
+  rb_define_method(cMysql2Client, "query_info_string", rb_mysql_info, 0);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif

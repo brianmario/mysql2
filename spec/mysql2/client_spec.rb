@@ -140,7 +140,8 @@ describe Mysql2::Client do
         @client.query('select 1')
       end
       it "should 0" do
-        @client.query_info.should be_nil
+        @client.query_info.should be_empty
+        @client.query_info_string.should be_nil
       end
     end
     context "when has some info" do
@@ -159,7 +160,8 @@ describe Mysql2::Client do
         @client.query("INSERT INTO infoTest (blah) VALUES (1234),(4535)")
       end
       it "should retrieve it" do
-        @client.query_info.should eq 'Records: 2  Duplicates: 0  Warnings: 0'
+        @client.query_info.should == {:records => 2, :duplicates => 0, :warnings => 0}
+        @client.query_info_string.should eq 'Records: 2  Duplicates: 0  Warnings: 0'
       end
     end
   end

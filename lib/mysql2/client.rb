@@ -61,6 +61,14 @@ module Mysql2
       @@default_query_options
     end
 
+    def query_info
+      info = query_info_string
+      return {} unless info
+      info_hash = {}
+      info.split.each_slice(2) { |s| info_hash[s[0].downcase.delete(':').to_sym] = s[1].to_i }
+      info_hash
+    end
+
     private
       def self.local_offset
         ::Time.local(2010).utc_offset.to_r / 86400

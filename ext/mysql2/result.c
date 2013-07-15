@@ -129,7 +129,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
       memcpy(buf, field->name, field->name_length);
       buf[field->name_length] = 0;
 
-#ifdef HAVE_RUBY_ENCODING_H
+#ifdef HAVE_RB_INTERN3
       rb_field = rb_intern3(buf, field->name_length, rb_utf8_encoding());
       rb_field = ID2SYM(rb_field);
 #else
@@ -394,6 +394,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   GetMysql2Result(self, wrapper);
 
   defaults = rb_iv_get(self, "@query_options");
+  Check_Type(defaults, T_HASH);
   if (rb_hash_aref(defaults, sym_symbolize_keys) == Qtrue) {
     symbolizeKeys = 1;
   }
@@ -423,6 +424,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   GetMysql2Result(self, wrapper);
 
   defaults = rb_iv_get(self, "@query_options");
+  Check_Type(defaults, T_HASH);
   if (rb_scan_args(argc, argv, "01&", &opts, &block) == 1) {
     opts = rb_funcall(defaults, intern_merge, 1, opts);
   } else {

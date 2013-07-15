@@ -130,6 +130,42 @@ describe Mysql2::Client do
     end
   end
 
+  it "should respond to #query_info" do
+    @client.should respond_to(:query_info)
+  end
+
+  context "#query_info" do
+    context "when no info present" do
+      before(:each) do
+        @client.query('select 1')
+      end
+      it "should 0" do
+        @client.query_info.should be_empty
+        @client.query_info_string.should be_nil
+      end
+    end
+    context "when has some info" do
+      before(:each) do
+        @client.query "USE test"
+        @client.query "CREATE TABLE IF NOT EXISTS infoTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
+      end
+
+      after(:each) do
+        @client.query "DROP TABLE infoTest"
+      end
+
+      before(:each) do
+        # http://dev.mysql.com/doc/refman/5.0/en/mysql-info.html says
+        # # Note that mysql_info() returns a non-NULL value for INSERT ... VALUES only for the multiple-row form of the statement (that is, only if multiple value lists are specified).
+        @client.query("INSERT INTO infoTest (blah) VALUES (1234),(4535)")
+      end
+      it "should retrieve it" do
+        @client.query_info.should == {:records => 2, :duplicates => 0, :warnings => 0}
+        @client.query_info_string.should eq 'Records: 2  Duplicates: 0  Warnings: 0'
+      end
+    end
+  end
+
   it "should expect connect_timeout to be a positive integer" do
     lambda {
       Mysql2::Client.new(:connect_timeout => -1)
@@ -257,10 +293,10 @@ describe Mysql2::Client do
           mark[:END] = Time.now
           mark.include?(:USR1).should be_true
           (mark[:USR1] - mark[:START]).should >= 1
-          (mark[:USR1] - mark[:START]).should < 1.2
+          (mark[:USR1] - mark[:START]).should < 1.3
           (mark[:END] - mark[:USR1]).should > 0.9
           (mark[:END] - mark[:START]).should >= 2
-          (mark[:END] - mark[:START]).should < 2.2
+          (mark[:END] - mark[:START]).should < 2.3
           Process.kill(:TERM, pid)
           Process.waitpid2(pid)
         ensure

@@ -259,6 +259,25 @@ static VALUE rb_mysql_client_warning_count(VALUE self) {
   return UINT2NUM(warning_count);
 }
 
+static VALUE rb_mysql_info(VALUE self) {
+  const char *info;
+  VALUE rb_str;
+  GET_CLIENT(self);
+
+  info = mysql_info(wrapper->client);
+
+  if (info == NULL) {
+    return Qnil;
+  }
+
+  rb_str = rb_str_new2(info);
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_enc_associate(rb_str, rb_utf8_encoding());
+#endif
+
+  return rb_str;
+}
+
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
   VALUE rv;
@@ -375,6 +394,7 @@ static VALUE nogvl_use_result(void *ptr) {
 static VALUE rb_mysql_client_async_result(VALUE self) {
   MYSQL_RES * result;
   VALUE resultObj;
+  VALUE current, is_streaming;
   GET_CLIENT(self);
 
   /* if we're not waiting on a result, do nothing */
@@ -388,7 +408,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return rb_raise_mysql2_error(wrapper);
   }
 
-  VALUE is_streaming = rb_hash_aref(rb_iv_get(self, "@current_query_options"), sym_stream);
+  is_streaming = rb_hash_aref(rb_iv_get(self, "@current_query_options"), sym_stream);
   if(is_streaming == Qtrue) {
     result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
   } else {
@@ -404,7 +424,11 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, rb_hash_dup(rb_iv_get(self, "@current_query_options")), result);
+  current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
+  RB_GC_GUARD(current);
+  Check_Type(current, T_HASH);
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result);
+
   return resultObj;
 }
 
@@ -549,10 +573,13 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
 
-  rb_iv_set(self, "@current_query_options", rb_hash_dup(rb_iv_get(self, "@query_options")));
-  current = rb_iv_get(self, "@current_query_options");
+  current = rb_hash_dup(rb_iv_get(self, "@query_options"));
+  RB_GC_GUARD(current);
+  Check_Type(current, T_HASH);
+  rb_iv_set(self, "@current_query_options", current);
+
   if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
-    opts = rb_funcall(current, intern_merge_bang, 1, opts);
+    rb_funcall(current, intern_merge_bang, 1, opts);
 
     if (rb_hash_aref(current, sym_async) == Qtrue) {
       async = 1;
@@ -930,6 +957,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 {
   MYSQL_RES * result;
   VALUE resultObj;
+  VALUE current;
   GET_CLIENT(self);
 
   result = (MYSQL_RES *)rb_thread_blocking_region(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
@@ -942,9 +970,12 @@ static VALUE rb_mysql_client_store_result(VALUE self)
     return Qnil;
   }
 
-  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, rb_hash_dup(rb_iv_get(self, "@current_query_options")), result);
-  return resultObj;
+  current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
+  RB_GC_GUARD(current);
+  Check_Type(current, T_HASH);
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result);
 
+  return resultObj;
 }
 
 #ifdef HAVE_RUBY_ENCODING_H
@@ -1112,6 +1143,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
   rb_define_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_method(cMysql2Client, "warning_count", rb_mysql_client_warning_count, 0);
+  rb_define_method(cMysql2Client, "query_info_string", rb_mysql_info, 0);
 #ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif

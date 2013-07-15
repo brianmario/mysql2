@@ -9,6 +9,7 @@ end
 have_func('rb_thread_blocking_region')
 have_func('rb_wait_for_single_fd')
 have_func('rb_hash_dup')
+have_func('rb_intern3')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
@@ -29,6 +30,14 @@ GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5}"
 
 if RUBY_PLATFORM =~ /mswin|mingw/
   inc, lib = dir_config('mysql')
+
+  # Ruby versions not incorporating the mkmf fix at
+  # https://bugs.ruby-lang.org/projects/ruby-trunk/repository/revisions/39717
+  # do not properly search for lib directories, and must be corrected
+  unless lib[-3, 3] == 'lib'
+    @libdir_basename = 'lib'
+    inc, lib = dir_config('mysql')
+  end
   exit 1 unless have_library("libmysql")
 elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   mc = Dir[GLOB].first if mc == true

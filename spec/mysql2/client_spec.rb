@@ -296,7 +296,7 @@ describe Mysql2::Client do
           (mark[:USR1] - mark[:START]).should < 1.3
           (mark[:END] - mark[:USR1]).should > 0.9
           (mark[:END] - mark[:START]).should >= 2
-          (mark[:END] - mark[:START]).should < 2.2
+          (mark[:END] - mark[:START]).should < 2.3
           Process.kill(:TERM, pid)
           Process.waitpid2(pid)
         ensure

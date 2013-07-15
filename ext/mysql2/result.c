@@ -129,7 +129,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
       memcpy(buf, field->name, field->name_length);
       buf[field->name_length] = 0;
 
-#ifdef HAVE_RUBY_ENCODING_H
+#ifdef HAVE_RB_INTERN3
       rb_field = rb_intern3(buf, field->name_length, rb_utf8_encoding());
       rb_field = ID2SYM(rb_field);
 #else

@@ -10,3 +10,7 @@ group :benchmarks do
   gem 'sequel'
   gem 'faker'
 end
+
+group :development do
+  gem 'pry'
+end

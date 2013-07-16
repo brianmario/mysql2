@@ -4,7 +4,7 @@ gemspec
 
 # benchmarks
 group :benchmarks do
-  gem 'activerecord'
+  gem 'activerecord', '>= 3.0'
   gem 'mysql'
   gem 'do_mysql'
   gem 'sequel'

@@ -19,18 +19,18 @@ mysql_opts = {
 }
 
 class Mysql2Model < ActiveRecord::Base
-  set_table_name :mysql2_test
+  self.table_name = "mysql2_test"
 end
 
 class MysqlModel < ActiveRecord::Base
-  set_table_name :mysql2_test
+  self.table_name = "mysql2_test"
 end
 
 Benchmark.bmbm do |x|
   x.report "Mysql2" do
     Mysql2Model.establish_connection(mysql2_opts)
     number_of.times do
-      Mysql2Model.all(:limit => 1000).each{ |r|
+      Mysql2Model.limit(1000).to_a.each{ |r|
         r.attributes.keys.each{ |k|
           r.send(k.to_sym)
         }
@@ -41,7 +41,7 @@ Benchmark.bmbm do |x|
   x.report "Mysql" do
     MysqlModel.establish_connection(mysql_opts)
     number_of.times do
-      MysqlModel.all(:limit => 1000).each{ |r|
+      MysqlModel.limit(1000).to_a.each{ |r|
         r.attributes.keys.each{ |k|
           r.send(k.to_sym)
         }

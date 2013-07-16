@@ -148,11 +148,11 @@ describe Mysql2::Result do
     it "should return nil values for NULL and strings for everything else when :cast is false" do
       result = @client.query('SELECT null_test, tiny_int_test, bool_cast_test, int_test, date_test, enum_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast => false).first
       result["null_test"].should be_nil
-      result["tiny_int_test"].should  == "1"
-      result["bool_cast_test"].should == "1"
-      result["int_test"].should       == "10"
-      result["date_test"].should      == "2010-04-04"
-      result["enum_test"].should      == "val1"
+      result["tiny_int_test"].should  eql("1")
+      result["bool_cast_test"].should eql("1")
+      result["int_test"].should       eql("10")
+      result["date_test"].should      eql("2010-04-04")
+      result["enum_test"].should      eql("val1")
     end
 
     it "should return nil for a NULL value" do

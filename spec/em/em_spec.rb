@@ -34,8 +34,8 @@ begin
         defer1.callback do |result|
           results << result.first
           defer2 = client.query "SELECT sleep(0.025) as second_query"
-          defer2.callback do |result|
-            results << result.first
+          defer2.callback do |r|
+            results << r.first
             EM.stop_event_loop
           end
         end

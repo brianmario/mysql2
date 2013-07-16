@@ -17,17 +17,17 @@ describe Mysql2::Client do
   if defined? Encoding
     it "should raise an exception on create for invalid encodings" do
       lambda {
-        c = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "fake"))
+        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "fake"))
       }.should raise_error(Mysql2::Error)
     end
 
     it "should not raise an exception on create for a valid encoding" do
       lambda {
-        c = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
+        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
       }.should_not raise_error(Mysql2::Error)
 
       lambda {
-        c = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
+        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
       }.should_not raise_error(Mysql2::Error)
     end
   end
@@ -160,8 +160,8 @@ describe Mysql2::Client do
         @client.query("INSERT INTO infoTest (blah) VALUES (1234),(4535)")
       end
       it "should retrieve it" do
-        @client.query_info.should == {:records => 2, :duplicates => 0, :warnings => 0}
-        @client.query_info_string.should eq 'Records: 2  Duplicates: 0  Warnings: 0'
+        @client.query_info.should  eql({:records => 2, :duplicates => 0, :warnings => 0})
+        @client.query_info_string.should eq('Records: 2  Duplicates: 0  Warnings: 0')
       end
     end
   end
@@ -419,12 +419,12 @@ describe Mysql2::Client do
       end
 
       it "returns multiple result sets" do
-        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'").first.should == { 'set_1' => 1 }
+        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'").first.should eql({ 'set_1' => 1 })
 
-        @multi_client.next_result.should == true
-        @multi_client.store_result.first.should == { 'set_2' => 2 }
+        @multi_client.next_result.should be_true
+        @multi_client.store_result.first.should eql({ 'set_2' => 2 })
 
-        @multi_client.next_result.should == false
+        @multi_client.next_result.should be_false
       end
 
       it "does not interfere with other statements" do
@@ -453,12 +453,12 @@ describe Mysql2::Client do
 
       it "#more_results? should work" do
         @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")
-        @multi_client.more_results?.should == true
+        @multi_client.more_results?.should be_true
 
         @multi_client.next_result
         @multi_client.store_result
 
-        @multi_client.more_results?.should == false
+        @multi_client.more_results?.should be_false
       end
     end
   end
@@ -621,11 +621,11 @@ describe Mysql2::Client do
 
   it "should raise a Mysql2::Error exception upon connection failure" do
     lambda {
-      bad_client = Mysql2::Client.new :host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42'
+      Mysql2::Client.new :host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42'
     }.should raise_error(Mysql2::Error)
 
     lambda {
-      good_client = Mysql2::Client.new DatabaseCredentials['root']
+      Mysql2::Client.new DatabaseCredentials['root']
     }.should_not raise_error(Mysql2::Error)
   end
 

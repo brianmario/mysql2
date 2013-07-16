@@ -4,21 +4,21 @@ require 'spec_helper'
 describe Mysql2::Error do
   before(:each) do
     begin
-      client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
-      client.query("HAHAHA")
+      @err_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
+      @err_client.query("HAHAHA")
     rescue Mysql2::Error => e
       @error = e
     ensure
-      client.close
+      @err_client.close
     end
 
     begin
-      client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
-      client.query("HAHAHA")
+      @err_client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
+      @err_client2.query("HAHAHA")
     rescue Mysql2::Error => e
       @error2 = e
     ensure
-      client.close
+      @err_client2.close
     end
   end
 
@@ -42,8 +42,8 @@ describe Mysql2::Error do
   unless RUBY_VERSION =~ /1.8/
     it "#message encoding should match the connection's encoding, or Encoding.default_internal if set" do
       if Encoding.default_internal.nil?
-        @error.message.encoding.should eql(@client.encoding)
-        @error2.message.encoding.should eql(@client2.encoding)
+        @error.message.encoding.should eql(@err_client.encoding)
+        @error2.message.encoding.should eql(@err_client2.encoding)
       else
         @error.message.encoding.should eql(Encoding.default_internal)
         @error2.message.encoding.should eql(Encoding.default_internal)
@@ -52,8 +52,8 @@ describe Mysql2::Error do
 
     it "#error encoding should match the connection's encoding, or Encoding.default_internal if set" do
       if Encoding.default_internal.nil?
-        @error.error.encoding.should eql(@client.encoding)
-        @error2.error.encoding.should eql(@client2.encoding)
+        @error.error.encoding.should eql(@err_client.encoding)
+        @error2.error.encoding.should eql(@err_client2.encoding)
       else
         @error.error.encoding.should eql(Encoding.default_internal)
         @error2.error.encoding.should eql(Encoding.default_internal)
@@ -62,8 +62,8 @@ describe Mysql2::Error do
 
     it "#sql_state encoding should match the connection's encoding, or Encoding.default_internal if set" do
       if Encoding.default_internal.nil?
-        @error.sql_state.encoding.should eql(@client.encoding)
-        @error2.sql_state.encoding.should eql(@client2.encoding)
+        @error.sql_state.encoding.should eql(@err_client.encoding)
+        @error2.sql_state.encoding.should eql(@err_client2.encoding)
       else
         @error.sql_state.encoding.should eql(Encoding.default_internal)
         @error2.sql_state.encoding.should eql(Encoding.default_internal)

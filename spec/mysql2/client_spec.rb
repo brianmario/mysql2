@@ -109,20 +109,16 @@ describe Mysql2::Client do
 
   context "#warning_count" do
     context "when no warnings" do
-      before(:each) do
-        @client.query('select 1')
-      end
       it "should 0" do
+        @client.query('select 1')
         @client.warning_count.should == 0
       end
     end
     context "when has a warnings" do
-      before(:each) do
+      it "should > 0" do
         # "the statement produces extra information that can be viewed by issuing a SHOW WARNINGS"
         # http://dev.mysql.com/doc/refman/5.0/en/explain-extended.html
         @client.query("explain extended select 1")
-      end
-      it "should > 0" do
         @client.warning_count.should > 0
       end
     end
@@ -134,32 +130,25 @@ describe Mysql2::Client do
 
   context "#query_info" do
     context "when no info present" do
-      before(:each) do
-        @client.query('select 1')
-      end
       it "should 0" do
+        @client.query('select 1')
         @client.query_info.should be_empty
         @client.query_info_string.should be_nil
       end
     end
     context "when has some info" do
-      before(:each) do
+      it "should retrieve it" do
         @client.query "USE test"
         @client.query "CREATE TABLE IF NOT EXISTS infoTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
-      end
 
-      after(:each) do
-        @client.query "DROP TABLE infoTest"
-      end
-
-      before(:each) do
         # http://dev.mysql.com/doc/refman/5.0/en/mysql-info.html says
         # # Note that mysql_info() returns a non-NULL value for INSERT ... VALUES only for the multiple-row form of the statement (that is, only if multiple value lists are specified).
         @client.query("INSERT INTO infoTest (blah) VALUES (1234),(4535)")
-      end
-      it "should retrieve it" do
+
         @client.query_info.should  eql({:records => 2, :duplicates => 0, :warnings => 0})
         @client.query_info_string.should eq('Records: 2  Duplicates: 0  Warnings: 0')
+
+        @client.query "DROP TABLE infoTest"
       end
     end
   end
@@ -184,7 +173,7 @@ describe Mysql2::Client do
 
   context "#query" do
     it "should let you query again if iterating is finished when streaming" do
-      @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).each {}
+      @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).each.to_a
 
       expect {
         @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false)

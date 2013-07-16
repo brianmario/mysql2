@@ -10,7 +10,7 @@ describe Mysql2::Result do
     result = @client.query('SELECT 1')
 
     result.count.should eql(1)
-    result.each { |r| }
+    result.each.to_a
     result.count.should eql(1)
   end
 
@@ -31,7 +31,7 @@ describe Mysql2::Result do
       @client.query "USE test"
       result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
       result.count.should eql(0)
-      result.each {|r|  }
+      result.each.to_a
       result.count.should eql(0)
   end
 
@@ -113,8 +113,8 @@ describe Mysql2::Result do
       result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
 
       expect {
-        result.each {}
-        result.each {}
+        result.each.to_a
+        result.each.to_a
       }.to raise_exception(Mysql2::Error)
     end
   end

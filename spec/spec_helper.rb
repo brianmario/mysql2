@@ -7,6 +7,13 @@ require 'yaml'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.configure do |config|
+  # makes it so we can use `test` instead of `it` when defining test cases
+  config.alias_example_to :test
+
+  # we're only going to use Test::Unit assertions
+  # this will also prevent the use of the rspec stuff
+  config.expect_with :stdlib
+
   config.before :each do
     @client = Mysql2::Client.new DatabaseCredentials['root']
   end

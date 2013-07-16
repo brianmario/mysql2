@@ -7,6 +7,14 @@ require 'yaml'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.configure do |config|
+  config.before :each do
+    @client = Mysql2::Client.new DatabaseCredentials['root']
+  end
+
+  config.after :each do
+    @client.close
+  end
+
   config.before(:all) do
     client = Mysql2::Client.new DatabaseCredentials['root']
     client.query %[

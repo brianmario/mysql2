@@ -2,10 +2,6 @@
 require 'spec_helper'
 
 describe Mysql2::Client do
-  before(:each) do
-    @client = Mysql2::Client.new DatabaseCredentials['root']
-  end
-
   it "should raise an exception upon connection failure" do
     lambda {
       # The odd local host IP address forces the mysql client library to
@@ -88,6 +84,8 @@ describe Mysql2::Client do
     results[1]['Value'].should_not be_nil
     results[1]['Value'].should be_kind_of(String)
     results[1]['Value'].should_not be_empty
+
+    ssl_client.close
   end
 
   it "should respond to #close" do

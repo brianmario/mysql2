@@ -3,10 +3,6 @@ require 'spec_helper'
 
 describe Mysql2::Result do
   before(:each) do
-    @client = Mysql2::Client.new DatabaseCredentials['root']
-  end
-
-  before(:each) do
     @result = @client.query "SELECT 1"
   end
 
@@ -330,6 +326,7 @@ describe Mysql2::Result do
           client2.query "USE test"
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
+          client2.close
         end
 
         it "should use Encoding.default_internal" do
@@ -359,6 +356,7 @@ describe Mysql2::Result do
           client2.query "USE test"
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
+          client2.close
         end
 
         it "should use Encoding.default_internal" do
@@ -441,6 +439,7 @@ describe Mysql2::Result do
               client2.query "USE test"
               result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               result[field].encoding.should eql(Encoding.find('us-ascii'))
+              client2.close
             end
 
             it "should use Encoding.default_internal" do

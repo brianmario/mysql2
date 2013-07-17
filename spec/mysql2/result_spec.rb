@@ -167,7 +167,7 @@ describe Mysql2::Result do
     end
 
     test "returns Fixnum for a TINYINT value" do
-      assert_includes [Fixnum, Bignum], @test_result['tiny_int_test'].class
+      assert_include [Fixnum, Bignum], @test_result['tiny_int_test'].class
       assert_equal 1, @test_result['tiny_int_test']
     end
 
@@ -204,27 +204,27 @@ describe Mysql2::Result do
     end
 
     test "returns Fixnum for a SMALLINT value" do
-      assert_includes [Fixnum, Bignum], @test_result['small_int_test'].class
+      assert_include [Fixnum, Bignum], @test_result['small_int_test'].class
       assert_equal 10, @test_result['small_int_test']
     end
 
     test "returns Fixnum for a MEDIUMINT value" do
-      assert_includes [Fixnum, Bignum], @test_result['medium_int_test'].class
+      assert_include [Fixnum, Bignum], @test_result['medium_int_test'].class
       assert_equal 10, @test_result['medium_int_test']
     end
 
     test "returns Fixnum for an INT value" do
-      assert_includes [Fixnum, Bignum], @test_result['int_test'].class
+      assert_include [Fixnum, Bignum], @test_result['int_test'].class
       assert_equal 10, @test_result['int_test']
     end
 
     test "returns Fixnum for a BIGINT value" do
-      assert_includes [Fixnum, Bignum], @test_result['big_int_test'].class
+      assert_include [Fixnum, Bignum], @test_result['big_int_test'].class
       assert_equal 10, @test_result['big_int_test']
     end
 
     test "returns Fixnum for a YEAR value" do
-      assert_includes [Fixnum, Bignum], @test_result['year_test'].class
+      assert_include [Fixnum, Bignum], @test_result['year_test'].class
       assert_equal 2009, @test_result['year_test']
     end
 

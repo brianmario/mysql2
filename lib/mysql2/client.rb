@@ -1,6 +1,6 @@
 module Mysql2
   class Client
-    attr_reader :query_options, :read_timeout, :write_timeout, :local_infile
+    attr_reader :query_options, :read_timeout
     @@default_query_options = {
       :as => :hash,                   # the type of object you want each row back as; also supports :array (an array of values)
       :async => false,                # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
@@ -16,8 +16,6 @@ module Mysql2
     def initialize(opts = {})
       opts = Mysql2::Util.key_hash_as_symbols( opts )
       @read_timeout = nil
-      @write_timeout = nil
-      @local_infile = nil
       @query_options = @@default_query_options.dup
       @query_options.merge! opts
 

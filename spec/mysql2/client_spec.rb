@@ -264,30 +264,32 @@ describe Mysql2::Client do
         }.should raise_error(Mysql2::Error)
       end
 
-      # XXX this test is not deterministic (because Unix signal handling is not)
-      # and may fail on a loaded system
-      it "should run signal handlers while waiting for a response" do
-        mark = {}
-        trap(:USR1) { mark[:USR1] = Time.now }
-        begin
-          mark[:START] = Time.now
-          pid = fork do
-            sleep 1 # wait for client "SELECT sleep(2)" query to start
-            Process.kill(:USR1, Process.ppid)
-            sleep # wait for explicit kill to prevent GC disconnect
+      if !defined? Rubinius
+        # XXX this test is not deterministic (because Unix signal handling is not)
+        # and may fail on a loaded system
+        it "should run signal handlers while waiting for a response" do
+          mark = {}
+          trap(:USR1) { mark[:USR1] = Time.now }
+          begin
+            mark[:START] = Time.now
+            pid = fork do
+              sleep 1 # wait for client "SELECT sleep(2)" query to start
+              Process.kill(:USR1, Process.ppid)
+              sleep # wait for explicit kill to prevent GC disconnect
+            end
+            @client.query("SELECT sleep(2)")
+            mark[:END] = Time.now
+            mark.include?(:USR1).should be_true
+            (mark[:USR1] - mark[:START]).should >= 1
+            (mark[:USR1] - mark[:START]).should < 1.3
+            (mark[:END] - mark[:USR1]).should > 0.9
+            (mark[:END] - mark[:START]).should >= 2
+            (mark[:END] - mark[:START]).should < 2.3
+            Process.kill(:TERM, pid)
+            Process.waitpid2(pid)
+          ensure
+            trap(:USR1, 'DEFAULT')
           end
-          @client.query("SELECT sleep(2)")
-          mark[:END] = Time.now
-          mark.include?(:USR1).should be_true
-          (mark[:USR1] - mark[:START]).should >= 1
-          (mark[:USR1] - mark[:START]).should < 1.3
-          (mark[:END] - mark[:USR1]).should > 0.9
-          (mark[:END] - mark[:START]).should >= 2
-          (mark[:END] - mark[:START]).should < 2.3
-          Process.kill(:TERM, pid)
-          Process.waitpid2(pid)
-        ensure
-          trap(:USR1, 'DEFAULT')
         end
       end
 

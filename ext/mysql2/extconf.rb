@@ -34,7 +34,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   # Ruby versions not incorporating the mkmf fix at
   # https://bugs.ruby-lang.org/projects/ruby-trunk/repository/revisions/39717
   # do not properly search for lib directories, and must be corrected
-  unless lib[-3, 3] == 'lib'
+  unless lib && lib[-3, 3] == 'lib'
     @libdir_basename = 'lib'
     inc, lib = dir_config('mysql')
   end

@@ -24,8 +24,8 @@ begin
         end
       end
 
-      assert_include results[0].keys, "second_query"
-      assert_include results[1].keys, "first_query"
+      assert_includes results[0].keys, "second_query"
+      assert_includes results[1].keys, "first_query"
     end
 
     test "supports queries in callbacks" do
@@ -44,8 +44,8 @@ begin
         end
       end
 
-      assert_include results[0].keys, "first_query"
-      assert_include results[1].keys, "second_query"
+      assert_includes results[0].keys, "first_query"
+      assert_includes results[1].keys, "second_query"
     end
 
     test "doesn't swallow exceptions raised in callbacks" do

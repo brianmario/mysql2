@@ -15,6 +15,10 @@ RSpec.configure do |config|
     end
   end
 
+  def assert_include(collection, value)
+    assert collection.include?(value), "#{value} not found in [#{collection.join(', ')}]"
+  end
+
   # makes it so we can use `test` instead of `it` when defining test cases
   config.alias_example_to :test
 

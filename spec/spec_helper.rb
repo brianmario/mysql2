@@ -7,6 +7,25 @@ require 'yaml'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.configure do |config|
+  def assert_not_raised(err_klass)
+    begin
+      yield
+    rescue err_klass => e
+      fail_with "Expected to not raise #{err_klass}, but one was caught"
+    end
+  end
+
+  def assert_include(collection, value)
+    assert collection.include?(value), "#{value} not found in [#{collection.join(', ')}]"
+  end
+
+  # makes it so we can use `test` instead of `it` when defining test cases
+  config.alias_example_to :test
+
+  # we're only going to use Test::Unit assertions
+  # this will also prevent the use of the rspec stuff
+  config.expect_with :stdlib
+
   config.before :each do
     @client = Mysql2::Client.new DatabaseCredentials['root']
   end

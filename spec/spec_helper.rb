@@ -7,6 +7,14 @@ require 'yaml'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.configure do |config|
+  def assert_not_raised(err_klass)
+    begin
+      yield
+    rescue err_klass => e
+      fail_with "Expected to not raise #{err_klass}, but one was caught"
+    end
+  end
+
   # makes it so we can use `test` instead of `it` when defining test cases
   config.alias_example_to :test
 

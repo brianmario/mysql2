@@ -22,51 +22,51 @@ describe Mysql2::Error do
     end
   end
 
-  it "should respond to #error_number" do
-    @error.should respond_to(:error_number)
+  test "responds to #error_number" do
+    assert @error.respond_to?(:error_number)
   end
 
-  it "should respond to #sql_state" do
-    @error.should respond_to(:sql_state)
+  test "responds to #sql_state" do
+    assert @error.respond_to?(:sql_state)
   end
 
   # Mysql gem compatibility
-  it "should alias #error_number to #errno" do
-    @error.should respond_to(:errno)
+  test "aliases #error_number to #errno" do
+    assert @error.respond_to?(:errno)
   end
 
-  it "should alias #message to #error" do
-    @error.should respond_to(:error)
+  test "aliases #message to #error" do
+    assert @error.respond_to?(:error)
   end
 
   unless RUBY_VERSION =~ /1.8/
-    it "#message encoding should match the connection's encoding, or Encoding.default_internal if set" do
+    test "#message encoding matches the connection's encoding, or Encoding.default_internal if set" do
       if Encoding.default_internal.nil?
-        @error.message.encoding.should eql(@err_client.encoding)
-        @error2.message.encoding.should eql(@err_client2.encoding)
+        assert_equal @err_client.encoding, @error.message.encoding
+        assert_equal @err_client2.encoding, @error2.message.encoding
       else
-        @error.message.encoding.should eql(Encoding.default_internal)
-        @error2.message.encoding.should eql(Encoding.default_internal)
+        assert_equal Encoding.default_internal, @error.message.encoding
+        assert_equal Encoding.default_internal, @error2.message.encoding
       end
     end
 
-    it "#error encoding should match the connection's encoding, or Encoding.default_internal if set" do
+    test "#error encoding matches the connection's encoding, or Encoding.default_internal if set" do
       if Encoding.default_internal.nil?
-        @error.error.encoding.should eql(@err_client.encoding)
-        @error2.error.encoding.should eql(@err_client2.encoding)
+        assert_equal @err_client.encoding, @error.error.encoding
+        assert_equal @err_client2.encoding, @error2.error.encoding
       else
-        @error.error.encoding.should eql(Encoding.default_internal)
-        @error2.error.encoding.should eql(Encoding.default_internal)
+        assert_equal Encoding.default_internal, @error.error.encoding
+        assert_equal Encoding.default_internal, @error2.error.encoding
       end
     end
 
-    it "#sql_state encoding should match the connection's encoding, or Encoding.default_internal if set" do
+    test "#sql_state encoding matches the connection's encoding, or Encoding.default_internal if set" do
       if Encoding.default_internal.nil?
-        @error.sql_state.encoding.should eql(@err_client.encoding)
-        @error2.sql_state.encoding.should eql(@err_client2.encoding)
+        assert_equal @err_client.encoding, @error.sql_state.encoding
+        assert_equal @err_client2.encoding, @error2.sql_state.encoding
       else
-        @error.sql_state.encoding.should eql(Encoding.default_internal)
-        @error2.sql_state.encoding.should eql(Encoding.default_internal)
+        assert_equal Encoding.default_internal, @error.sql_state.encoding
+        assert_equal Encoding.default_internal, @error2.sql_state.encoding
       end
     end
   end

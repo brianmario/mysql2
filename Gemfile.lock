@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    mysql2 (0.2.19)
+    mysql2 (0.2.20)
 
 GEM
   remote: https://rubygems.org/

@@ -42,7 +42,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
 elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   mc = Dir[GLOB].first if mc == true
   ver = `#{mc} --version`.chomp.to_f
-  cflags = `#{mc} --cflags`.chomp
+  includes = `#{mc} --include`.chomp
   exit 1 if $? != 0
   libs = `#{mc} --libs_r`.chomp
   # MySQL 5.5 and above already have re-entrant code in libmysqlclient (no _r).
@@ -50,7 +50,7 @@ elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
     libs = `#{mc} --libs`.chomp
   end
   exit 1 if $? != 0
-  $CPPFLAGS += ' ' + cflags
+  $INCFLAGS += ' ' + includes
   $libs = libs + " " + $libs
 else
   inc, lib = dir_config('mysql', '/usr/local')

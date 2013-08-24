@@ -283,6 +283,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           int tokens;
           unsigned int hour=0, min=0, sec=0;
           tokens = sscanf(row[i], "%2u:%2u:%2u", &hour, &min, &sec);
+          if (tokens < 3) {
+            val = Qnil;
+            break;
+          }
           val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec));
           if (!NIL_P(app_timezone)) {
             if (app_timezone == intern_local) {
@@ -300,6 +304,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           uint64_t seconds;
 
           tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6u", &year, &month, &day, &hour, &min, &sec, &msec);
+          if (tokens < 6) { /* msec might be empty */
+            val = Qnil;
+            break;
+          }
           seconds = (year*31557600ULL) + (month*2592000ULL) + (day*86400ULL) + (hour*3600ULL) + (min*60ULL) + sec;
 
           if (seconds == 0) {
@@ -342,6 +350,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           int tokens;
           unsigned int year=0, month=0, day=0;
           tokens = sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
+          if (tokens < 3) {
+            val = Qnil;
+            break;
+          }
           if (year+month+day == 0) {
             val = Qnil;
           } else {

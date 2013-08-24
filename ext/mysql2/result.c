@@ -99,10 +99,10 @@ static void rb_mysql_result_free(void *ptr) {
  * reliable way for us to tell this so we'll always release the GVL
  * to be safe
  */
-static VALUE nogvl_fetch_row(void *ptr) {
+static void *nogvl_fetch_row(void *ptr) {
   MYSQL_RES *result = ptr;
 
-  return (VALUE)mysql_fetch_row(result);
+  return mysql_fetch_row(result);
 }
 
 static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
@@ -203,7 +203,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
 #endif
 
   ptr = wrapper->result;
-  row = (MYSQL_ROW)rb_thread_blocking_region(nogvl_fetch_row, ptr, RUBY_UBF_IO, 0);
+  row = (MYSQL_ROW)rb_thread_call_without_gvl(nogvl_fetch_row, ptr, RUBY_UBF_IO, 0);
   if (row == NULL) {
     return Qnil;
   }

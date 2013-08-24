@@ -5,6 +5,9 @@ def asplode lib
   abort "-----\n#{lib} is missing.  please check your installation of mysql and try again.\n-----"
 end
 
+# 2.0-only
+have_header('ruby/thread.h') && have_func('rb_thread_call_without_gvl', 'ruby/thread.h')
+
 # 1.9-only
 have_func('rb_thread_blocking_region')
 have_func('rb_wait_for_single_fd')

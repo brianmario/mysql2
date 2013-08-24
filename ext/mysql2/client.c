@@ -124,6 +124,7 @@ static void rb_mysql_client_mark(void * wrapper) {
 static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   VALUE rb_error_msg = rb_str_new2(mysql_error(wrapper->client));
   VALUE rb_sql_state = rb_tainted_str_new2(mysql_sqlstate(wrapper->client));
+  VALUE e;
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
@@ -136,7 +137,7 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   }
 #endif
 
-  VALUE e = rb_exc_new3(cMysql2Error, rb_error_msg);
+  e = rb_exc_new3(cMysql2Error, rb_error_msg);
   rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(wrapper->client)));
   rb_funcall(e, intern_sql_state_eql, 1, rb_sql_state);
   rb_exc_raise(e);
@@ -530,10 +531,10 @@ static VALUE finish_and_mark_inactive(void *args) {
  * again.
  */
 static VALUE rb_mysql_client_abandon_results(VALUE self) {
-  GET_CLIENT(self);
-
   MYSQL_RES *result;
   int ret;
+
+  GET_CLIENT(self);
 
   while (mysql_more_results(wrapper->client) == 1) {
     ret = mysql_next_result(wrapper->client);
@@ -810,9 +811,12 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
 static VALUE rb_mysql_client_socket(VALUE self) {
   GET_CLIENT(self);
 #ifndef _WIN32
-  REQUIRE_CONNECTED(wrapper);
-  int fd_set_fd = wrapper->client->net.fd;
-  return INT2NUM(fd_set_fd);
+  {
+    int fd_set_fd;
+    REQUIRE_CONNECTED(wrapper);
+    fd_set_fd = wrapper->client->net.fd;
+    return INT2NUM(fd_set_fd);
+  }
 #else
   rb_raise(cMysql2Error, "Raw access to the mysql file descriptor isn't supported on Windows");
 #endif
@@ -939,8 +943,8 @@ static VALUE rb_mysql_client_more_results(VALUE self)
  */
 static VALUE rb_mysql_client_next_result(VALUE self)
 {
-    GET_CLIENT(self);
     int ret;
+    GET_CLIENT(self);
     ret = mysql_next_result(wrapper->client);
     if (ret > 0) {
       rb_raise_mysql2_error(wrapper);

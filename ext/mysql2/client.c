@@ -750,8 +750,8 @@ static VALUE rb_mysql_client_info(VALUE self) {
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc;
   rb_encoding *conn_enc;
-#endif
   GET_CLIENT(self);
+#endif
   version = rb_hash_new();
 
 #ifdef HAVE_RUBY_ENCODING_H
@@ -1050,18 +1050,18 @@ static VALUE set_write_timeout(VALUE self, VALUE value) {
 
 static VALUE set_charset_name(VALUE self, VALUE value) {
   char *charset_name;
+#ifdef HAVE_RUBY_ENCODING_H
   size_t charset_name_len;
   const struct mysql2_mysql_enc_name_to_rb_map *mysql2rb;
-#ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *enc;
   VALUE rb_enc;
 #endif
   GET_CLIENT(self);
 
   charset_name = RSTRING_PTR(value);
-  charset_name_len = RSTRING_LEN(value);
 
 #ifdef HAVE_RUBY_ENCODING_H
+  charset_name_len = RSTRING_LEN(value);
   mysql2rb = mysql2_mysql_enc_name_to_rb(charset_name, charset_name_len);
   if (mysql2rb == NULL || mysql2rb->rb_name == NULL) {
     VALUE inspect = rb_inspect(value);

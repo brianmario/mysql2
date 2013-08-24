@@ -20,7 +20,7 @@
 typedef void rb_unblock_function_t(void *);
 static void *
 rb_thread_call_without_gvl(
-  void *(*func), void *data1,
+   void *(*func)(void *), void *data1,
   RB_MYSQL_UNUSED rb_unblock_function_t *ubf,
   RB_MYSQL_UNUSED void *data2)
 {

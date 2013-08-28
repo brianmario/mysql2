@@ -22,10 +22,10 @@ module Mysql2
       initialize_ext
 
       # Set MySQL connection options (each one is a call to mysql_options())
-      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout].each do |key|
+      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :secure_auth].each do |key|
         next unless opts.key?(key)
         case key
-        when :reconnect, :local_infile
+        when :reconnect, :local_infile, :secure_auth
           send(:"#{key}=", !!opts[key])
         when :connect_timeout, :read_timeout, :write_timeout
           send(:"#{key}=", opts[key].to_i)

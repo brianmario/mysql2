@@ -108,8 +108,10 @@ Mysql2::Client.new(
   :connect_timeout = seconds,
   :reconnect = true/false,
   :local_infile = true/false,
+  :secure_auth = true/false
   )
 ```
+### Multiple result sets
 
 You can also retrieve multiple result sets. For this to work you need to connect with
 flags `Mysql2::Client::MULTI_STATEMENTS`. Using multiple result sets is normally used
@@ -126,6 +128,22 @@ end
 ```
 
 See https://gist.github.com/1367987 for using MULTI_STATEMENTS with Active Record.
+
+### Secure auth
+
+Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this). This option causes the server to block connections by clients that attempt to use accounts that have passwords stored in the old (pre-4.1) format. It also causes clients to refuse to attempt a connection using the older password format. To bypass this restriction in the client, pass the option :secure_auth => false to Mysql2::Client.new(). If you using ActiveRecord, your database.yml might look something like this:
+
+```
+development:
+  adapter: mysql2
+  encoding: utf8
+  database: my_db_name
+  username: root
+  password: my_password
+  host: 127.0.0.1
+  port: 3306
+  secure_auth: false
+````
 
 ## Cascading config
 

@@ -716,6 +716,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval = &boolval;
       break;
 
+    case MYSQL_SECURE_AUTH:
+      boolval = (value == Qfalse ? 0 : 1);
+      retval = &boolval;
+      break;
+
     default:
       return Qfalse;
   }
@@ -1085,6 +1090,10 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
   return self;
 }
 
+static VALUE set_secure_auth(VALUE self, VALUE value) {
+  return _mysql_client_options(self, MYSQL_SECURE_AUTH, value);
+}
+
 static VALUE initialize_ext(VALUE self) {
   GET_CLIENT(self);
 
@@ -1153,6 +1162,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "write_timeout=", set_write_timeout, 1);
   rb_define_private_method(cMysql2Client, "local_infile=", set_local_infile, 1);
   rb_define_private_method(cMysql2Client, "charset_name=", set_charset_name, 1);
+  rb_define_private_method(cMysql2Client, "secure_auth=", set_secure_auth, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);

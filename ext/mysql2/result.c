@@ -157,6 +157,8 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
   /* if binary flag is set, respect it's wishes */
   if (field.flags & BINARY_FLAG && field.charsetnr == 63) {
     rb_enc_associate(val, binaryEncoding);
+  } else if (!field.charsetnr) {
+    rb_enc_associate(val, binaryEncoding);
   } else {
     /* lookup the encoding configured on this field */
     const char *enc_name;

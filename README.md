@@ -131,7 +131,11 @@ See https://gist.github.com/1367987 for using MULTI_STATEMENTS with Active Recor
 
 ### Secure auth
 
-Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this). This option causes the server to block connections by clients that attempt to use accounts that have passwords stored in the old (pre-4.1) format. It also causes clients to refuse to attempt a connection using the older password format. To bypass this restriction in the client, pass the option :secure_auth => false to Mysql2::Client.new(). If you using ActiveRecord, your database.yml might look something like this:
+Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
+When secure_auth is enabled, the server will refuse a connection if the account password is stored in old pre-MySQL 4.1 format.
+The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
+To bypass this restriction in the client, pass the option :secure_auth => false to Mysql2::Client.new().
+If using ActiveRecord, your database.yml might look something like this:
 
 ```
 development:

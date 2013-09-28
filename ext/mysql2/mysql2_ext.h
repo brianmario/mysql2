@@ -29,6 +29,9 @@ typedef unsigned int    uint;
 #ifdef HAVE_RUBY_ENCODING_H
 #include <ruby/encoding.h>
 #endif
+#ifdef HAVE_RUBY_THREAD_H
+#include <ruby/thread.h>
+#endif
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)
 #define RB_MYSQL_UNUSED __attribute__ ((unused))

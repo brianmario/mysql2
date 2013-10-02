@@ -108,7 +108,9 @@ Mysql2::Client.new(
   :connect_timeout = seconds,
   :reconnect = true/false,
   :local_infile = true/false,
-  :secure_auth = true/false
+  :secure_auth = true/false,
+  :default_file = '/path/to/my.cfg',
+  :default_group = 'my.cfg section'
   )
 ```
 ### Multiple result sets
@@ -147,7 +149,16 @@ development:
   host: 127.0.0.1
   port: 3306
   secure_auth: false
-````
+```
+
+### Reading a MySQL config file
+You may read configuration options from a MySQL configuration file by passing
+the `:default_file` and `:default_group` paramters. For example:
+
+```
+  client = Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
+```
+
 
 ## Cascading config
 

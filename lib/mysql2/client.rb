@@ -10,7 +10,9 @@ module Mysql2
       :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller
       :cache_rows => true,            # tells Mysql2 to use it's internal row cache for results
       :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
-      :cast => true
+      :cast => true,
+      :default_file => nil,
+      :default_group => nil
     }
 
     def initialize(opts = {})
@@ -21,8 +23,7 @@ module Mysql2
 
       initialize_ext
 
-      # Set MySQL connection options (each one is a call to mysql_options())
-      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :secure_auth].each do |key|
+      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth].each do |key|
         next unless opts.key?(key)
         case key
         when :reconnect, :local_infile, :secure_auth
@@ -49,8 +50,8 @@ module Mysql2
 
       user     = opts[:username] || opts[:user]
       pass     = opts[:password] || opts[:pass]
-      host     = opts[:host] || opts[:hostname] || 'localhost'
-      port     = opts[:port] || 3306
+      host     = opts[:host] || opts[:hostname]
+      port     = opts[:port]
       database = opts[:database] || opts[:dbname] || opts[:db]
       socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]

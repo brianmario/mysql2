@@ -55,7 +55,7 @@ module Mysql2
       socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
 
-      connect user, pass, host, port, database, socket, flags
+      connect user.to_s, pass, host, port, database.to_s, socket, flags
     end
 
     def self.default_query_options

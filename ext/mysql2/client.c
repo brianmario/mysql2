@@ -284,9 +284,9 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   VALUE rv;
   GET_CLIENT(self);
 
-  args.host = NIL_P(host) ? "localhost" : StringValuePtr(host);
+  args.host = NIL_P(host) ? NULL : StringValuePtr(host);
   args.unix_socket = NIL_P(socket) ? NULL : StringValuePtr(socket);
-  args.port = NIL_P(port) ? 3306 : NUM2INT(port);
+  args.port = NIL_P(port) ? NULL : NUM2INT(port);
   args.user = NIL_P(user) ? NULL : StringValuePtr(user);
   args.passwd = NIL_P(pass) ? NULL : StringValuePtr(pass);
   args.db = NIL_P(database) ? NULL : StringValuePtr(database);
@@ -682,6 +682,7 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   int result;
   void *retval = NULL;
   unsigned int intval = 0;
+  const char * charval = NULL;
   my_bool boolval;
 
   GET_CLIENT(self);
@@ -720,6 +721,16 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
     case MYSQL_SECURE_AUTH:
       boolval = (value == Qfalse ? 0 : 1);
       retval = &boolval;
+      break;
+
+    case MYSQL_READ_DEFAULT_FILE:
+      charval = (const char *)StringValuePtr(value);
+      retval  = charval;
+      break;
+
+    case MYSQL_READ_DEFAULT_GROUP:
+      charval = (const char *)StringValuePtr(value);
+      retval  = charval;
       break;
 
     default:
@@ -1098,6 +1109,14 @@ static VALUE set_secure_auth(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_SECURE_AUTH, value);
 }
 
+static VALUE set_read_default_file(VALUE self, VALUE value) {
+  return _mysql_client_options(self, MYSQL_READ_DEFAULT_FILE, value);
+}
+
+static VALUE set_read_default_group(VALUE self, VALUE value) {
+  return _mysql_client_options(self, MYSQL_READ_DEFAULT_GROUP, value);
+}
+
 static VALUE initialize_ext(VALUE self) {
   GET_CLIENT(self);
 
@@ -1167,6 +1186,8 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "local_infile=", set_local_infile, 1);
   rb_define_private_method(cMysql2Client, "charset_name=", set_charset_name, 1);
   rb_define_private_method(cMysql2Client, "secure_auth=", set_secure_auth, 1);
+  rb_define_private_method(cMysql2Client, "default_file=", set_read_default_file, 1);
+  rb_define_private_method(cMysql2Client, "default_group=", set_read_default_group, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);

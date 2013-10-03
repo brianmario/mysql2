@@ -104,6 +104,16 @@ describe Mysql2::Client do
     ssl_client.close
   end
 
+  it "should be able to connect to database with numeric-only name" do
+    lambda {
+      creds = DatabaseCredentials['numericuser']
+      @client.query "CREATE DATABASE IF NOT EXISTS `#{creds['database']}`"
+      @client.query "GRANT ALL ON `#{creds['database']}`.* TO #{creds['username']}@`#{creds['host']}`"
+      client = Mysql2::Client.new creds
+      @client.query "DROP DATABASE IF EXISTS `#{creds['database']}`"
+    }.should_not raise_error
+  end
+
   it "should respond to #close" do
     @client.should respond_to(:close)
   end

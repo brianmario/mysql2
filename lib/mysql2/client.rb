@@ -56,6 +56,14 @@ module Mysql2
       socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
 
+      # Correct the data types before passing these values down to the C level
+      user = user.to_s unless user.nil?
+      pass = pass.to_s unless pass.nil?
+      host = host.to_s unless host.nil?
+      port = port.to_i unless port.nil?
+      database = database.to_s unless database.nil?
+      socket = socket.to_s unless socket.nil?
+
       connect user, pass, host, port, database, socket, flags
     end
 

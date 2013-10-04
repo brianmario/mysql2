@@ -680,7 +680,7 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
 
 static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   int result;
-  void *retval = NULL;
+  const void *retval = NULL;
   unsigned int intval = 0;
   const char * charval = NULL;
   my_bool boolval;

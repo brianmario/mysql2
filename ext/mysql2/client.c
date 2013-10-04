@@ -286,7 +286,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 
   args.host = NIL_P(host) ? NULL : StringValuePtr(host);
   args.unix_socket = NIL_P(socket) ? NULL : StringValuePtr(socket);
-  args.port = NIL_P(port) ? NULL : NUM2INT(port);
+  args.port = NIL_P(port) ? 0 : NUM2INT(port);
   args.user = NIL_P(user) ? NULL : StringValuePtr(user);
   args.passwd = NIL_P(pass) ? NULL : StringValuePtr(pass);
   args.db = NIL_P(database) ? NULL : StringValuePtr(database);
@@ -680,7 +680,7 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
 
 static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   int result;
-  void *retval = NULL;
+  const void *retval = NULL;
   unsigned int intval = 0;
   const char * charval = NULL;
   my_bool boolval;

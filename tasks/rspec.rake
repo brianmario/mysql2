@@ -36,16 +36,26 @@ file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
   CLEAN.exclude task.name
   src_path = File.expand_path("../../#{task.prerequisites.first}", __FILE__)
   dst_path = File.expand_path("../../#{task.name}", __FILE__)
-  cp src_path, dst_path
-  sh "sed -i 's/LOCALUSERNAME/#{ENV['USER']}/' #{dst_path}"
+
+  dst_file = File.open(dst_path, 'w')
+  File.open(src_path) do |f|
+    f.each_line do |line|
+      dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])
+    end
+  end
 end
 
 file 'spec/my.cnf' => 'spec/my.cnf.example' do |task|
   CLEAN.exclude task.name
   src_path = File.expand_path("../../#{task.prerequisites.first}", __FILE__)
   dst_path = File.expand_path("../../#{task.name}", __FILE__)
-  cp src_path, dst_path
-  sh "sed -i 's/LOCALUSERNAME/#{ENV['USER']}/' #{dst_path}"
+
+  dst_file = File.open(dst_path, 'w')
+  File.open(src_path) do |f|
+    f.each_line do |line|
+      dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])
+    end
+  end
 end
 
 Rake::Task[:spec].prerequisites << :'spec/configuration.yml'

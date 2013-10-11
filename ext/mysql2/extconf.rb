@@ -98,20 +98,32 @@ if try_link('int main() {return 0;}', gcc_flags)
   $CFLAGS << gcc_flags
 end
 
-if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
-  rpath_flags = " -Wl,-rpath,#{libdir}"
-  if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', rpath_flags)
-    # Usually Ruby sets RPATHFLAG the right way for each system, but not on OS X.
-    warn "-----\nSetting rpath to #{libdir}\n-----"
-    $LDFLAGS << rpath_flags
-  else
-    if RbConfig::CONFIG["RPATHFLAG"].to_s.empty?
-      # If we got here because try_link failed, warn the user
-      warn "-----\nDon't know how to set rpath on your system, if MySQL libraries are not in path mysql2 may not load\n-----"
+case explicit_rpath = with_config('mysql-rpath')
+when true
+  abort "-----\nOption --with-mysql-rpath must have an argument\n-----"
+when false
+  warn "-----\nOption --with-mysql-rpath has been disabled at your request\n-----"
+when String
+  # The user gave us a value so use it
+  rpath_flags = " -Wl,-rpath,#{explicit_rpath}"
+  warn "-----\nSetting mysql rpath to #{explicit_rpath}\n-----"
+  $LDFLAGS << rpath_flags
+else
+  if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
+    rpath_flags = " -Wl,-rpath,#{libdir}"
+    if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', rpath_flags)
+      # Usually Ruby sets RPATHFLAG the right way for each system, but not on OS X.
+      warn "-----\nSetting rpath to #{libdir}\n-----"
+      $LDFLAGS << rpath_flags
+    else
+      if RbConfig::CONFIG["RPATHFLAG"].to_s.empty?
+        # If we got here because try_link failed, warn the user
+        warn "-----\nDon't know how to set rpath on your system, if MySQL libraries are not in path mysql2 may not load\n-----"
+      end
+      # Make sure that LIBPATH gets set if we didn't explicitly set the rpath.
+      warn "-----\nSetting libpath to #{libdir}\n-----"
+      $LIBPATH << libdir unless $LIBPATH.include?(libdir)
     end
-    # Make sure that LIBPATH gets set if we didn't explicitly set the rpath.
-    warn "-----\nSetting libpath to #{libdir}\n-----"
-    $LIBPATH << libdir unless $LIBPATH.include?(libdir)
   end
 end
 

@@ -54,7 +54,7 @@ elsif mc = (with_config('mysql-config') || Dir[GLOB].first) then
   end
   exit 1 if $? != 0
   $INCFLAGS += ' ' + includes
-  $libs = libs + " " + $libs
+  $libs = libs + " " + $libs + " -Wl,-rpath," + `#{mc} --variable=pkglibdir`.chomp
 else
   inc, lib = dir_config('mysql', '/usr/local')
   libs = ['m', 'z', 'socket', 'nsl', 'mygcc']

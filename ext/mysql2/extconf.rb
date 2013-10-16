@@ -91,21 +91,27 @@ end
   asplode h unless have_header h
 end
 
-# GCC | Clang | XCode specific flags
-if RbConfig::MAKEFILE_CONFIG['CC'] =~ /gcc|clang|xcrun/
-  $CFLAGS << ' -Wall -funroll-loops'
+# These gcc style flags are also supported by clang and xcode compilers,
+# so we'll use a does-it-work test instead of an is-it-gcc test.
+gcc_flags = ' -Wall -funroll-loops'
+if try_link('int main() {return 0;}', gcc_flags)
+  $CFLAGS << gcc_flags
+end
 
-  if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
-    # The following comment and test is borrowed from the Pg gem:
-    # Try to use runtime path linker option, even if RbConfig doesn't know about it.
-    # The rpath option is usually set implicit by dir_config(), but so far not on Mac OS X.
-    if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', " -Wl,-rpath,#{libdir}")
-      warn "-----\nSetting rpath to #{libdir}\n-----"
-      $LDFLAGS << " -Wl,-rpath,#{libdir}"
-    else
-      # Make sure that LIBPATH gets set if we didn't explicitly set the rpath.
-      $LIBPATH << libdir unless $LIBPATH.include?(libdir)
+if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
+  rpath_flags = " -Wl,-rpath,#{libdir}"
+  if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', rpath_flags)
+    # Usually Ruby sets RPATHFLAG the right way for each system, but not on OS X.
+    warn "-----\nSetting rpath to #{libdir}\n-----"
+    $LDFLAGS << rpath_flags
+  else
+    if RbConfig::CONFIG["RPATHFLAG"].to_s.empty?
+      # If we got here because try_link failed, warn the user
+      warn "-----\nDon't know how to set rpath on your system, if MySQL libraries are not in path mysql2 may not load\n-----"
     end
+    # Make sure that LIBPATH gets set if we didn't explicitly set the rpath.
+    warn "-----\nSetting libpath to #{libdir}\n-----"
+    $LIBPATH << libdir unless $LIBPATH.include?(libdir)
   end
 end
 

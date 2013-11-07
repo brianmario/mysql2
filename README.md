@@ -405,15 +405,15 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 ## Compatibility
 
-The specs pass on my system (SL 10.6.3, x86_64) in these rubies:
+This gem is regularly tested against the following Ruby versions on Linux and Mac OS X:
 
-* 1.8.7-p249
-* ree-1.8.7-2010.01
-* 1.9.1-p378
-* ruby-trunk
-* rbx-head - broken at the moment, working with the rbx team for a solution
+ * Ruby MRI 1.8.7, 1.9.2, 1.9.3, 2.0.0 (ongoing patch releases).
+ * Ruby Enterprise Edition (based on MRI 1.8.7).
+ * Rubinius 2.0 in compatibility modes 1.8, 1.9, 2.0.
 
-The Active Record driver should work on 2.3.5 and 3.0
+The mysql2 gem 0.2.x series includes an Active Record driver that works with AR
+2.3.x and 3.0.x. Starting in Active Record 3.1, a mysql2 driver is included in
+the Active Record codebase and no longer provided in mysql2 gem 0.3 and above.
 
 ## Yeah... but why?
 
@@ -421,7 +421,6 @@ Someone: Dude, the Mysql gem works fiiiiiine.
 
 Me: It sure does, but it only hands you nil and strings for field values. Leaving you to convert
 them into proper Ruby types in Ruby-land - which is slow as balls.
-
 
 Someone: OK fine, but do_mysql can already give me back values with Ruby objects mapped to MySQL types.
 

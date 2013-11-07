@@ -99,10 +99,10 @@ static void rb_mysql_result_free(void *ptr) {
  * reliable way for us to tell this so we'll always release the GVL
  * to be safe
  */
-static VALUE nogvl_fetch_row(void *ptr) {
+static void *nogvl_fetch_row(void *ptr) {
   MYSQL_RES *result = ptr;
 
-  return (VALUE)mysql_fetch_row(result);
+  return mysql_fetch_row(result);
 }
 
 static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
@@ -157,6 +157,9 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
   /* if binary flag is set, respect it's wishes */
   if (field.flags & BINARY_FLAG && field.charsetnr == 63) {
     rb_enc_associate(val, binaryEncoding);
+  } else if (!field.charsetnr) {
+    /* MySQL 4.x may not provide an encoding, binary will get the bytes through */
+    rb_enc_associate(val, binaryEncoding);
   } else {
     /* lookup the encoding configured on this field */
     const char *enc_name;
@@ -200,7 +203,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
 #endif
 
   ptr = wrapper->result;
-  row = (MYSQL_ROW)rb_thread_blocking_region(nogvl_fetch_row, ptr, RUBY_UBF_IO, 0);
+  row = (MYSQL_ROW)rb_thread_call_without_gvl(nogvl_fetch_row, ptr, RUBY_UBF_IO, 0);
   if (row == NULL) {
     return Qnil;
   }
@@ -280,6 +283,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           int tokens;
           unsigned int hour=0, min=0, sec=0;
           tokens = sscanf(row[i], "%2u:%2u:%2u", &hour, &min, &sec);
+          if (tokens < 3) {
+            val = Qnil;
+            break;
+          }
           val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec));
           if (!NIL_P(app_timezone)) {
             if (app_timezone == intern_local) {
@@ -297,6 +304,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           uint64_t seconds;
 
           tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6u", &year, &month, &day, &hour, &min, &sec, &msec);
+          if (tokens < 6) { /* msec might be empty */
+            val = Qnil;
+            break;
+          }
           seconds = (year*31557600ULL) + (month*2592000ULL) + (day*86400ULL) + (hour*3600ULL) + (min*60ULL) + sec;
 
           if (seconds == 0) {
@@ -339,6 +350,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
           int tokens;
           unsigned int year=0, month=0, day=0;
           tokens = sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
+          if (tokens < 3) {
+            val = Qnil;
+            break;
+          }
           if (year+month+day == 0) {
             val = Qnil;
           } else {

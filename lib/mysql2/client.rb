@@ -10,7 +10,9 @@ module Mysql2
       :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller
       :cache_rows => true,            # tells Mysql2 to use it's internal row cache for results
       :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
-      :cast => true
+      :cast => true,
+      :default_file => nil,
+      :default_group => nil
     }
 
     def initialize(opts = {})
@@ -21,11 +23,10 @@ module Mysql2
 
       initialize_ext
 
-      # Set MySQL connection options (each one is a call to mysql_options())
-      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout].each do |key|
+      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth].each do |key|
         next unless opts.key?(key)
         case key
-        when :reconnect, :local_infile
+        when :reconnect, :local_infile, :secure_auth
           send(:"#{key}=", !!opts[key])
         when :connect_timeout, :read_timeout, :write_timeout
           send(:"#{key}=", opts[key].to_i)
@@ -49,11 +50,19 @@ module Mysql2
 
       user     = opts[:username] || opts[:user]
       pass     = opts[:password] || opts[:pass]
-      host     = opts[:host] || opts[:hostname] || 'localhost'
-      port     = opts[:port] || 3306
+      host     = opts[:host] || opts[:hostname]
+      port     = opts[:port]
       database = opts[:database] || opts[:dbname] || opts[:db]
       socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
+
+      # Correct the data types before passing these values down to the C level
+      user = user.to_s unless user.nil?
+      pass = pass.to_s unless pass.nil?
+      host = host.to_s unless host.nil?
+      port = port.to_i unless port.nil?
+      database = database.to_s unless database.nil?
+      socket = socket.to_s unless socket.nil?
 
       connect user, pass, host, port, database, socket, flags
     end

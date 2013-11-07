@@ -15,14 +15,61 @@ Mysql2::Client - your connection to the database
 Mysql2::Result - returned from issuing a #query on the connection. It includes Enumerable.
 
 ## Installing
-
+### OSX / Linux
 ``` sh
 gem install mysql2
 ```
 
 This gem links against MySQL's `libmysqlclient` C shared library. You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`, or other appropriate package for your system.
 
-If you have installed MySQL to a non-standard location, add `gem install mysql2 --with-mysql-config=/some/random/path/bin/mysql_config`
+By default, the mysql2 gem will try to find a copy of MySQL in this order:
+
+* Option `--with-mysql-dir`, if provided (see below).
+* Option `--with-mysql-config`, if provided (see below).
+* Several typical paths for `msyql_config` (default for the majority of users).
+* The directory `/usr/local`.
+
+### Configuration options
+
+Use these options by `gem install mysql2 -- [--optionA] [--optionB=argument]`.
+
+* `--with-mysql-dir[=/path/to/mysqldir]` -
+Specify the directory where MySQL is installed. The mysql2 gem will not use
+`mysql_config`, but will instead look at `mysqldir/lib` and `mysqldir/include`
+for the library and header files.
+This option is mutually exclusive with `--with-mysql-config`.
+
+* `--with-mysql-config[=/path/to/mysql_config]` -
+Specify a path to the `mysql_config` binary provided by your copy of MySQL. The
+mysql2 gem will ask this `mysql_config` binary about the compiler and linker
+arguments needed.
+This option is mutually exclusive with `--with-mysql-dir`.
+
+* `--with-mysql-rpath=/path/to/mysql/lib` / `--without-mysql-rpath` -
+Override the runtime path used to find the MySQL libraries.
+This may be needed if you deploy to a system where these libraries
+are located somewhere different than on your build system.
+This overrides any rpath calculated by default or by the options above.
+
+### Windows
+First, make sure you have the DevKit installed (http://rubyinstaller.org/downloads/) and its variables
+are loaded by running devkit\devktvars.bat .
+
+Next, you need a MySQL library to link against. If you have MySQL loaded on your development machine,
+you can use that. If not, you will need to either copy the MySQL directory from your server, or else
+obtain a copy of the MySQL C connector: http://dev.mysql.com/downloads/connector/c/
+
+If you're using the connector, I recommend just getting the .zip file and unzipping it someplace convenient.
+
+Now you can install mysql2. You must use the `--with-mysql-dir` option to tell gem where your MySQL library
+files are. For example, if you unzipped the connector to c:\mysql-connector-c-6.1.1-win32 you would install
+the gem like this:
+
+    gem install mysql2 -- --with-mysql-dir=c:\mysql-connector-c-6.1.1-win32
+    
+Finally, you must copy libmysql.dll from the lib subdirectory of your MySQL or MySQL connector directory into
+your ruby\bin directory. In the above example, libmysql.dll would be located at
+c:\mysql-connector-c-6.1.1-win32\lib .
 
 ## Usage
 
@@ -108,8 +155,12 @@ Mysql2::Client.new(
   :connect_timeout = seconds,
   :reconnect = true/false,
   :local_infile = true/false,
+  :secure_auth = true/false,
+  :default_file = '/path/to/my.cfg',
+  :default_group = 'my.cfg section'
   )
 ```
+### Multiple result sets
 
 You can also retrieve multiple result sets. For this to work you need to connect with
 flags `Mysql2::Client::MULTI_STATEMENTS`. Using multiple result sets is normally used
@@ -126,6 +177,35 @@ end
 ```
 
 See https://gist.github.com/1367987 for using MULTI_STATEMENTS with Active Record.
+
+### Secure auth
+
+Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
+When secure_auth is enabled, the server will refuse a connection if the account password is stored in old pre-MySQL 4.1 format.
+The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
+To bypass this restriction in the client, pass the option :secure_auth => false to Mysql2::Client.new().
+If using ActiveRecord, your database.yml might look something like this:
+
+```
+development:
+  adapter: mysql2
+  encoding: utf8
+  database: my_db_name
+  username: root
+  password: my_password
+  host: 127.0.0.1
+  port: 3306
+  secure_auth: false
+```
+
+### Reading a MySQL config file
+You may read configuration options from a MySQL configuration file by passing
+the `:default_file` and `:default_group` paramters. For example:
+
+```
+  client = Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
+```
+
 
 ## Cascading config
 

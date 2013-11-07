@@ -169,9 +169,9 @@ MySQL client library defaults will be used for any parameters that are left out
 or set to nil. Relative paths are allowed, and may be required by managed
 hosting providers such as Heroku.
 
-```
+``` ruby
 Mysql2::Client.new(
-  ...options as above...,
+  # ...options as above...,
   :sslkey => '/path/to/client-key.pem',
   :sslcert => '/path/to/client-cert.pem',
   :sslca => '/path/to/ca-cert.pem',
@@ -206,7 +206,7 @@ The MySQL 5.6.5 client library may also refuse to attempt a connection if provid
 To bypass this restriction in the client, pass the option :secure_auth => false to Mysql2::Client.new().
 If using ActiveRecord, your database.yml might look something like this:
 
-```
+``` yaml
 development:
   adapter: mysql2
   encoding: utf8
@@ -219,11 +219,12 @@ development:
 ```
 
 ### Reading a MySQL config file
+
 You may read configuration options from a MySQL configuration file by passing
 the `:default_file` and `:default_group` paramters. For example:
 
-```
-  client = Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
+``` ruby
+Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
 ```
 
 

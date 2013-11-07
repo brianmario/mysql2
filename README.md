@@ -160,6 +160,26 @@ Mysql2::Client.new(
   :default_group = 'my.cfg section'
   )
 ```
+
+### SSL options
+
+Setting any of the following options will enable an SSL connection, but only if
+your MySQL client library and server have been compiled with SSL support.
+MySQL client library defaults will be used for any parameters that are left out
+or set to nil. Relative paths are allowed, and may be required by managed
+hosting providers such as Heroku.
+
+``` ruby
+Mysql2::Client.new(
+  # ...options as above...,
+  :sslkey => '/path/to/client-key.pem',
+  :sslcert => '/path/to/client-cert.pem',
+  :sslca => '/path/to/ca-cert.pem',
+  :sslcapath => '/path/to/cacerts',
+  :sslcipher => 'DHE-RSA-AES256-SHA'
+  )
+```
+
 ### Multiple result sets
 
 You can also retrieve multiple result sets. For this to work you need to connect with
@@ -186,7 +206,7 @@ The MySQL 5.6.5 client library may also refuse to attempt a connection if provid
 To bypass this restriction in the client, pass the option :secure_auth => false to Mysql2::Client.new().
 If using ActiveRecord, your database.yml might look something like this:
 
-```
+``` yaml
 development:
   adapter: mysql2
   encoding: utf8
@@ -199,11 +219,12 @@ development:
 ```
 
 ### Reading a MySQL config file
+
 You may read configuration options from a MySQL configuration file by passing
 the `:default_file` and `:default_group` paramters. For example:
 
-```
-  client = Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
+``` ruby
+Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
 ```
 
 
@@ -405,15 +426,15 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 ## Compatibility
 
-The specs pass on my system (SL 10.6.3, x86_64) in these rubies:
+This gem is regularly tested against the following Ruby versions on Linux and Mac OS X:
 
-* 1.8.7-p249
-* ree-1.8.7-2010.01
-* 1.9.1-p378
-* ruby-trunk
-* rbx-head - broken at the moment, working with the rbx team for a solution
+ * Ruby MRI 1.8.7, 1.9.2, 1.9.3, 2.0.0 (ongoing patch releases).
+ * Ruby Enterprise Edition (based on MRI 1.8.7).
+ * Rubinius 2.0 in compatibility modes 1.8, 1.9, 2.0.
 
-The Active Record driver should work on 2.3.5 and 3.0
+The mysql2 gem 0.2.x series includes an Active Record driver that works with AR
+2.3.x and 3.0.x. Starting in Active Record 3.1, a mysql2 driver is included in
+the Active Record codebase and no longer provided in mysql2 gem 0.3 and above.
 
 ## Yeah... but why?
 
@@ -421,7 +442,6 @@ Someone: Dude, the Mysql gem works fiiiiiine.
 
 Me: It sure does, but it only hands you nil and strings for field values. Leaving you to convert
 them into proper Ruby types in Ruby-land - which is slow as balls.
-
 
 Someone: OK fine, but do_mysql can already give me back values with Ruby objects mapped to MySQL types.
 

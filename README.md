@@ -160,6 +160,26 @@ Mysql2::Client.new(
   :default_group = 'my.cfg section'
   )
 ```
+
+### SSL options
+
+Setting any of the following options will enable an SSL connection, but only if
+your MySQL client library and server have been compiled with SSL support.
+MySQL client library defaults will be used for any parameters that are left out
+or set to nil. Relative paths are allowed, and may be required by managed
+hosting providers such as Heroku.
+
+```
+Mysql2::Client.new(
+  ...options as above...,
+  :sslkey => '/path/to/client-key.pem',
+  :sslcert => '/path/to/client-cert.pem',
+  :sslca => '/path/to/ca-cert.pem',
+  :sslcapath => '/path/to/cacerts',
+  :sslcipher => 'DHE-RSA-AES256-SHA'
+  )
+```
+
 ### Multiple result sets
 
 You can also retrieve multiple result sets. For this to work you need to connect with

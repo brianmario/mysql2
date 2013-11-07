@@ -22,7 +22,27 @@ gem install mysql2
 
 This gem links against MySQL's `libmysqlclient` C shared library. You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`, or other appropriate package for your system.
 
-If you have installed MySQL to a non-standard location, add `gem install mysql2 --with-mysql-config=/some/random/path/bin/mysql_config`
+By default, the mysql2 gem will try to find a copy of MySQL in this order:
+
+* Option `--with-mysql-dir`, if provided (see below).
+* Option `--with-mysql-config`, if provided (see below).
+* Several typical paths for `msyql_config` (default for the majority of users).
+* The directory `/usr/local`.
+
+### Configuration options
+
+Use these options by `gem install mysql2 -- [--optionA] [--optionB=argument]`.
+The following options are mutually exclusive.
+
+* `--with-mysql-dir[=/path/to/mysqldir]` -
+Specify the directory where MySQL is installed. The mysql2 gem will not use
+`mysql_config`, but will instead look at `mysqldir/lib` and `mysqldir/include`
+for the library and header files.
+
+* `--with-mysql-config[=/path/to/mysql_config]` -
+Specify a path to the `mysql_config` binary provided by your copy of MySQL. The
+mysql2 gem will ask this `mysql_config` binary about the compiler and linker
+arguments needed.
 
 ### Windows
 First, make sure you have the DevKit installed (http://rubyinstaller.org/downloads/) and its variables

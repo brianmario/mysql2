@@ -15,7 +15,7 @@ Mysql2::Client - your connection to the database
 Mysql2::Result - returned from issuing a #query on the connection. It includes Enumerable.
 
 ## Installing
-
+### OSX / Linux
 ``` sh
 gem install mysql2
 ```
@@ -23,6 +23,26 @@ gem install mysql2
 This gem links against MySQL's `libmysqlclient` C shared library. You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`, or other appropriate package for your system.
 
 If you have installed MySQL to a non-standard location, add `gem install mysql2 --with-mysql-config=/some/random/path/bin/mysql_config`
+
+### Windows
+First, make sure you have the DevKit installed (http://rubyinstaller.org/downloads/) and its variables
+are loaded by running devkit\devktvars.bat .
+
+Next, you need a MySQL library to link against. If you have MySQL loaded on your development machine,
+you can use that. If not, you will need to either copy the MySQL directory from your server, or else
+obtain a copy of the MySQL C connector: http://dev.mysql.com/downloads/connector/c/
+
+If you're using the connector, I recommend just getting the .zip file and unzipping it someplace convenient.
+
+Now you can install mysql2. You must use the `--with-mysql-dir` option to tell gem where your MySQL library
+files are. For example, if you unzipped the connector to c:\mysql-connector-c-6.1.1-win32 you would install
+the gem like this:
+
+    gem install mysql2 -- --with-mysql-dir=c:\mysql-connector-c-6.1.1-win32
+    
+Finally, you must copy libmysql.dll from the lib subdirectory of your MySQL or MySQL connector directory into
+your ruby\bin directory. In the above example, libmysql.dll would be located at
+c:\mysql-connector-c-6.1.1-win32\lib .
 
 ## Usage
 

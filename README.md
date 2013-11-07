@@ -32,17 +32,24 @@ By default, the mysql2 gem will try to find a copy of MySQL in this order:
 ### Configuration options
 
 Use these options by `gem install mysql2 -- [--optionA] [--optionB=argument]`.
-The following options are mutually exclusive.
 
 * `--with-mysql-dir[=/path/to/mysqldir]` -
 Specify the directory where MySQL is installed. The mysql2 gem will not use
 `mysql_config`, but will instead look at `mysqldir/lib` and `mysqldir/include`
 for the library and header files.
+This option is mutually exclusive with `--with-mysql-config`.
 
 * `--with-mysql-config[=/path/to/mysql_config]` -
 Specify a path to the `mysql_config` binary provided by your copy of MySQL. The
 mysql2 gem will ask this `mysql_config` binary about the compiler and linker
 arguments needed.
+This option is mutually exclusive with `--with-mysql-dir`.
+
+* `--with-mysql-rpath=/path/to/mysql/lib` / `--without-mysql-rpath` -
+Override the runtime path used to find the MySQL libraries.
+This may be needed if you deploy to a system where these libraries
+are located somewhere different than on your build system.
+This overrides any rpath calculated by default or by the options above.
 
 ### Windows
 First, make sure you have the DevKit installed (http://rubyinstaller.org/downloads/) and its variables

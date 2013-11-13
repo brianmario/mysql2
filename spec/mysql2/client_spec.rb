@@ -647,7 +647,7 @@ describe Mysql2::Client do
   context 'write operations api' do
     before(:each) do
       @client.query "USE test"
-      @client.query "CREATE TABLE IF NOT EXISTS lastIdTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
+      @client.query "CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
     end
 
     after(:each) do
@@ -673,6 +673,15 @@ describe Mysql2::Client do
       @client.affected_rows.should eql(1)
       @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
       @client.affected_rows.should eql(1)
+    end
+
+    it "#last_id should handle BIGINT auto-increment ids above 32 bits" do
+      # The id column type must be BIGINT. Surprise: INT(x) is limited to 32-bits for all values of x.
+      # Insert a row with a given ID, this should raise the auto-increment state
+      @client.query "INSERT INTO lastIdTest (id, blah) VALUES (5000000000, 5000)"
+      @client.last_id.should eql(5000000000)
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (5001)"
+      @client.last_id.should eql(5000000001)
     end
   end
 

@@ -199,9 +199,7 @@ static void rb_mysql_client_free(void *ptr) {
 
   wrapper->refcount--;
   if (wrapper->refcount == 0) {
-    nogvl_close(wrapper);
-    xfree(wrapper->client);
-    xfree(wrapper);
+    close_connection_and_free_mysql2_client(wrapper);
   }
 }
 
@@ -1311,3 +1309,12 @@ void init_mysql2_client() {
       LONG2NUM(CLIENT_BASIC_FLAGS));
 #endif
 }
+
+void close_connection_and_free_mysql2_client(void *ptr) {
+  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
+
+  nogvl_close(wrapper);
+  xfree(wrapper->client);
+  xfree(wrapper);
+}
+

@@ -1,5 +1,5 @@
 #include <mysql2_ext.h>
-#include <client.h>
+
 #include <errno.h>
 #ifndef _WIN32
 #include <sys/socket.h>
@@ -146,9 +146,13 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
 
 static void *nogvl_init(void *ptr) {
   MYSQL *client;
+  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
 
   /* may initialize embedded server and read /etc/services off disk */
-  client = mysql_init((MYSQL *)ptr);
+  client = mysql_init(wrapper->client);
+
+  if (client) mysql2_set_local_infile(client, wrapper);
+
   return (void*)(client ? Qtrue : Qfalse);
 }
 
@@ -1124,7 +1128,7 @@ static VALUE set_read_default_group(VALUE self, VALUE value) {
 static VALUE initialize_ext(VALUE self) {
   GET_CLIENT(self);
 
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_init, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
+  if ((VALUE)rb_thread_call_without_gvl(nogvl_init, wrapper, RUBY_UBF_IO, 0) == Qfalse) {
     /* TODO: warning - not enough memory? */
     return rb_raise_mysql2_error(wrapper);
   }
@@ -1139,7 +1143,7 @@ void init_mysql2_client() {
   int i;
   int dots = 0;
   const char *lib = mysql_get_client_info();
-  
+
   for (i = 0; lib[i] != 0 && MYSQL_LINK_VERSION[i] != 0; i++) {
     if (lib[i] == '.') {
       dots++;

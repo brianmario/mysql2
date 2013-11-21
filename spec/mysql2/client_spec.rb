@@ -78,7 +78,10 @@ describe Mysql2::Client do
   end
 
   it "should be able to connect via SSL options" do
-    pending("DON'T WORRY, THIS TEST PASSES :) - but is machine-specific. You need to have MySQL running with SSL configured and enabled. Then update the paths in this test to your needs and remove the pending state.")
+    ssl = @client.query "SHOW VARIABLES LIKE 'have_%ssl'"
+    ssl_enabled = ssl.any? {|x| x['Value'] == 'ENABLED'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") unless ssl_enabled
+    pending("DON'T WORRY, THIS TEST PASSES - but you must update the SSL cert paths in this test and remove this pending state.")
     ssl_client = nil
     lambda {
       ssl_client = Mysql2::Client.new(

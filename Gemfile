@@ -14,3 +14,7 @@ end
 group :development do
   gem 'pry'
 end
+
+platforms :rbx do
+  gem 'rubysl'
+end

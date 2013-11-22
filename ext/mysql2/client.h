@@ -36,9 +36,6 @@ rb_thread_call_without_gvl(
 #endif /* ! HAVE_RB_THREAD_BLOCKING_REGION */
 #endif /* ! HAVE_RB_THREAD_CALL_WITHOUT_GVL */
 
-void init_mysql2_client();
-void close_connection_and_free_mysql2_client(void *);
-
 typedef struct {
   VALUE encoding;
   VALUE active_thread; /* rb_thread_current() or Qnil */
@@ -50,5 +47,8 @@ typedef struct {
   int freed;
   MYSQL *client;
 } mysql_client_wrapper;
+
+void init_mysql2_client();
+void decr_mysql2_client(mysql_client_wrapper *wrapper);
 
 #endif

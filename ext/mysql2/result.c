@@ -1,6 +1,7 @@
 #include <mysql2_ext.h>
 #include <stdint.h>
 
+#include "client.h"
 #include "mysql_enc_to_ruby.h"
 
 #ifdef HAVE_RUBY_ENCODING_H
@@ -86,8 +87,7 @@ static void rb_mysql_result_free(void *ptr) {
   if (wrapper->client != Qnil) {
     wrapper->client_wrapper->refcount--;
     if (wrapper->client_wrapper->refcount == 0) {
-      xfree(wrapper->client_wrapper->client);
-      xfree(wrapper->client_wrapper);
+      close_connection_and_free_mysql2_client(wrapper->client_wrapper);
     }
   }
 

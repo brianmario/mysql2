@@ -1,7 +1,6 @@
 #include <mysql2_ext.h>
 #include <stdint.h>
 
-#include "client.h"
 #include "mysql_enc_to_ruby.h"
 
 #ifdef HAVE_RUBY_ENCODING_H
@@ -85,10 +84,7 @@ static void rb_mysql_result_free(void *ptr) {
 
   // If the GC gets to client first it will be nil
   if (wrapper->client != Qnil) {
-    wrapper->client_wrapper->refcount--;
-    if (wrapper->client_wrapper->refcount == 0) {
-      close_connection_and_free_mysql2_client(wrapper->client_wrapper);
-    }
+    decr_mysql2_client(wrapper->client_wrapper);
   }
 
   xfree(wrapper);

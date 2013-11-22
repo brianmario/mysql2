@@ -104,6 +104,22 @@ describe Mysql2::Client do
     ssl_client.close
   end
 
+  it "should not leave dangling connections after garbage collection" do
+    GC.start
+    client = Mysql2::Client.new(DatabaseCredentials['root'])
+    before_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+
+    10.times do
+      Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
+    end
+    after_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+    after_count.should == before_count + 10
+
+    GC.start
+    final_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+    final_count.should == before_count
+  end
+
   it "should be able to connect to database with numeric-only name" do
     lambda {
       creds = DatabaseCredentials['numericuser']

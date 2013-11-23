@@ -429,6 +429,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   ID db_timezone, app_timezone, dbTz, appTz;
   mysql2_result_wrapper * wrapper;
   unsigned long i;
+  const char * errstr;
   int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1, streaming = 0;
   MYSQL_FIELD * fields = NULL;
 
@@ -492,7 +493,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   if (wrapper->lastRowProcessed == 0) {
-    if(streaming) {
+    if (streaming) {
       /* We can't get number of rows if we're streaming, */
       /* until we've finished fetching all rows */
       wrapper->numberOfRows = 0;
@@ -508,7 +509,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   if (streaming) {
-    if(!wrapper->streamingComplete) {
+    if (!wrapper->streamingComplete) {
       VALUE row;
 
       fields = mysql_fetch_fields(wrapper->result);
@@ -526,6 +527,13 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
       wrapper->numberOfRows = wrapper->lastRowProcessed;
       wrapper->streamingComplete = 1;
+
+      // Check for errors, the connection might have gone out from under us
+      // mysql_error returns an empty string if there is no error
+      errstr = mysql_error(wrapper->client_wrapper->client);
+      if (errstr[0]) {
+        rb_raise(cMysql2Error, "%s", errstr);
+      }
     } else {
       rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
     }

@@ -6,6 +6,7 @@ rvm:
   - 2.0.0
   - ree
   - rbx
+env: RBXOPT=-Xgc.honor_start=true
 bundler_args: --without benchmarks
 script:
   - bundle exec rake

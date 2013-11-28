@@ -54,6 +54,7 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   # clean compiled extension
   CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
 end
+task :spec unless Rake::Task.task_defined?(:spec)
 Rake::Task[:spec].prerequisites << :compile
 
 file 'lib/mysql2/mysql2.rb' do |t|

@@ -38,6 +38,7 @@ file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
   dst_path = File.expand_path("../../#{task.name}", __FILE__)
 
   dst_file = File.open(dst_path, 'w')
+  dst_file.sync = true
   File.open(src_path) do |f|
     f.each_line do |line|
       dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])
@@ -51,6 +52,7 @@ file 'spec/my.cnf' => 'spec/my.cnf.example' do |task|
   dst_path = File.expand_path("../../#{task.name}", __FILE__)
 
   dst_file = File.open(dst_path, 'w')
+  dst_file.sync = true
   File.open(src_path) do |f|
     f.each_line do |line|
       dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])

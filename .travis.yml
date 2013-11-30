@@ -13,5 +13,4 @@ matrix:
 env: RBXOPT=-Xgc.honor_start=true
 bundler_args: --without benchmarks
 script:
-  - bundle exec rake
-  - bundle exec rspec
+  - bundle exec rake spec

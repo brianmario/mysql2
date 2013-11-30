@@ -26,8 +26,6 @@ begin
   RSpec::Core::RakeTask.new('spec') do |t|
     t.verbose = true
   end
-
-  task :default => :spec
 rescue LoadError
   puts "rspec, or one of its dependencies, is not available. Install it with: sudo gem install rspec"
 end

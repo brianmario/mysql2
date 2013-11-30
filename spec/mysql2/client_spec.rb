@@ -106,6 +106,7 @@ describe Mysql2::Client do
 
   it "should not leave dangling connections after garbage collection" do
     GC.start
+    sleep 1 if defined? Rubinius # Let the rbx GC thread do its work
     client = Mysql2::Client.new(DatabaseCredentials['root'])
     before_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
 
@@ -116,9 +117,9 @@ describe Mysql2::Client do
     after_count.should == before_count + 10
 
     GC.start
+    sleep 1 if defined? Rubinius # Let the rbx GC thread do its work
     final_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-    final_count.should == before_count if !defined? Rubinius
-    final_count.should < before_count + 5 if defined? Rubinius # Cut GC some slack
+    final_count.should == before_count
   end
 
   it "should be able to connect to database with numeric-only name" do

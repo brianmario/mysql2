@@ -16,5 +16,7 @@ group :development do
 end
 
 platforms :rbx do
-  gem 'rubysl'
+  gem 'rubysl-rake'
+  gem 'rubysl-drb'
+  gem 'rubysl-bigdecimal'
 end

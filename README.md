@@ -66,7 +66,7 @@ files are. For example, if you unzipped the connector to c:\mysql-connector-c-6.
 the gem like this:
 
     gem install mysql2 -- --with-mysql-dir=c:\mysql-connector-c-6.1.1-win32
-    
+
 Finally, you must copy libmysql.dll from the lib subdirectory of your MySQL or MySQL connector directory into
 your ruby\bin directory. In the above example, libmysql.dll would be located at
 c:\mysql-connector-c-6.1.1-win32\lib .
@@ -182,18 +182,43 @@ Mysql2::Client.new(
 
 ### Multiple result sets
 
-You can also retrieve multiple result sets. For this to work you need to connect with
-flags `Mysql2::Client::MULTI_STATEMENTS`. Using multiple result sets is normally used
-when calling stored procedures that return more than one result set
+You can also retrieve multiple result sets. For this to work you need to
+connect with flags `Mysql2::Client::MULTI_STATEMENTS`. Multiple result sets can
+be used with stored procedures that return more than one result set, and for
+bundling several SQL statements into a single call to `client.query`.
 
 ``` ruby
-client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS )
-result = client.query( 'CALL sp_customer_list( 25, 10 )')
+client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS)
+result = client.query('CALL sp_customer_list( 25, 10 )')
 # result now contains the first result set
-while ( client.next_result)
-    result = client.store_result
-    # result now contains the next result set
+while client.next_result
+  result = client.store_result
+  # result now contains the next result set
 end
+```
+
+Repeated calls to `client.next_result` will return true, false, or raise an
+exception if the respective query erred. When `client.next_result` returns true,
+call `client.store_result` to retieve a result object. Exceptions are not
+raised until `client.next_result` is called to find the status of the respective
+query. Subsequent queries are not executed if an earlier query raised an
+exception.
+
+``` ruby
+result = client.query('SELECT 1; SELECT 2; SELECT A; SELECT 3')
+p result.first
+
+while client.next_result
+  result = client.store_result
+  p result.first
+end
+```
+
+Yields:
+```
+{"1"=>1}
+{"2"=>2}
+next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
 ```
 
 See https://gist.github.com/1367987 for using MULTI_STATEMENTS with Active Record.

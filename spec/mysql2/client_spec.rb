@@ -451,6 +451,15 @@ describe Mysql2::Client do
         @multi_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:flags => Mysql2::Client::MULTI_STATEMENTS))
       end
 
+      it "should raise an exception when one of multiple statements fails" do
+        result = @multi_client.query("SELECT 1 as 'set_1'; SELECT * FROM invalid_table_name;SELECT 2 as 'set_2';")
+        result.first['set_1'].should be(1)
+        lambda {
+          @multi_client.next_result
+        }.should raise_error(Mysql2::Error)
+        @multi_client.next_result.should be_false
+      end
+
       it "returns multiple result sets" do
         @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'").first.should eql({ 'set_1' => 1 })
 

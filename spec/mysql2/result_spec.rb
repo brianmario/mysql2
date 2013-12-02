@@ -92,7 +92,6 @@ describe Mysql2::Result do
 
   context "#fields" do
     before(:each) do
-      @client.query "USE test"
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1")
     end
 
@@ -116,7 +115,6 @@ describe Mysql2::Result do
     end
 
     it "should set the actual count of rows after streaming" do
-      @client.query "USE test"
       result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
       result.count.should eql(0)
       result.each {|r|  }
@@ -129,7 +127,6 @@ describe Mysql2::Result do
     end
 
     it "#count should be zero for rows after streaming when there were no results" do
-      @client.query "USE test"
       result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
       result.count.should eql(0)
       result.each.to_a
@@ -161,7 +158,6 @@ describe Mysql2::Result do
 
   context "row data type mapping" do
     before(:each) do
-      @client.query "USE test"
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
     end
 
@@ -347,7 +343,6 @@ describe Mysql2::Result do
           result['enum_test'].encoding.should eql(Encoding.find('utf-8'))
 
           client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          client2.query "USE test"
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
           client2.close
@@ -377,7 +372,6 @@ describe Mysql2::Result do
           result['set_test'].encoding.should eql(Encoding.find('utf-8'))
 
           client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          client2.query "USE test"
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
           client2.close
@@ -460,7 +454,6 @@ describe Mysql2::Result do
               result[field].encoding.should eql(Encoding.find('utf-8'))
 
               client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-              client2.query "USE test"
               result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               result[field].encoding.should eql(Encoding.find('us-ascii'))
               client2.close

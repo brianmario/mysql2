@@ -124,7 +124,7 @@ describe Mysql2::Result do
     end
 
     it "should not yield nil at the end of streaming" do
-      result = @client.query('SELECT * FROM mysql2_test', :stream => true)
+      result = @client.query('SELECT * FROM mysql2_test', :stream => true, :cache_rows => false)
       result.each { |r| r.should_not be_nil}
     end
 
@@ -148,7 +148,7 @@ describe Mysql2::Result do
       end
 
       client.query "SET net_write_timeout = 1"
-      res = client.query "SELECT * FROM streamingTest", :stream => true
+      res = client.query "SELECT * FROM streamingTest", :stream => true, :cache_rows => false
 
       lambda {
         res.each_with_index do |row, i|

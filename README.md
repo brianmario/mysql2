@@ -199,7 +199,7 @@ end
 
 Repeated calls to `client.next_result` will return true, false, or raise an
 exception if the respective query erred. When `client.next_result` returns true,
-call `client.store_result` to retieve a result object. Exceptions are not
+call `client.store_result` to retrieve a result object. Exceptions are not
 raised until `client.next_result` is called to find the status of the respective
 query. Subsequent queries are not executed if an earlier query raised an
 exception. Subsequent calls to `client.next_result` will return false.

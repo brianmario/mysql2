@@ -139,9 +139,10 @@ describe Mysql2::Result do
     it "should raise an exception if streaming ended due to a timeout" do
       # Create an extra client instance, since we're going to time it out
       client = Mysql2::Client.new DatabaseCredentials['root']
-      client.query "CREATE TEMPORARY TABLE streamingTest (val VARCHAR(10))"
+      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255))"
 
       # Insert enough records to force the result set into multiple reads
+      # (the BINARY type is used simply because it forces full width results)
       10000.times do |i|
         client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
       end

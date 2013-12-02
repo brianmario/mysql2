@@ -6,56 +6,6 @@ describe Mysql2::Result do
     @result = @client.query "SELECT 1"
   end
 
-  it "should maintain a count while streaming" do
-    result = @client.query('SELECT 1')
-
-    result.count.should eql(1)
-    result.each.to_a
-    result.count.should eql(1)
-  end
-
-  it "should set the actual count of rows after streaming" do
-      @client.query "USE test"
-      result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
-      result.count.should eql(0)
-      result.each {|r|  }
-      result.count.should eql(1)
-  end
-
-  it "should not yield nil at the end of streaming" do
-    result = @client.query('SELECT * FROM mysql2_test', :stream => true)
-    result.each { |r| r.should_not be_nil}
-  end
-
-  it "#count should be zero for rows after streaming when there were no results" do
-      @client.query "USE test"
-      result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
-      result.count.should eql(0)
-      result.each.to_a
-      result.count.should eql(0)
-  end
-
-  it "should raise an exception if streaming ended due to a timeout" do
-    # Create an extra client instance, since we're going to time it out
-    client = Mysql2::Client.new DatabaseCredentials['root']
-    client.query "CREATE TEMPORARY TABLE streamingTest (val VARCHAR(10))"
-
-    # Insert enough records to force the result set into multiple reads
-    10000.times do |i|
-      client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
-    end
-
-    client.query "SET net_write_timeout = 1"
-    res = client.query "SELECT * FROM streamingTest", :stream => true
-
-    lambda {
-      res.each_with_index do |row, i|
-        # Exhaust the first result packet then trigger a timeout
-        sleep 2 if i > 0 && i % 1000 == 0
-      end
-    }.should raise_error(Mysql2::Error, /Lost connection/)
-  end
-
   it "should have included Enumerable" do
     Mysql2::Result.ancestors.include?(Enumerable).should be_true
   end
@@ -153,6 +103,58 @@ describe Mysql2::Result do
     it "should return an array of field names in proper order" do
       result = @client.query "SELECT 'a', 'b', 'c'"
       result.fields.should eql(['a', 'b', 'c'])
+    end
+  end
+
+  context "streaming" do
+    it "should maintain a count while streaming" do
+      result = @client.query('SELECT 1')
+
+      result.count.should eql(1)
+      result.each.to_a
+      result.count.should eql(1)
+    end
+
+    it "should set the actual count of rows after streaming" do
+      @client.query "USE test"
+      result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
+      result.count.should eql(0)
+      result.each {|r|  }
+      result.count.should eql(1)
+    end
+
+    it "should not yield nil at the end of streaming" do
+      result = @client.query('SELECT * FROM mysql2_test', :stream => true)
+      result.each { |r| r.should_not be_nil}
+    end
+
+    it "#count should be zero for rows after streaming when there were no results" do
+      @client.query "USE test"
+      result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
+      result.count.should eql(0)
+      result.each.to_a
+      result.count.should eql(0)
+    end
+
+    it "should raise an exception if streaming ended due to a timeout" do
+      # Create an extra client instance, since we're going to time it out
+      client = Mysql2::Client.new DatabaseCredentials['root']
+      client.query "CREATE TEMPORARY TABLE streamingTest (val VARCHAR(10))"
+
+      # Insert enough records to force the result set into multiple reads
+      10000.times do |i|
+        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+      end
+
+      client.query "SET net_write_timeout = 1"
+      res = client.query "SELECT * FROM streamingTest", :stream => true
+
+      lambda {
+        res.each_with_index do |row, i|
+          # Exhaust the first result packet then trigger a timeout
+          sleep 2 if i > 0 && i % 1000 == 0
+        end
+      }.should raise_error(Mysql2::Error, /Lost connection/)
     end
   end
 

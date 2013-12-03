@@ -1,4 +1,5 @@
 #include <mysql2_ext.h>
+
 #include <stdint.h>
 
 #include "mysql_enc_to_ruby.h"

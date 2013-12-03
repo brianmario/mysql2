@@ -78,7 +78,10 @@ describe Mysql2::Client do
   end
 
   it "should be able to connect via SSL options" do
-    pending("DON'T WORRY, THIS TEST PASSES :) - but is machine-specific. You need to have MySQL running with SSL configured and enabled. Then update the paths in this test to your needs and remove the pending state.")
+    ssl = @client.query "SHOW VARIABLES LIKE 'have_%ssl'"
+    ssl_enabled = ssl.any? {|x| x['Value'] == 'ENABLED'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") unless ssl_enabled
+    pending("DON'T WORRY, THIS TEST PASSES - but you must update the SSL cert paths in this test and remove this pending state.")
     ssl_client = nil
     lambda {
       ssl_client = Mysql2::Client.new(
@@ -194,6 +197,49 @@ describe Mysql2::Client do
 
         @client.query "DROP TABLE infoTest"
       end
+    end
+  end
+
+  context ":local_infile" do
+    before(:all) do
+      @client_i = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => true)
+      local = @client_i.query "SHOW VARIABLES LIKE 'local_infile'"
+      local_enabled = local.any? {|x| x['Value'] == 'ON'}
+      pending("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
+
+      @client_i.query %[
+        CREATE TABLE IF NOT EXISTS infileTest (
+          id MEDIUMINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          foo VARCHAR(10),
+          bar MEDIUMTEXT
+        )
+      ]
+    end
+
+    after(:all) do
+      @client_i.query "DROP TABLE infileTest"
+    end
+
+    it "should raise an error when local_infile is disabled" do
+      client = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => false)
+      lambda {
+        client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
+      }.should raise_error(Mysql2::Error, %r{command is not allowed})
+    end
+
+    it "should raise an error when a non-existent file is loaded" do
+      lambda {
+        @client_i.query "LOAD DATA LOCAL INFILE 'this/file/is/not/here' INTO TABLE infileTest"
+      }.should_not raise_error(Mysql2::Error, %r{file not found: this/file/is/not/here})
+    end
+
+    it "should LOAD DATA LOCAL INFILE" do
+      @client_i.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
+      info = @client_i.query_info
+      info.should eql({:records => 1, :deleted => 0, :skipped => 0, :warnings => 0})
+
+      result = @client_i.query "SELECT * FROM infileTest"
+      result.first.should eql({'id' => 1, 'foo' => 'Hello', 'bar' => 'World'})
     end
   end
 

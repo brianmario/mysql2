@@ -126,14 +126,21 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   VALUE rb_sql_state = rb_tainted_str_new2(mysql_sqlstate(wrapper->client));
   VALUE e;
 #ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
-
-  rb_enc_associate(rb_error_msg, conn_enc);
-  rb_enc_associate(rb_sql_state, conn_enc);
-  if (default_internal_enc) {
-    rb_error_msg = rb_str_export_to_enc(rb_error_msg, default_internal_enc);
-    rb_sql_state = rb_str_export_to_enc(rb_sql_state, default_internal_enc);
+  if (wrapper->server_version < 50500) {
+    /* MySQL < 5.5 uses mixed encoding, just call it binary. */
+    int err_enc = rb_ascii8bit_encindex();
+    rb_enc_associate_index(rb_error_msg, err_enc);
+    rb_enc_associate_index(rb_sql_state, err_enc);
+  } else {
+    /* MySQL >= 5.5 uses UTF-8 errors internally and converts them to the connection encoding. */
+    rb_encoding *default_internal_enc = rb_default_internal_encoding();
+    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+    rb_enc_associate(rb_error_msg, conn_enc);
+    rb_enc_associate(rb_sql_state, conn_enc);
+    if (default_internal_enc) {
+      rb_error_msg = rb_str_export_to_enc(rb_error_msg, default_internal_enc);
+      rb_sql_state = rb_str_export_to_enc(rb_sql_state, default_internal_enc);
+    }
   }
 #endif
 
@@ -219,6 +226,7 @@ static VALUE allocate(VALUE klass) {
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
   wrapper->active_thread = Qnil;
+  wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
   wrapper->connected = 0; /* means that a database connection is open */
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
@@ -311,6 +319,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
       return rb_raise_mysql2_error(wrapper);
   }
 
+  wrapper->server_version = mysql_get_server_version(wrapper->client);
   wrapper->connected = 1;
   return self;
 }

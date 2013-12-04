@@ -39,6 +39,7 @@ rb_thread_call_without_gvl(
 typedef struct {
   VALUE encoding;
   VALUE active_thread; /* rb_thread_current() or Qnil */
+  long server_version;
   int reconnect_enabled;
   int active;
   int connected;

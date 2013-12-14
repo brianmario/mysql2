@@ -50,13 +50,21 @@ describe Mysql2::Error do
     end
 
     subject { error.message.encoding }
-    it { should eql(err_enc) }
+    it "#message   should transcode from #{db_enc.inspect} to #{err_enc}" do should eql(err_enc) end
 
     subject { error.error.encoding }
-    it { should eql(err_enc) }
+    it "#error     should transcode from #{db_enc.inspect} to #{err_enc}" do should eql(err_enc) end
 
     subject { error.sql_state.encoding }
-    it { should eql(err_enc) }
+    it "#sql_state should transcode from #{db_enc.inspect} to #{err_enc}" do should eql(err_enc) end
+  end
+
+  shared_examples "mysql2 error encoding (MySQL < 5.5)" do |db_enc, def_enc, err_enc|
+    include_examples "mysql2 error encoding", db_enc, def_enc, err_enc
+  end
+
+  shared_examples "mysql2 error encoding (MySQL >= 5.5)" do |db_enc, def_enc, err_enc|
+    include_examples "mysql2 error encoding", db_enc, def_enc, err_enc
   end
 
   it_behaves_like "mysql2 error"
@@ -64,15 +72,15 @@ describe Mysql2::Error do
   unless RUBY_VERSION =~ /1.8/
     mysql_ver = Mysql2::Client.new(DatabaseCredentials['root']).server_info[:id]
     if mysql_ver < 50505
-      it_behaves_like "mysql2 error encoding", nil, nil, Encoding::ASCII_8BIT
-      it_behaves_like "mysql2 error encoding", 'utf8', Encoding::UTF_8, Encoding::ASCII_8BIT
-      it_behaves_like "mysql2 error encoding", 'big5', Encoding::Big5, Encoding::ASCII_8BIT
-      it_behaves_like "mysql2 error encoding", 'big5', Encoding::US_ASCII, Encoding::ASCII_8BIT
+      it_behaves_like "mysql2 error encoding (MySQL < 5.5)", nil, nil, Encoding::ASCII_8BIT
+      it_behaves_like "mysql2 error encoding (MySQL < 5.5)", 'utf8', Encoding::UTF_8, Encoding::ASCII_8BIT
+      it_behaves_like "mysql2 error encoding (MySQL < 5.5)", 'big5', Encoding::Big5, Encoding::ASCII_8BIT
+      it_behaves_like "mysql2 error encoding (MySQL < 5.5)", 'big5', Encoding::US_ASCII, Encoding::ASCII_8BIT
     else
-      it_behaves_like "mysql2 error encoding", nil, nil, Encoding::UTF_8
-      it_behaves_like "mysql2 error encoding", 'utf8', Encoding::UTF_8, Encoding::UTF_8
-      it_behaves_like "mysql2 error encoding", 'big5', Encoding::Big5, Encoding::Big5
-      it_behaves_like "mysql2 error encoding", 'big5', Encoding::US_ASCII, Encoding::US_ASCII
+      it_behaves_like "mysql2 error encoding (MySQL >= 5.5)", nil, nil, Encoding::UTF_8
+      it_behaves_like "mysql2 error encoding (MySQL >= 5.5)", 'utf8', Encoding::UTF_8, Encoding::UTF_8
+      it_behaves_like "mysql2 error encoding (MySQL >= 5.5)", 'big5', Encoding::Big5, Encoding::Big5
+      it_behaves_like "mysql2 error encoding (MySQL >= 5.5)", 'big5', Encoding::US_ASCII, Encoding::US_ASCII
     end
   end
 end

@@ -61,6 +61,13 @@ describe Mysql2::Result do
       end
     end
 
+    it "should be able to return results as json" do
+      @result.each(:as => :json) do |row|
+        row.class.should eql(String)
+        row.should eql("{\"1\":1}")
+      end
+    end
+
     it "should cache previously yielded results by default" do
       @result.first.object_id.should eql(@result.first.object_id)
     end

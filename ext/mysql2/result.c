@@ -55,7 +55,7 @@ static VALUE cBigDecimal, cDate, cDateTime;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
-static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
+static VALUE sym_symbolize_keys, sym_as, sym_array, sym_json, sym_database_timezone, sym_application_timezone,
           sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream, sym_name;
 static ID intern_merge;
 
@@ -181,7 +181,7 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
 #endif
 
 
-static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast, MYSQL_FIELD * fields) {
+static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int asJson, int castBool, int cast, MYSQL_FIELD * fields) {
   VALUE rowVal;
   mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
@@ -394,6 +394,15 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
       }
     }
   }
+
+  if(asJson) {
+    VALUE klass;
+
+    rb_require("json");
+    klass = rb_const_get(rb_cModule, rb_intern("JSON"));
+    rowVal = rb_funcall(klass, rb_intern("generate"), 1, rowVal);
+  }
+
   return rowVal;
 }
 
@@ -431,7 +440,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   mysql2_result_wrapper * wrapper;
   unsigned long i;
   const char * errstr;
-  int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1, streaming = 0;
+  int symbolizeKeys = 0, asArray = 0, asJson = 0, castBool = 0, cacheRows = 1, cast = 1, streaming = 0;
   MYSQL_FIELD * fields = NULL;
 
   GetMysql2Result(self, wrapper);
@@ -450,6 +459,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (rb_hash_aref(opts, sym_as) == sym_array) {
     asArray = 1;
+  }
+
+  if (rb_hash_aref(opts, sym_as) == sym_json) {
+    asJson = 1;
   }
 
   if (rb_hash_aref(opts, sym_cast_booleans) == Qtrue) {
@@ -516,7 +529,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       fields = mysql_fetch_fields(wrapper->result);
 
       do {
-        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast, fields);
+        row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, asJson, castBool, cast, fields);
 
         if (block != Qnil && row != Qnil) {
           rb_yield(row);
@@ -555,7 +568,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
         if (cacheRows && i < rowsProcessed) {
           row = rb_ary_entry(wrapper->rows, i);
         } else {
-          row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast, fields);
+          row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, asJson, castBool, cast, fields);
           if (cacheRows) {
             rb_ary_store(wrapper->rows, i, row);
           }
@@ -645,6 +658,7 @@ void init_mysql2_result() {
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
+  sym_json            = ID2SYM(rb_intern("json"));
   sym_local           = ID2SYM(rb_intern("local"));
   sym_utc             = ID2SYM(rb_intern("utc"));
   sym_cast_booleans   = ID2SYM(rb_intern("cast_booleans"));

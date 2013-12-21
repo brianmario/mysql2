@@ -4,12 +4,9 @@ rvm:
   - 1.9.2
   - 1.9.3
   - 2.0.0
-  - 2.1.0-preview2
+  - 2.1.0
   - ree
   - rbx
-matrix:
-  allow_failures:
-    - rvm: 2.1.0-preview2
 env: RBXOPT=-Xgc.honor_start=true
 bundler_args: --without benchmarks
 script:

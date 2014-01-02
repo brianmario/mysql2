@@ -11,3 +11,7 @@ env: RBXOPT=-Xgc.honor_start=true
 bundler_args: --without benchmarks
 script:
   - bundle exec rake spec
+# Temporary workaround for broken Rubygems on Travis
+before_install:
+  - gem update --system 2.1.11
+  - gem --version

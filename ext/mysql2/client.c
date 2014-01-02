@@ -128,23 +128,18 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  if (wrapper->server_version < 50500) {
-    /* MySQL < 5.5 uses mixed encoding, assume binary and transcode to the connection encoding. */
-    rb_encoding *err_enc = rb_ascii8bit_encoding();
-    rb_error_msg = rb_str_conv_enc_opts(rb_error_msg, err_enc, conn_enc, ECONV_UNDEF_REPLACE | ECONV_INVALID_REPLACE, Qnil);
-    rb_sql_state = rb_str_conv_enc_opts(rb_sql_state, err_enc, conn_enc, ECONV_UNDEF_REPLACE | ECONV_INVALID_REPLACE, Qnil);
-  } else {
-    /* MySQL >= 5.5 uses UTF-8 errors internally and converts them to the connection encoding. */
-    rb_enc_associate(rb_error_msg, conn_enc);
-    rb_enc_associate(rb_sql_state, conn_enc);
-  }
+  rb_encoding *dest_enc = default_internal_enc ? default_internal_enc : rb_utf8_encoding();
 
-  if (default_internal_enc) {
-    rb_error_msg = rb_str_export_to_enc(rb_error_msg, default_internal_enc);
-    rb_sql_state = rb_str_export_to_enc(rb_sql_state, default_internal_enc);
-  }
+  rb_enc_associate(rb_error_msg, conn_enc);
+  rb_enc_associate(rb_sql_state, conn_enc);
 
-  /* Ruby 2.1 String.scrub! fixes all encoding problems. Several gems backport this functionality at runtime. */
+  /* This function does nothing if arg 2 == arg 3, so it won't fix misencoded text. */
+  rb_error_msg = rb_str_conv_enc_opts(rb_error_msg, conn_enc, dest_enc, ECONV_UNDEF_REPLACE | ECONV_INVALID_REPLACE, Qnil);
+  rb_sql_state = rb_str_conv_enc_opts(rb_sql_state, conn_enc, dest_enc, ECONV_UNDEF_REPLACE | ECONV_INVALID_REPLACE, Qnil);
+
+  /* Ruby 2.1 String.scrub! fixes any encoding problems in the error text.
+   * Several gems provide a runtime backport of this function, otherwise we'd
+   * have called rb_str_scrub directly. */
   if (rb_respond_to(rb_error_msg, intern_scrub_bang))
     rb_funcall(rb_error_msg, intern_scrub_bang, 0);
 

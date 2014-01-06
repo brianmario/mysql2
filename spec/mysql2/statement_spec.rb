@@ -68,4 +68,39 @@ describe Mysql2::Statement do
     list.first.should == 'foo'
     list[1].should == '2'
   end
+
+  it "should pass in nil parameters" do
+    statement = @client.prepare 'SELECT * FROM (SELECT 1 as foo, 2) bar WHERE foo = ?'
+    statement.execute(nil).should == statement
+  end
+
+  it "should pass in Bignum parameters" do
+    statement = @client.prepare 'SELECT * FROM (SELECT 1 as foo, 2) bar WHERE foo = ?'
+    (lambda{ statement.execute(723623523423323223123) }).should raise_error(RangeError)
+  end
+
+  it "should pass in Float parameters" do
+    statement = @client.prepare 'SELECT * FROM (SELECT 2.3 as foo, 2) bar WHERE foo = ?'
+    statement.execute(2.4).should == statement
+  end
+
+  it "should pass in String parameters" do
+    statement = @client.prepare 'SELECT * FROM (SELECT "foo" as foo, 2) bar WHERE foo = ?'
+    statement.execute("blah").should == statement
+  end
+
+  it "should pass in Time parameters" do
+    statement = @client.prepare 'SELECT * FROM (SELECT CURRENT_TIMESTAMP() as foo, 2) bar WHERE foo = ?'
+    statement.execute(Time.now).should == statement
+  end
+
+  it "should pass in DateTime parameters" do
+    statement = @client.prepare 'SELECT * FROM (SELECT CURRENT_TIMESTAMP() as foo, 2) bar WHERE foo = ?'
+    statement.execute(DateTime.now).should == statement
+  end
+
+  it "should pass in Date parameters" do
+    statement = @client.prepare 'SELECT * FROM (SELECT CURRENT_DATE() as foo, 2) bar WHERE foo = ?'
+    statement.execute(Date.today)
+  end
 end

@@ -28,6 +28,7 @@ static VALUE field_count(VALUE self) {
 static VALUE nogvl_execute(void *ptr) {
   MYSQL_STMT *stmt = ptr;
 
+  printf("%s, ", stmt->last_error);
   if(mysql_stmt_execute(stmt)) {
     return Qfalse;
   } else {
@@ -35,12 +36,16 @@ static VALUE nogvl_execute(void *ptr) {
   }
 }
 
-#define FREE_BINDS                  \
- for (i = 0; i < argc; i++) {       \
-   if (bind_buffers[i].buffer) {    \
-     free(bind_buffers[i].buffer);  \
-   }                                \
- }                                  \
+#define FREE_BINDS                                             \
+ for (i = 0; i < argc; i++) {                                  \
+   if (bind_buffers[i].buffer) { \
+     if(bind_buffers[i].buffer_type == MYSQL_TYPE_STRING) {    \
+       free(bind_buffers[i].length);                           \
+     } else {                                                  \
+       free(bind_buffers[i].buffer);                           \
+     }                                                         \
+   }                                                           \
+ }                                                             \
  free(bind_buffers);
 
 /* call-seq: stmt.execute
@@ -93,11 +98,14 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           *(double*)(bind_buffers[i].buffer) = NUM2DBL(argv[i]);
           break;
         case T_STRING:
+          printf("Assigning a string\n");
           bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
           bind_buffers[i].buffer = RSTRING_PTR(argv[i]);
           bind_buffers[i].buffer_length = RSTRING_LEN(argv[i]);
-          unsigned long len = RSTRING_LEN(argv[i]);
-          bind_buffers[i].length = &len;
+          unsigned long *len = malloc(sizeof(long));
+          (*len) = RSTRING_LEN(argv[i]);
+          bind_buffers[i].length = len;
+//          printf("Done\n");
           break;
         default:
           // TODO: what Ruby type should support MYSQL_TYPE_TIME
@@ -119,7 +127,9 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 
             *(MYSQL_TIME*)(bind_buffers[i].buffer) = t;
           } else if (CLASS_OF(argv[i]) == cDate) {
-            bind_buffers[i].buffer_type = MYSQL_TYPE_NEWDATE;
+
+            bind_buffers[i].buffer_type = MYSQL_TYPE_DATE;
+
             bind_buffers[i].buffer = malloc(sizeof(MYSQL_TIME));
 
             MYSQL_TIME t;
@@ -144,12 +154,14 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
       FREE_BINDS;
       rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
     }
+    printf("Bound\n");
   }
 
   if (rb_thread_blocking_region(nogvl_execute, stmt, RUBY_UBF_IO, 0) == Qfalse) {
     FREE_BINDS;
     rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
   }
+    printf("Executed\n");
 
   if (bind_count > 0) {
     FREE_BINDS;

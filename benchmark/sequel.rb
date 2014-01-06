@@ -8,9 +8,9 @@ require 'sequel'
 require 'sequel/adapters/do'
 
 number_of = 10
-mysql2_opts = "mysql2://localhost/test"
-mysql_opts = "mysql://localhost/test"
-do_mysql_opts = "do:mysql://localhost/test"
+mysql2_opts = "mysql2://root@localhost/test"
+mysql_opts = "mysql://root@localhost/test"
+do_mysql_opts = "do:mysql://root@localhost/test"
 
 class Mysql2Model < Sequel::Model(Sequel.connect(mysql2_opts)[:mysql2_test]); end
 class MysqlModel < Sequel::Model(Sequel.connect(mysql_opts)[:mysql2_test]); end

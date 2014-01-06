@@ -12,3 +12,7 @@ tmp
 vendor
 lib/mysql2/mysql2.rb
 spec/configuration.yml
+spec/my.cnf
+Gemfile.lock
+.ruby-version
+.rvmrc

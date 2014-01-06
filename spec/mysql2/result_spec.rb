@@ -3,40 +3,7 @@ require 'spec_helper'
 
 describe Mysql2::Result do
   before(:each) do
-    @client = Mysql2::Client.new DatabaseCredentials['root']
-  end
-
-  before(:each) do
     @result = @client.query "SELECT 1"
-  end
-
-  it "should maintain a count while streaming" do
-    result = @client.query('SELECT 1')
-
-    result.count.should eql(1)
-    result.each { |r| }
-    result.count.should eql(1)
-  end
-
-  it "should set the actual count of rows after streaming" do
-      @client.query "USE test"
-      result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
-      result.count.should eql(0)
-      result.each {|r|  }
-      result.count.should eql(1)
-  end
-
-  it "should not yield nil at the end of streaming" do
-    result = @client.query('SELECT * FROM mysql2_test', :stream => true)
-    result.each { |r| r.should_not be_nil}
-  end
-
-  it "#count should be zero for rows after streaming when there were no results " do
-      @client.query "USE test"
-      result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
-      result.count.should eql(0)
-      result.each {|r|  }
-      result.count.should eql(0)
   end
 
   it "should have included Enumerable" do
@@ -117,15 +84,14 @@ describe Mysql2::Result do
       result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
 
       expect {
-        result.each {}
-        result.each {}
+        result.each.to_a
+        result.each.to_a
       }.to raise_exception(Mysql2::Error)
     end
   end
 
   context "#fields" do
     before(:each) do
-      @client.query "USE test"
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1")
     end
 
@@ -139,20 +105,70 @@ describe Mysql2::Result do
     end
   end
 
+  context "streaming" do
+    it "should maintain a count while streaming" do
+      result = @client.query('SELECT 1')
+
+      result.count.should eql(1)
+      result.each.to_a
+      result.count.should eql(1)
+    end
+
+    it "should set the actual count of rows after streaming" do
+      result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
+      result.count.should eql(0)
+      result.each {|r|  }
+      result.count.should eql(1)
+    end
+
+    it "should not yield nil at the end of streaming" do
+      result = @client.query('SELECT * FROM mysql2_test', :stream => true, :cache_rows => false)
+      result.each { |r| r.should_not be_nil}
+    end
+
+    it "#count should be zero for rows after streaming when there were no results" do
+      result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
+      result.count.should eql(0)
+      result.each.to_a
+      result.count.should eql(0)
+    end
+
+    it "should raise an exception if streaming ended due to a timeout" do
+      # Create an extra client instance, since we're going to time it out
+      client = Mysql2::Client.new DatabaseCredentials['root']
+      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255))"
+
+      # Insert enough records to force the result set into multiple reads
+      # (the BINARY type is used simply because it forces full width results)
+      10000.times do |i|
+        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+      end
+
+      client.query "SET net_write_timeout = 1"
+      res = client.query "SELECT * FROM streamingTest", :stream => true, :cache_rows => false
+
+      lambda {
+        res.each_with_index do |row, i|
+          # Exhaust the first result packet then trigger a timeout
+          sleep 2 if i > 0 && i % 1000 == 0
+        end
+      }.should raise_error(Mysql2::Error, /Lost connection/)
+    end
+  end
+
   context "row data type mapping" do
     before(:each) do
-      @client.query "USE test"
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
     end
 
     it "should return nil values for NULL and strings for everything else when :cast is false" do
       result = @client.query('SELECT null_test, tiny_int_test, bool_cast_test, int_test, date_test, enum_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast => false).first
       result["null_test"].should be_nil
-      result["tiny_int_test"].should  == "1"
-      result["bool_cast_test"].should == "1"
-      result["int_test"].should       == "10"
-      result["date_test"].should      == "2010-04-04"
-      result["enum_test"].should      == "val1"
+      result["tiny_int_test"].should  eql("1")
+      result["bool_cast_test"].should eql("1")
+      result["int_test"].should       eql("10")
+      result["date_test"].should      eql("2010-04-04")
+      result["enum_test"].should      eql("val1")
     end
 
     it "should return nil for a NULL value" do
@@ -160,9 +176,14 @@ describe Mysql2::Result do
       @test_result['null_test'].should eql(nil)
     end
 
-    it "should return Fixnum for a BIT value" do
+    it "should return String for a BIT(64) value" do
       @test_result['bit_test'].class.should eql(String)
       @test_result['bit_test'].should eql("\000\000\000\000\000\000\000\005")
+    end
+
+    it "should return String for a BIT(1) value" do
+      @test_result['single_bit_test'].class.should eql(String)
+      @test_result['single_bit_test'].should eql("\001")
     end
 
     it "should return Fixnum for a TINYINT value" do
@@ -186,6 +207,20 @@ describe Mysql2::Result do
       result3.first['bool_cast_test'].should be_true
 
       @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
+    end
+
+    it "should return TrueClass or FalseClass for a BIT(1) value if :cast_booleans is enabled" do
+      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'
+      id1 = @client.last_id
+      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'
+      id2 = @client.last_id
+
+      result1 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id1}", :cast_booleans => true
+      result2 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id2}", :cast_booleans => true
+      result1.first['single_bit_test'].should be_true
+      result2.first['single_bit_test'].should be_false
+
+      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
     end
 
     it "should return Fixnum for a SMALLINT value" do
@@ -234,7 +269,7 @@ describe Mysql2::Result do
     end
 
     if 1.size == 4 # 32bit
-      if RUBY_VERSION =~ /1.9/
+      unless RUBY_VERSION =~ /1.8/
         klass = Time
       else
         klass = DateTime
@@ -252,7 +287,7 @@ describe Mysql2::Result do
         r.first['test'].class.should eql(klass)
       end
     elsif 1.size == 8 # 64bit
-      if RUBY_VERSION =~ /1.9/
+      unless RUBY_VERSION =~ /1.8/
         it "should return Time when timestamp is < 1901-12-13 20:45:52" do
           r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
           r.first['test'].class.should eql(Time)
@@ -308,9 +343,9 @@ describe Mysql2::Result do
           result['enum_test'].encoding.should eql(Encoding.find('utf-8'))
 
           client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          client2.query "USE test"
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
+          client2.close
         end
 
         it "should use Encoding.default_internal" do
@@ -337,9 +372,9 @@ describe Mysql2::Result do
           result['set_test'].encoding.should eql(Encoding.find('utf-8'))
 
           client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          client2.query "USE test"
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
+          client2.close
         end
 
         it "should use Encoding.default_internal" do
@@ -419,9 +454,9 @@ describe Mysql2::Result do
               result[field].encoding.should eql(Encoding.find('utf-8'))
 
               client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-              client2.query "USE test"
               result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               result[field].encoding.should eql(Encoding.find('us-ascii'))
+              client2.close
             end
 
             it "should use Encoding.default_internal" do

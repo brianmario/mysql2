@@ -12,6 +12,7 @@ begin
         defer1 = client1.query "SELECT sleep(0.1) as first_query"
         defer1.callback do |result|
           results << result.first
+          client1.close
           EM.stop_event_loop
         end
 
@@ -19,6 +20,7 @@ begin
         defer2 = client2.query "SELECT sleep(0.025) second_query"
         defer2.callback do |result|
           results << result.first
+          client2.close
         end
       end
 
@@ -34,8 +36,9 @@ begin
         defer1.callback do |result|
           results << result.first
           defer2 = client.query "SELECT sleep(0.025) as second_query"
-          defer2.callback do |result|
-            results << result.first
+          defer2.callback do |r|
+            results << r.first
+            client.close
             EM.stop_event_loop
           end
         end
@@ -51,6 +54,7 @@ begin
           client = Mysql2::EM::Client.new DatabaseCredentials['root']
           defer = client.query "SELECT sleep(0.1) as first_query"
           defer.callback do |result|
+            client.close
             raise 'some error'
           end
           defer.errback do |err|

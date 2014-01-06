@@ -1,5 +1,7 @@
 # Mysql2 - A modern, simple and very fast Mysql library for Ruby - binding to libmysql
 
+[![Build Status](https://travis-ci.org/brianmario/mysql2.png)](https://travis-ci.org/brianmario/mysql2)
+
 The Mysql2 gem is meant to serve the extremely common use-case of connecting, querying and iterating on results.
 Some database libraries out there serve as direct 1:1 mappings of the already complex C API's available.
 This one is not.
@@ -13,12 +15,61 @@ Mysql2::Client - your connection to the database
 Mysql2::Result - returned from issuing a #query on the connection. It includes Enumerable.
 
 ## Installing
-
+### OSX / Linux
 ``` sh
 gem install mysql2
 ```
 
-You may have to specify --with-mysql-config=/some/random/path/bin/mysql_config
+This gem links against MySQL's `libmysqlclient` C shared library. You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`, or other appropriate package for your system.
+
+By default, the mysql2 gem will try to find a copy of MySQL in this order:
+
+* Option `--with-mysql-dir`, if provided (see below).
+* Option `--with-mysql-config`, if provided (see below).
+* Several typical paths for `msyql_config` (default for the majority of users).
+* The directory `/usr/local`.
+
+### Configuration options
+
+Use these options by `gem install mysql2 -- [--optionA] [--optionB=argument]`.
+
+* `--with-mysql-dir[=/path/to/mysqldir]` -
+Specify the directory where MySQL is installed. The mysql2 gem will not use
+`mysql_config`, but will instead look at `mysqldir/lib` and `mysqldir/include`
+for the library and header files.
+This option is mutually exclusive with `--with-mysql-config`.
+
+* `--with-mysql-config[=/path/to/mysql_config]` -
+Specify a path to the `mysql_config` binary provided by your copy of MySQL. The
+mysql2 gem will ask this `mysql_config` binary about the compiler and linker
+arguments needed.
+This option is mutually exclusive with `--with-mysql-dir`.
+
+* `--with-mysql-rpath=/path/to/mysql/lib` / `--without-mysql-rpath` -
+Override the runtime path used to find the MySQL libraries.
+This may be needed if you deploy to a system where these libraries
+are located somewhere different than on your build system.
+This overrides any rpath calculated by default or by the options above.
+
+### Windows
+First, make sure you have the DevKit installed (http://rubyinstaller.org/downloads/) and its variables
+are loaded by running devkit\devktvars.bat .
+
+Next, you need a MySQL library to link against. If you have MySQL loaded on your development machine,
+you can use that. If not, you will need to either copy the MySQL directory from your server, or else
+obtain a copy of the MySQL C connector: http://dev.mysql.com/downloads/connector/c/
+
+If you're using the connector, I recommend just getting the .zip file and unzipping it someplace convenient.
+
+Now you can install mysql2. You must use the `--with-mysql-dir` option to tell gem where your MySQL library
+files are. For example, if you unzipped the connector to c:\mysql-connector-c-6.1.1-win32 you would install
+the gem like this:
+
+    gem install mysql2 -- --with-mysql-dir=c:\mysql-connector-c-6.1.1-win32
+
+Finally, you must copy libmysql.dll from the lib subdirectory of your MySQL or MySQL connector directory into
+your ruby\bin directory. In the above example, libmysql.dll would be located at
+c:\mysql-connector-c-6.1.1-win32\lib .
 
 ## Usage
 
@@ -100,27 +151,107 @@ Mysql2::Client.new(
   :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | MULTI_STATEMENTS,
   :encoding = 'utf8',
   :read_timeout = seconds,
+  :write_timeout = seconds,
   :connect_timeout = seconds,
   :reconnect = true/false,
   :local_infile = true/false,
+  :secure_auth = true/false,
+  :default_file = '/path/to/my.cfg',
+  :default_group = 'my.cfg section'
   )
 ```
 
-You can also retrieve multiple result sets. For this to work you need to connect with
-flags `Mysql2::Client::MULTI_STATEMENTS`. Using multiple result sets is normally used
-when calling stored procedures that return more than one result set
+### SSL options
+
+Setting any of the following options will enable an SSL connection, but only if
+your MySQL client library and server have been compiled with SSL support.
+MySQL client library defaults will be used for any parameters that are left out
+or set to nil. Relative paths are allowed, and may be required by managed
+hosting providers such as Heroku.
 
 ``` ruby
-client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS )
-result = client.query( 'CALL sp_customer_list( 25, 10 )')
+Mysql2::Client.new(
+  # ...options as above...,
+  :sslkey => '/path/to/client-key.pem',
+  :sslcert => '/path/to/client-cert.pem',
+  :sslca => '/path/to/ca-cert.pem',
+  :sslcapath => '/path/to/cacerts',
+  :sslcipher => 'DHE-RSA-AES256-SHA'
+  )
+```
+
+### Multiple result sets
+
+You can also retrieve multiple result sets. For this to work you need to
+connect with flags `Mysql2::Client::MULTI_STATEMENTS`. Multiple result sets can
+be used with stored procedures that return more than one result set, and for
+bundling several SQL statements into a single call to `client.query`.
+
+``` ruby
+client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS)
+result = client.query('CALL sp_customer_list( 25, 10 )')
 # result now contains the first result set
-while ( client.next_result)
-    result = client.store_result
-    # result now contains the next result set
+while client.next_result
+  result = client.store_result
+  # result now contains the next result set
 end
 ```
 
-See https://gist.github.com/1367987 for using MULTI_STATEMENTS with ActiveRecord.
+Repeated calls to `client.next_result` will return true, false, or raise an
+exception if the respective query erred. When `client.next_result` returns true,
+call `client.store_result` to retrieve a result object. Exceptions are not
+raised until `client.next_result` is called to find the status of the respective
+query. Subsequent queries are not executed if an earlier query raised an
+exception. Subsequent calls to `client.next_result` will return false.
+
+``` ruby
+result = client.query('SELECT 1; SELECT 2; SELECT A; SELECT 3')
+p result.first
+
+while client.next_result
+  result = client.store_result
+  p result.first
+end
+```
+
+Yields:
+```
+{"1"=>1}
+{"2"=>2}
+next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
+```
+
+See https://gist.github.com/1367987 for using MULTI_STATEMENTS with Active Record.
+
+### Secure auth
+
+Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
+When secure_auth is enabled, the server will refuse a connection if the account password is stored in old pre-MySQL 4.1 format.
+The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
+To bypass this restriction in the client, pass the option :secure_auth => false to Mysql2::Client.new().
+If using ActiveRecord, your database.yml might look something like this:
+
+``` yaml
+development:
+  adapter: mysql2
+  encoding: utf8
+  database: my_db_name
+  username: root
+  password: my_password
+  host: 127.0.0.1
+  port: 3306
+  secure_auth: false
+```
+
+### Reading a MySQL config file
+
+You may read configuration options from a MySQL configuration file by passing
+the `:default_file` and `:default_group` paramters. For example:
+
+``` ruby
+Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
+```
+
 
 ## Cascading config
 
@@ -168,11 +299,6 @@ Pass the `:as => :array` option to any of the above methods of configuration
 ### Array of Hashes
 
 The default result type is set to :hash, but you can override a previous setting to something else with :as => :hash
-
-### Others...
-
-I may add support for `:as => :csv` or even `:as => :json` to allow for *much* more efficient generation of those data types from result sets.
-If you'd like to see either of these (or others), open an issue and start bugging me about it ;)
 
 ### Timezones
 
@@ -264,15 +390,15 @@ There are a few things that need to be kept in mind while using streaming:
 
 Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html.
 
-## ActiveRecord
+## Active Record
 
-To use the ActiveRecord driver (with or without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
+To use the Active Record driver (with or without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
 That was easy right? :)
 
-NOTE: as of 0.3.0, and ActiveRecord 3.1 - the ActiveRecord adapter has been pulled out of this gem and into ActiveRecord itself. If you need to use mysql2 with
+NOTE: as of 0.3.0, and Active Record 3.1 - the Active Record adapter has been pulled out of this gem and into Active Record itself. If you need to use mysql2 with
 Rails versions < 3.1 make sure and specify `gem "mysql2", "~> 0.2.7"` in your Gemfile
 
-## Asynchronous ActiveRecord
+## Asynchronous Active Record
 
 Please see the [em-synchrony](https://github.com/igrigorik/em-synchrony) project for details about using EventMachine with mysql2 and Rails.
 
@@ -320,15 +446,15 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 ## Compatibility
 
-The specs pass on my system (SL 10.6.3, x86_64) in these rubies:
+This gem is regularly tested against the following Ruby versions on Linux and Mac OS X:
 
-* 1.8.7-p249
-* ree-1.8.7-2010.01
-* 1.9.1-p378
-* ruby-trunk
-* rbx-head - broken at the moment, working with the rbx team for a solution
+ * Ruby MRI 1.8.7, 1.9.2, 1.9.3, 2.0.0 (ongoing patch releases).
+ * Ruby Enterprise Edition (based on MRI 1.8.7).
+ * Rubinius 2.0 in compatibility modes 1.8, 1.9, 2.0.
 
-The ActiveRecord driver should work on 2.3.5 and 3.0
+The mysql2 gem 0.2.x series includes an Active Record driver that works with AR
+2.3.x and 3.0.x. Starting in Active Record 3.1, a mysql2 driver is included in
+the Active Record codebase and no longer provided in mysql2 gem 0.3 and above.
 
 ## Yeah... but why?
 
@@ -336,7 +462,6 @@ Someone: Dude, the Mysql gem works fiiiiiine.
 
 Me: It sure does, but it only hands you nil and strings for field values. Leaving you to convert
 them into proper Ruby types in Ruby-land - which is slow as balls.
-
 
 Someone: OK fine, but do_mysql can already give me back values with Ruby objects mapped to MySQL types.
 
@@ -387,6 +512,7 @@ though.
 ## Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude
-* Yury Korolev (http://github.com/yury) - for TONS of help testing the ActiveRecord adapter
+* Yury Korolev (http://github.com/yury) - for TONS of help testing the Active Record adapter
 * Aaron Patterson (http://github.com/tenderlove) - tons of contributions, suggestions and general badassness
-* Mike Perham (http://github.com/mperham) - Async ActiveRecord adapter (uses Fibers and EventMachine)
+* Mike Perham (http://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
+* Aaron Stone (http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support.

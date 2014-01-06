@@ -7,6 +7,14 @@ require 'yaml'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.configure do |config|
+  config.before :each do
+    @client = Mysql2::Client.new DatabaseCredentials['root']
+  end
+
+  config.after :each do
+    @client.close
+  end
+
   config.before(:all) do
     client = Mysql2::Client.new DatabaseCredentials['root']
     client.query %[
@@ -14,6 +22,7 @@ RSpec.configure do |config|
         id MEDIUMINT NOT NULL AUTO_INCREMENT,
         null_test VARCHAR(10),
         bit_test BIT(64),
+        single_bit_test BIT(1),
         tiny_int_test TINYINT,
         bool_cast_test TINYINT(1),
         small_int_test SMALLINT,
@@ -50,7 +59,7 @@ RSpec.configure do |config|
     client.query "DELETE FROM mysql2_test;"
     client.query %[
       INSERT INTO mysql2_test (
-        null_test, bit_test, tiny_int_test, bool_cast_test, small_int_test, medium_int_test, int_test, big_int_test,
+        null_test, bit_test, single_bit_test, tiny_int_test, bool_cast_test, small_int_test, medium_int_test, int_test, big_int_test,
         float_test, float_zero_test, double_test, decimal_test, decimal_zero_test, date_test, date_time_test, timestamp_test, time_test,
         year_test, char_test, varchar_test, binary_test, varbinary_test, tiny_blob_test,
         tiny_text_test, blob_test, text_test, medium_blob_test, medium_text_test,
@@ -58,7 +67,7 @@ RSpec.configure do |config|
       )
 
       VALUES (
-        NULL, b'101', 1, 1, 10, 10, 10, 10,
+        NULL, b'101', b'1', 1, 1, 10, 10, 10, 10,
         10.3, 0, 10.3, 10.3, 0, '2010-4-4', '2010-4-4 11:44:00', '2010-4-4 11:44:00', '11:44:00',
         2009, "test", "test", "test", "test", "test",
         "test", "test", "test", "test", "test",

@@ -107,8 +107,8 @@ num.times do |n|
     :medium_text_test => twenty5_paragraphs,
     :long_blob_test => twenty5_paragraphs,
     :long_text_test => twenty5_paragraphs,
-    :enum_test => ['val1', 'val2'].rand,
-    :set_test => ['val1', 'val2', 'val1,val2'].rand
+    :enum_test => ['val1', 'val2'][rand(2)],
+    :set_test => ['val1', 'val2', 'val1,val2'][rand(3)]
   )
   if n % 100 == 0
     $stdout.putc '.'

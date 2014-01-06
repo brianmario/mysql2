@@ -3,7 +3,7 @@ require 'spec_helper'
 
 describe Mysql2::Statement do
   before :each do
-    @client = Mysql2::Client.new :host => "localhost", :username => "root"
+    @client = Mysql2::Client.new DatabaseCredentials['root']
   end
 
   it "should create a statement" do

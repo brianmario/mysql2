@@ -25,7 +25,7 @@ describe Mysql2::Error do
     rescue Mysql2::Error => e
       error = e
     ensure
-      err_client.close
+      err_client.close if err_client
     end
 
     subject { error }

@@ -68,4 +68,74 @@ describe Mysql2::Statement do
     list.first.should == 'foo'
     list[1].should == '2'
   end
+
+  context "parameter substitution" do
+
+    # Test all different types of parameter explicitly dealt with
+    let(:some_fixnum) { 1 }
+    let(:some_bignum) { 723623523423323223123 }
+    let(:some_bigdecimal) { BigDecimal.new(1.25, 2) }
+    let(:some_float) { 2.4 }
+    let(:some_string) { "blah" }
+    let(:some_time) { Time.now }
+    let(:some_datetime) { DateTime.now}
+    let(:some_date) { Date.today }
+
+    it "tests with correct types" do
+      some_bignum.should be_a(Bignum)
+      some_fixnum.should be_a(Fixnum)
+      some_bigdecimal.should be_a(BigDecimal)
+      some_float     .should be_a(Float)
+      some_string    .should be_a(String)
+      some_time.      should be_a(Time)
+      some_datetime.  should be_a(DateTime)
+      some_date.      should be_a(Date)
+    end
+
+    it "should pass in nil parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT 1 as foo, 2) bar WHERE foo = ?'
+      statement.execute(nil).should == statement
+    end
+
+    it "should pass in Fixnum parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT 1 as foo, 2) bar WHERE foo = ?'
+      statement.execute(some_fixnum).should == statement
+    end
+
+    it "should pass in Bignum parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT 1 as foo, 2) bar WHERE foo = ?'
+      (lambda{ statement.execute(some_bignum) }).should raise_error(RangeError)
+    end
+
+    it "should pass in BigDecimal parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT 1 as foo, 2) bar WHERE foo = ?'
+      statement.execute(some_bigdecimal).should == statement
+    end
+
+    it "should pass in Float parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT 2.3 as foo, 2) bar WHERE foo = ?'
+      statement.execute(some_float).should == statement
+    end
+
+    it "should pass in String parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT "foo" as foo, 2) bar WHERE foo = ?'
+      statement.execute(some_string).should == statement
+    end
+
+    it "should pass in Time parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT CURRENT_TIMESTAMP() as foo, 2) bar WHERE foo = ?'
+      statement.execute(some_time).should == statement
+    end
+
+    it "should pass in DateTime parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT CURRENT_TIMESTAMP() as foo, 2) bar WHERE foo = ?'
+      statement.execute(some_datetime).should == statement
+    end
+
+    it "should pass in Date parameters" do
+      statement = @client.prepare 'SELECT * FROM (SELECT CURRENT_DATE() as foo, 2) bar WHERE foo = ?'
+      statement.execute(some_date).should == statement
+    end
+
+  end
 end

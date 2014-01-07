@@ -35,12 +35,16 @@ static VALUE nogvl_execute(void *ptr) {
   }
 }
 
-#define FREE_BINDS                  \
- for (i = 0; i < argc; i++) {       \
-   if (bind_buffers[i].buffer) {    \
-     free(bind_buffers[i].buffer);  \
-   }                                \
- }                                  \
+#define FREE_BINDS                                             \
+ for (i = 0; i < argc; i++) {                                  \
+   if (bind_buffers[i].buffer) { \
+     if(bind_buffers[i].buffer_type == MYSQL_TYPE_STRING) {    \
+       free(bind_buffers[i].length);                           \
+     } else {                                                  \
+       free(bind_buffers[i].buffer);                           \
+     }                                                         \
+   }                                                           \
+ }                                                             \
  free(bind_buffers);
 
 /* call-seq: stmt.execute
@@ -96,8 +100,9 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
           bind_buffers[i].buffer = RSTRING_PTR(argv[i]);
           bind_buffers[i].buffer_length = RSTRING_LEN(argv[i]);
-          unsigned long len = RSTRING_LEN(argv[i]);
-          bind_buffers[i].length = &len;
+          unsigned long *len = malloc(sizeof(long));
+          (*len) = RSTRING_LEN(argv[i]);
+          bind_buffers[i].length = len;
           break;
         default:
           // TODO: what Ruby type should support MYSQL_TYPE_TIME
@@ -119,7 +124,9 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 
             *(MYSQL_TIME*)(bind_buffers[i].buffer) = t;
           } else if (CLASS_OF(argv[i]) == cDate) {
-            bind_buffers[i].buffer_type = MYSQL_TYPE_NEWDATE;
+
+            bind_buffers[i].buffer_type = MYSQL_TYPE_DATE;
+
             bind_buffers[i].buffer = malloc(sizeof(MYSQL_TIME));
 
             MYSQL_TIME t;

@@ -12,7 +12,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
-static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
+static ID intern_scrub_bang, intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
 static VALUE rb_hash_dup(VALUE other) {
@@ -126,22 +126,25 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   VALUE rb_sql_state = rb_tainted_str_new2(mysql_sqlstate(wrapper->client));
   VALUE e;
 #ifdef HAVE_RUBY_ENCODING_H
-  if (wrapper->server_version < 50500) {
-    /* MySQL < 5.5 uses mixed encoding, just call it binary. */
-    int err_enc = rb_ascii8bit_encindex();
-    rb_enc_associate_index(rb_error_msg, err_enc);
-    rb_enc_associate_index(rb_sql_state, err_enc);
-  } else {
-    /* MySQL >= 5.5 uses UTF-8 errors internally and converts them to the connection encoding. */
-    rb_encoding *default_internal_enc = rb_default_internal_encoding();
-    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
-    rb_enc_associate(rb_error_msg, conn_enc);
-    rb_enc_associate(rb_sql_state, conn_enc);
-    if (default_internal_enc) {
-      rb_error_msg = rb_str_export_to_enc(rb_error_msg, default_internal_enc);
-      rb_sql_state = rb_str_export_to_enc(rb_sql_state, default_internal_enc);
-    }
-  }
+  rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+  rb_encoding *default_internal_enc = rb_default_internal_encoding();
+  rb_encoding *dest_enc = default_internal_enc ? default_internal_enc : conn_enc;
+
+  rb_enc_associate(rb_error_msg, conn_enc);
+  rb_enc_associate(rb_sql_state, conn_enc);
+
+  /* This function does nothing if arg 2 == arg 3, so it won't fix misencoded text. */
+  rb_error_msg = rb_str_conv_enc_opts(rb_error_msg, conn_enc, dest_enc, ECONV_UNDEF_REPLACE | ECONV_INVALID_REPLACE, Qnil);
+  rb_sql_state = rb_str_conv_enc_opts(rb_sql_state, conn_enc, dest_enc, ECONV_UNDEF_REPLACE | ECONV_INVALID_REPLACE, Qnil);
+
+  /* Ruby 2.1 String.scrub! fixes any encoding problems in the error text.
+   * Several gems provide a runtime backport of this function, otherwise we'd
+   * have called rb_str_scrub directly. */
+  if (rb_respond_to(rb_error_msg, intern_scrub_bang))
+    rb_funcall(rb_error_msg, intern_scrub_bang, 0);
+
+  if (rb_respond_to(rb_sql_state, intern_scrub_bang))
+    rb_funcall(rb_sql_state, intern_scrub_bang, 0);
 #endif
 
   e = rb_exc_new3(cMysql2Error, rb_error_msg);
@@ -1217,6 +1220,7 @@ void init_mysql2_client() {
   sym_array           = ID2SYM(rb_intern("array"));
   sym_stream          = ID2SYM(rb_intern("stream"));
 
+  intern_scrub_bang = rb_intern("scrub!");
   intern_merge = rb_intern("merge");
   intern_merge_bang = rb_intern("merge!");
   intern_error_number_eql = rb_intern("error_number=");

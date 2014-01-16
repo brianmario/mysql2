@@ -122,16 +122,12 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
-      char buf[field->name_length+1];
-      memcpy(buf, field->name, field->name_length);
-      buf[field->name_length] = 0;
-
 #ifdef HAVE_RB_INTERN3
-      rb_field = rb_intern3(buf, field->name_length, rb_utf8_encoding());
+      rb_field = rb_intern3(field->name, field->name_length, rb_utf8_encoding());
       rb_field = ID2SYM(rb_field);
 #else
       VALUE colStr;
-      colStr = rb_str_new2(buf);
+      colStr = rb_str_new(field->name, field->name_length);
       rb_field = ID2SYM(rb_to_id(colStr));
 #endif
     } else {

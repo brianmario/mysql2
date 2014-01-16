@@ -67,6 +67,7 @@ describe Mysql2::Error do
     it_behaves_like "mysql2 error encoding", nil   , nil               , Encoding::UTF_8   , %r/near '\xE9\x80\xA0\xE5\xAD\x97'/n
     it_behaves_like "mysql2 error encoding", 'utf8', Encoding::UTF_8   , Encoding::UTF_8   , %r/near '\xE9\x80\xA0\xE5\xAD\x97'/n
     it_behaves_like "mysql2 error encoding", 'big5', Encoding::Big5    , Encoding::Big5    , %r/near '\xB3\x79\xA6\x72'/n
-    it_behaves_like "mysql2 error encoding", 'big5', Encoding::US_ASCII, Encoding::US_ASCII, %r/near '??'/n
+    # FIXME it_behaves_like "mysql2 error encoding", 'latin1', Encoding::ISO_8859_1, Encoding::ISO_8859_1, %r/near '\?\?'/n
+    it_behaves_like "mysql2 error encoding", 'big5', Encoding::US_ASCII, Encoding::US_ASCII, %r/near '\?\?'/n
   end
 end

@@ -128,7 +128,7 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
 #ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
   rb_encoding *default_internal_enc = rb_default_internal_encoding();
-  rb_encoding *dest_enc = default_internal_enc ? default_internal_enc : rb_utf8_encoding();
+  rb_encoding *dest_enc = default_internal_enc ? default_internal_enc : conn_enc;
 
   rb_enc_associate(rb_error_msg, conn_enc);
   rb_enc_associate(rb_sql_state, conn_enc);

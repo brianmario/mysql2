@@ -15,3 +15,6 @@ script:
 before_install:
   - gem update --system 2.1.11
   - gem --version
+matrix:
+  allow_failures:
+    - rvm: rbx

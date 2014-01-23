@@ -1,86 +1,83 @@
 # encoding: UTF-8
+
 require 'spec_helper'
 
-# The matrix of error encoding tests:
-# ('Enc = X' means 'Encoding.default_internal = X')
-#                  MySQL < 5.5   MySQL >= 5.5
-# Ruby 1.8         N/A           N/A
-# Ruby 1.9+
-#  Enc = nil
-#  :enc = nil      BINARY        UTF-8
-#
-#  Enc = XYZ
-#  :enc = XYZ      BINARY        XYZ
-#
-#  Enc = FOO
-#  :enc = BAR      BINARY        FOO
-#
-
-
 describe Mysql2::Error do
-  shared_examples "mysql2 error" do
+  let(:client) { Mysql2::Client.new(DatabaseCredentials['root']) }
+
+  let :error do
     begin
-      err_client = Mysql2::Client.new(DatabaseCredentials['root'])
-      err_client.query("HAHAHA")
+      client.query("HAHAHA")
     rescue Mysql2::Error => e
       error = e
     ensure
-      err_client.close
+      client.close
     end
 
-    subject { error }
-    it { should respond_to(:error_number) }
-    it { should respond_to(:sql_state) }
+    error
+  end
+
+  it "responds to error_number and sql_state, with aliases" do
+    error.should respond_to(:error_number)
+    error.should respond_to(:sql_state)
 
     # Mysql gem compatibility
-    it { should respond_to(:errno) }
-    it { should respond_to(:error) }
+    error.should respond_to(:errno)
+    error.should respond_to(:error)
   end
 
-  shared_examples "mysql2 error encoding" do |db_enc, def_enc, err_enc|
-    Encoding.default_internal = def_enc
+  if "".respond_to? :encoding
+    let :error do
+      client = Mysql2::Client.new(DatabaseCredentials['root'])
+      begin
+        client.query("\xE9\x80\xA0\xE5\xAD\x97")
+      rescue Mysql2::Error => e
+        error = e
+      ensure
+        client.close
+      end
 
-    begin
-      err_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => db_enc))
-      err_client.query("造字")
-    rescue Mysql2::Error => e
-      error = e
-    ensure
-      err_client.close
+      error
     end
 
-    subject { error.message.encoding }
-    it "#message   should transcode from #{db_enc.inspect} to #{err_enc}" do should eql(err_enc) end
+    let :bad_err do
+      client = Mysql2::Client.new(DatabaseCredentials['root'])
+      begin
+        client.query("\xE5\xC6\x7D\x1F")
+      rescue Mysql2::Error => e
+        error = e
+      ensure
+        client.close
+      end
 
-    subject { error.error.encoding }
-    it "#error     should transcode from #{db_enc.inspect} to #{err_enc}" do should eql(err_enc) end
+      error
+    end
 
-    subject { error.sql_state.encoding }
-    it "#sql_state should transcode from #{db_enc.inspect} to #{err_enc}" do should eql(err_enc) end
-  end
+    it "returns error messages as UTF-8 by default" do
+      with_internal_encoding nil do
+        error.message.encoding.should eql(Encoding::UTF_8)
+        error.message.valid_encoding?
 
-  shared_examples "mysql2 error encoding (MySQL < 5.5)" do |db_enc, def_enc, err_enc|
-    include_examples "mysql2 error encoding", db_enc, def_enc, err_enc
-  end
+        bad_err.message.encoding.should eql(Encoding::UTF_8)
+        bad_err.message.valid_encoding?
 
-  shared_examples "mysql2 error encoding (MySQL >= 5.5)" do |db_enc, def_enc, err_enc|
-    include_examples "mysql2 error encoding", db_enc, def_enc, err_enc
-  end
+        bad_err.message.should include("??}\u001F")
+      end
+    end
 
-  it_behaves_like "mysql2 error"
+    it "returns sql state as ASCII" do
+      error.sql_state.encoding.should eql(Encoding::US_ASCII)
+      error.sql_state.valid_encoding?
+    end
 
-  unless RUBY_VERSION =~ /1.8/
-    mysql_ver = Mysql2::Client.new(DatabaseCredentials['root']).server_info[:id]
-    if mysql_ver < 50505
-      it_behaves_like "mysql2 error encoding (MySQL < 5.5)", nil, nil, Encoding::ASCII_8BIT
-      it_behaves_like "mysql2 error encoding (MySQL < 5.5)", 'utf8', Encoding::UTF_8, Encoding::ASCII_8BIT
-      it_behaves_like "mysql2 error encoding (MySQL < 5.5)", 'big5', Encoding::Big5, Encoding::ASCII_8BIT
-      it_behaves_like "mysql2 error encoding (MySQL < 5.5)", 'big5', Encoding::US_ASCII, Encoding::ASCII_8BIT
-    else
-      it_behaves_like "mysql2 error encoding (MySQL >= 5.5)", nil, nil, Encoding::UTF_8
-      it_behaves_like "mysql2 error encoding (MySQL >= 5.5)", 'utf8', Encoding::UTF_8, Encoding::UTF_8
-      it_behaves_like "mysql2 error encoding (MySQL >= 5.5)", 'big5', Encoding::Big5, Encoding::Big5
-      it_behaves_like "mysql2 error encoding (MySQL >= 5.5)", 'big5', Encoding::US_ASCII, Encoding::US_ASCII
+    it "returns error messages and sql state in Encoding.default_internal if set" do
+      with_internal_encoding 'UTF-16LE' do
+        error.message.encoding.should eql(Encoding.default_internal)
+        error.message.valid_encoding?
+
+        bad_err.message.encoding.should eql(Encoding.default_internal)
+        bad_err.message.valid_encoding?
+      end
     end
   end
 end

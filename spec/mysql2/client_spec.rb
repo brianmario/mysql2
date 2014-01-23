@@ -7,13 +7,14 @@ describe Mysql2::Client do
 
     it "should not raise an exception for valid defaults group" do
       lambda {
-        @client = Mysql2::Client.new(:default_file => cnf_file, :default_group => "test")
+        opts = DatabaseCredentials['root'].merge(:default_file => cnf_file, :default_group => "test")
+        @client = Mysql2::Client.new(opts)
       }.should_not raise_error(Mysql2::Error)
     end
 
     it "should not raise an exception without default group" do
       lambda {
-        @client = Mysql2::Client.new(:default_file => cnf_file)
+        @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:default_file => cnf_file))
       }.should_not raise_error(Mysql2::Error)
     end
   end

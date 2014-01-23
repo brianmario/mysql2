@@ -72,7 +72,7 @@ describe Mysql2::Error do
 
     it "returns error messages and sql state in Encoding.default_internal if set" do
       interal_before = Encoding.default_internal
-      Encoding.default_internal = 'UTF-16'
+      Encoding.default_internal = 'UTF-16LE'
 
       error.message.encoding.should eql(Encoding.default_internal)
       error.message.valid_encoding?

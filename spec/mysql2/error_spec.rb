@@ -53,7 +53,9 @@ describe Mysql2::Error do
       error
     end
 
-    it "returns error messages as UTF-8" do
+    it "returns error messages as UTF-8 by default" do
+      Encoding.default_internal = nil
+
       error.message.encoding.should eql(Encoding::UTF_8)
       error.message.valid_encoding?
 

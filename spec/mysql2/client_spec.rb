@@ -7,13 +7,14 @@ describe Mysql2::Client do
 
     it "should not raise an exception for valid defaults group" do
       lambda {
-        @client = Mysql2::Client.new(:default_file => cnf_file, :default_group => "test")
+        opts = DatabaseCredentials['root'].merge(:default_file => cnf_file, :default_group => "test")
+        @client = Mysql2::Client.new(opts)
       }.should_not raise_error(Mysql2::Error)
     end
 
     it "should not raise an exception without default group" do
       lambda {
-        @client = Mysql2::Client.new(:default_file => cnf_file)
+        @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:default_file => cnf_file))
       }.should_not raise_error(Mysql2::Error)
     end
   end
@@ -78,7 +79,10 @@ describe Mysql2::Client do
   end
 
   it "should be able to connect via SSL options" do
-    pending("DON'T WORRY, THIS TEST PASSES :) - but is machine-specific. You need to have MySQL running with SSL configured and enabled. Then update the paths in this test to your needs and remove the pending state.")
+    ssl = @client.query "SHOW VARIABLES LIKE 'have_%ssl'"
+    ssl_enabled = ssl.any? {|x| x['Value'] == 'ENABLED'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") unless ssl_enabled
+    pending("DON'T WORRY, THIS TEST PASSES - but you must update the SSL cert paths in this test and remove this pending state.")
     ssl_client = nil
     lambda {
       ssl_client = Mysql2::Client.new(
@@ -102,6 +106,24 @@ describe Mysql2::Client do
     results[1]['Value'].should_not be_empty
 
     ssl_client.close
+  end
+
+  it "should not leave dangling connections after garbage collection" do
+    GC.start
+    sleep 0.300 # Let GC do its work
+    client = Mysql2::Client.new(DatabaseCredentials['root'])
+    before_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+
+    10.times do
+      Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
+    end
+    after_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+    after_count.should == before_count + 10
+
+    GC.start
+    sleep 0.300 # Let GC do its work
+    final_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+    final_count.should == before_count
   end
 
   it "should be able to connect to database with numeric-only name" do
@@ -176,6 +198,49 @@ describe Mysql2::Client do
 
         @client.query "DROP TABLE infoTest"
       end
+    end
+  end
+
+  context ":local_infile" do
+    before(:all) do
+      @client_i = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => true)
+      local = @client_i.query "SHOW VARIABLES LIKE 'local_infile'"
+      local_enabled = local.any? {|x| x['Value'] == 'ON'}
+      pending("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
+
+      @client_i.query %[
+        CREATE TABLE IF NOT EXISTS infileTest (
+          id MEDIUMINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+          foo VARCHAR(10),
+          bar MEDIUMTEXT
+        )
+      ]
+    end
+
+    after(:all) do
+      @client_i.query "DROP TABLE infileTest"
+    end
+
+    it "should raise an error when local_infile is disabled" do
+      client = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => false)
+      lambda {
+        client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
+      }.should raise_error(Mysql2::Error, %r{command is not allowed})
+    end
+
+    it "should raise an error when a non-existent file is loaded" do
+      lambda {
+        @client_i.query "LOAD DATA LOCAL INFILE 'this/file/is/not/here' INTO TABLE infileTest"
+      }.should_not raise_error(Mysql2::Error, %r{file not found: this/file/is/not/here})
+    end
+
+    it "should LOAD DATA LOCAL INFILE" do
+      @client_i.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
+      info = @client_i.query_info
+      info.should eql({:records => 1, :deleted => 0, :skipped => 0, :warnings => 0})
+
+      result = @client_i.query "SELECT * FROM infileTest"
+      result.first.should eql({'id' => 1, 'foo' => 'Hello', 'bar' => 'World'})
     end
   end
 
@@ -332,6 +397,7 @@ describe Mysql2::Client do
       end
 
       it "should close the connection when an exception is raised" do
+        pending "Ruby 2.1 has changed Timeout behavior." if RUBY_VERSION =~ /2.1/
         begin
           Timeout.timeout(1) do
             @client.query("SELECT sleep(2)")
@@ -345,6 +411,7 @@ describe Mysql2::Client do
       end
 
       it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
+        pending "Ruby 2.1 has changed Timeout behavior." if RUBY_VERSION =~ /2.1/
         client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
         begin
           Timeout.timeout(1) do
@@ -359,6 +426,7 @@ describe Mysql2::Client do
       end
 
       it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction true" do
+        pending "Ruby 2.1 has changed Timeout behavior." if RUBY_VERSION =~ /2.1/
         client = Mysql2::Client.new(DatabaseCredentials['root'])
         begin
           Timeout.timeout(1) do
@@ -431,6 +499,15 @@ describe Mysql2::Client do
     context "Multiple results sets" do
       before(:each) do
         @multi_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:flags => Mysql2::Client::MULTI_STATEMENTS))
+      end
+
+      it "should raise an exception when one of multiple statements fails" do
+        result = @multi_client.query("SELECT 1 as 'set_1'; SELECT * FROM invalid_table_name;SELECT 2 as 'set_2';")
+        result.first['set_1'].should be(1)
+        lambda {
+          @multi_client.next_result
+        }.should raise_error(Mysql2::Error)
+        @multi_client.next_result.should be_false
       end
 
       it "returns multiple result sets" do
@@ -579,18 +656,22 @@ describe Mysql2::Client do
   if defined? Encoding
     context "strings returned by #info" do
       it "should default to the connection's encoding if Encoding.default_internal is nil" do
-        Encoding.default_internal = nil
-        @client.info[:version].encoding.should eql(Encoding.find('utf-8'))
+        with_internal_encoding nil do
+          @client.info[:version].encoding.should eql(Encoding.find('utf-8'))
 
-        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-        client2.info[:version].encoding.should eql(Encoding.find('us-ascii'))
+          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+          client2.info[:version].encoding.should eql(Encoding.find('us-ascii'))
+        end
       end
 
       it "should use Encoding.default_internal" do
-        Encoding.default_internal = Encoding.find('utf-8')
-        @client.info[:version].encoding.should eql(Encoding.default_internal)
-        Encoding.default_internal = Encoding.find('us-ascii')
-        @client.info[:version].encoding.should eql(Encoding.default_internal)
+        with_internal_encoding 'utf-8' do
+          @client.info[:version].encoding.should eql(Encoding.default_internal)
+        end
+
+        with_internal_encoding 'us-ascii' do
+          @client.info[:version].encoding.should eql(Encoding.default_internal)
+        end
       end
     end
   end
@@ -618,18 +699,22 @@ describe Mysql2::Client do
   if defined? Encoding
     context "strings returned by #server_info" do
       it "should default to the connection's encoding if Encoding.default_internal is nil" do
-        Encoding.default_internal = nil
-        @client.server_info[:version].encoding.should eql(Encoding.find('utf-8'))
+        with_internal_encoding nil do
+          @client.server_info[:version].encoding.should eql(Encoding.find('utf-8'))
 
-        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-        client2.server_info[:version].encoding.should eql(Encoding.find('us-ascii'))
+          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+          client2.server_info[:version].encoding.should eql(Encoding.find('us-ascii'))
+        end
       end
 
       it "should use Encoding.default_internal" do
-        Encoding.default_internal = Encoding.find('utf-8')
-        @client.server_info[:version].encoding.should eql(Encoding.default_internal)
-        Encoding.default_internal = Encoding.find('us-ascii')
-        @client.server_info[:version].encoding.should eql(Encoding.default_internal)
+        with_internal_encoding 'utf-8' do
+          @client.server_info[:version].encoding.should eql(Encoding.default_internal)
+        end
+
+        with_internal_encoding 'us-ascii' do
+          @client.server_info[:version].encoding.should eql(Encoding.default_internal)
+        end
       end
     end
   end
@@ -647,7 +732,7 @@ describe Mysql2::Client do
   context 'write operations api' do
     before(:each) do
       @client.query "USE test"
-      @client.query "CREATE TABLE IF NOT EXISTS lastIdTest (`id` int(11) NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
+      @client.query "CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
     end
 
     after(:each) do
@@ -673,6 +758,15 @@ describe Mysql2::Client do
       @client.affected_rows.should eql(1)
       @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
       @client.affected_rows.should eql(1)
+    end
+
+    it "#last_id should handle BIGINT auto-increment ids above 32 bits" do
+      # The id column type must be BIGINT. Surprise: INT(x) is limited to 32-bits for all values of x.
+      # Insert a row with a given ID, this should raise the auto-increment state
+      @client.query "INSERT INTO lastIdTest (id, blah) VALUES (5000000000, 5000)"
+      @client.last_id.should eql(5000000000)
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (5001)"
+      @client.last_id.should eql(5000000001)
     end
   end
 

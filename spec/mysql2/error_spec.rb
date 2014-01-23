@@ -1,72 +1,82 @@
 # encoding: UTF-8
+
 require 'spec_helper'
 
 describe Mysql2::Error do
-  before(:each) do
+  let(:client) { Mysql2::Client.new(DatabaseCredentials['root']) }
+
+  let :error do
     begin
-      @err_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
-      @err_client.query("HAHAHA")
+      client.query("HAHAHA")
     rescue Mysql2::Error => e
-      @error = e
+      error = e
     ensure
-      @err_client.close
+      client.close
     end
 
-    begin
-      @err_client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
-      @err_client2.query("HAHAHA")
-    rescue Mysql2::Error => e
-      @error2 = e
-    ensure
-      @err_client2.close
+    error
+  end
+
+  it "responds to error_number and sql_state, with aliases" do
+    error.should respond_to(:error_number)
+    error.should respond_to(:sql_state)
+
+    # Mysql gem compatibility
+    error.should respond_to(:errno)
+    error.should respond_to(:error)
+  end
+
+  if "".respond_to? :encoding
+    let :error do
+      client = Mysql2::Client.new(DatabaseCredentials['root'])
+      begin
+        client.query("\xE9\x80\xA0\xE5\xAD\x97")
+      rescue Mysql2::Error => e
+        error = e
+      ensure
+        client.close
+      end
+
+      error
     end
-  end
 
-  it "should respond to #error_number" do
-    @error.should respond_to(:error_number)
-  end
+    let :bad_err do
+      client = Mysql2::Client.new(DatabaseCredentials['root'])
+      begin
+        client.query("\xE5\xC6\x7D\x1F")
+      rescue Mysql2::Error => e
+        error = e
+      ensure
+        client.close
+      end
 
-  it "should respond to #sql_state" do
-    @error.should respond_to(:sql_state)
-  end
+      error
+    end
 
-  # Mysql gem compatibility
-  it "should alias #error_number to #errno" do
-    @error.should respond_to(:errno)
-  end
+    it "returns error messages as UTF-8 by default" do
+      with_internal_encoding nil do
+        error.message.encoding.should eql(Encoding::UTF_8)
+        error.message.valid_encoding?
 
-  it "should alias #message to #error" do
-    @error.should respond_to(:error)
-  end
+        bad_err.message.encoding.should eql(Encoding::UTF_8)
+        bad_err.message.valid_encoding?
 
-  unless RUBY_VERSION =~ /1.8/
-    it "#message encoding should match the connection's encoding, or Encoding.default_internal if set" do
-      if Encoding.default_internal.nil?
-        @error.message.encoding.should eql(@err_client.encoding)
-        @error2.message.encoding.should eql(@err_client2.encoding)
-      else
-        @error.message.encoding.should eql(Encoding.default_internal)
-        @error2.message.encoding.should eql(Encoding.default_internal)
+        bad_err.message.should include("??}\u001F")
       end
     end
 
-    it "#error encoding should match the connection's encoding, or Encoding.default_internal if set" do
-      if Encoding.default_internal.nil?
-        @error.error.encoding.should eql(@err_client.encoding)
-        @error2.error.encoding.should eql(@err_client2.encoding)
-      else
-        @error.error.encoding.should eql(Encoding.default_internal)
-        @error2.error.encoding.should eql(Encoding.default_internal)
-      end
+    it "returns sql state as ASCII" do
+      error.sql_state.encoding.should eql(Encoding::US_ASCII)
+      error.sql_state.valid_encoding?
     end
 
-    it "#sql_state encoding should match the connection's encoding, or Encoding.default_internal if set" do
-      if Encoding.default_internal.nil?
-        @error.sql_state.encoding.should eql(@err_client.encoding)
-        @error2.sql_state.encoding.should eql(@err_client2.encoding)
-      else
-        @error.sql_state.encoding.should eql(Encoding.default_internal)
-        @error2.sql_state.encoding.should eql(Encoding.default_internal)
+    it "returns error messages and sql state in Encoding.default_internal if set" do
+      with_internal_encoding 'UTF-16LE' do
+        error.message.encoding.should eql(Encoding.default_internal)
+        error.message.valid_encoding?
+
+        bad_err.message.encoding.should eql(Encoding.default_internal)
+        bad_err.message.valid_encoding?
       end
     end
   end

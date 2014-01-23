@@ -26,8 +26,6 @@ begin
   RSpec::Core::RakeTask.new('spec') do |t|
     t.verbose = true
   end
-
-  task :default => :spec
 rescue LoadError
   puts "rspec, or one of its dependencies, is not available. Install it with: sudo gem install rspec"
 end
@@ -37,9 +35,8 @@ file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
   src_path = File.expand_path("../../#{task.prerequisites.first}", __FILE__)
   dst_path = File.expand_path("../../#{task.name}", __FILE__)
 
-  dst_file = File.open(dst_path, 'w')
-  File.open(src_path) do |f|
-    f.each_line do |line|
+  File.open(dst_path, 'w') do |dst_file|
+    File.open(src_path).each_line do |line|
       dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])
     end
   end
@@ -50,9 +47,8 @@ file 'spec/my.cnf' => 'spec/my.cnf.example' do |task|
   src_path = File.expand_path("../../#{task.prerequisites.first}", __FILE__)
   dst_path = File.expand_path("../../#{task.name}", __FILE__)
 
-  dst_file = File.open(dst_path, 'w')
-  File.open(src_path) do |f|
-    f.each_line do |line|
+  File.open(dst_path, 'w') do |dst_file|
+    File.open(src_path).each_line do |line|
       dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])
     end
   end

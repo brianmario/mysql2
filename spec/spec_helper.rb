@@ -7,6 +7,15 @@ require 'yaml'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.configure do |config|
+  def with_internal_encoding(encoding)
+    old_enc = Encoding.default_internal
+    Encoding.default_internal = encoding
+
+    yield
+  ensure
+    Encoding.default_internal = old_enc
+  end
+
   config.before :each do
     @client = Mysql2::Client.new DatabaseCredentials['root']
   end

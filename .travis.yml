@@ -4,11 +4,17 @@ rvm:
   - 1.9.2
   - 1.9.3
   - 2.0.0
+  - 2.1.0
   - ree
-  - rbx-18mode
-  - rbx-19mode
-  - rbx-20mode
+  - rbx
+env: RBXOPT=-Xgc.honor_start=true
 bundler_args: --without benchmarks
 script:
-  - bundle exec rake
-  - bundle exec rspec
+  - bundle exec rake spec
+# Temporary workaround for broken Rubygems on Travis
+before_install:
+  - gem update --system 2.1.11
+  - gem --version
+matrix:
+  allow_failures:
+    - rvm: rbx

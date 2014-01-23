@@ -14,3 +14,9 @@ end
 group :development do
   gem 'pry'
 end
+
+platforms :rbx do
+  gem 'rubysl-rake'
+  gem 'rubysl-drb'
+  gem 'rubysl-bigdecimal'
+end

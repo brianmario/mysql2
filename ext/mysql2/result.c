@@ -1,4 +1,5 @@
 #include <mysql2_ext.h>
+
 #include <stdint.h>
 
 #include "mysql_enc_to_ruby.h"
@@ -84,11 +85,7 @@ static void rb_mysql_result_free(void *ptr) {
 
   // If the GC gets to client first it will be nil
   if (wrapper->client != Qnil) {
-    wrapper->client_wrapper->refcount--;
-    if (wrapper->client_wrapper->refcount == 0) {
-      xfree(wrapper->client_wrapper->client);
-      xfree(wrapper->client_wrapper);
-    }
+    decr_mysql2_client(wrapper->client_wrapper);
   }
 
   xfree(wrapper);
@@ -125,16 +122,12 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
-      char buf[field->name_length+1];
-      memcpy(buf, field->name, field->name_length);
-      buf[field->name_length] = 0;
-
 #ifdef HAVE_RB_INTERN3
-      rb_field = rb_intern3(buf, field->name_length, rb_utf8_encoding());
+      rb_field = rb_intern3(field->name, field->name_length, rb_utf8_encoding());
       rb_field = ID2SYM(rb_field);
 #else
       VALUE colStr;
-      colStr = rb_str_new2(buf);
+      colStr = rb_str_new(field->name, field->name_length);
       rb_field = ID2SYM(rb_to_id(colStr));
 #endif
     } else {
@@ -433,6 +426,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   ID db_timezone, app_timezone, dbTz, appTz;
   mysql2_result_wrapper * wrapper;
   unsigned long i;
+  const char * errstr;
   int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1, streaming = 0;
   MYSQL_FIELD * fields = NULL;
 
@@ -496,7 +490,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   if (wrapper->lastRowProcessed == 0) {
-    if(streaming) {
+    if (streaming) {
       /* We can't get number of rows if we're streaming, */
       /* until we've finished fetching all rows */
       wrapper->numberOfRows = 0;
@@ -512,7 +506,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   if (streaming) {
-    if(!wrapper->streamingComplete) {
+    if (!wrapper->streamingComplete) {
       VALUE row;
 
       fields = mysql_fetch_fields(wrapper->result);
@@ -530,6 +524,13 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
       wrapper->numberOfRows = wrapper->lastRowProcessed;
       wrapper->streamingComplete = 1;
+
+      // Check for errors, the connection might have gone out from under us
+      // mysql_error returns an empty string if there is no error
+      errstr = mysql_error(wrapper->client_wrapper->client);
+      if (errstr[0]) {
+        rb_raise(cMysql2Error, "%s", errstr);
+      }
     } else {
       rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
     }

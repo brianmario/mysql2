@@ -54,15 +54,15 @@ describe Mysql2::Error do
     end
 
     it "returns error messages as UTF-8 by default" do
-      Encoding.default_internal = nil
+      with_internal_encoding nil do
+        error.message.encoding.should eql(Encoding::UTF_8)
+        error.message.valid_encoding?
 
-      error.message.encoding.should eql(Encoding::UTF_8)
-      error.message.valid_encoding?
+        bad_err.message.encoding.should eql(Encoding::UTF_8)
+        bad_err.message.valid_encoding?
 
-      bad_err.message.encoding.should eql(Encoding::UTF_8)
-      bad_err.message.valid_encoding?
-
-      bad_err.message.should include("??}\u001F")
+        bad_err.message.should include("??}\u001F")
+      end
     end
 
     it "returns sql state as ASCII" do
@@ -71,16 +71,13 @@ describe Mysql2::Error do
     end
 
     it "returns error messages and sql state in Encoding.default_internal if set" do
-      interal_before = Encoding.default_internal
-      Encoding.default_internal = 'UTF-16LE'
+      with_internal_encoding 'UTF-16LE' do
+        error.message.encoding.should eql(Encoding.default_internal)
+        error.message.valid_encoding?
 
-      error.message.encoding.should eql(Encoding.default_internal)
-      error.message.valid_encoding?
-
-      bad_err.message.encoding.should eql(Encoding.default_internal)
-      bad_err.message.valid_encoding?
-
-      Encoding.default_internal = interal_before
+        bad_err.message.encoding.should eql(Encoding.default_internal)
+        bad_err.message.valid_encoding?
+      end
     end
   end
 end

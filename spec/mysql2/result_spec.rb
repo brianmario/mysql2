@@ -338,23 +338,27 @@ describe Mysql2::Result do
     if defined? Encoding
       context "string encoding for ENUM values" do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do
-          Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['enum_test'].encoding.should eql(Encoding.find('utf-8'))
+          with_internal_encoding nil do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['enum_test'].encoding.should eql(Encoding.find('utf-8'))
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
-          client2.close
+            client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+            result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
+            client2.close
+          end
         end
 
         it "should use Encoding.default_internal" do
-          Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['enum_test'].encoding.should eql(Encoding.default_internal)
-          Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['enum_test'].encoding.should eql(Encoding.default_internal)
+          with_internal_encoding 'utf-8' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['enum_test'].encoding.should eql(Encoding.default_internal)
+          end
+
+          with_internal_encoding 'us-ascii' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['enum_test'].encoding.should eql(Encoding.default_internal)
+          end
         end
       end
     end
@@ -367,23 +371,27 @@ describe Mysql2::Result do
     if defined? Encoding
       context "string encoding for SET values" do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do
-          Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['set_test'].encoding.should eql(Encoding.find('utf-8'))
+          with_internal_encoding nil do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['set_test'].encoding.should eql(Encoding.find('utf-8'))
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
-          client2.close
+            client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+            result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
+            client2.close
+          end
         end
 
         it "should use Encoding.default_internal" do
-          Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['set_test'].encoding.should eql(Encoding.default_internal)
-          Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['set_test'].encoding.should eql(Encoding.default_internal)
+          with_internal_encoding 'utf-8' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['set_test'].encoding.should eql(Encoding.default_internal)
+          end
+
+          with_internal_encoding 'us-ascii' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['set_test'].encoding.should eql(Encoding.default_internal)
+          end
         end
       end
     end
@@ -396,18 +404,22 @@ describe Mysql2::Result do
     if defined? Encoding
       context "string encoding for BINARY values" do
         it "should default to binary if Encoding.default_internal is nil" do
-          Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['binary_test'].encoding.should eql(Encoding.find('binary'))
+          with_internal_encoding nil do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['binary_test'].encoding.should eql(Encoding.find('binary'))
+          end
         end
 
         it "should not use Encoding.default_internal" do
-          Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['binary_test'].encoding.should eql(Encoding.find('binary'))
-          Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          result['binary_test'].encoding.should eql(Encoding.find('binary'))
+          with_internal_encoding 'utf-8' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['binary_test'].encoding.should eql(Encoding.find('binary'))
+          end
+
+          with_internal_encoding 'us-ascii' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            result['binary_test'].encoding.should eql(Encoding.find('binary'))
+          end
         end
       end
     end
@@ -434,38 +446,46 @@ describe Mysql2::Result do
         context "string encoding for #{type} values" do
           if ['VARBINARY', 'TINYBLOB', 'BLOB', 'MEDIUMBLOB', 'LONGBLOB'].include?(type)
             it "should default to binary if Encoding.default_internal is nil" do
-              Encoding.default_internal = nil
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              result['binary_test'].encoding.should eql(Encoding.find('binary'))
+              with_internal_encoding nil do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                result['binary_test'].encoding.should eql(Encoding.find('binary'))
+              end
             end
 
             it "should not use Encoding.default_internal" do
-              Encoding.default_internal = Encoding.find('utf-8')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              result['binary_test'].encoding.should eql(Encoding.find('binary'))
-              Encoding.default_internal = Encoding.find('us-ascii')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              result['binary_test'].encoding.should eql(Encoding.find('binary'))
+              with_internal_encoding 'utf-8' do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                result['binary_test'].encoding.should eql(Encoding.find('binary'))
+              end
+
+              with_internal_encoding 'us-ascii' do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                result['binary_test'].encoding.should eql(Encoding.find('binary'))
+              end
             end
           else
             it "should default to utf-8 if Encoding.default_internal is nil" do
-              Encoding.default_internal = nil
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              result[field].encoding.should eql(Encoding.find('utf-8'))
+              with_internal_encoding nil do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                result[field].encoding.should eql(Encoding.find('utf-8'))
 
-              client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-              result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              result[field].encoding.should eql(Encoding.find('us-ascii'))
-              client2.close
+                client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+                result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                result[field].encoding.should eql(Encoding.find('us-ascii'))
+                client2.close
+              end
             end
 
             it "should use Encoding.default_internal" do
-              Encoding.default_internal = Encoding.find('utf-8')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              result[field].encoding.should eql(Encoding.default_internal)
-              Encoding.default_internal = Encoding.find('us-ascii')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              result[field].encoding.should eql(Encoding.default_internal)
+              with_internal_encoding 'utf-8' do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                result[field].encoding.should eql(Encoding.default_internal)
+              end
+
+              with_internal_encoding 'us-ascii' do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                result[field].encoding.should eql(Encoding.default_internal)
+              end
             end
           end
         end

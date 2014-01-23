@@ -30,7 +30,7 @@ describe Mysql2::Error do
     let :error do
       client = Mysql2::Client.new(DatabaseCredentials['root'])
       begin
-        client.query("造字")
+        client.query("\xE9\x80\xA0\xE5\xAD\x97")
       rescue Mysql2::Error => e
         error = e
       ensure

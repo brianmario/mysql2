@@ -17,6 +17,12 @@ module Mysql2
       super(clean_message(msg))
     end
 
+    if "".respond_to? :encode
+      def sql_state=(state)
+        @sql_state = state.encode
+      end
+    end
+
     private
 
     # In MySQL 5.5+ error messages are always constructed server-side as UTF-8
@@ -50,10 +56,10 @@ module Mysql2
       return message if !message.respond_to?(:encoding)
 
       if @server_version && @server_version > 50500
-        message
+        message.encode
       else
         if message.respond_to? :scrub
-          message.scrub
+          message.scrub.encode
         else
           # This is ugly as hell but Ruby 1.9 doesn't provide a way to clean a string
           # and retain it's valid UTF-8 characters, that I know of.
@@ -66,7 +72,7 @@ module Mysql2
               new_message << REPLACEMENT_CHAR
             end
           end
-          new_message
+          new_message.encode
         end
       end
     end

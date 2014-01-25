@@ -119,8 +119,7 @@ end
 How about with symbolized keys?
 
 ``` ruby
-# NOTE: the :symbolize_keys and future options will likely move to the #query method soon
-client.query("SELECT * FROM users WHERE group='githubbers'").each(:symbolize_keys => true) do |row|
+client.query("SELECT * FROM users WHERE group='githubbers'", :symbolize_keys => true) do |row|
   # do something with row, it's ready to rock
 end
 ```

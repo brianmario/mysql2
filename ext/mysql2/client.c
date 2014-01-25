@@ -12,7 +12,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
-static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql, intern_server_version;
+static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
 static VALUE rb_hash_dup(VALUE other) {
@@ -1208,7 +1208,6 @@ void init_mysql2_client() {
   intern_merge_bang = rb_intern("merge!");
   intern_error_number_eql = rb_intern("error_number=");
   intern_sql_state_eql = rb_intern("sql_state=");
-  intern_server_version = rb_intern("server_version=");
 
 #ifdef CLIENT_LONG_PASSWORD
   rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),

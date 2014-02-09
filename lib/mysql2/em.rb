@@ -30,7 +30,7 @@ module Mysql2
 
       def close(*args)
         if @watch
-          @watch.detach
+          @watch.detach rescue RuntimeError
         end
         super(*args)
       end

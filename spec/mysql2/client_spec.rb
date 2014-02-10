@@ -126,6 +126,27 @@ describe Mysql2::Client do
     final_count.should == before_count
   end
 
+  if Process.respond_to?(:fork)
+    it "should not close connections when running in a child process" do
+      GC.start
+      sleep 1 if defined? Rubinius # Let the rbx GC thread do its work
+      client = Mysql2::Client.new(DatabaseCredentials['root'])
+
+      fork do
+        client.query('SELECT 1')
+        client = nil
+        GC.start
+        sleep 1 if defined? Rubinius # Let the rbx GC thread do its work
+      end
+
+      Process.wait
+
+      # this will throw an error if the underlying socket was shutdown by the
+      # child's GC
+      expect { client.query('SELECT 1') }.to_not raise_exception
+    end
+  end
+
   it "should be able to connect to database with numeric-only name" do
     lambda {
       creds = DatabaseCredentials['numericuser']

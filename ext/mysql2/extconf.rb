@@ -41,8 +41,8 @@ if inc && lib
     @libdir_basename = 'lib'
     inc, lib = dir_config('mysql')
   end
-  abort "-----\nCannot find include dir at #{inc}\n-----" unless inc && File.directory?(inc)
-  abort "-----\nCannot find library dir at #{lib}\n-----" unless lib && File.directory?(lib)
+  abort "-----\nCannot find include dir(s) #{inc}\n-----" unless inc && inc.split(File::PATH_SEPARATOR).any?{|dir| File.directory?(dir)}
+  abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any?{|dir| File.directory?(dir)}
   warn  "-----\nUsing --with-mysql-dir=#{File.dirname inc}\n-----"
   rpath_dir = lib
 elsif mc = (with_config('mysql-config') || Dir[GLOB].first)

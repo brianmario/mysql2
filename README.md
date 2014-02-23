@@ -10,9 +10,9 @@ It also forces the use of UTF-8 [or binary] for the connection [and all strings 
 
 The API consists of two classes:
 
-Mysql2::Client - your connection to the database
+`Mysql2::Client` - your connection to the database
 
-Mysql2::Result - returned from issuing a #query on the connection. It includes Enumerable.
+`Mysql2::Result` - returned from issuing a #query on the connection. It includes Enumerable.
 
 ## Installing
 ### OSX / Linux
@@ -439,7 +439,7 @@ For example, if you were to yield 4 rows from a 100 row dataset, only 4 hashes w
 Now say you were to iterate over that same collection again, this time yielding 15 rows - the 4 previous rows that had already been turned into ruby hashes would be pulled from an internal cache, then 11 more would be created and stored in that cache.
 Once the entire dataset has been converted into ruby objects, Mysql2::Result will free the Mysql C result object as it's no longer needed.
 
-This caching behavior can be disabled by setting the :cache_rows option to false.
+This caching behavior can be disabled by setting the `:cache_rows` option to false.
 
 As for field values themselves, I'm workin on it - but expect that soon.
 

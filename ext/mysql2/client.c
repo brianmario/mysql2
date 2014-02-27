@@ -164,26 +164,19 @@ static void *nogvl_connect(void *ptr) {
 
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper;
-#ifndef _WIN32
-  int flags;
-#endif
   wrapper = ptr;
   if (wrapper->connected) {
     wrapper->active_thread = Qnil;
     wrapper->connected = 0;
-    /*
-     * we'll send a QUIT message to the server, but that message is more of a
-     * formality than a hard requirement since the socket is getting shutdown
-     * anyways, so ensure the socket write does not block our interpreter
-     *
-     *
-     * if the socket is dead we have no chance of blocking,
-     * so ignore any potential fcntl errors since they don't matter
-     */
 #ifndef _WIN32
-    flags = fcntl(wrapper->client->net.fd, F_GETFL);
-    if (flags > 0 && !(flags & O_NONBLOCK))
-      fcntl(wrapper->client->net.fd, F_SETFL, flags | O_NONBLOCK);
+    /* Call close() on the socket before calling mysql_close(). This prevents
+     * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
+     * the socket. The difference is that close() will drop this process's
+     * reference to the socket only, while a QUIT or shutdown() would render
+     * the underlying connection unusable, interrupting other processes which
+     * share this object across a fork().
+     */
+    close(wrapper->client->net.fd);
 #endif
 
     mysql_close(wrapper->client);

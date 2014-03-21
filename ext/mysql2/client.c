@@ -177,6 +177,7 @@ static void *nogvl_close(void *ptr) {
      * share this object across a fork().
      */
     close(wrapper->client->net.fd);
+    wrapper->client->net.fd = -1;
 #endif
 
     mysql_close(wrapper->client);

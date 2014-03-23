@@ -477,10 +477,13 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   wrapper->active_thread = Qnil;
   wrapper->connected = 0;
 
-  /* manually close the socket for read/write
-     this feels dirty, but is there another way? */
-  close(wrapper->client->net.fd);
-  wrapper->client->net.fd = -1;
+  /* Invalidate the MySQL socket to prevent further communication.
+   * The GC will come along later and call mysql_close to free it.
+   */
+  if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+    fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
+    close(wrapper->client->net.fd);
+  }
 
   rb_exc_raise(error);
 

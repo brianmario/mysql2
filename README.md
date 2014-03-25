@@ -445,15 +445,22 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 ## Compatibility
 
-This gem is regularly tested against the following Ruby versions on Linux and Mac OS X:
+This gem is tested with the following Ruby versions on Linux and Mac OS X:
 
- * Ruby MRI 1.8.7, 1.9.2, 1.9.3, 2.0.0 (ongoing patch releases).
- * Ruby Enterprise Edition (based on MRI 1.8.7).
- * Rubinius 2.0 in compatibility modes 1.8, 1.9, 2.0.
+ * Ruby MRI 1.8.7, 1.9.2, 1.9.3, 2.0.0, 2.1.x (ongoing patch releases)
+ * Ruby Enterprise Edition (based on MRI 1.8.7)
+ * Rubinius 2.x
 
-The mysql2 gem 0.2.x series includes an Active Record driver that works with AR
-2.3.x and 3.0.x. Starting in Active Record 3.1, a mysql2 driver is included in
-the Active Record codebase and no longer provided in mysql2 gem 0.3 and above.
+This gem is tested with the following MySQL and MariaDB versions:
+
+ * MySQL 5.0, 5.1, 5.5, 5.6
+ * MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
+ * MariaDB 5.5, 10.0
+
+This gem has two version families:
+
+ * mysql2 0.2.x includes an Active Record driver compatible with AR 2.3 and 3.0
+ * mysql2 0.3.x does not include an AR driver because it is included in AR 3.1 and above
 
 ## Yeah... but why?
 

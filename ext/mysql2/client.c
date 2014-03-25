@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #endif
 #include <unistd.h>
+#include <fcntl.h>
 #include "wait_for_single_fd.h"
 
 #include "mysql_enc_name_to_ruby.h"
@@ -170,12 +171,23 @@ static void *nogvl_connect(void *ptr) {
  * We do this hack because we want to call mysql_close to release
  * memory, but do not want mysql_close to drop connections in the
  * parent if the socket got shared in fork.
- * Returns Qtrue or false (success or failure)
+ * Returns Qtrue or Qfalse (success or failure)
  */
 static VALUE invalidate_fd(int clientfd)
 {
-  /* TODO: set cloexec flags, atomically if possible */
+#ifdef SOCK_CLOEXEC
+  /* Atomically set CLOEXEC on the new FD in case another thread forks */
+  int sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (sockfd < 0) {
+    /* Maybe SOCK_CLOEXEC is defined but not available on this kernel */
+    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+  }
+#else
+  /* Well we don't have SOCK_CLOEXEC, so just set FD_CLOEXEC quickly */
   int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+  fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+#endif
 
   if (sockfd < 0) {
     /*

@@ -2,9 +2,11 @@
 
 #include <errno.h>
 #ifndef _WIN32
+#include <sys/types.h>
 #include <sys/socket.h>
 #endif
 #include <unistd.h>
+#include <fcntl.h>
 #include "wait_for_single_fd.h"
 
 #include "mysql_enc_name_to_ruby.h"
@@ -162,6 +164,47 @@ static void *nogvl_connect(void *ptr) {
   return (void *)(client ? Qtrue : Qfalse);
 }
 
+#ifndef _WIN32
+/*
+ * Redirect clientfd to a dummy socket for mysql_close to
+ * write, shutdown, and close on as a no-op.
+ * We do this hack because we want to call mysql_close to release
+ * memory, but do not want mysql_close to drop connections in the
+ * parent if the socket got shared in fork.
+ * Returns Qtrue or Qfalse (success or failure)
+ */
+static VALUE invalidate_fd(int clientfd)
+{
+#ifdef SOCK_CLOEXEC
+  /* Atomically set CLOEXEC on the new FD in case another thread forks */
+  int sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (sockfd < 0) {
+    /* Maybe SOCK_CLOEXEC is defined but not available on this kernel */
+    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+  }
+#else
+  /* Well we don't have SOCK_CLOEXEC, so just set FD_CLOEXEC quickly */
+  int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+  fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+#endif
+
+  if (sockfd < 0) {
+    /*
+     * Cannot raise here, because one or both of the following may be true:
+     * a) we have no GVL (in C Ruby)
+     * b) are running as a GC finalizer
+     */
+    return Qfalse;
+  }
+
+  dup2(sockfd, clientfd);
+  close(sockfd);
+
+  return Qtrue;
+}
+#endif /* _WIN32 */
+
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper;
   wrapper = ptr;
@@ -169,17 +212,21 @@ static void *nogvl_close(void *ptr) {
     wrapper->active_thread = Qnil;
     wrapper->connected = 0;
 #ifndef _WIN32
-    /* Call close() on the socket before calling mysql_close(). This prevents
+    /* Invalidate the socket before calling mysql_close(). This prevents
      * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
-     * the socket. The difference is that close() will drop this process's
-     * reference to the socket only, while a QUIT or shutdown() would render
-     * the underlying connection unusable, interrupting other processes which
-     * share this object across a fork().
+     * the socket. The difference is that invalidate_fd will drop this
+     * process's reference to the socket only, while a QUIT or shutdown()
+     * would render the underlying connection unusable, interrupting other
+     * processes which share this object across a fork().
      */
-    close(wrapper->client->net.fd);
+    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+      fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, leaking some memory\n");
+      close(wrapper->client->net.fd);
+      return NULL;
+    }
 #endif
 
-    mysql_close(wrapper->client);
+    mysql_close(wrapper->client); /* only used to free memory at this point */
   }
 
   return NULL;
@@ -442,10 +489,13 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   wrapper->active_thread = Qnil;
   wrapper->connected = 0;
 
-  /* manually close the socket for read/write
-     this feels dirty, but is there another way? */
-  close(wrapper->client->net.fd);
-  wrapper->client->net.fd = -1;
+  /* Invalidate the MySQL socket to prevent further communication.
+   * The GC will come along later and call mysql_close to free it.
+   */
+  if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+    fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
+    close(wrapper->client->net.fd);
+  }
 
   rb_exc_raise(error);
 

@@ -67,6 +67,7 @@ struct nogvl_connect_args {
   const char *user;
   const char *passwd;
   const char *db;
+  const char *init_command;
   unsigned int port;
   const char *unix_socket;
   unsigned long client_flag;
@@ -155,6 +156,10 @@ static void *nogvl_init(void *ptr) {
 static void *nogvl_connect(void *ptr) {
   struct nogvl_connect_args *args = ptr;
   MYSQL *client;
+
+  if (args->init_command != NULL) {
+    mysql_options(args->mysql, MYSQL_INIT_COMMAND, args->init_command);
+  }
 
   client = mysql_real_connect(args->mysql, args->host,
                               args->user, args->passwd,
@@ -322,7 +327,7 @@ static VALUE rb_mysql_info(VALUE self) {
   return rb_str;
 }
 
-static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
+static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags, VALUE init_command) {
   struct nogvl_connect_args args;
   VALUE rv;
   GET_CLIENT(self);
@@ -335,6 +340,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.db = NIL_P(database) ? NULL : StringValuePtr(database);
   args.mysql = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
+  args.init_command = NIL_P(init_command) ? NULL : StringValuePtr(init_command);
 
   rv = (VALUE) rb_thread_call_without_gvl(nogvl_connect, &args, RUBY_UBF_IO, 0);
   if (rv == Qfalse) {
@@ -1237,7 +1243,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "default_group=", set_read_default_group, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
-  rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
+  rb_define_private_method(cMysql2Client, "connect", rb_connect, 8);
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));

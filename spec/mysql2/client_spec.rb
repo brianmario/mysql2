@@ -54,7 +54,7 @@ describe Mysql2::Client do
       end
     end
     client = klient.new :flags => Mysql2::Client::FOUND_ROWS
-    (client.connect_args.last.last & Mysql2::Client::FOUND_ROWS).should be_true
+    (client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).should be_true
   end
 
   it "should default flags to (REMEMBER_OPTIONS, LONG_PASSWORD, LONG_FLAG, TRANSACTIONS, PROTOCOL_41, SECURE_CONNECTION)" do
@@ -66,12 +66,56 @@ describe Mysql2::Client do
       end
     end
     client = klient.new
-    (client.connect_args.last.last & (Mysql2::Client::REMEMBER_OPTIONS |
+    (client.connect_args.last[6] & (Mysql2::Client::REMEMBER_OPTIONS |
                                      Mysql2::Client::LONG_PASSWORD |
                                      Mysql2::Client::LONG_FLAG |
                                      Mysql2::Client::TRANSACTIONS |
                                      Mysql2::Client::PROTOCOL_41 |
                                      Mysql2::Client::SECURE_CONNECTION)).should be_true
+  end
+
+  it "should accept init_command" do
+    klient = Class.new(Mysql2::Client) do
+      attr_reader :connect_args
+      def connect *args
+        @connect_args ||= []
+        @connect_args << args
+      end
+    end
+    command = "SET @@session.something = 1"
+    client = klient.new :init_command => command
+    client.connect_args.last[7].should eq(command)
+  end
+
+  it "should execute init command" do
+    options = DatabaseCredentials['root'].dup
+    options[:init_command] = "SET @something = 'setting_value';"
+    client = Mysql2::Client.new(options)
+    result = client.query("SELECT @something;")
+    result.first['@something'].should eq('setting_value')
+  end
+
+  it "should send init_command after reconnect" do
+    pending "Ruby 2.1 has changed Timeout behavior." if RUBY_VERSION =~ /2.1/
+    options = DatabaseCredentials['root'].dup
+    options[:init_command] = "SET @something = 'setting_value';"
+    options[:reconnect] = true
+    client = Mysql2::Client.new(options)
+
+    result = client.query("SELECT @something;")
+    result.first['@something'].should eq('setting_value')
+
+    # simulate a broken connection
+    begin
+      Timeout.timeout(1) do
+        client.query("SELECT sleep(2)")
+      end
+    rescue Timeout::Error
+    end
+    client.ping.should be_false
+
+    result = client.query("SELECT @something;")
+    result.first['@something'].should eq('setting_value')
   end
 
   it "should have a global default_query_options hash" do

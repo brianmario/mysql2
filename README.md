@@ -156,8 +156,21 @@ Mysql2::Client.new(
   :local_infile = true/false,
   :secure_auth = true/false,
   :default_file = '/path/to/my.cfg',
-  :default_group = 'my.cfg section'
+  :default_group = 'my.cfg section',
+  :init_command => sql
   )
+```
+
+### init_command
+
+If you specify the init_command option, the SQL string you provide will be executed after the connection is established.
+
+If `:reconnect` is set to `true`, init_command will also be executed after a successful reconnect.
+
+It is useful if you want to provide session options which survive reconnection.
+
+``` ruby
+Mysql2::Client.new(:init_command => "SET @@SESSION.sql_mode = 'STRICT_ALL_TABLES'")
 ```
 
 ### SSL options

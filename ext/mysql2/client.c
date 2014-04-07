@@ -338,7 +338,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 
   rv = (VALUE) rb_thread_call_without_gvl(nogvl_connect, &args, RUBY_UBF_IO, 0);
   if (rv == Qfalse) {
-    while (rv == Qfalse && errno == EINTR && !mysql_errno(wrapper->client)) {
+    while (rv == Qfalse && errno == EINTR) {
       errno = 0;
       rv = (VALUE) rb_thread_call_without_gvl(nogvl_connect, &args, RUBY_UBF_IO, 0);
     }

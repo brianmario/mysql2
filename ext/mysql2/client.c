@@ -1,5 +1,6 @@
 #include <mysql2_ext.h>
 
+#include <time.h>
 #include <errno.h>
 #ifndef _WIN32
 #include <sys/types.h>
@@ -255,6 +256,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->active_thread = Qnil;
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
+  wrapper->connect_timeout = 0;
   wrapper->connected = 0; /* means that a database connection is open */
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
   wrapper->refcount = 1;
@@ -326,6 +328,8 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   struct nogvl_connect_args args;
   VALUE rv;
   GET_CLIENT(self);
+  time_t start_time, end_time;
+  unsigned int elapsed_time, connect_timeout;
 
   args.host = NIL_P(host) ? NULL : StringValuePtr(host);
   args.unix_socket = NIL_P(socket) ? NULL : StringValuePtr(socket);
@@ -336,12 +340,31 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.mysql = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
 
+  if (wrapper->connect_timeout)
+    time(&start_time);
   rv = (VALUE) rb_thread_call_without_gvl(nogvl_connect, &args, RUBY_UBF_IO, 0);
   if (rv == Qfalse) {
     while (rv == Qfalse && errno == EINTR) {
+      if (wrapper->connect_timeout) {
+        time(&end_time);
+        /* avoid long connect timeout from system time changes */
+        if (end_time < start_time)
+            start_time = end_time;
+        elapsed_time = end_time - start_time;
+        /* avoid an early timeout due to time truncating milliseconds off the start time */
+        if (elapsed_time > 0)
+            elapsed_time--;
+        if (elapsed_time >= wrapper->connect_timeout)
+          break;
+        connect_timeout = wrapper->connect_timeout - elapsed_time;
+        mysql_options(wrapper->client, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout);
+      }
       errno = 0;
       rv = (VALUE) rb_thread_call_without_gvl(nogvl_connect, &args, RUBY_UBF_IO, 0);
     }
+    /* restore the connect timeout for reconnecting */
+    if (wrapper->connect_timeout)
+      mysql_options(wrapper->client, MYSQL_OPT_CONNECT_TIMEOUT, &wrapper->connect_timeout);
     if (rv == Qfalse)
       return rb_raise_mysql2_error(wrapper);
   }
@@ -795,9 +818,15 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   if (result != 0) {
     rb_warn("%s\n", mysql_error(wrapper->client));
   } else {
-    /* Special case for reconnect, this option is also stored in the wrapper struct */
-    if (opt == MYSQL_OPT_RECONNECT)
-      wrapper->reconnect_enabled = boolval;
+    /* Special case for options that are stored in the wrapper struct */
+    switch (opt) {
+      case MYSQL_OPT_RECONNECT:
+        wrapper->reconnect_enabled = boolval;
+        break;
+      case MYSQL_OPT_CONNECT_TIMEOUT:
+        wrapper->connect_timeout = intval;
+        break;
+    }
   }
 
   return (result == 0) ? Qtrue : Qfalse;

@@ -74,19 +74,6 @@ describe Mysql2::Client do
                                      Mysql2::Client::SECURE_CONNECTION)).should be_true
   end
 
-  it "should accept init_command" do
-    klient = Class.new(Mysql2::Client) do
-      attr_reader :connect_args
-      def connect *args
-        @connect_args ||= []
-        @connect_args << args
-      end
-    end
-    command = "SET @@session.something = 1"
-    client = klient.new :init_command => command
-    client.connect_args.last[7].should eq(command)
-  end
-
   it "should execute init command" do
     options = DatabaseCredentials['root'].dup
     options[:init_command] = "SET @something = 'setting_value';"

@@ -23,7 +23,7 @@ module Mysql2
 
       initialize_ext
 
-      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth].each do |key|
+      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command].each do |key|
         next unless opts.key?(key)
         case key
         when :reconnect, :local_infile, :secure_auth
@@ -55,7 +55,6 @@ module Mysql2
       database = opts[:database] || opts[:dbname] || opts[:db]
       socket   = opts[:socket] || opts[:sock]
       flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
-      init_command = opts[:init_command]
 
       # Correct the data types before passing these values down to the C level
       user = user.to_s unless user.nil?
@@ -64,9 +63,8 @@ module Mysql2
       port = port.to_i unless port.nil?
       database = database.to_s unless database.nil?
       socket = socket.to_s unless socket.nil?
-      init_command = init_command.to_s unless init_command.nil?
 
-      connect user, pass, host, port, database, socket, flags, init_command
+      connect user, pass, host, port, database, socket, flags
     end
 
     def self.default_query_options

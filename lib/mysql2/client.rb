@@ -23,6 +23,9 @@ module Mysql2
 
       initialize_ext
 
+      # Set default connect_timeout to avoid unlimited retries from signal interruption
+      opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
+
       [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command].each do |key|
         next unless opts.key?(key)
         case key

@@ -253,7 +253,7 @@ the `:default_file` and `:default_group` paramters. For example:
 Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
 ```
 
-### init_command
+### Initial command on connect and reconnect
 
 If you specify the init_command option, the SQL string you provide will be executed after the connection is established.
 If `:reconnect` is set to `true`, init_command will also be executed after a successful reconnect.
@@ -400,46 +400,7 @@ There are a few things that need to be kept in mind while using streaming:
 
 Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html.
 
-## Active Record
-
-To use the Active Record driver (with or without rails), all you should need to do is have this gem installed and set the adapter in your database.yml to "mysql2".
-That was easy right? :)
-
-NOTE: as of 0.3.0, and Active Record 3.1 - the Active Record adapter has been pulled out of this gem and into Active Record itself. If you need to use mysql2 with
-Rails versions < 3.1 make sure and specify `gem "mysql2", "~> 0.2.7"` in your Gemfile
-
-## Asynchronous Active Record
-
-Please see the [em-synchrony](https://github.com/igrigorik/em-synchrony) project for details about using EventMachine with mysql2 and Rails.
-
-## Sequel
-
-The Sequel adapter was pulled out into Sequel core (will be part of the next release) and can be used by specifying the "mysql2://" prefix to your connection specification.
-
-## EventMachine
-
-The mysql2 EventMachine deferrable api allows you to make async queries using EventMachine,
-while specifying callbacks for success for failure. Here's a simple example:
-
-``` ruby
-require 'mysql2/em'
-
-EM.run do
-  client1 = Mysql2::EM::Client.new
-  defer1 = client1.query "SELECT sleep(3) as first_query"
-  defer1.callback do |result|
-    puts "Result: #{result.to_a.inspect}"
-  end
-
-  client2 = Mysql2::EM::Client.new
-  defer2 = client2.query "SELECT sleep(1) second_query"
-  defer2.callback do |result|
-    puts "Result: #{result.to_a.inspect}"
-  end
-end
-```
-
-## Lazy Everything
+### Lazy Everything
 
 Well... almost ;)
 
@@ -468,42 +429,67 @@ This gem is tested with the following MySQL and MariaDB versions:
  * MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
  * MariaDB 5.5, 10.0
 
-This gem has two version families:
+### Active Record
 
  * mysql2 0.2.x includes an Active Record driver compatible with AR 2.3 and 3.0
  * mysql2 0.3.x does not include an AR driver because it is included in AR 3.1 and above
 
-## Yeah... but why?
+### Asynchronous Active Record
 
-Someone: Dude, the Mysql gem works fiiiiiine.
+Please see the [em-synchrony](https://github.com/igrigorik/em-synchrony) project for details about using EventMachine with mysql2 and Rails.
 
-Me: It sure does, but it only hands you nil and strings for field values. Leaving you to convert
-them into proper Ruby types in Ruby-land - which is slow as balls.
+### Sequel
 
-Someone: OK fine, but do_mysql can already give me back values with Ruby objects mapped to MySQL types.
+Sequel includes a mysql2 adapter in all releases since 3.15 (2010-09-01).
+Use the prefix "mysql2://" in your connection specification.
 
-Me: Yep, but it's API is considerably more complex *and* can be ~2x slower.
+### EventMachine
 
-## Benchmarks
+The mysql2 EventMachine deferrable api allows you to make async queries using EventMachine,
+while specifying callbacks for success for failure. Here's a simple example:
 
-Performing a basic "SELECT * FROM" query on a table with 30k rows and fields of nearly every Ruby-representable data type,
-then iterating over every row using an #each like method yielding a block:
+``` ruby
+require 'mysql2/em'
 
-These results are from the `query_with_mysql_casting.rb` script in the benchmarks folder
+EM.run do
+  client1 = Mysql2::EM::Client.new
+  defer1 = client1.query "SELECT sleep(3) as first_query"
+  defer1.callback do |result|
+    puts "Result: #{result.to_a.inspect}"
+  end
+
+  client2 = Mysql2::EM::Client.new
+  defer2 = client2.query "SELECT sleep(1) second_query"
+  defer2.callback do |result|
+    puts "Result: #{result.to_a.inspect}"
+  end
+end
+```
+
+## Benchmarks and Comparison
+
+The mysql2 gem converts MySQL field types to Ruby data types in C code, providing a serious speed benefit.
+
+The do_mysql gem also converts MySQL fields types, but has a considerably more complex API and is still ~2x slower than mysql2.
+
+The mysql gem returns only nil or string data types, leaving you to convert field values to Ruby types in Ruby-land, which is much slower than mysql2's C code.
+
+For a comparative benchmark, the script below performs a basic "SELECT * FROM"
+query on a table with 30k rows and fields of nearly every Ruby-representable
+data type, then iterating over every row using an #each like method yielding a
+block:
 
 ``` sh
- user       system     total       real
-Mysql2
- 0.750000   0.180000   0.930000 (  1.821655)
-do_mysql
- 1.650000   0.200000   1.850000 (  2.811357)
-Mysql
- 7.500000   0.210000   7.710000 (  8.065871)
+         user       system     total       real
+Mysql2   0.750000   0.180000   0.930000   (1.821655)
+do_mysql 1.650000   0.200000   1.850000   (2.811357)
+Mysql    7.500000   0.210000   7.710000   (8.065871)
 ```
+
+These results are from the `query_with_mysql_casting.rb` script in the benchmarks folder.
 
 ## Development
 
-To run the tests, you can use RVM and Bundler to create a pristine environment for mysql2 development/hacking.
 Use 'bundle install' to install the necessary development and testing gems:
 
 ``` sh

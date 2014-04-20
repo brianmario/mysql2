@@ -83,7 +83,6 @@ describe Mysql2::Client do
   end
 
   it "should send init_command after reconnect" do
-    pending "Ruby 2.1 has changed Timeout behavior." if RUBY_VERSION =~ /2.1/
     options = DatabaseCredentials['root'].dup
     options[:init_command] = "SET @something = 'setting_value';"
     options[:reconnect] = true
@@ -94,7 +93,7 @@ describe Mysql2::Client do
 
     # simulate a broken connection
     begin
-      Timeout.timeout(1) do
+      Timeout.timeout(1, Timeout::Error) do
         client.query("SELECT sleep(2)")
       end
     rescue Timeout::Error
@@ -449,9 +448,8 @@ describe Mysql2::Client do
       end
 
       it "should close the connection when an exception is raised" do
-        pending "Ruby 2.1 has changed Timeout behavior." if RUBY_VERSION =~ /2.1/
         begin
-          Timeout.timeout(1) do
+          Timeout.timeout(1, Timeout::Error) do
             @client.query("SELECT sleep(2)")
           end
         rescue Timeout::Error
@@ -463,10 +461,9 @@ describe Mysql2::Client do
       end
 
       it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
-        pending "Ruby 2.1 has changed Timeout behavior." if RUBY_VERSION =~ /2.1/
         client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
         begin
-          Timeout.timeout(1) do
+          Timeout.timeout(1, Timeout::Error) do
             client.query("SELECT sleep(2)")
           end
         rescue Timeout::Error
@@ -478,10 +475,9 @@ describe Mysql2::Client do
       end
 
       it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction true" do
-        pending "Ruby 2.1 has changed Timeout behavior." if RUBY_VERSION =~ /2.1/
         client = Mysql2::Client.new(DatabaseCredentials['root'])
         begin
-          Timeout.timeout(1) do
+          Timeout.timeout(1, Timeout::Error) do
             client.query("SELECT sleep(2)")
           end
         rescue Timeout::Error
@@ -494,7 +490,7 @@ describe Mysql2::Client do
         client.reconnect = true
 
         begin
-          Timeout.timeout(1) do
+          Timeout.timeout(1, Timeout::Error) do
             client.query("SELECT sleep(2)")
           end
         rescue Timeout::Error

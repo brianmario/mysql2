@@ -326,10 +326,10 @@ static VALUE rb_mysql_info(VALUE self) {
 
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
-  VALUE rv;
-  GET_CLIENT(self);
   time_t start_time, end_time;
   unsigned int elapsed_time, connect_timeout;
+  VALUE rv;
+  GET_CLIENT(self);
 
   args.host = NIL_P(host) ? NULL : StringValuePtr(host);
   args.unix_socket = NIL_P(socket) ? NULL : StringValuePtr(socket);

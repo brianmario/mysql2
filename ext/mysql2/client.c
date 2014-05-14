@@ -1,10 +1,13 @@
 #include <mysql2_ext.h>
 
+#include <time.h>
 #include <errno.h>
 #ifndef _WIN32
+#include <sys/types.h>
 #include <sys/socket.h>
 #endif
 #include <unistd.h>
+#include <fcntl.h>
 #include "wait_for_single_fd.h"
 
 #include "mysql_enc_name_to_ruby.h"
@@ -12,7 +15,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
-static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql, intern_server_version;
+static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
 static VALUE rb_hash_dup(VALUE other) {
@@ -162,31 +165,69 @@ static void *nogvl_connect(void *ptr) {
   return (void *)(client ? Qtrue : Qfalse);
 }
 
+#ifndef _WIN32
+/*
+ * Redirect clientfd to a dummy socket for mysql_close to
+ * write, shutdown, and close on as a no-op.
+ * We do this hack because we want to call mysql_close to release
+ * memory, but do not want mysql_close to drop connections in the
+ * parent if the socket got shared in fork.
+ * Returns Qtrue or Qfalse (success or failure)
+ */
+static VALUE invalidate_fd(int clientfd)
+{
+#ifdef SOCK_CLOEXEC
+  /* Atomically set CLOEXEC on the new FD in case another thread forks */
+  int sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (sockfd < 0) {
+    /* Maybe SOCK_CLOEXEC is defined but not available on this kernel */
+    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+  }
+#else
+  /* Well we don't have SOCK_CLOEXEC, so just set FD_CLOEXEC quickly */
+  int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+  fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+#endif
+
+  if (sockfd < 0) {
+    /*
+     * Cannot raise here, because one or both of the following may be true:
+     * a) we have no GVL (in C Ruby)
+     * b) are running as a GC finalizer
+     */
+    return Qfalse;
+  }
+
+  dup2(sockfd, clientfd);
+  close(sockfd);
+
+  return Qtrue;
+}
+#endif /* _WIN32 */
+
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper;
-#ifndef _WIN32
-  int flags;
-#endif
   wrapper = ptr;
   if (wrapper->connected) {
     wrapper->active_thread = Qnil;
     wrapper->connected = 0;
-    /*
-     * we'll send a QUIT message to the server, but that message is more of a
-     * formality than a hard requirement since the socket is getting shutdown
-     * anyways, so ensure the socket write does not block our interpreter
-     *
-     *
-     * if the socket is dead we have no chance of blocking,
-     * so ignore any potential fcntl errors since they don't matter
-     */
 #ifndef _WIN32
-    flags = fcntl(wrapper->client->net.fd, F_GETFL);
-    if (flags > 0 && !(flags & O_NONBLOCK))
-      fcntl(wrapper->client->net.fd, F_SETFL, flags | O_NONBLOCK);
+    /* Invalidate the socket before calling mysql_close(). This prevents
+     * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
+     * the socket. The difference is that invalidate_fd will drop this
+     * process's reference to the socket only, while a QUIT or shutdown()
+     * would render the underlying connection unusable, interrupting other
+     * processes which share this object across a fork().
+     */
+    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+      fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, leaking some memory\n");
+      close(wrapper->client->net.fd);
+      return NULL;
+    }
 #endif
 
-    mysql_close(wrapper->client);
+    mysql_close(wrapper->client); /* only used to free memory at this point */
   }
 
   return NULL;
@@ -215,6 +256,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->active_thread = Qnil;
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
+  wrapper->connect_timeout = 0;
   wrapper->connected = 0; /* means that a database connection is open */
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
   wrapper->refcount = 1;
@@ -286,6 +328,8 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   struct nogvl_connect_args args;
   VALUE rv;
   GET_CLIENT(self);
+  time_t start_time, end_time;
+  unsigned int elapsed_time, connect_timeout;
 
   args.host = NIL_P(host) ? NULL : StringValuePtr(host);
   args.unix_socket = NIL_P(socket) ? NULL : StringValuePtr(socket);
@@ -296,12 +340,31 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.mysql = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
 
+  if (wrapper->connect_timeout)
+    time(&start_time);
   rv = (VALUE) rb_thread_call_without_gvl(nogvl_connect, &args, RUBY_UBF_IO, 0);
   if (rv == Qfalse) {
-    while (rv == Qfalse && errno == EINTR && !mysql_errno(wrapper->client)) {
+    while (rv == Qfalse && errno == EINTR) {
+      if (wrapper->connect_timeout) {
+        time(&end_time);
+        /* avoid long connect timeout from system time changes */
+        if (end_time < start_time)
+            start_time = end_time;
+        elapsed_time = end_time - start_time;
+        /* avoid an early timeout due to time truncating milliseconds off the start time */
+        if (elapsed_time > 0)
+            elapsed_time--;
+        if (elapsed_time >= wrapper->connect_timeout)
+          break;
+        connect_timeout = wrapper->connect_timeout - elapsed_time;
+        mysql_options(wrapper->client, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout);
+      }
       errno = 0;
       rv = (VALUE) rb_thread_call_without_gvl(nogvl_connect, &args, RUBY_UBF_IO, 0);
     }
+    /* restore the connect timeout for reconnecting */
+    if (wrapper->connect_timeout)
+      mysql_options(wrapper->client, MYSQL_OPT_CONNECT_TIMEOUT, &wrapper->connect_timeout);
     if (rv == Qfalse)
       return rb_raise_mysql2_error(wrapper);
   }
@@ -449,10 +512,13 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   wrapper->active_thread = Qnil;
   wrapper->connected = 0;
 
-  /* manually close the socket for read/write
-     this feels dirty, but is there another way? */
-  close(wrapper->client->net.fd);
-  wrapper->client->net.fd = -1;
+  /* Invalidate the MySQL socket to prevent further communication.
+   * The GC will come along later and call mysql_close to free it.
+   */
+  if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+    fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
+    close(wrapper->client->net.fd);
+  }
 
   rb_exc_raise(error);
 
@@ -737,6 +803,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval  = charval;
       break;
 
+    case MYSQL_INIT_COMMAND:
+      charval = (const char *)StringValuePtr(value);
+      retval  = charval;
+      break;
+
     default:
       return Qfalse;
   }
@@ -747,9 +818,15 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   if (result != 0) {
     rb_warn("%s\n", mysql_error(wrapper->client));
   } else {
-    /* Special case for reconnect, this option is also stored in the wrapper struct */
-    if (opt == MYSQL_OPT_RECONNECT)
-      wrapper->reconnect_enabled = boolval;
+    /* Special case for options that are stored in the wrapper struct */
+    switch (opt) {
+      case MYSQL_OPT_RECONNECT:
+        wrapper->reconnect_enabled = boolval;
+        break;
+      case MYSQL_OPT_CONNECT_TIMEOUT:
+        wrapper->connect_timeout = intval;
+        break;
+    }
   }
 
   return (result == 0) ? Qtrue : Qfalse;
@@ -1121,6 +1198,10 @@ static VALUE set_read_default_group(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_READ_DEFAULT_GROUP, value);
 }
 
+static VALUE set_init_command(VALUE self, VALUE value) {
+  return _mysql_client_options(self, MYSQL_INIT_COMMAND, value);
+}
+
 static VALUE initialize_ext(VALUE self) {
   GET_CLIENT(self);
 
@@ -1192,6 +1273,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "secure_auth=", set_secure_auth, 1);
   rb_define_private_method(cMysql2Client, "default_file=", set_read_default_file, 1);
   rb_define_private_method(cMysql2Client, "default_group=", set_read_default_group, 1);
+  rb_define_private_method(cMysql2Client, "init_command=", set_init_command, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
@@ -1208,7 +1290,6 @@ void init_mysql2_client() {
   intern_merge_bang = rb_intern("merge!");
   intern_error_number_eql = rb_intern("error_number=");
   intern_sql_state_eql = rb_intern("sql_state=");
-  intern_server_version = rb_intern("server_version=");
 
 #ifdef CLIENT_LONG_PASSWORD
   rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),

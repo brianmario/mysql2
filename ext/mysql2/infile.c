@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define ERROR_LEN 1024
 typedef struct

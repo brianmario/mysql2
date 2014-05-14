@@ -41,6 +41,7 @@ typedef struct {
   VALUE active_thread; /* rb_thread_current() or Qnil */
   long server_version;
   int reconnect_enabled;
+  int connect_timeout;
   int active;
   int connected;
   int initialized;

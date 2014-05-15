@@ -349,11 +349,11 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
         time(&end_time);
         /* avoid long connect timeout from system time changes */
         if (end_time < start_time)
-            start_time = end_time;
+          start_time = end_time;
         elapsed_time = end_time - start_time;
         /* avoid an early timeout due to time truncating milliseconds off the start time */
         if (elapsed_time > 0)
-            elapsed_time--;
+          elapsed_time--;
         if (elapsed_time >= wrapper->connect_timeout)
           break;
         connect_timeout = wrapper->connect_timeout - elapsed_time;

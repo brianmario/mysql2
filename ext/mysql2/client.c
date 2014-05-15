@@ -764,17 +764,17 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
 
   switch(opt) {
     case MYSQL_OPT_CONNECT_TIMEOUT:
-      intval = NUM2INT(value);
+      intval = NUM2UINT(value);
       retval = &intval;
       break;
 
     case MYSQL_OPT_READ_TIMEOUT:
-      intval = NUM2INT(value);
+      intval = NUM2UINT(value);
       retval = &intval;
       break;
 
     case MYSQL_OPT_WRITE_TIMEOUT:
-      intval = NUM2INT(value);
+      intval = NUM2UINT(value);
       retval = &intval;
       break;
 

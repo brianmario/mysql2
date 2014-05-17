@@ -33,11 +33,11 @@ rvm:
   - ree
 matrix:
   allow_failures:
-    - rvm: rbx
+    - rvm: rbx-2
   include:
     - rvm: 2.0.0
       env: DB=mariadb55
     - rvm: 2.0.0
       env: DB=mariadb10
-    - rvm: rbx
+    - rvm: rbx-2
       env: RBXOPT=-Xgc.honor_start=true

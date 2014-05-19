@@ -23,7 +23,6 @@ before_install:
   - mysqld --version
 os:
   - linux
-  - osx
 rvm:
   - 1.8.7
   - 1.9.2
@@ -41,3 +40,5 @@ matrix:
       env: DB=mariadb10
     - rvm: rbx-2
       env: RBXOPT=-Xgc.honor_start=true
+    - rvm: 2.0.0
+      os: osx

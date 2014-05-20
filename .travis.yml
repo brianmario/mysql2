@@ -20,6 +20,13 @@ before_install:
       sudo apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y install mariadb-server libmariadbd-dev
     fi
     "
+  - |
+    bash -c " # Install MySQL is OS=darwin
+    if [[ x$OSTYPE =~ ^xdarwin ]]; then
+      brew install mysql
+      mysql.server start
+    fi
+    "
   - mysqld --version
 os:
   - linux

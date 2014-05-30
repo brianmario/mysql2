@@ -1,16 +1,16 @@
-# Mysql2 - A modern, simple and very fast Mysql library for Ruby - binding to libmysql
+# Mysql2 - A modern, simple and very fast MySQL library for Ruby - binding to libmysql
 
 [![Build Status](https://travis-ci.org/brianmario/mysql2.png)](https://travis-ci.org/brianmario/mysql2)
 
 The Mysql2 gem is meant to serve the extremely common use-case of connecting, querying and iterating on results.
-Some database libraries out there serve as direct 1:1 mappings of the already complex C API's available.
+Some database libraries out there serve as direct 1:1 mappings of the already complex C APIs available.
 This one is not.
 
 It also forces the use of UTF-8 [or binary] for the connection [and all strings in 1.9, unless Encoding.default_internal is set then it'll convert from UTF-8 to that encoding] and uses encoding-aware MySQL API calls where it can.
 
 The API consists of two classes:
 
-`Mysql2::Client` - your connection to the database
+`Mysql2::Client` - your connection to the database.
 
 `Mysql2::Result` - returned from issuing a #query on the connection. It includes Enumerable.
 
@@ -26,7 +26,7 @@ By default, the mysql2 gem will try to find a copy of MySQL in this order:
 
 * Option `--with-mysql-dir`, if provided (see below).
 * Option `--with-mysql-config`, if provided (see below).
-* Several typical paths for `msyql_config` (default for the majority of users).
+* Several typical paths for `mysql_config` (default for the majority of users).
 * The directory `/usr/local`.
 
 ### Configuration options

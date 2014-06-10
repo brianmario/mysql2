@@ -335,7 +335,7 @@ result = client.query("SELECT * FROM table_with_boolean_field", :cast_booleans =
 
 ### Skipping casting
 
-Mysql2 casting is fast, but not as fast as not casting data.  In rare cases where typecasting is not needed, it will be faster to disable it by providing :cast => false.
+Mysql2 casting is fast, but not as fast as not casting data.  In rare cases where typecasting is not needed, it will be faster to disable it by providing :cast => false. (Note that :cast => false overrides :cast_booleans => true.)
 
 ``` ruby
 client = Mysql2::Client.new

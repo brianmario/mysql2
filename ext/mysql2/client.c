@@ -176,21 +176,29 @@ static void *nogvl_connect(void *ptr) {
  */
 static VALUE invalidate_fd(int clientfd)
 {
+  int success;
+  int sp[2];
 #ifdef SOCK_CLOEXEC
   /* Atomically set CLOEXEC on the new FD in case another thread forks */
-  int sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (sockfd < 0) {
+  success = socketpair(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sp);
+  if (success != 0) {
     /* Maybe SOCK_CLOEXEC is defined but not available on this kernel */
-    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+    success = socketpair(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sp);
+    if (success == 0) {
+      fcntl(sp[0], F_SETFD, FD_CLOEXEC);
+      fcntl(sp[1], F_SETFD, FD_CLOEXEC);
+    }
   }
 #else
   /* Well we don't have SOCK_CLOEXEC, so just set FD_CLOEXEC quickly */
-  int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-  fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+  success = socketpair(PF_UNIX, SOCK_STREAM, 0, sp);
+  if (success == 0) {
+    fcntl(sp[0], F_SETFD, FD_CLOEXEC);
+    fcntl(sp[1], F_SETFD, FD_CLOEXEC);
+  }
 #endif
 
-  if (sockfd < 0) {
+  if (success != 0) {
     /*
      * Cannot raise here, because one or both of the following may be true:
      * a) we have no GVL (in C Ruby)
@@ -199,8 +207,9 @@ static VALUE invalidate_fd(int clientfd)
     return Qfalse;
   }
 
-  dup2(sockfd, clientfd);
-  close(sockfd);
+  dup2(sp[0], clientfd);
+  close(sp[0]);
+  close(sp[1]);
 
   return Qtrue;
 }

@@ -325,9 +325,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
                     val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
                   }
                 }
-              } else { /* use Time, supports microseconds */
+              } else { 
+                /* microseconds can be up to 6 digits. Fewer digits must be interpreted from
+                 * the left because the microseconds are to the right of the decimal point.
+                 */
                 if (tokens == 7) {
-                  for (int i = 0; i < 6; ++i) {
+                  int i;
+                  for (i = 0; i < 6; ++i) {
                     if (msec_char[i] == '\0') {
                       msec_char[i] = '0';
                     }

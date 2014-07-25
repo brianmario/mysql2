@@ -6,7 +6,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #endif
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 #include <fcntl.h>
 #include "wait_for_single_fd.h"
 

@@ -335,6 +335,16 @@ describe Mysql2::Result do
       @test_result['enum_test'].should eql('val1')
     end
 
+    it "should raise an error given an invalid DATETIME" do
+      begin
+        @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each
+      rescue Mysql2::Error => e
+        error = e
+      end
+
+      error.message.should eql("Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
+    end
+
     if defined? Encoding
       context "string encoding for ENUM values" do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do

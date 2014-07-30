@@ -1235,6 +1235,13 @@ void init_mysql2_client() {
     }
   }
 
+  /* Initializing mysql library, so different threads could call Client.new */
+  /* without race condition in the library */
+  if (mysql_library_init(0, NULL, NULL) != 0) {
+    rb_raise(rb_eRuntimeError, "Could not initialize MySQL client library");
+    return;
+  }
+
 #if 0
   mMysql2      = rb_define_module("Mysql2"); Teach RDoc about Mysql2 constant.
 #endif

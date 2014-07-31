@@ -28,6 +28,7 @@ before_install:
     fi
     "
   - mysqld --version
+  - mysql -u root -e "CREATE DATABASE IF NOT EXISTS test"
 os:
   - linux
 rvm:

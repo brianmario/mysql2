@@ -109,17 +109,20 @@ describe Mysql2::Client do
   end
 
   it "should be able to connect via SSL options" do
-    ssl = @client.query "SHOW VARIABLES LIKE 'have_%ssl'"
-    ssl_enabled = ssl.any? {|x| x['Value'] == 'ENABLED'}
-    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") unless ssl_enabled
-    pending("DON'T WORRY, THIS TEST PASSES - but you must update the SSL cert paths in this test and remove this pending state.")
+    ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"
+    ssl_uncompiled = ssl.any? {|x| x['Value'] == 'OFF'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not compiled into your MySQL daemon.") if ssl_uncompiled
+    ssl_disabled = ssl.any? {|x| x['Value'] == 'DISABLED'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
+
+    # You may need to adjust the lines below to match your SSL certificate paths
     ssl_client = nil
     lambda {
       ssl_client = Mysql2::Client.new(
-        :sslkey => '/path/to/client-key.pem',
-        :sslcert => '/path/to/client-cert.pem',
-        :sslca => '/path/to/ca-cert.pem',
-        :sslcapath => '/path/to/newcerts/',
+        :sslkey    => '/etc/mysql/client-key.pem',
+        :sslcert   => '/etc/mysql/client-cert.pem',
+        :sslca     => '/etc/mysql/ca-cert.pem',
+        :sslcapath => '/etc/mysql/',
         :sslcipher => 'DHE-RSA-AES256-SHA'
       )
     }.should_not raise_error(Mysql2::Error)

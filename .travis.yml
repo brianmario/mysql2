@@ -7,17 +7,7 @@ before_install:
   - |
     bash -c " # Install MariaDB if DB=mariadb
     if [[ x$DB =~ xmariadb ]]; then
-      sudo service mysql stop
-      sudo apt-get purge '^mysql*' 'libmysql*'
-      sudo apt-get install python-software-properties
-      sudo apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xcbcb082a1bb943db
-      if [[ x$DB = xmariadb55 ]]; then
-        sudo add-apt-repository 'deb http://ftp.osuosl.org/pub/mariadb/repo/5.5/ubuntu precise main'
-      elif [[ x$DB = xmariadb10 ]]; then
-        sudo add-apt-repository 'deb http://ftp.osuosl.org/pub/mariadb/repo/10.0/ubuntu precise main'
-      fi
-      sudo apt-get update
-      sudo apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y install mariadb-server libmariadbd-dev
+      sudo bash .travis_mariadb.sh '$DB'
     fi
     "
   - |
@@ -26,6 +16,10 @@ before_install:
       brew install mysql
       mysql.server start
     fi
+    "
+  - |
+    bash -c " # Configure SSL support
+    sudo bash .travis_ssl.sh
     "
   - mysqld --version
   - mysql -u root -e "CREATE DATABASE IF NOT EXISTS test"

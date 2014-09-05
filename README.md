@@ -79,7 +79,7 @@ Connect to a database:
 # this takes a hash of options, almost all of which map directly
 # to the familiar database.yml in rails
 # See http://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/MysqlAdapter.html
-client = Mysql2::Client.new(:host => "localhost", :username => "root")
+client = Mysql2::Client.new(:host => "localhost", :username => "root", :password=>"qwerty", :database=>"dbname")
 ```
 
 Then query it:
@@ -105,6 +105,11 @@ results.each do |row|
   # the keys are the fields, as you'd expect
   # the values are pre-built ruby primitives mapped from their corresponding field types in MySQL
   # Here's an otter: http://farm1.static.flickr.com/130/398077070_b8795d0ef3_b.jpg
+  # Here's an actual example, kids:
+  puts row["id"] # row["id"].class = Fixnum
+  if row["dne"] # non-existant hash entry is nil
+    puts row["dne"]
+  end
 end
 ```
 

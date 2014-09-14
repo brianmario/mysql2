@@ -124,9 +124,11 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   rb_enc_associate(rb_sql_state, rb_usascii_encoding());
 #endif
 
-  e = rb_funcall(cMysql2Error, intern_new, 2, rb_error_msg, LONG2FIX(wrapper->server_version));
-  rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(wrapper->client)));
-  rb_funcall(e, intern_sql_state_eql, 1, rb_sql_state);
+  e = rb_funcall(cMysql2Error, intern_new, 4,
+                 rb_error_msg,
+                 LONG2FIX(wrapper->server_version),
+                 UINT2NUM(mysql_errno(wrapper->client)),
+                 rb_sql_state);
   rb_exc_raise(e);
   return Qnil;
 }

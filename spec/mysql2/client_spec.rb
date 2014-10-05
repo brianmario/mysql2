@@ -91,15 +91,26 @@ describe Mysql2::Client do
     result = client.query("SELECT @something;")
     result.first['@something'].should eq('setting_value')
 
-    # simulate a broken connection
-    begin
-      Timeout.timeout(1, Timeout::Error) do
-        client.query("SELECT sleep(2)")
-      end
-    rescue Timeout::Error
-    end
-    client.ping.should be_false
+    # get the current connection id
+    result = client.query("SELECT CONNECTION_ID()")
+    first_conn_id = result.first['CONNECTION_ID()']
 
+    # break the current connection
+    begin
+      client.query("KILL #{first_conn_id}")
+    rescue Mysql2::Error
+    end
+
+    client.ping # reconnect now
+
+    # get the new connection id
+    result = client.query("SELECT CONNECTION_ID()")
+    second_conn_id = result.first['CONNECTION_ID()']
+
+    # confirm reconnect by checking the new connection id
+    first_conn_id.should_not == second_conn_id
+
+    # At last, check that the init command executed
     result = client.query("SELECT @something;")
     result.first['@something'].should eq('setting_value')
   end

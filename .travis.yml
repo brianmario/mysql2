@@ -5,6 +5,12 @@ script:
 before_install:
   - gem --version
   - |
+    bash -c " # Install MySQL 5.7 if DB=mysql57
+    if [[ x$DB =~ mysql57 ]]; then
+      bash .travis_mysql57.sh
+    fi
+    "
+  - |
     bash -c " # Install MariaDB if DB=mariadb
     if [[ x$DB =~ xmariadb ]]; then
       sudo bash .travis_mariadb.sh '$DB'
@@ -34,12 +40,15 @@ rvm:
   - ree
 matrix:
   allow_failures:
+    - env: DB=mysql57
     - rvm: rbx-2
   include:
     - rvm: 2.0.0
       env: DB=mariadb55
     - rvm: 2.0.0
       env: DB=mariadb10
+    - rvm: 2.0.0
+      env: DB=mysql57
     - rvm: rbx-2
       env: RBXOPT=-Xgc.honor_start=true
     - rvm: 2.0.0

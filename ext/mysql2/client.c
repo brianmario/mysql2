@@ -1378,6 +1378,10 @@ void init_mysql2_client() {
 #ifdef CLIENT_SECURE_CONNECTION
   rb_const_set(cMysql2Client, rb_intern("SECURE_CONNECTION"),
       LONG2NUM(CLIENT_SECURE_CONNECTION));
+#else
+  /* HACK because MySQL5.7 no longer defines this constant,
+   * but we're using it in our default connection flags. */
+  rb_const_set(cMysql2Client, rb_intern("SECURE_CONNECTION"), LONG2NUM(0));
 #endif
 
 #ifdef CLIENT_MULTI_STATEMENTS

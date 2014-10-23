@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 service mysql stop
 apt-get purge '^mysql*' 'libmysql*'

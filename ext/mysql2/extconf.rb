@@ -74,10 +74,6 @@ else
   rpath_dir = lib
 end
 
-if RUBY_PLATFORM =~ /mswin|mingw/
-  exit 1 unless have_library('libmysql')
-end
-
 if have_header('mysql.h')
   prefix = nil
 elsif have_header('mysql/mysql.h')
@@ -124,6 +120,49 @@ else
       warn "-----\nSetting libpath to #{libdir}\n-----"
       $LIBPATH << libdir unless $LIBPATH.include?(libdir)
     end
+  end
+end
+
+if RUBY_PLATFORM =~ /mswin|mingw/
+  # Build libmysql.a interface link library
+  require 'rake'
+
+  # Build libmysql.a interface link library
+  # Use rake to rebuild only if these files change
+  deffile = File.expand_path('../../../support/libmysql.def', __FILE__)
+  libfile = File.expand_path(File.join(libdir, 'libmysql.lib'))
+  file 'libmysql.a' => [deffile, libfile] do |t|
+    when_writing 'building libmysql.a' do
+      sh 'dlltool', '--kill-at',
+         '--dllname', 'libmysql.dll',
+         '--output-lib', 'libmysql.a',
+         '--input-def', deffile, libfile
+    end
+  end
+
+  Rake::Task['libmysql.a'].invoke
+
+  # Make sure the generated interface library works
+  $LOCAL_LIBS << ' ' << 'libmysql.a'
+  abort "-----\nCannot find libmysql.a\n----" unless have_library('libmysql')
+  abort "-----\nCannot link to libmysql.a (my_init)\n----" unless have_func('my_init')
+
+  # Vendor libmysql.dll
+  vendordll = File.expand_path('../../../vendor/libmysql.dll', __FILE__)
+  dllfile = File.expand_path(File.join(libdir, 'libmysql.dll'))
+  file vendordll => dllfile do |t|
+    when_writing 'copying libmysql.dll' do
+      cp dllfile, vendordll
+    end
+  end
+
+  # Copy libmysql.dll to the local vendor directory by default
+  if arg_config('--no-vendor-libmysql')
+    # Fine, don't.
+    puts "--no-vendor-libmysql"
+  else # Default: arg_config('--vendor-libmysql')
+    # Let's do it!
+    Rake::Task[vendordll].invoke
   end
 end
 

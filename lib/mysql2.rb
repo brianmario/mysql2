@@ -3,6 +3,26 @@ require 'date'
 require 'bigdecimal'
 require 'rational' unless RUBY_VERSION >= '1.9.2'
 
+# Load libmysql.dll before requiring mysql2/mysql2.so
+# This gives a chance to be flexible about the load path
+# Or to bomb out with a clear error message instead of a linker crash
+if RUBY_PLATFORM =~ /mswin|mingw/
+  dll_search = [
+    File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\'),
+    File.expand_path('../libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\'),
+    'libmysql.dll' # This will use default / system library paths
+  ]
+
+  # If this environment variable is set, it overrides any other search paths
+  dll_search = [ ENV['RUBY_MYSQL2_LIBMYSQL_DLL'].dup ] if ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
+
+  require 'Win32API'
+  LoadLibrary = Win32API.new('Kernel32', 'LoadLibrary', ['P'], 'I')
+  unless dll_search.any? { |dll| 0 != LoadLibrary.call(dll) }
+    abort "Failed to load libmysql.dll from any of #{dll_search.inspect}"
+  end
+end
+
 require 'mysql2/version' unless defined? Mysql2::VERSION
 require 'mysql2/error'
 require 'mysql2/mysql2'

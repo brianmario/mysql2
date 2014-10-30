@@ -7,7 +7,7 @@ before_install:
   - |
     bash -c " # Install MySQL 5.7 if DB=mysql57
     if [[ x$DB =~ mysql57 ]]; then
-      bash .travis_mysql57.sh
+      sudo bash .travis_mysql57.sh
     fi
     "
   - |
@@ -29,6 +29,7 @@ before_install:
     "
   - mysqld --version
   - mysql -u root -e "CREATE DATABASE IF NOT EXISTS test"
+  - mysql -u root -e "CREATE USER '$USER'@'localhost'" || true
 os:
   - linux
 rvm:

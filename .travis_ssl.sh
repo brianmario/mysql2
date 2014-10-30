@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Halt the tests on error
 set -e

@@ -60,4 +60,12 @@ describe Mysql2::Statement do
     statement.each { |row| rows << row }
     rows.should == [[1]]
   end
+
+  it "should select dates" do
+    statement = @client.prepare 'SELECT NOW()'
+    statement.execute
+    rows = []
+    statement.each { |row| rows << row }
+    rows.first.first.should be_kind_of Time
+  end
 end

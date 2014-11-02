@@ -1246,6 +1246,8 @@ static void *nogvl_prepare_statement(void *ptr) {
  */
 static VALUE prepare_statement(VALUE self, VALUE sql) {
   GET_CLIENT(self);
+  REQUIRE_CONNECTED(wrapper);
+
   struct nogvl_prepare_statement_args args;
   MYSQL_STMT *stmt;
   VALUE rb_stmt;

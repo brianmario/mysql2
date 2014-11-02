@@ -43,4 +43,13 @@ describe Mysql2::Statement do
     statement.execute
     lambda { statement.each }.should raise_error
   end
+
+  it "should tell us about the fields" do
+    statement = @client.prepare 'SELECT 1 as foo, 2'
+    statement.execute
+    list = statement.fields
+    list.length.should == 2
+    list.first.name.should == 'foo'
+    list[1].name.should == '2'
+  end
 end

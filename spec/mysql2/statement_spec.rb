@@ -37,4 +37,10 @@ describe Mysql2::Statement do
     statement = @client.prepare 'SELECT 1'
     statement.execute.should == statement
   end
+
+  it "should raise an exception without a block" do
+    statement = @client.prepare 'SELECT 1'
+    statement.execute
+    lambda { statement.each }.should raise_error
+  end
 end

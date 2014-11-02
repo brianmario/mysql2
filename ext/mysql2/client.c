@@ -30,12 +30,6 @@ static VALUE rb_hash_dup(VALUE other) {
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
 
-#define REQUIRE_CONNECTED(wrapper) \
-  REQUIRE_INITIALIZED(wrapper) \
-  if (!wrapper->connected && !wrapper->reconnect_enabled) { \
-    rb_raise(cMysql2Error, "closed MySQL connection"); \
-  }
-
 #define REQUIRE_NOT_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \
   if (wrapper->connected) { \
@@ -44,10 +38,6 @@ static VALUE rb_hash_dup(VALUE other) {
 
 #define MARK_CONN_INACTIVE(conn) \
   wrapper->active_thread = Qnil;
-
-#define GET_CLIENT(self) \
-  mysql_client_wrapper *wrapper; \
-  Data_Get_Struct(self, mysql_client_wrapper, wrapper)
 
 /*
  * compatability with mysql-connector-c, where LIBMYSQL_VERSION is the correct
@@ -85,16 +75,6 @@ struct nogvl_send_query_args {
   const char *sql_ptr;
   long sql_len;
   mysql_client_wrapper *wrapper;
-};
-
-/*
- * used to pass all arguments to mysql_stmt_prepare while inside
- * rb_thread_call_without_gvl
- */
-struct nogvl_prepare_statement_args {
-  MYSQL_STMT *stmt;
-  const char *sql;
-  unsigned long sql_len;
 };
 
 /*
@@ -1230,16 +1210,6 @@ static VALUE initialize_ext(VALUE self) {
   return self;
 }
 
-static void *nogvl_prepare_statement(void *ptr) {
-  struct nogvl_prepare_statement_args *args = ptr;
-
-  if (mysql_stmt_prepare(args->stmt, args->sql, args->sql_len)) {
-    return (void*)Qfalse;
-  } else {
-    return (void*)Qtrue;
-  }
-}
-
 /* call-seq: client.prepare # => Mysql2::Statement
  *
  * Create a new prepared statement.
@@ -1248,31 +1218,7 @@ static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
   GET_CLIENT(self);
   REQUIRE_CONNECTED(wrapper);
 
-  struct nogvl_prepare_statement_args args;
-  MYSQL_STMT *stmt;
-  VALUE rb_stmt;
-  my_bool truth = 1;
-
-  stmt = mysql_stmt_init(wrapper->client);
-  if (stmt == NULL) {
-    rb_raise(cMysql2Error, "Unable to initialize prepared statement: out of memory");
-  }
-
-  if (mysql_stmt_attr_set(stmt, STMT_ATTR_UPDATE_MAX_LENGTH, &truth)) {
-    rb_raise(cMysql2Error, "Unable to initialize prepared statement");
-  }
-
-  rb_stmt = Data_Wrap_Struct(cMysql2Statement, 0, mysql_stmt_close, stmt);
-
-  args.stmt = stmt;
-  args.sql = StringValuePtr(sql);
-  args.sql_len = RSTRING_LEN(sql);
-
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
-    rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
-  }
-
-  return rb_stmt;
+  return rb_mysql_stmt_new(self, sql);
 }
 
 void init_mysql2_client() {

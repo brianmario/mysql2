@@ -52,4 +52,13 @@ describe Mysql2::Statement do
     list.first.name.should == 'foo'
     list[1].name.should == '2'
   end
+
+  it "should let us iterate over results" do
+    statement = @client.prepare 'SELECT 1'
+    statement.execute
+    rows = []
+    statement.each { |row| rows << row }
+    pending "not working yet"
+    rows.should == [[1]]
+  end
 end

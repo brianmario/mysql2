@@ -8,6 +8,7 @@ require 'mysql2/error'
 require 'mysql2/mysql2'
 require 'mysql2/result'
 require 'mysql2/client'
+require 'mysql2/field'
 
 # = Mysql2
 #

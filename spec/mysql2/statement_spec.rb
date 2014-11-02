@@ -16,4 +16,12 @@ describe Mysql2::Statement do
     @client.close
     lambda { @client.prepare 'SELECT 1' }.should raise_error(Mysql2::Error)
   end
+
+  it "should tell us the param count" do
+    statement = @client.prepare 'SELECT ?, ?'
+    statement.param_count.should == 2
+
+    statement2 = @client.prepare 'SELECT 1'
+    statement2.param_count.should == 0
+  end
 end

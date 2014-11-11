@@ -129,17 +129,17 @@ static void *nogvl_execute(void *ptr) {
   }
 }
 
-#define FREE_BINDS                                             \
- for (i = 0; i < argc; i++) {                                  \
-   if (bind_buffers[i].buffer) { \
-     if(bind_buffers[i].buffer_type == MYSQL_TYPE_STRING) {    \
-       free(bind_buffers[i].length);                           \
-     } else {                                                  \
-       free(bind_buffers[i].buffer);                           \
-     }                                                         \
-   }                                                           \
- }                                                             \
- free(bind_buffers);
+#define FREE_BINDS                                              \
+  for (i = 0; i < argc; i++) {                                  \
+    if (bind_buffers[i].buffer) {                               \
+      if (bind_buffers[i].buffer_type == MYSQL_TYPE_STRING) {   \
+        free(bind_buffers[i].length);                           \
+      } else {                                                  \
+        free(bind_buffers[i].buffer);                           \
+      }                                                         \
+    }                                                           \
+  }                                                             \
+  free(bind_buffers);
 
 /* call-seq: stmt.execute
  *

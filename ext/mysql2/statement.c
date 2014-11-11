@@ -331,6 +331,15 @@ static VALUE each(VALUE self) {
     unsigned long field_count;
     unsigned long i;
 
+    // FIXME we are calling mysql_stmt_store_result() *before* instead of *after*
+    // binding the data buffers with mysql_stmt_bind_result(). Turn into a config
+    // flag for result sets that require a lot of memory?
+    //
+    // From MySQL docs:
+    // "By default, result sets are fetched unbuffered a row at a time from the
+    // server. To buffer the entire result set on the client, call
+    // mysql_stmt_store_result() after binding the data buffers and before
+    // calling mysql_stmt_fetch()."
     if (mysql_stmt_store_result(stmt)) {
       rb_raise(cMysql2Error, "%s", mysql_stmt_error(stmt));
     }

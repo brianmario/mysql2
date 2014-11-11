@@ -305,9 +305,11 @@ static VALUE fields(VALUE self) {
     rb_ary_store(field_list, (long)i, rb_field);
   }
 
+  mysql_free_result(metadata);
   return field_list;
 }
 
+// FIXME refactor into Mysql2::Result
 static VALUE each(VALUE self) {
   MYSQL_STMT *stmt;
   MYSQL_RES *result;
@@ -524,10 +526,16 @@ static VALUE each(VALUE self) {
       rb_yield(row);
     }
 
+    for (i = 0; i < field_count; i++) {
+      if (result_buffers[i].buffer) {
+        free(result_buffers[i].buffer);
+      }
+    }
     free(result_buffers);
     free(is_null);
     free(error);
     free(length);
+    mysql_free_result(result);
   }
 
   return self;

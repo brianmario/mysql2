@@ -91,15 +91,26 @@ describe Mysql2::Client do
     result = client.query("SELECT @something;")
     result.first['@something'].should eq('setting_value')
 
-    # simulate a broken connection
-    begin
-      Timeout.timeout(1, Timeout::Error) do
-        client.query("SELECT sleep(2)")
-      end
-    rescue Timeout::Error
-    end
-    client.ping.should be_false
+    # get the current connection id
+    result = client.query("SELECT CONNECTION_ID()")
+    first_conn_id = result.first['CONNECTION_ID()']
 
+    # break the current connection
+    begin
+      client.query("KILL #{first_conn_id}")
+    rescue Mysql2::Error
+    end
+
+    client.ping # reconnect now
+
+    # get the new connection id
+    result = client.query("SELECT CONNECTION_ID()")
+    second_conn_id = result.first['CONNECTION_ID()']
+
+    # confirm reconnect by checking the new connection id
+    first_conn_id.should_not == second_conn_id
+
+    # At last, check that the init command executed
     result = client.query("SELECT @something;")
     result.first['@something'].should eq('setting_value')
   end
@@ -109,17 +120,20 @@ describe Mysql2::Client do
   end
 
   it "should be able to connect via SSL options" do
-    ssl = @client.query "SHOW VARIABLES LIKE 'have_%ssl'"
-    ssl_enabled = ssl.any? {|x| x['Value'] == 'ENABLED'}
-    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") unless ssl_enabled
-    pending("DON'T WORRY, THIS TEST PASSES - but you must update the SSL cert paths in this test and remove this pending state.")
+    ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"
+    ssl_uncompiled = ssl.any? {|x| x['Value'] == 'OFF'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not compiled into your MySQL daemon.") if ssl_uncompiled
+    ssl_disabled = ssl.any? {|x| x['Value'] == 'DISABLED'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
+
+    # You may need to adjust the lines below to match your SSL certificate paths
     ssl_client = nil
     lambda {
       ssl_client = Mysql2::Client.new(
-        :sslkey => '/path/to/client-key.pem',
-        :sslcert => '/path/to/client-cert.pem',
-        :sslca => '/path/to/ca-cert.pem',
-        :sslcapath => '/path/to/newcerts/',
+        :sslkey    => '/etc/mysql/client-key.pem',
+        :sslcert   => '/etc/mysql/client-cert.pem',
+        :sslca     => '/etc/mysql/ca-cert.pem',
+        :sslcapath => '/etc/mysql/',
         :sslcipher => 'DHE-RSA-AES256-SHA'
       )
     }.should_not raise_error(Mysql2::Error)

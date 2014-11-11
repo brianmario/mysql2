@@ -6,7 +6,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #endif
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 #include <fcntl.h>
 #include "wait_for_single_fd.h"
 
@@ -167,26 +169,30 @@ static void *nogvl_connect(void *ptr) {
 
 #ifndef _WIN32
 /*
- * Redirect clientfd to a dummy socket for mysql_close to
- * write, shutdown, and close on as a no-op.
- * We do this hack because we want to call mysql_close to release
- * memory, but do not want mysql_close to drop connections in the
- * parent if the socket got shared in fork.
+ * Redirect clientfd to /dev/null for mysql_close and SSL_close to write,
+ * shutdown, and close. The hack is needed to prevent shutdown() from breaking
+ * a socket that may be in use by the parent or other processes after fork.
+ *
+ * /dev/null is used to absorb writes; previously a dummy socket was used, but
+ * it could not abosrb writes and caused openssl to go into an infinite loop.
+ *
  * Returns Qtrue or Qfalse (success or failure)
+ *
+ * Note: if this function is needed on Windows, use "nul" instead of "/dev/null"
  */
 static VALUE invalidate_fd(int clientfd)
 {
 #ifdef SOCK_CLOEXEC
   /* Atomically set CLOEXEC on the new FD in case another thread forks */
-  int sockfd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  int sockfd = open("/dev/null", O_RDWR | O_CLOEXEC);
   if (sockfd < 0) {
     /* Maybe SOCK_CLOEXEC is defined but not available on this kernel */
-    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    int sockfd = open("/dev/null", O_RDWR);
     fcntl(sockfd, F_SETFD, FD_CLOEXEC);
   }
 #else
   /* Well we don't have SOCK_CLOEXEC, so just set FD_CLOEXEC quickly */
-  int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+  int sockfd = open("/dev/null", O_RDWR);
   fcntl(sockfd, F_SETFD, FD_CLOEXEC);
 #endif
 
@@ -326,10 +332,10 @@ static VALUE rb_mysql_info(VALUE self) {
 
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
-  VALUE rv;
-  GET_CLIENT(self);
   time_t start_time, end_time;
   unsigned int elapsed_time, connect_timeout;
+  VALUE rv;
+  GET_CLIENT(self);
 
   args.host = NIL_P(host) ? NULL : StringValuePtr(host);
   args.unix_socket = NIL_P(socket) ? NULL : StringValuePtr(socket);
@@ -349,11 +355,11 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
         time(&end_time);
         /* avoid long connect timeout from system time changes */
         if (end_time < start_time)
-            start_time = end_time;
+          start_time = end_time;
         elapsed_time = end_time - start_time;
         /* avoid an early timeout due to time truncating milliseconds off the start time */
         if (elapsed_time > 0)
-            elapsed_time--;
+          elapsed_time--;
         if (elapsed_time >= wrapper->connect_timeout)
           break;
         connect_timeout = wrapper->connect_timeout - elapsed_time;
@@ -764,17 +770,17 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
 
   switch(opt) {
     case MYSQL_OPT_CONNECT_TIMEOUT:
-      intval = NUM2INT(value);
+      intval = NUM2UINT(value);
       retval = &intval;
       break;
 
     case MYSQL_OPT_READ_TIMEOUT:
-      intval = NUM2INT(value);
+      intval = NUM2UINT(value);
       retval = &intval;
       break;
 
     case MYSQL_OPT_WRITE_TIMEOUT:
-      intval = NUM2INT(value);
+      intval = NUM2UINT(value);
       retval = &intval;
       break;
 
@@ -1233,6 +1239,13 @@ void init_mysql2_client() {
     }
   }
 
+  /* Initializing mysql library, so different threads could call Client.new */
+  /* without race condition in the library */
+  if (mysql_library_init(0, NULL, NULL) != 0) {
+    rb_raise(rb_eRuntimeError, "Could not initialize MySQL client library");
+    return;
+  }
+
 #if 0
   mMysql2      = rb_define_module("Mysql2"); Teach RDoc about Mysql2 constant.
 #endif
@@ -1365,6 +1378,10 @@ void init_mysql2_client() {
 #ifdef CLIENT_SECURE_CONNECTION
   rb_const_set(cMysql2Client, rb_intern("SECURE_CONNECTION"),
       LONG2NUM(CLIENT_SECURE_CONNECTION));
+#else
+  /* HACK because MySQL5.7 no longer defines this constant,
+   * but we're using it in our default connection flags. */
+  rb_const_set(cMysql2Client, rb_intern("SECURE_CONNECTION"), LONG2NUM(0));
 #endif
 
 #ifdef CLIENT_MULTI_STATEMENTS

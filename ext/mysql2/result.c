@@ -176,6 +176,20 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
 }
 #endif
 
+/* Interpret microseconds digits left-aligned in fixed-width field.
+ * e.g. 10.123 seconds means 10 seconds and 123000 microseconds,
+ * because the microseconds are to the right of the decimal point.
+ */
+static unsigned int msec_char_to_uint(char *msec_char, size_t len)
+{
+  int i;
+  for (i = 0; i < (len - 1); i++) {
+    if (msec_char[i] == '\0') {
+      msec_char[i] = '0';
+    }
+  }
+  return (unsigned int)strtoul(msec_char, NULL, 10);
+}
 
 static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast, MYSQL_FIELD * fields) {
   VALUE rowVal;
@@ -274,13 +288,16 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         }
         case MYSQL_TYPE_TIME: {     /* TIME field */
           int tokens;
-          unsigned int hour=0, min=0, sec=0;
-          tokens = sscanf(row[i], "%2u:%2u:%2u", &hour, &min, &sec);
+          unsigned int hour=0, min=0, sec=0, msec=0;
+          char msec_char[7] = {'0','0','0','0','0','0','\0'};
+
+          tokens = sscanf(row[i], "%2u:%2u:%2u.%6s", &hour, &min, &sec, msec_char);
           if (tokens < 3) {
             val = Qnil;
             break;
           }
-          val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec));
+          msec = msec_char_to_uint(msec_char, sizeof(msec_char));
+          val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
           if (!NIL_P(app_timezone)) {
             if (app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);
@@ -294,9 +311,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
         case MYSQL_TYPE_DATETIME: { /* DATETIME field */
           int tokens;
           unsigned int year=0, month=0, day=0, hour=0, min=0, sec=0, msec=0;
+          char msec_char[7] = {'0','0','0','0','0','0','\0'};
           uint64_t seconds;
 
-          tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6u", &year, &month, &day, &hour, &min, &sec, &msec);
+          tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6s", &year, &month, &day, &hour, &min, &sec, msec_char);
           if (tokens < 6) { /* msec might be empty */
             val = Qnil;
             break;
@@ -307,7 +325,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
             val = Qnil;
           } else {
             if (month < 1 || day < 1) {
-              rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
+              rb_raise(cMysql2Error, "Invalid date in field '%.*s': %s", fields[i].name_length, fields[i].name, row[i]);
               val = Qnil;
             } else {
               if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { /* use DateTime for larger date range, does not support microseconds */
@@ -324,7 +342,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
                     val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
                   }
                 }
-              } else { /* use Time, supports microseconds */
+              } else {
+                msec = msec_char_to_uint(msec_char, sizeof(msec_char));
                 val = rb_funcall(rb_cTime, db_timezone, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
                 if (!NIL_P(app_timezone)) {
                   if (app_timezone == intern_local) {
@@ -351,7 +370,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
             val = Qnil;
           } else {
             if (month < 1 || day < 1) {
-              rb_raise(cMysql2Error, "Invalid date: %s", row[i]);
+              rb_raise(cMysql2Error, "Invalid date in field '%.*s': %s", fields[i].name_length, fields[i].name, row[i]);
               val = Qnil;
             } else {
               val = rb_funcall(cDate, intern_new, 3, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day));

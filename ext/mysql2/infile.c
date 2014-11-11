@@ -1,7 +1,9 @@
 #include <mysql2_ext.h>
 
 #include <errno.h>
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 #include <fcntl.h>
 
 #define ERROR_LEN 1024

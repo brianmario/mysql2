@@ -104,7 +104,10 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   libfile = File.expand_path(File.join(rpath_dir, 'libmysql.lib'))
   file 'libmysql.a' => [deffile, libfile] do |t|
     when_writing 'building libmysql.a' do
-      sh 'dlltool', '--kill-at',
+      # Ruby kindly shows us where dllwrap is, but that tool does more than we want.
+      # Maybe in the future Ruby could provide RbConfig::CONFIG['DLLTOOL'] directly.
+      dlltool = RbConfig::CONFIG['DLLWRAP'].gsub('dllwrap', 'dlltool')
+      sh dlltool, '--kill-at',
          '--dllname', 'libmysql.dll',
          '--output-lib', 'libmysql.a',
          '--input-def', deffile, libfile
@@ -112,11 +115,13 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   end
 
   Rake::Task['libmysql.a'].invoke
-
-  # Make sure the generated interface library works
   $LOCAL_LIBS << ' ' << 'libmysql.a'
-  abort "-----\nCannot find libmysql.a\n----" unless have_library('libmysql')
-  abort "-----\nCannot link to libmysql.a (my_init)\n----" unless have_func('my_init')
+
+  # Make sure the generated interface library works (if cross-compiling, trust without verifying)
+  unless RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
+    abort "-----\nCannot find libmysql.a\n----" unless have_library('libmysql')
+    abort "-----\nCannot link to libmysql.a (my_init)\n----" unless have_func('my_init')
+  end
 
   # Vendor libmysql.dll
   vendordll = File.expand_path('../../../vendor/libmysql.dll', __FILE__)

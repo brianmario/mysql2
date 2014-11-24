@@ -80,14 +80,17 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
 
 /* this is called during GC */
 static void rb_mysql_result_free(void *ptr) {
-  mysql2_result_wrapper * wrapper = ptr;
+  mysql2_result_wrapper *wrapper = ptr;
   rb_mysql_result_free_result(wrapper);
+
+  printf("rb_mysql_result_free\n");
 
   // If the GC gets to client first it will be nil
   if (wrapper->client != Qnil) {
     decr_mysql2_client(wrapper->client_wrapper);
   }
 
+  printf("result.c xfree wrapper\n");
   xfree(wrapper);
 }
 
@@ -595,9 +598,11 @@ static VALUE rb_mysql_result_count(VALUE self) {
 }
 
 /* Mysql2::Result */
-VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r) {
+VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, MYSQL_STMT * s) {
   VALUE obj;
   mysql2_result_wrapper * wrapper;
+
+
   obj = Data_Make_Struct(cMysql2Result, mysql2_result_wrapper, rb_mysql_result_mark, rb_mysql_result_free, wrapper);
   wrapper->numberOfFields = 0;
   wrapper->numberOfRows = 0;
@@ -610,7 +615,10 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->streamingComplete = 0;
   wrapper->client = client;
   wrapper->client_wrapper = DATA_PTR(client);
+
+  printf("refcount++ before: %i\n", wrapper->client_wrapper->refcount);
   wrapper->client_wrapper->refcount++;
+  printf("refcount++ after: %i\n", wrapper->client_wrapper->refcount);
 
   rb_obj_call_init(obj, 0, NULL);
 

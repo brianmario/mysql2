@@ -2,7 +2,7 @@
 #define MYSQL2_RESULT_H
 
 void init_mysql2_result();
-VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r);
+VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, MYSQL_STMT * s);
 
 typedef struct {
   VALUE fields;

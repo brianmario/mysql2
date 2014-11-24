@@ -146,10 +146,12 @@ static void *nogvl_execute(void *ptr) {
  * Executes the current prepared statement, returns +stmt+.
  */
 static VALUE execute(int argc, VALUE *argv, VALUE self) {
-  MYSQL_BIND *bind_buffers;
+  MYSQL_BIND *bind_buffers = NULL;
   unsigned long bind_count;
   long i;
-  MYSQL_STMT* stmt;
+  MYSQL_STMT *stmt;
+  MYSQL_RES *result;
+  VALUE resultObj;
   GET_STATEMENT(self);
 
   stmt = stmt_wrapper->stmt;
@@ -258,7 +260,56 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
     FREE_BINDS;
   }
 
-  return self;
+
+  // ===============
+
+
+  result = mysql_stmt_result_metadata(stmt);
+  if(result == NULL) {
+    if(mysql_stmt_errno(stmt) != 0) {
+      // FIXME: MARK_CONN_INACTIVE(wrapper->client);
+      // FIXME: rb_raise_mysql2_stmt_error(self);
+    }
+    // no data and no error, so query was not a SELECT
+    return Qnil;
+  }
+
+
+  VALUE current;
+  current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
+  GET_CLIENT(stmt_wrapper->client);
+
+  printf("in statement.c: %i\n", wrapper->refcount);
+
+
+  resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, result, stmt);
+
+  // resultObj = rb_mysql_result_to_obj(result, stmt);
+  // rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(stmt_wrapper->client, "@query_options"), rb_intern("dup"), 0));
+
+
+
+  //   mysql2_result_wrapper* result_wrapper;
+
+  //   GET_CLIENT(stmt_wrapper->client);
+  //   GetMysql2Result(resultObj, result_wrapper);
+  //   result_wrapper->encoding = wrapper->encoding;
+
+
+  // return self;
+  // return resultObj;
+
+  // ===============
+
+
+
+
+  // VALUE current;
+  // current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
+
+  printf("exiting statement.c\n");
+
+  return resultObj;
 }
 
 /* call-seq: stmt.fields # => array

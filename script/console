@@ -4,4 +4,4 @@
 set -e
 
 cd $(dirname "$0")/..
-exec ruby -S bin/pry -Ilib -r mysql2 -r mysql2/console
+exec ruby -S pry -Ilib -r mysql2 -r mysql2/console

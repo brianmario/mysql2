@@ -3,7 +3,7 @@
 # Halt the tests on error
 set -e
 
-# Whever MySQL configs live, go there (this is for cross-platform)
+# Wherever MySQL configs live, go there (this is for cross-platform)
 cd $(my_print_defaults --help | grep my.cnf | xargs find 2>/dev/null | xargs dirname)
 
 # Create config files to run openssl in batch mode
@@ -64,4 +64,5 @@ ssl-key=/etc/mysql/server-key.pem
 ruby -e 'start = Time.now.min; while Time.now.min == start; sleep 2; end'
 
 # Ok, let's see what we got!
+set +e
 service mysql restart || brew services restart mysql

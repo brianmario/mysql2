@@ -236,26 +236,12 @@ static void rb_mysql_client_free(void *ptr) {
 
 void decr_mysql2_client(mysql_client_wrapper *wrapper)
 {
-
-  printf("decr_mysql2_client\n");
-  printf("  >> refcount before: %i\n", wrapper->refcount);
-
   wrapper->refcount--;
 
-  printf("  >> refcount after: %i\n", wrapper->refcount);
-
   if (wrapper->refcount == 0) {
-    printf("    -- wrapper->refcount == 0\n");
-
     nogvl_close(wrapper);
-    printf("    -- nogvl_close\n");
-
     xfree(wrapper->client);
-    printf("    -- xfree wrapper client\n");
-
     xfree(wrapper);
-    printf("    -- xfree wrapper\n");
-    printf("    -- refcount: %i\n\n", wrapper->refcount);
   }
 }
 
@@ -272,8 +258,6 @@ static VALUE allocate(VALUE klass) {
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
   wrapper->refcount = 1;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
-
-  printf("init refcount: %i == 1\n", wrapper->refcount);
 
   return obj;
 }
@@ -705,7 +689,6 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 
     rb_rescue2(do_query, (VALUE)&async_args, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
-    printf("calling rb_mysql_client_async_result\n");
     return rb_mysql_client_async_result(self);
   } else {
     return Qnil;
@@ -1236,8 +1219,6 @@ static VALUE initialize_ext(VALUE self) {
 static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
   GET_CLIENT(self);
   REQUIRE_CONNECTED(wrapper);
-
-  printf("prepare refcount: %i\n", wrapper->refcount);
 
   return rb_mysql_stmt_new(self, sql);
 }

@@ -83,14 +83,11 @@ static void rb_mysql_result_free(void *ptr) {
   mysql2_result_wrapper *wrapper = ptr;
   rb_mysql_result_free_result(wrapper);
 
-  printf("rb_mysql_result_free\n");
-
   // If the GC gets to client first it will be nil
   if (wrapper->client != Qnil) {
     decr_mysql2_client(wrapper->client_wrapper);
   }
 
-  printf("result.c xfree wrapper\n");
   xfree(wrapper);
 }
 
@@ -633,13 +630,9 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->streamingComplete = 0;
   wrapper->client = client;
   wrapper->client_wrapper = DATA_PTR(client);
-
-  printf("refcount++ before: %i\n", wrapper->client_wrapper->refcount);
   wrapper->client_wrapper->refcount++;
-  printf("refcount++ after: %i\n", wrapper->client_wrapper->refcount);
 
   rb_obj_call_init(obj, 0, NULL);
-
   rb_iv_set(obj, "@query_options", options);
 
   return obj;

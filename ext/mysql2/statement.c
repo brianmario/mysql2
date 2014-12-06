@@ -260,10 +260,6 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
     FREE_BINDS;
   }
 
-
-  // ===============
-
-
   result = mysql_stmt_result_metadata(stmt);
   if(result == NULL) {
     if(mysql_stmt_errno(stmt) != 0) {
@@ -274,40 +270,21 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
     return Qnil;
   }
 
-
   VALUE current;
   current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
   GET_CLIENT(stmt_wrapper->client);
 
-  printf("in statement.c: %i\n", wrapper->refcount);
-
-
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, result, stmt);
 
-  // resultObj = rb_mysql_result_to_obj(result, stmt);
-  // rb_iv_set(resultObj, "@query_options", rb_funcall(rb_iv_get(stmt_wrapper->client, "@query_options"), rb_intern("dup"), 0));
+#ifdef HAVE_RUBY_ENCODING_H
+  {
+    mysql2_result_wrapper *result_wrapper;
 
-
-
-  //   mysql2_result_wrapper* result_wrapper;
-
-  //   GET_CLIENT(stmt_wrapper->client);
-  //   GetMysql2Result(resultObj, result_wrapper);
-  //   result_wrapper->encoding = wrapper->encoding;
-
-
-  // return self;
-  // return resultObj;
-
-  // ===============
-
-
-
-
-  // VALUE current;
-  // current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
-
-  printf("exiting statement.c\n");
+    GET_CLIENT(stmt_wrapper->client);
+    GetMysql2Result(resultObj, result_wrapper);
+    result_wrapper->encoding = wrapper->encoding;
+  }
+#endif
 
   return resultObj;
 }
@@ -360,10 +337,10 @@ static VALUE fields(VALUE self) {
   return field_list;
 }
 
+#if 0
 // FIXME refactor into Mysql2::Result
 static VALUE each(VALUE self) {
   MYSQL_STMT *stmt;
-  MYSQL_RES *result;
   GET_STATEMENT(self);
   stmt = stmt_wrapper->stmt;
 
@@ -372,7 +349,6 @@ static VALUE each(VALUE self) {
     rb_raise(cMysql2Error, "FIXME: current limitation: each require block");
   }
 
-  result = mysql_stmt_result_metadata(stmt);
   if (result) {
     MYSQL_BIND *result_buffers;
     my_bool *is_null;
@@ -600,6 +576,7 @@ static VALUE each(VALUE self) {
 
   return self;
 }
+#endif
 
 void init_mysql2_statement() {
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
@@ -608,5 +585,5 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "field_count", field_count, 0);
   rb_define_method(cMysql2Statement, "execute", execute, -1);
   rb_define_method(cMysql2Statement, "fields", fields, 0);
-  rb_define_method(cMysql2Statement, "each", each, 0);
+  // rb_define_method(cMysql2Statement, "each", each, 0);
 }

@@ -11,4 +11,4 @@ client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8
 statement = client.prepare 'SELECT varchar_test, year_test FROM mysql2_test WHERE varchar_test = ?'
 result = statement.execute('test')
 
-statement.each {|x| p x }
+p result.each

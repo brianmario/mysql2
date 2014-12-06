@@ -108,7 +108,7 @@ describe Mysql2::Statement do
     statement.execute(Date.today)
   end
 
-  context "utf8_db_field" do
+  context "utf8_db" do
     before(:each) do
       @client.query("DROP DATABASE IF EXISTS test_mysql2_stmt_utf8")
       @client.query("CREATE DATABASE test_mysql2_stmt_utf8")
@@ -124,6 +124,29 @@ describe Mysql2::Statement do
     it "should be able to retrieve utf8 field names correctly" do
       statement = @client.prepare 'SELECT * FROM `テーブル`'
       statement.fields.should == ['整数', '文字列']
+      result = statement.execute
+
+      result.to_a.should == [{"整数"=>1, "文字列"=>"イチ"}, {"整数"=>2, "文字列"=>"弐"}, {"整数"=>3, "文字列"=>"さん"}]
     end
+
+    it "should be able to retrieve utf8 param query correctly" do
+      statement = @client.prepare 'SELECT 整数 FROM テーブル WHERE 文字列 = ?'
+      statement.param_count.should == 1
+
+      result = statement.execute 'イチ'
+
+      result.to_a.should == [{"整数"=>1}]
+    end
+
+    it "should be able to retrieve query with param in different encoding correctly" do
+      statement = @client.prepare 'SELECT 整数 FROM テーブル WHERE 文字列 = ?'
+      statement.param_count.should == 1
+
+      param = 'イチ'.encode("EUC-JP")
+      result = statement.execute param
+
+      result.to_a.should == [{"整数"=>1}]
+    end
+
   end
 end

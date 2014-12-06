@@ -33,9 +33,11 @@ describe Mysql2::Statement do
     statement2.field_count.should == 1
   end
 
-  #   statement2 = @client.prepare 'SELECT 1'
-  #   statement2.field_count.should == 1
-  # end
+  it "should tell us the result count" do
+    statement = @client.prepare 'SELECT 1'
+    result = statement.execute
+    result.count.should == 1
+  end
 
   it "should let us execute our statement" do
     statement = @client.prepare 'SELECT 1'

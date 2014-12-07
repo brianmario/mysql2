@@ -125,7 +125,7 @@ describe Mysql2::Statement do
       result.to_a.should == [{"整数"=>1}]
     end
 
-  end
+  end if defined? Encoding
 
   context "streaming result" do
     it "should be able to stream query result" do

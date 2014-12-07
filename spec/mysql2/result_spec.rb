@@ -128,9 +128,10 @@ describe Mysql2::Result do
     end
 
     it "#count should be zero for rows after streaming when there were no results" do
+      @client.query "USE test"
       result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
       result.count.should eql(0)
-      result.each.to_a
+      result.each {|r|  }
       result.count.should eql(0)
     end
 

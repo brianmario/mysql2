@@ -368,6 +368,10 @@ static VALUE rb_mysql_result_stmt_fetch_row(VALUE self, ID db_timezone, ID app_t
 
       switch(result_buffer->buffer_type) {
         case MYSQL_TYPE_TINY:         // signed char
+          if (castBool && fields[i].length == 1) {
+            val = (*((unsigned char*)result_buffer->buffer) != 0) ? Qtrue : Qfalse;
+            break;
+          }
           if (result_buffer->is_unsigned) {
             val = UINT2NUM(*((unsigned char*)result_buffer->buffer));
           } else {

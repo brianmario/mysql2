@@ -2,7 +2,7 @@
 
 VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
-static VALUE sym_stream, intern_error_number_eql, intern_sql_state_eql;
+static VALUE sym_stream, intern_error_number_eql, intern_sql_state_eql, intern_each;
 
 #define GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
@@ -365,6 +365,11 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   }
 #endif
 
+  if (!is_streaming) {
+    // cache all result
+    rb_funcall(resultObj, intern_each, 0);
+  }
+
   return resultObj;
 }
 
@@ -428,4 +433,5 @@ void init_mysql2_statement() {
 
   intern_error_number_eql = rb_intern("error_number=");
   intern_sql_state_eql = rb_intern("sql_state=");
+  intern_each = rb_intern("each");
 }

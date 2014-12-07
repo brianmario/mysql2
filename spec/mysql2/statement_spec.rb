@@ -58,6 +58,18 @@ describe Mysql2::Statement do
     rows.should == [{"1"=>1}]
   end
 
+  it "should keep its result after other query" do
+    @client.query 'USE test'
+    @client.query 'CREATE TABLE IF NOT EXISTS mysql2_stmt_q(a int)'
+    @client.query 'INSERT INTO mysql2_stmt_q (a) VALUES (1), (2)'
+    stmt = @client.prepare('SELECT a FROM mysql2_stmt_q WHERE a = ?')
+    result1 = stmt.execute(1)
+    result2 = stmt.execute(2)
+    result2.first.should == {"a"=>2}
+    result1.first.should == {"a"=>1}
+    @client.query 'DROP TABLE IF EXISTS mysql2_stmt_q'
+  end
+
   it "should select dates" do
     statement = @client.prepare 'SELECT NOW()'
     result = statement.execute

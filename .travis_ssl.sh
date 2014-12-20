@@ -65,4 +65,9 @@ ruby -e 'start = Time.now.min; while Time.now.min == start; sleep 2; end'
 
 # Ok, let's see what we got!
 set +e
-service mysql restart || brew services restart mysql
+if [ "$(uname)" == "Darwin" ]; then
+  brew tap homebrew/boneyard
+  brew services restart mysql
+else
+  service mysql restart
+fi

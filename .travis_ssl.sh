@@ -60,14 +60,5 @@ ssl-cert=/etc/mysql/server-cert.pem
 ssl-key=/etc/mysql/server-key.pem
 " >> my.cnf
 
-# FIXME The startdate code above isn't doing the trick, we must wait until the minute moves
+# Wait until the minute moves to ensure that the SSL cert is within its valid range
 ruby -e 'start = Time.now.min; while Time.now.min == start; sleep 2; end'
-
-# Ok, let's see what we got!
-set +e
-if [ "$(uname)" == "Darwin" ]; then
-  brew tap homebrew/boneyard
-  brew services restart mysql
-else
-  service mysql restart
-fi

@@ -25,7 +25,10 @@ before_install:
     "
   - |
     bash -c " # Configure SSL support
-    sudo bash .travis_ssl.sh
+    if [[ ! x$OSTYPE =~ ^xdarwin ]]; then
+      sudo bash .travis_ssl.sh
+      sudo service mysql restart
+    fi
     "
   - mysqld --version
   - mysql -u root -e "CREATE DATABASE IF NOT EXISTS test"
@@ -43,6 +46,7 @@ matrix:
   allow_failures:
     - env: DB=mysql57
     - rvm: rbx-2
+    - os: osx
   include:
     - rvm: 2.0.0
       env: DB=mariadb55

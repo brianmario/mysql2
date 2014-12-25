@@ -22,7 +22,7 @@ file "vendor/#{CONNECTOR_DIR}/include/mysql.h" => ["vendor/#{CONNECTOR_ZIP}"] do
   full_file = File.expand_path(t.prerequisites.last)
   when_writing "creating #{t.name}" do
     cd "vendor" do
-      sh "unzip #{full_file} #{CONNECTOR_DIR}/bin/** #{CONNECTOR_DIR}/include/** #{CONNECTOR_DIR}/lib/**"
+      sh "unzip -uq #{full_file} #{CONNECTOR_DIR}/bin/** #{CONNECTOR_DIR}/include/** #{CONNECTOR_DIR}/lib/**"
     end
     # update file timestamp to avoid Rake perform this extraction again.
     touch t.name

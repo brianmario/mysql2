@@ -5,21 +5,31 @@ def gemspec
 end
 
 Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
-  # Expand the path because the build dir is 3-4 levels deep in tmp/platform/version/
-  connector_dir = File.expand_path("../../vendor/#{CONNECTOR_DIR}", __FILE__)
-  windows_options = [ "--with-mysql-dir=#{connector_dir}" ]
+  # put binaries into lib/mysql2/ or lib/mysql2/x.y/
+  ext.lib_dir = File.join 'lib', 'mysql2'
 
-  # automatically add build options to avoid need of manual input
+  # clean compiled extension
+  CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
+
   if RUBY_PLATFORM =~ /mswin|mingw/ then
-    ext.config_options = windows_options
+    Rake::Task['vendor:mysql'].invoke
+    # Expand the path because the build dir is 3-4 levels deep in tmp/platform/version/
+    connector_dir = File.expand_path("../../vendor/#{CONNECTOR_DIR}", __FILE__)
+    ext.config_options = [ "--with-mysql-dir=#{connector_dir}" ]
   else
     ext.cross_compile = true
-    ext.cross_platform = ['x86-mingw32', 'x86-mswin32-60']
-    ext.cross_config_options = windows_options
+    ext.cross_platform = ['x86-mingw32', 'x86-mswin32-60', 'x64-mingw32']
+    ext.cross_config_options = {
+      'x86-mingw32'    => [ "--with-mysql-dir=" + File.expand_path("../../vendor/mysql-connector-c-#{CONNECTOR_VERSION}-win32", __FILE__) ],
+      'x86-mswin32-60' => [ "--with-mysql-dir=" + File.expand_path("../../vendor/mysql-connector-c-#{CONNECTOR_VERSION}-win32", __FILE__) ],
+      'x64-mingw32'    => [ "--with-mysql-dir=" + File.expand_path("../../vendor/mysql-connector-c-#{CONNECTOR_VERSION}-winx64", __FILE__) ],
+    }
 
-    # inject 1.8/1.9 pure-ruby entry point when cross compiling only
     ext.cross_compiling do |spec|
+      Rake::Task['lib/mysql2/mysql2.rb'].invoke
+      Rake::Task['vendor:mysql'].invoke(spec.platform)
       spec.files << 'lib/mysql2/mysql2.rb'
+      spec.files << 'vendor/libmysql.dll'
       spec.post_install_message = <<-POST_INSTALL_MESSAGE
 
 ======================================================================================================
@@ -28,7 +38,7 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   It was built using MySQL Connector/C version #{CONNECTOR_VERSION}.
   It's recommended to use the exact same version to avoid potential issues.
 
-  At the time of building this gem, the necessary DLL files where available
+  At the time of building this gem, the necessary DLL files were available
   in the following download:
 
   http://dev.mysql.com/get/Downloads/Connector-C/#{CONNECTOR_ZIP}/from/pick
@@ -40,11 +50,6 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
       POST_INSTALL_MESSAGE
     end
   end
-
-  ext.lib_dir = File.join 'lib', 'mysql2'
-
-  # clean compiled extension
-  CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
 end
 Rake::Task[:spec].prerequisites << :compile
 
@@ -56,10 +61,6 @@ RUBY_VERSION =~ /(\\d+.\\d+)/
 require "#{name}/\#{$1}/#{name}"
     eoruby
   end
-end
-
-if Rake::Task.task_defined?(:cross)
-  Rake::Task[:cross].prerequisites << "lib/mysql2/mysql2.rb"
 end
 
 # DevKit task following the example of Luis Lavena's test-ruby-c-extension
@@ -74,8 +75,4 @@ end
 if RUBY_PLATFORM =~ /mingw|mswin/ then
   Rake::Task['compile'].prerequisites.unshift 'vendor:mysql'
   Rake::Task['compile'].prerequisites.unshift 'devkit'
-else
-  if Rake::Task.tasks.map {|t| t.name }.include? 'cross'
-    Rake::Task['cross'].prerequisites.unshift 'vendor:mysql'
-  end
 end

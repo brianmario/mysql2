@@ -124,9 +124,12 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   end
 
   # Vendor libmysql.dll
-  vendordll = File.expand_path('../../../vendor/libmysql.dll', __FILE__)
+  vendordir = File.expand_path('../../../vendor/', __FILE__)
+  directory vendordir
+
+  vendordll = File.join(vendordir, 'libmysql.dll')
   dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
-  file vendordll => dllfile do |t|
+  file vendordll => [dllfile, vendordir] do |t|
     when_writing 'copying libmysql.dll' do
       cp dllfile, vendordll
     end

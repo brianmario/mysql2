@@ -7,19 +7,22 @@ require 'rational' unless RUBY_VERSION >= '1.9.2'
 # This gives a chance to be flexible about the load path
 # Or to bomb out with a clear error message instead of a linker crash
 if RUBY_PLATFORM =~ /mswin|mingw/
-  dll_search = [
-    File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\'),
-    File.expand_path('../libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\'),
-    'libmysql.dll' # This will use default / system library paths
-  ]
-
-  # If this environment variable is set, it overrides any other search paths
-  dll_search = [ ENV['RUBY_MYSQL2_LIBMYSQL_DLL'].dup ] if ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
+  dll_path = if ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
+               # If this environment variable is set, it overrides any other paths
+               # The user is advised to use backslashes not forward slashes
+               ENV['RUBY_MYSQL2_LIBMYSQL_DLL'].dup
+             elsif File.exist?(File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)))
+               # Use vendor/libmysql.dll if it exists, convert slashes for Win32 LoadLibrary
+               File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\')
+             else
+               # This will use default / system library paths
+               'libmysql.dll'
+             end
 
   require 'Win32API'
   LoadLibrary = Win32API.new('Kernel32', 'LoadLibrary', ['P'], 'I')
-  unless dll_search.any? { |dll| 0 != LoadLibrary.call(dll) }
-    abort "Failed to load libmysql.dll from any of #{dll_search.inspect}"
+  if 0 == LoadLibrary.call(dll_path)
+    abort "Failed to load libmysql.dll from #{dll_path}"
   end
 end
 

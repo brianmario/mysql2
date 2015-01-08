@@ -1,36 +1,60 @@
 require 'rake/clean'
 require 'rake/extensioncompiler'
 
-CONNECTOR_VERSION = "6.1.5" #"mysql-connector-c-6.1.5-win32.zip"
-CONNECTOR_PLATFORM = RUBY_PLATFORM =~ /x64/ ? "winx64" : "win32"
-CONNECTOR_DIR = "mysql-connector-c-#{CONNECTOR_VERSION}-#{CONNECTOR_PLATFORM}"
-CONNECTOR_ZIP = "mysql-connector-c-#{CONNECTOR_VERSION}-#{CONNECTOR_PLATFORM}.zip"
+CONNECTOR_VERSION = "6.1.5" # NOTE: Track the upstream version from time to time
 
-# download mysql library and headers
-directory "vendor"
-
-file "vendor/#{CONNECTOR_ZIP}" => ["vendor"] do |t|
-  url = "http://cdn.mysql.com/Downloads/Connector-C/#{CONNECTOR_ZIP}"
-  when_writing "downloading #{t.name}" do
-    cd File.dirname(t.name) do
-      sh "curl -C - -O #{url} || wget -c #{url}"
-    end
-  end
+def vendor_mysql_platform(platform=nil)
+  platform ||= RUBY_PLATFORM
+  platform =~ /x64/ ? "winx64" : "win32"
 end
 
-file "vendor/#{CONNECTOR_DIR}/include/mysql.h" => ["vendor/#{CONNECTOR_ZIP}"] do |t|
-  full_file = File.expand_path(t.prerequisites.last)
-  when_writing "creating #{t.name}" do
-    cd "vendor" do
-      sh "unzip -uq #{full_file} #{CONNECTOR_DIR}/bin/** #{CONNECTOR_DIR}/include/** #{CONNECTOR_DIR}/lib/**"
-    end
-    # update file timestamp to avoid Rake perform this extraction again.
-    touch t.name
-  end
+def vendor_mysql_dir(*args)
+  "mysql-connector-c-#{CONNECTOR_VERSION}-#{vendor_mysql_platform(*args)}"
 end
 
-# clobber expanded packages
-CLOBBER.include("vendor/#{CONNECTOR_DIR}")
+def vendor_mysql_zip(*args)
+  "#{vendor_mysql_dir(*args)}.zip"
+end
+
+def vendor_mysql_url(*args)
+  "http://cdn.mysql.com/Downloads/Connector-C/#{vendor_mysql_zip(*args)}"
+end
 
 # vendor:mysql
-task 'vendor:mysql' => "vendor/#{CONNECTOR_DIR}/include/mysql.h"
+task "vendor:mysql", [:platform] do |t, args|
+  puts "vendor:mysql for #{vendor_mysql_dir(args[:platform])}"
+
+  # download mysql library and headers
+  directory "vendor"
+
+  file "vendor/#{vendor_mysql_zip(args[:platform])}" => ["vendor"] do |t|
+    url = vendor_mysql_url(args[:platform])
+    when_writing "downloading #{t.name}" do
+      cd "vendor" do
+        sh "curl", "-C", "-", "-O", url do |ok, res|
+          sh "wget", "-c", url if ! ok
+        end
+      end
+    end
+  end
+
+  file "vendor/#{vendor_mysql_dir(args[:platform])}/include/mysql.h" => ["vendor/#{vendor_mysql_zip(args[:platform])}"] do |t|
+    full_file = File.expand_path(t.prerequisites.last)
+    when_writing "creating #{t.name}" do
+      cd "vendor" do
+        sh "unzip", "-uq", full_file,
+           "#{vendor_mysql_dir(args[:platform])}/bin/**",
+           "#{vendor_mysql_dir(args[:platform])}/include/**",
+           "#{vendor_mysql_dir(args[:platform])}/lib/**"
+      end
+      # update file timestamp to avoid Rake perform this extraction again.
+      touch t.name
+    end
+  end
+
+  # clobber expanded packages
+  CLOBBER.include("vendor/#{vendor_mysql_dir(args[:platform])}")
+
+  Rake::Task["vendor/#{vendor_mysql_dir(args[:platform])}/include/mysql.h"].invoke
+  Rake::Task["vendor:mysql"].reenable # allow task to be invoked again (with another platform)
+end

@@ -14,20 +14,21 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   if RUBY_PLATFORM =~ /mswin|mingw/ then
     Rake::Task['vendor:mysql'].invoke
     # Expand the path because the build dir is 3-4 levels deep in tmp/platform/version/
-    connector_dir = File.expand_path("../../vendor/#{CONNECTOR_DIR}", __FILE__)
+    connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir}", __FILE__)
     ext.config_options = [ "--with-mysql-dir=#{connector_dir}" ]
   else
+    Rake::Task['vendor:mysql'].invoke('x86')
+    Rake::Task['vendor:mysql'].invoke('x64')
     ext.cross_compile = true
     ext.cross_platform = ['x86-mingw32', 'x86-mswin32-60', 'x64-mingw32']
     ext.cross_config_options = {
-      'x86-mingw32'    => [ "--with-mysql-dir=" + File.expand_path("../../vendor/mysql-connector-c-#{CONNECTOR_VERSION}-win32", __FILE__) ],
-      'x86-mswin32-60' => [ "--with-mysql-dir=" + File.expand_path("../../vendor/mysql-connector-c-#{CONNECTOR_VERSION}-win32", __FILE__) ],
-      'x64-mingw32'    => [ "--with-mysql-dir=" + File.expand_path("../../vendor/mysql-connector-c-#{CONNECTOR_VERSION}-winx64", __FILE__) ],
+      'x86-mingw32'    => [ "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__) ],
+      'x86-mswin32-60' => [ "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__) ],
+      'x64-mingw32'    => [ "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x64')}", __FILE__) ],
     }
 
     ext.cross_compiling do |spec|
       Rake::Task['lib/mysql2/mysql2.rb'].invoke
-      Rake::Task['vendor:mysql'].invoke(spec.platform)
       spec.files << 'lib/mysql2/mysql2.rb'
       spec.files << 'vendor/libmysql.dll'
       spec.post_install_message = <<-POST_INSTALL_MESSAGE
@@ -41,7 +42,7 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   At the time of building this gem, the necessary DLL files were available
   in the following download:
 
-  http://dev.mysql.com/get/Downloads/Connector-C/#{CONNECTOR_ZIP}/from/pick
+  #{vendor_mysql_url(spec.platform)}
 
   And put lib\\libmysql.dll file in your Ruby bin directory, for example C:\\Ruby\\bin
 

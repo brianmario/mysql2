@@ -13,6 +13,7 @@ end
 
 group :development do
   gem 'pry'
+  gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
 end
 
 platforms :rbx do

@@ -1,6 +1,7 @@
 # Mysql2 - A modern, simple and very fast MySQL library for Ruby - binding to libmysql
 
-[![Build Status](https://travis-ci.org/brianmario/mysql2.png)](https://travis-ci.org/brianmario/mysql2)
+Travis CI [![Travis CI Status](https://travis-ci.org/brianmario/mysql2.png)](https://travis-ci.org/brianmario/mysql2)
+Appveyor CI [![Appveyor CI Status](https://ci.appveyor.com/api/projects/status/github/sodabrew/mysql2)](https://ci.appveyor.com/project/sodabrew/mysql2)
 
 The Mysql2 gem is meant to serve the extremely common use-case of connecting, querying and iterating on results.
 Some database libraries out there serve as direct 1:1 mappings of the already complex C APIs available.
@@ -52,24 +53,21 @@ are located somewhere different than on your build system.
 This overrides any rpath calculated by default or by the options above.
 
 ### Windows
-First, make sure you have the DevKit installed (http://rubyinstaller.org/downloads/) and its variables
-are loaded by running devkit\devktvars.bat .
+Make sure that you have Ruby and the DevKit compilers installed. We recommend
+the [Ruby Installer](http://rubyinstaller.org) distribution.
 
-Next, you need a MySQL library to link against. If you have MySQL loaded on your development machine,
-you can use that. If not, you will need to either copy the MySQL directory from your server, or else
-obtain a copy of the MySQL C connector: http://dev.mysql.com/downloads/connector/c/
+By default, the mysql2 gem will download and use MySQL Connector/C from
+mysql.com. If you prefer to use a local installation of Connector/C, add the
+flag `--with-mysql-dir=c:/mysql-connector-c-x-y-z` (_this path may use forward slashes_).
 
-If you're using the connector, I recommend just getting the .zip file and unzipping it someplace convenient.
+By default, the `libmysql.dll` library will be copied into the mysql2 gem
+directory. To prevent this, add the flag `--no-vendor-libmysql`. The mysql2 gem
+will search for `libmysql.dll` in the following paths, in order:
 
-Now you can install mysql2. You must use the `--with-mysql-dir` option to tell gem where your MySQL library
-files are. For example, if you unzipped the connector to c:\mysql-connector-c-6.1.1-win32 you would install
-the gem like this:
-
-    gem install mysql2 -- --with-mysql-dir=c:\mysql-connector-c-6.1.1-win32
-
-Finally, you must copy libmysql.dll from the lib subdirectory of your MySQL or MySQL connector directory into
-your ruby\bin directory. In the above example, libmysql.dll would be located at
-c:\mysql-connector-c-6.1.1-win32\lib .
+* Environment variable `RUBY_MYSQL2_LIBMYSQL_DLL=C:\path\to\libmysql.dll`
+  (_note the Windows-style backslashes_).
+* In the mysql2 gem's own directory `vendor/libmysql.dll`
+* In the system's default library search paths.
 
 ## Usage
 

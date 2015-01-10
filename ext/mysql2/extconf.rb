@@ -74,10 +74,6 @@ else
   rpath_dir = lib
 end
 
-if RUBY_PLATFORM =~ /mswin|mingw/
-  exit 1 unless have_library('libmysql')
-end
-
 if have_header('mysql.h')
   prefix = nil
 elsif have_header('mysql/mysql.h')
@@ -98,31 +94,82 @@ if try_link('int main() {return 0;}', gcc_flags)
   $CFLAGS << gcc_flags
 end
 
-case explicit_rpath = with_config('mysql-rpath')
-when true
-  abort "-----\nOption --with-mysql-rpath must have an argument\n-----"
-when false
-  warn "-----\nOption --with-mysql-rpath has been disabled at your request\n-----"
-when String
-  # The user gave us a value so use it
-  rpath_flags = " -Wl,-rpath,#{explicit_rpath}"
-  warn "-----\nSetting mysql rpath to #{explicit_rpath}\n-----"
-  $LDFLAGS << rpath_flags
+if RUBY_PLATFORM =~ /mswin|mingw/
+  # Build libmysql.a interface link library
+  require 'rake'
+
+  # Build libmysql.a interface link library
+  # Use rake to rebuild only if these files change
+  deffile = File.expand_path('../../../support/libmysql.def', __FILE__)
+  libfile = File.expand_path(File.join(rpath_dir, 'libmysql.lib'))
+  file 'libmysql.a' => [deffile, libfile] do |t|
+    when_writing 'building libmysql.a' do
+      # Ruby kindly shows us where dllwrap is, but that tool does more than we want.
+      # Maybe in the future Ruby could provide RbConfig::CONFIG['DLLTOOL'] directly.
+      dlltool = RbConfig::CONFIG['DLLWRAP'].gsub('dllwrap', 'dlltool')
+      sh dlltool, '--kill-at',
+         '--dllname', 'libmysql.dll',
+         '--output-lib', 'libmysql.a',
+         '--input-def', deffile, libfile
+    end
+  end
+
+  Rake::Task['libmysql.a'].invoke
+  $LOCAL_LIBS << ' ' << 'libmysql.a'
+
+  # Make sure the generated interface library works (if cross-compiling, trust without verifying)
+  unless RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
+    abort "-----\nCannot find libmysql.a\n----" unless have_library('libmysql')
+    abort "-----\nCannot link to libmysql.a (my_init)\n----" unless have_func('my_init')
+  end
+
+  # Vendor libmysql.dll
+  vendordir = File.expand_path('../../../vendor/', __FILE__)
+  directory vendordir
+
+  vendordll = File.join(vendordir, 'libmysql.dll')
+  dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
+  file vendordll => [dllfile, vendordir] do |t|
+    when_writing 'copying libmysql.dll' do
+      cp dllfile, vendordll
+    end
+  end
+
+  # Copy libmysql.dll to the local vendor directory by default
+  if arg_config('--no-vendor-libmysql')
+    # Fine, don't.
+    puts "--no-vendor-libmysql"
+  else # Default: arg_config('--vendor-libmysql')
+    # Let's do it!
+    Rake::Task[vendordll].invoke
+  end
 else
-  if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
-    rpath_flags = " -Wl,-rpath,#{libdir}"
-    if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', rpath_flags)
-      # Usually Ruby sets RPATHFLAG the right way for each system, but not on OS X.
-      warn "-----\nSetting rpath to #{libdir}\n-----"
-      $LDFLAGS << rpath_flags
-    else
-      if RbConfig::CONFIG["RPATHFLAG"].to_s.empty?
-        # If we got here because try_link failed, warn the user
-        warn "-----\nDon't know how to set rpath on your system, if MySQL libraries are not in path mysql2 may not load\n-----"
+  case explicit_rpath = with_config('mysql-rpath')
+  when true
+    abort "-----\nOption --with-mysql-rpath must have an argument\n-----"
+  when false
+    warn "-----\nOption --with-mysql-rpath has been disabled at your request\n-----"
+  when String
+    # The user gave us a value so use it
+    rpath_flags = " -Wl,-rpath,#{explicit_rpath}"
+    warn "-----\nSetting mysql rpath to #{explicit_rpath}\n-----"
+    $LDFLAGS << rpath_flags
+  else
+    if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
+      rpath_flags = " -Wl,-rpath,#{libdir}"
+      if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', rpath_flags)
+        # Usually Ruby sets RPATHFLAG the right way for each system, but not on OS X.
+        warn "-----\nSetting rpath to #{libdir}\n-----"
+        $LDFLAGS << rpath_flags
+      else
+        if RbConfig::CONFIG["RPATHFLAG"].to_s.empty?
+          # If we got here because try_link failed, warn the user
+          warn "-----\nDon't know how to set rpath on your system, if MySQL libraries are not in path mysql2 may not load\n-----"
+        end
+        # Make sure that LIBPATH gets set if we didn't explicitly set the rpath.
+        warn "-----\nSetting libpath to #{libdir}\n-----"
+        $LIBPATH << libdir unless $LIBPATH.include?(libdir)
       end
-      # Make sure that LIBPATH gets set if we didn't explicitly set the rpath.
-      warn "-----\nSetting libpath to #{libdir}\n-----"
-      $LIBPATH << libdir unless $LIBPATH.include?(libdir)
     end
   end
 end

@@ -1,0 +1,43 @@
+---
+version: "{build}"
+clone_depth: 10
+install:
+  - SET PATH=C:\Ruby%ruby_version%\bin;%PATH%
+  - ruby --version
+  - gem --version
+  - gem install bundler --quiet --no-ri --no-rdoc
+  - bundler --version
+  - bundle install --without benchmarks
+build_script:
+  - bundle exec rake compile
+test_script:
+  - '"C:\Program Files\MySQL\MySQL Server 5.6\bin\mysql" --version'
+  - >
+    "C:\Program Files\MySQL\MySQL Server 5.6\bin\mysql" -u root -p"Password12!" -e "
+    CREATE DATABASE IF NOT EXISTS test;
+    CREATE USER '%USERNAME%'@'localhost';
+    SET PASSWORD = PASSWORD('');
+    FLUSH PRIVILEGES;
+    "
+  - bundle exec rake spec
+# Where do I get Unix find?
+#on_failure:
+#  - find tmp -name "*.log" -exec cat {};
+environment:
+  matrix:
+    - ruby_version: "200"
+    - ruby_version: "200-x64"
+    - ruby_version: "21"
+    - ruby_version: "21-x64"
+cache:
+  - vendor
+  - C:\Ruby200\lib\ruby\gems\2.0.0
+  - C:\Ruby200\bin
+  - C:\Ruby200-x64\lib\ruby\gems\2.0.0
+  - C:\Ruby200-x64\bin
+  - C:\Ruby21\lib\ruby\gems\2.1.0
+  - C:\Ruby21\bin
+  - C:\Ruby21-x64\lib\ruby\gems\2.1.0
+  - C:\Ruby21-x64\bin
+services:
+  - mysql

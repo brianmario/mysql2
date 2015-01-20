@@ -16,7 +16,7 @@ The API consists of two classes:
 `Mysql2::Result` - returned from issuing a #query on the connection. It includes Enumerable.
 
 ## Installing
-### OSX / Linux
+### OS X / Linux
 ``` sh
 gem install mysql2
 ```
@@ -29,6 +29,16 @@ By default, the mysql2 gem will try to find a copy of MySQL in this order:
 * Option `--with-mysql-config`, if provided (see below).
 * Several typical paths for `mysql_config` (default for the majority of users).
 * The directory `/usr/local`.
+
+### OS X with MacPorts
+
+``` sh
+sudo port install mysql56
+```
+
+``` sh
+gem install mysql2 -- --with-mysql-config=/opt/local/lib/mysql56/bin/mysql_config
+```
 
 ### Configuration options
 

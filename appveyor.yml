@@ -7,7 +7,7 @@ install:
   - gem --version
   - gem install bundler --quiet --no-ri --no-rdoc
   - bundler --version
-  - bundle install --without benchmarks
+  - bundle install --without benchmarks --path vendor/bundle
 build_script:
   - bundle exec rake compile
 test_script:
@@ -31,13 +31,5 @@ environment:
     - ruby_version: "21-x64"
 cache:
   - vendor
-  - C:\Ruby200\lib\ruby\gems\2.0.0
-  - C:\Ruby200\bin
-  - C:\Ruby200-x64\lib\ruby\gems\2.0.0
-  - C:\Ruby200-x64\bin
-  - C:\Ruby21\lib\ruby\gems\2.1.0
-  - C:\Ruby21\bin
-  - C:\Ruby21-x64\lib\ruby\gems\2.1.0
-  - C:\Ruby21-x64\bin
 services:
   - mysql

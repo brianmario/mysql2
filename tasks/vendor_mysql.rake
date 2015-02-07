@@ -21,6 +21,12 @@ def vendor_mysql_url(*args)
 end
 
 # vendor:mysql
+task "vendor:mysql:cross" do |t|
+  # When cross-compiling, grab both 32 and 64 bit connectors
+  Rake::Task['vendor:mysql'].invoke('x86')
+  Rake::Task['vendor:mysql'].invoke('x64')
+end
+
 task "vendor:mysql", [:platform] do |t, args|
   puts "vendor:mysql for #{vendor_mysql_dir(args[:platform])}"
 

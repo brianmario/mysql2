@@ -12,19 +12,16 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
 
   if RUBY_PLATFORM =~ /mswin|mingw/ then
-    Rake::Task['vendor:mysql'].invoke
     # Expand the path because the build dir is 3-4 levels deep in tmp/platform/version/
     connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir}", __FILE__)
     ext.config_options = [ "--with-mysql-dir=#{connector_dir}" ]
   else
-    Rake::Task['vendor:mysql'].invoke('x86')
-    Rake::Task['vendor:mysql'].invoke('x64')
     ext.cross_compile = true
     ext.cross_platform = ['x86-mingw32', 'x86-mswin32-60', 'x64-mingw32']
-    ext.cross_config_options = {
-      'x86-mingw32'    => [ "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__) ],
-      'x86-mswin32-60' => [ "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__) ],
-      'x64-mingw32'    => [ "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x64')}", __FILE__) ],
+    ext.cross_config_options << {
+      'x86-mingw32'    => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__),
+      'x86-mswin32-60' => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__),
+      'x64-mingw32'    => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x64')}", __FILE__),
     }
 
     ext.cross_compiling do |spec|
@@ -76,4 +73,8 @@ end
 if RUBY_PLATFORM =~ /mingw|mswin/ then
   Rake::Task['compile'].prerequisites.unshift 'vendor:mysql'
   Rake::Task['compile'].prerequisites.unshift 'devkit'
+else
+  if Rake::Task.tasks.map {|t| t.name }.include? 'cross'
+    Rake::Task['cross'].prerequisites.unshift 'vendor:mysql:cross'
+  end
 end

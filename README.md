@@ -16,12 +16,16 @@ The API consists of two classes:
 `Mysql2::Result` - returned from issuing a #query on the connection. It includes Enumerable.
 
 ## Installing
-### OSX / Linux
+### General Instructions
 ``` sh
 gem install mysql2
 ```
 
-This gem links against MySQL's `libmysqlclient` C shared library. You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`, or other appropriate package for your system.
+This gem links against MySQL's `libmysqlclient` library or `Connector/C`
+library, and compatible alternatives such as MariaDB.
+You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`,
+or other appropriate package for your system. See below for system-specific
+instructions.
 
 By default, the mysql2 gem will try to find a copy of MySQL in this order:
 
@@ -51,6 +55,19 @@ Override the runtime path used to find the MySQL libraries.
 This may be needed if you deploy to a system where these libraries
 are located somewhere different than on your build system.
 This overrides any rpath calculated by default or by the options above.
+
+### Linux and other Unixes
+
+You may need to install a package such as `libmysqlclient-dev` or `mysql-devel`;
+refer to your distribution's package guide to find the particular package.
+The most common issue we see is a user who has the library file `libmysqlclient.so` but is
+missing the header file `mysql.h` -- double check that you have the _-dev_ packages installed.
+
+### Mac OS X
+
+You may use MacPorts, Homebrew, or a native MySQL installer package. The most
+common paths will be automatically searched. If you want to select a specific
+MySQL directory, use the `--with-mysql-dir` or `--with-mysql-config` options above.
 
 ### Windows
 Make sure that you have Ruby and the DevKit compilers installed. We recommend
@@ -420,13 +437,13 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 This gem is tested with the following Ruby versions on Linux and Mac OS X:
 
- * Ruby MRI 1.8.7, 1.9.2, 1.9.3, 2.0.0, 2.1.x (ongoing patch releases)
+ * Ruby MRI 1.8.7, 1.9.2, 1.9.3, 2.0.0, 2.1.x, 2.2.x (ongoing patch releases)
  * Ruby Enterprise Edition (based on MRI 1.8.7)
  * Rubinius 2.x
 
 This gem is tested with the following MySQL and MariaDB versions:
 
- * MySQL 5.0, 5.1, 5.5, 5.6
+ * MySQL 5.0, 5.1, 5.5, 5.6, 5.7
  * MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
  * MariaDB 5.5, 10.0
 

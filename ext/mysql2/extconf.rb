@@ -20,13 +20,13 @@ dirs = ENV['PATH'].split(File::PATH_SEPARATOR) + %w[
   /opt
   /opt/local
   /opt/local/mysql
-  /opt/local/lib/mysql5
+  /opt/local/lib/mysql5*
   /usr
   /usr/mysql
   /usr/local
   /usr/local/mysql
   /usr/local/mysql-*
-  /usr/local/lib/mysql5
+  /usr/local/lib/mysql5*
 ].map{|dir| "#{dir}/bin" }
 
 GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5}"

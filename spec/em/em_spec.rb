@@ -121,13 +121,13 @@ begin
           callbacks_run << :errback
         end
         EM.add_timer(0.1) do
+          callbacks_run.should == [:callback]
           lambda {
             client.close
           }.should_not raise_error(/invalid binding to detach/)
           EM.stop_event_loop
         end
       end
-      callbacks_run.should == [:callback]
     end
   end
 rescue LoadError

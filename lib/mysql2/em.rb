@@ -10,6 +10,7 @@ module Mysql2
         def initialize(client, deferable)
           @client = client
           @deferable = deferable
+          @is_watching = true
         end
 
         def notify_readable
@@ -22,11 +23,19 @@ module Mysql2
             @deferable.succeed(result)
           end
         end
+
+        def watching?
+          @is_watching
+        end
+
+        def unbind
+          @is_watching = false
+        end
       end
 
       def close(*args)
         if @watch
-          @watch.detach
+          @watch.detach if @watch.watching?
         end
         super(*args)
       end

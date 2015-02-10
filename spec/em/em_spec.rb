@@ -108,6 +108,27 @@ begin
         callbacks_run.should == [:errback]
       end
     end
+
+    it "should not raise error when closing client with no query running" do
+      callbacks_run = []
+      EM.run do
+        client = Mysql2::EM::Client.new DatabaseCredentials['root']
+        defer = client.query("select sleep(0.025)")
+        defer.callback do |result|
+          callbacks_run << :callback
+        end
+        defer.errback do |err|
+          callbacks_run << :errback
+        end
+        EM.add_timer(0.1) do
+          callbacks_run.should == [:callback]
+          lambda {
+            client.close
+          }.should_not raise_error(/invalid binding to detach/)
+          EM.stop_event_loop
+        end
+      end
+    end
   end
 rescue LoadError
   puts "EventMachine not installed, skipping the specs that use it"

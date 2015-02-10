@@ -446,7 +446,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   mysql2_result_wrapper * wrapper;
   unsigned long i;
   const char * errstr;
-  int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1, streaming = 0;
+  int symbolizeKeys, asArray, castBool, cacheRows, cast, streaming;
   MYSQL_FIELD * fields = NULL;
 
   GetMysql2Result(self, wrapper);
@@ -459,29 +459,12 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     opts = defaults;
   }
 
-  if (rb_hash_aref(opts, sym_symbolize_keys) == Qtrue) {
-    symbolizeKeys = 1;
-  }
-
-  if (rb_hash_aref(opts, sym_as) == sym_array) {
-    asArray = 1;
-  }
-
-  if (rb_hash_aref(opts, sym_cast_booleans) == Qtrue) {
-    castBool = 1;
-  }
-
-  if (rb_hash_aref(opts, sym_cache_rows) == Qfalse) {
-    cacheRows = 0;
-  }
-
-  if (rb_hash_aref(opts, sym_cast) == Qfalse) {
-    cast = 0;
-  }
-
-  if(rb_hash_aref(opts, sym_stream) == Qtrue) {
-    streaming = 1;
-  }
+  symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
+  asArray = rb_hash_aref(opts, sym_as) == sym_array;
+  castBool = RTEST(rb_hash_aref(opts, sym_cast_booleans));
+  cacheRows = RTEST(rb_hash_aref(opts, sym_cache_rows));
+  cast = RTEST(rb_hash_aref(opts, sym_cast));
+  streaming = RTEST(rb_hash_aref(opts, sym_stream));
 
   if(streaming && cacheRows) {
     rb_warn("cacheRows is ignored if streaming is true");

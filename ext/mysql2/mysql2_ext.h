@@ -40,6 +40,7 @@ typedef unsigned int    uint;
 
 #include <client.h>
 #include <result.h>
+#include <statement.h>
 #include <infile.h>
 
 #endif

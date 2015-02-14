@@ -595,13 +595,16 @@ static VALUE rb_mysql_result_count(VALUE self) {
 
   GetMysql2Result(self, wrapper);
   if (wrapper->is_streaming) {
-    return LONG2NUM(wrapper->numberOfRows);
+    /* This is an unsigned long per result.h */
+    return ULONG2NUM(wrapper->numberOfRows);
   }
 
   if (wrapper->resultFreed) {
+    /* Ruby arrays have platform signed long length */
     return LONG2NUM(RARRAY_LEN(wrapper->rows));
   } else {
-    return INT2FIX(mysql_num_rows(wrapper->result));
+    /* MySQL returns an unsigned 64-bit long here */
+    return ULL2NUM(mysql_num_rows(wrapper->result));
   }
 }
 

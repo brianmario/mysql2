@@ -107,18 +107,19 @@ describe Mysql2::Result do
 
   context "streaming" do
     it "should maintain a count while streaming" do
-      result = @client.query('SELECT 1')
-
-      result.count.should eql(1)
+      result = @client.query('SELECT 1', :stream => true, :cache_rows => false)
+      result.count.should eql(0)
       result.each.to_a
       result.count.should eql(1)
     end
 
-    it "should set the actual count of rows after streaming" do
-      result = @client.query("SELECT * FROM mysql2_test", :stream => true, :cache_rows => false)
+    it "should retain the count when mixing first and each" do
+      result = @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false)
       result.count.should eql(0)
-      result.each {|r|  }
+      result.first
       result.count.should eql(1)
+      result.each.to_a
+      result.count.should eql(2)
     end
 
     it "should not yield nil at the end of streaming" do

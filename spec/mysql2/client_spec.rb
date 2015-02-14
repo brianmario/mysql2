@@ -564,7 +564,7 @@ describe Mysql2::Client do
       end
 
       it "should raise an exception when one of multiple statements fails" do
-        result = @multi_client.query("SELECT 1 as 'set_1'; SELECT * FROM invalid_table_name;SELECT 2 as 'set_2';")
+        result = @multi_client.query("SELECT 1 AS 'set_1'; SELECT * FROM invalid_table_name; SELECT 2 AS 'set_2';")
         result.first['set_1'].should be(1)
         lambda {
           @multi_client.next_result
@@ -573,7 +573,7 @@ describe Mysql2::Client do
       end
 
       it "returns multiple result sets" do
-        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'").first.should eql({ 'set_1' => 1 })
+        @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'").first.should eql({ 'set_1' => 1 })
 
         @multi_client.next_result.should be_true
         @multi_client.store_result.first.should eql({ 'set_2' => 2 })
@@ -582,12 +582,12 @@ describe Mysql2::Client do
       end
 
       it "does not interfere with other statements" do
-        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")
+        @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'")
         while( @multi_client.next_result )
           @multi_client.store_result
         end
 
-        @multi_client.query( "select 3 as 'next'").first.should == { 'next' => 3 }
+        @multi_client.query("SELECT 3 AS 'next'").first.should == { 'next' => 3 }
       end
 
       it "will raise on query if there are outstanding results to read" do
@@ -606,7 +606,7 @@ describe Mysql2::Client do
       end
 
       it "#more_results? should work" do
-        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")
+        @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'")
         @multi_client.more_results?.should be_true
 
         @multi_client.next_result

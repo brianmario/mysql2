@@ -438,7 +438,7 @@ static void *nogvl_do_result(void *ptr, char use_result) {
   MYSQL_RES *result;
 
   wrapper = (mysql_client_wrapper *)ptr;
-  if(use_result) {
+  if (use_result) {
     result = mysql_use_result(wrapper->client);
   } else {
     result = mysql_store_result(wrapper->client);
@@ -483,7 +483,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   }
 
   is_streaming = rb_hash_aref(rb_iv_get(self, "@current_query_options"), sym_stream);
-  if(is_streaming == Qtrue) {
+  if (is_streaming == Qtrue) {
     result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
   } else {
     result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);

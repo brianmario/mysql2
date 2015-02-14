@@ -232,7 +232,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
       VALUE val = Qnil;
       enum enum_field_types type = fields[i].type;
 
-      if(!cast) {
+      if (!cast) {
         if (type == MYSQL_TYPE_NULL) {
           val = Qnil;
         } else {
@@ -479,11 +479,11 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     cast = 0;
   }
 
-  if(rb_hash_aref(opts, sym_stream) == Qtrue) {
+  if (rb_hash_aref(opts, sym_stream) == Qtrue) {
     streaming = 1;
   }
 
-  if(streaming && cacheRows) {
+  if (streaming && cacheRows) {
     rb_warn("cacheRows is ignored if streaming is true");
   }
 
@@ -601,7 +601,7 @@ static VALUE rb_mysql_result_count(VALUE self) {
   mysql2_result_wrapper *wrapper;
 
   GetMysql2Result(self, wrapper);
-  if(wrapper->resultFreed) {
+  if (wrapper->resultFreed) {
     if (wrapper->streamingComplete){
       return LONG2NUM(wrapper->numberOfRows);
     } else {

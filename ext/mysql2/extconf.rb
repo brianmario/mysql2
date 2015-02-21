@@ -124,13 +124,14 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   end
 
   # Vendor libmysql.dll
-  vendordir = File.expand_path('../../../vendor/', __FILE__)
+  vendordir = 'vendor' # File.expand_path('../../../vendor/', __FILE__)
   directory vendordir
 
   vendordll = File.join(vendordir, 'libmysql.dll')
   dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
-  file vendordll => [dllfile, vendordir] do |t|
+  file 'libmysql.dll' => [dllfile, vendordir] do |t|
     when_writing 'copying libmysql.dll' do
+      mkdir_p vendordir
       cp dllfile, vendordll
     end
   end
@@ -141,7 +142,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
     puts "--no-vendor-libmysql"
   else # Default: arg_config('--vendor-libmysql')
     # Let's do it!
-    Rake::Task[vendordll].invoke
+    Rake::Task['libmysql.dll'].execute
   end
 else
   case explicit_rpath = with_config('mysql-rpath')

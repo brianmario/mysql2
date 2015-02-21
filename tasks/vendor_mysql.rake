@@ -51,9 +51,10 @@ task "vendor:mysql", [:platform] do |t, args|
         sh "unzip", "-uq", full_file,
            "#{vendor_mysql_dir(args[:platform])}/bin/**",
            "#{vendor_mysql_dir(args[:platform])}/include/**",
-           "#{vendor_mysql_dir(args[:platform])}/lib/**"
+           "#{vendor_mysql_dir(args[:platform])}/lib/**",
+           "#{vendor_mysql_dir(args[:platform])}/README" # contains the license info
       end
-      # update file timestamp to avoid Rake perform this extraction again.
+      # update file timestamp to avoid Rake performing this extraction again.
       touch t.name
     end
   end

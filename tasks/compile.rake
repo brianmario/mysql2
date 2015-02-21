@@ -26,8 +26,11 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
 
     ext.cross_compiling do |spec|
       Rake::Task['lib/mysql2/mysql2.rb'].invoke
+      # vendor/libmysql.dll is invoked from extconf.rb
+      Rake::Task['vendor/README'].invoke
       spec.files << 'lib/mysql2/mysql2.rb'
       spec.files << 'vendor/libmysql.dll'
+      spec.files << 'vendor/README'
       spec.post_install_message = <<-POST_INSTALL_MESSAGE
 
 ======================================================================================================
@@ -36,12 +39,10 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   It was built using MySQL Connector/C version #{CONNECTOR_VERSION}.
   It's recommended to use the exact same version to avoid potential issues.
 
-  At the time of building this gem, the necessary DLL files were available
-  in the following download:
-
+  At the time of building this gem, the necessary DLL files were retrieved from:
   #{vendor_mysql_url(spec.platform)}
 
-  And put lib\\libmysql.dll file in your Ruby bin directory, for example C:\\Ruby\\bin
+  This gem *includes* vendor/libmysql.dll with redistribution notice in vendor/README.
 
 ======================================================================================================
 
@@ -50,6 +51,13 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   end
 end
 Rake::Task[:spec].prerequisites << :compile
+
+file 'vendor/README' do |t|
+  connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir}", __FILE__)
+  when_writing 'copying Connector/C README' do
+    cp "#{connector_dir}/README", 'vendor/README'
+  end
+end
 
 file 'lib/mysql2/mysql2.rb' do |t|
   name = gemspec.name

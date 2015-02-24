@@ -47,29 +47,22 @@ module Mysql2
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any?
 
-      if [:user,:pass,:hostname,:dbname,:db,:sock].any?{|k| @query_options.has_key?(k) }
-        warn "============= WARNING FROM mysql2 ============="
-        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock will be deprecated at some point in the future."
-        warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
-        warn "============= END WARNING FROM mysql2 ========="
+      if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @connect_options.has_key? k }
+        raise <<-DEPR
+The options :user, :pass, :hostname, :dbname, :db, :sock are removed.
+Please use :username, :password, :host, :port, :database, :socket instead.
+DEPR
       end
 
-      user     = opts[:username] || opts[:user]
-      pass     = opts[:password] || opts[:pass]
-      host     = opts[:host] || opts[:hostname]
-      port     = opts[:port]
-      database = opts[:database] || opts[:dbname] || opts[:db]
-      socket   = opts[:socket] || opts[:sock]
-      flags    = opts[:flags] ? opts[:flags] | @connect_options[:connect_flags] : @connect_options[:connect_flags]
-
       # Correct the data types before passing these values down to the C level
-      user = user.to_s unless user.nil?
-      pass = pass.to_s unless pass.nil?
-      host = host.to_s unless host.nil?
-      port = port.to_i unless port.nil?
-      database = database.to_s unless database.nil?
-      socket = socket.to_s unless socket.nil?
-      flags = flags.to_i # if nil then 0
+      user     = opts[:username].to_s unless opts[:username].nil?
+      pass     = opts[:password].to_s unless opts[:password].nil?
+      host     = opts[:host].to_s     unless opts[:host].nil?
+      port     = opts[:port].to_i     unless opts[:port].nil?
+      database = opts[:database].to_s unless opts[:database].nil?
+      socket   = opts[:socket].to_s   unless opts[:socket].nil?
+      flags    = opts[:flags] ? opts[:flags] | @connect_options[:connect_flags] : @connect_options[:connect_flags]
+      flags  ||= 0 # if nil then 0
 
       connect user, pass, host, port, database, socket, flags
     end

@@ -12,6 +12,7 @@ typedef struct {
   unsigned int numberOfFields;
   unsigned long numberOfRows;
   unsigned long lastRowProcessed;
+  char is_streaming;
   char streamingComplete;
   char resultFreed;
   MYSQL_RES *result;

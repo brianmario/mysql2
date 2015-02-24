@@ -614,6 +614,21 @@ describe Mysql2::Client do
 
         @multi_client.more_results?.should be_false
       end
+
+      it "#more_results? should work with stored procedures" do
+        @multi_client.query("DROP PROCEDURE IF EXISTS test_proc")
+        @multi_client.query("CREATE PROCEDURE test_proc() BEGIN SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'; END")
+        @multi_client.query("CALL test_proc()").first.should eql({ 'set_1' => 1 })
+        @multi_client.more_results?.should be_true
+
+        @multi_client.next_result
+        @multi_client.store_result.first.should eql({ 'set_2' => 2 })
+
+        @multi_client.next_result
+        @multi_client.store_result.should be_nil # this is the result from CALL itself
+
+        @multi_client.more_results?.should be_false
+      end
     end
   end
 

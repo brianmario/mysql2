@@ -446,7 +446,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   mysql2_result_wrapper * wrapper;
   unsigned long i;
   const char * errstr;
-  int symbolizeKeys = 0, asArray = 0, castBool = 0, cacheRows = 1, cast = 1, streaming = 0;
+  int symbolizeKeys, asArray, castBool, cacheRows, cast;
   MYSQL_FIELD * fields = NULL;
 
   GetMysql2Result(self, wrapper);
@@ -459,31 +459,13 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     opts = defaults;
   }
 
-  if (rb_hash_aref(opts, sym_symbolize_keys) == Qtrue) {
-    symbolizeKeys = 1;
-  }
+  symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
+  asArray       = rb_hash_aref(opts, sym_as) == sym_array;
+  castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
+  cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
+  cast          = RTEST(rb_hash_aref(opts, sym_cast));
 
-  if (rb_hash_aref(opts, sym_as) == sym_array) {
-    asArray = 1;
-  }
-
-  if (rb_hash_aref(opts, sym_cast_booleans) == Qtrue) {
-    castBool = 1;
-  }
-
-  if (rb_hash_aref(opts, sym_cache_rows) == Qfalse) {
-    cacheRows = 0;
-  }
-
-  if (rb_hash_aref(opts, sym_cast) == Qfalse) {
-    cast = 0;
-  }
-
-  if (rb_hash_aref(opts, sym_stream) == Qtrue) {
-    streaming = 1;
-  }
-
-  if (streaming && cacheRows) {
+  if (wrapper->is_streaming && cacheRows) {
     rb_warn("cacheRows is ignored if streaming is true");
   }
 
@@ -508,23 +490,12 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     app_timezone = Qnil;
   }
 
-  if (wrapper->lastRowProcessed == 0) {
-    if (streaming) {
-      /* We can't get number of rows if we're streaming, */
-      /* until we've finished fetching all rows */
-      wrapper->numberOfRows = 0;
+  if (wrapper->is_streaming) {
+    /* When streaming, we will only yield rows, not return them. */
+    if (wrapper->rows == Qnil) {
       wrapper->rows = rb_ary_new();
-    } else {
-      wrapper->numberOfRows = mysql_num_rows(wrapper->result);
-      if (wrapper->numberOfRows == 0) {
-        wrapper->rows = rb_ary_new();
-        return wrapper->rows;
-      }
-      wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
     }
-  }
 
-  if (streaming) {
     if (!wrapper->streamingComplete) {
       VALUE row;
 
@@ -532,16 +503,15 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
       do {
         row = rb_mysql_result_fetch_row(self, db_timezone, app_timezone, symbolizeKeys, asArray, castBool, cast, fields);
-
-        if (block != Qnil && row != Qnil) {
-          rb_yield(row);
-          wrapper->lastRowProcessed++;
+        if (row != Qnil) {
+          wrapper->numberOfRows++;
+          if (block != Qnil) {
+            rb_yield(row);
+          }
         }
       } while(row != Qnil);
 
       rb_mysql_result_free_result(wrapper);
-
-      wrapper->numberOfRows = wrapper->lastRowProcessed;
       wrapper->streamingComplete = 1;
 
       // Check for errors, the connection might have gone out from under us
@@ -554,6 +524,15 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
     }
   } else {
+    if (wrapper->lastRowProcessed == 0) {
+      wrapper->numberOfRows = mysql_num_rows(wrapper->result);
+      if (wrapper->numberOfRows == 0) {
+        wrapper->rows = rb_ary_new();
+        return wrapper->rows;
+      }
+      wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+    }
+
     if (cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
       /* we've already read the entire dataset from the C result into our */
       /* internal array. Lets hand that over to the user since it's ready to go */
@@ -601,14 +580,17 @@ static VALUE rb_mysql_result_count(VALUE self) {
   mysql2_result_wrapper *wrapper;
 
   GetMysql2Result(self, wrapper);
+  if (wrapper->is_streaming) {
+    /* This is an unsigned long per result.h */
+    return ULONG2NUM(wrapper->numberOfRows);
+  }
+
   if (wrapper->resultFreed) {
-    if (wrapper->streamingComplete){
-      return LONG2NUM(wrapper->numberOfRows);
-    } else {
-      return LONG2NUM(RARRAY_LEN(wrapper->rows));
-    }
+    /* Ruby arrays have platform signed long length */
+    return LONG2NUM(RARRAY_LEN(wrapper->rows));
   } else {
-    return INT2FIX(mysql_num_rows(wrapper->result));
+    /* MySQL returns an unsigned 64-bit long here */
+    return ULL2NUM(mysql_num_rows(wrapper->result));
   }
 }
 
@@ -633,6 +615,10 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   rb_obj_call_init(obj, 0, NULL);
 
   rb_iv_set(obj, "@query_options", options);
+
+  /* Options that cannot be changed in results.each(...) { |row| }
+   * should be processed here. */
+  wrapper->is_streaming = (rb_hash_aref(options, sym_stream) == Qtrue ? 1 : 0);
 
   return obj;
 }

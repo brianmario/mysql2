@@ -20,7 +20,7 @@ static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_arr
 static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
-static VALUE rb_hash_dup(VALUE other) {
+VALUE rb_hash_dup(VALUE other) {
   return rb_funcall(rb_cHash, rb_intern("[]"), 1, other);
 }
 #endif

@@ -71,3 +71,7 @@ void init_mysql2_client();
 void decr_mysql2_client(mysql_client_wrapper *wrapper);
 
 #endif
+
+#ifndef HAVE_RB_HASH_DUP
+VALUE rb_hash_dup(VALUE other);
+#endif

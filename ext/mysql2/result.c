@@ -780,13 +780,11 @@ static VALUE rb_mysql_result_each_nonstmt(VALUE self, const result_each_args* ar
           wrapper->numberOfRows++;
           if (args->block_given != Qnil) {
             rb_yield(row);
-            wrapper->lastRowProcessed++;
           }
         }
       } while(row != Qnil);
 
       rb_mysql_result_free_result(wrapper);
-      wrapper->numberOfRows = wrapper->lastRowProcessed;
       wrapper->streamingComplete = 1;
 
       // Check for errors, the connection might have gone out from under us
@@ -799,6 +797,15 @@ static VALUE rb_mysql_result_each_nonstmt(VALUE self, const result_each_args* ar
       rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
     }
   } else {
+    if (wrapper->lastRowProcessed == 0) {
+      wrapper->numberOfRows = mysql_num_rows(wrapper->result);
+      if (wrapper->numberOfRows == 0) {
+        wrapper->rows = rb_ary_new();
+        return wrapper->rows;
+      }
+      wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+    }
+
     if (args->cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
       /* we've already read the entire dataset from the C result into our */
       /* internal array. Lets hand that over to the user since it's ready to go */
@@ -816,7 +823,6 @@ static VALUE rb_mysql_result_each_nonstmt(VALUE self, const result_each_args* ar
           row = rb_ary_entry(wrapper->rows, i);
         } else {
           row = rb_mysql_result_fetch_row(self, args->db_timezone, args->app_timezone, args->symbolizeKeys, args->asArray, args->castBool, args->cast, fields);
-
           if (args->cacheRows) {
             rb_ary_store(wrapper->rows, i, row);
           }
@@ -990,20 +996,13 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     app_timezone = Qnil;
   }
 
-  if (wrapper->lastRowProcessed == 0) {
-    if(args.streaming) {
-      // We can't get number of rows if we're streaming,
-      // until we've finished fetching all rows
-      wrapper->numberOfRows = 0;
+  if (wrapper->lastRowProcessed == 0 && !wrapper->is_streaming) {
+    wrapper->numberOfRows = wrapper->stmt ? mysql_stmt_num_rows(wrapper->stmt) : mysql_num_rows(wrapper->result);
+    if (wrapper->numberOfRows == 0) {
       wrapper->rows = rb_ary_new();
-    } else {
-      wrapper->numberOfRows = wrapper->stmt ? mysql_stmt_num_rows(wrapper->stmt) : mysql_num_rows(wrapper->result);
-      if (wrapper->numberOfRows == 0) {
-        wrapper->rows = rb_ary_new();
-        return wrapper->rows;
-      }
-      wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+      return wrapper->rows;
     }
+    wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
   }
 
   // Backward compat

@@ -961,11 +961,11 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     rb_warn("cacheRows is ignored if streaming is true");
   }
 
-  if (wrapper->stmt && !args.cacheRows && !args.streaming) {
+  if (wrapper->stmt && !cacheRows && !wrapper->is_streaming) {
     rb_warn("cacheRows is forced for prepared statements (if not streaming)");
   }
 
-  if (wrapper->stmt && !args.cast) {
+  if (wrapper->stmt && !cast) {
     rb_warn("cast is forced for prepared statements");
   }
 

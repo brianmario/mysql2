@@ -939,10 +939,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   VALUE defaults, opts, block;
   ID db_timezone, app_timezone, dbTz, appTz;
   mysql2_result_wrapper * wrapper;
-  unsigned long i;
-  const char * errstr;
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
-  MYSQL_FIELD * fields = NULL;
 
   GetMysql2Result(self, wrapper);
 

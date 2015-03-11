@@ -82,6 +82,10 @@ module Mysql2
       info_hash
     end
 
+    def info
+      self.class.info
+    end
+
     private
       def self.local_offset
         ::Time.local(2010).utc_offset.to_r / 86400

@@ -16,7 +16,7 @@
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
-static VALUE sym_id, sym_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
+static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
 
 #ifndef HAVE_RB_HASH_DUP
@@ -843,30 +843,23 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
  *
  * Returns a string that represents the client library version.
  */
-static VALUE rb_mysql_client_info(VALUE self) {
-  VALUE version, client_info;
-#ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *default_internal_enc;
-  rb_encoding *conn_enc;
-  GET_CLIENT(self);
-#endif
-  version = rb_hash_new();
+static VALUE rb_mysql_client_info(VALUE klass) {
+  VALUE version_info, version, header_version;
+  version_info = rb_hash_new();
+
+  version = rb_str_new2(mysql_get_client_info());
+  header_version = rb_str_new2(MYSQL_LINK_VERSION);
 
 #ifdef HAVE_RUBY_ENCODING_H
-  default_internal_enc = rb_default_internal_encoding();
-  conn_enc = rb_to_encoding(wrapper->encoding);
+  rb_enc_associate(version, rb_usascii_encoding());
+  rb_enc_associate(header_version, rb_usascii_encoding());
 #endif
 
-  rb_hash_aset(version, sym_id, LONG2NUM(mysql_get_client_version()));
-  client_info = rb_str_new2(mysql_get_client_info());
-#ifdef HAVE_RUBY_ENCODING_H
-  rb_enc_associate(client_info, conn_enc);
-  if (default_internal_enc) {
-    client_info = rb_str_export_to_enc(client_info, default_internal_enc);
-  }
-#endif
-  rb_hash_aset(version, sym_version, client_info);
-  return version;
+  rb_hash_aset(version_info, sym_id, LONG2NUM(mysql_get_client_version()));
+  rb_hash_aset(version_info, sym_version, version);
+  rb_hash_aset(version_info, sym_header_version, header_version);
+
+  return version_info;
 }
 
 /* call-seq:
@@ -1254,12 +1247,12 @@ void init_mysql2_client() {
   rb_define_alloc_func(cMysql2Client, allocate);
 
   rb_define_singleton_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
+  rb_define_singleton_method(cMysql2Client, "info", rb_mysql_client_info, 0);
 
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
   rb_define_method(cMysql2Client, "abandon_results!", rb_mysql_client_abandon_results, 0);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_real_escape, 1);
-  rb_define_method(cMysql2Client, "info", rb_mysql_client_info, 0);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
   rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
@@ -1293,6 +1286,7 @@ void init_mysql2_client() {
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));
+  sym_header_version  = ID2SYM(rb_intern("header_version"));
   sym_async           = ID2SYM(rb_intern("async"));
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));

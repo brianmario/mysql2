@@ -2,7 +2,14 @@
 require 'mkmf'
 
 def asplode lib
-  abort "-----\n#{lib} is missing.  please check your installation of mysql and try again.\n-----"
+  if RUBY_PLATFORM =~ /mingw|mswin/
+    abort "-----\n#{lib} is missing. please check your installation of mysql and try again.\n-----"
+  elsif RUBY_PLATFORM =~ /darwin/
+    abort "-----\n#{lib} is missing. Try 'brew install mysql', check your installation of mysql and try again.\n-----"
+  else
+    abort "-----\n#{lib} is missing. Try 'apt-get install libmysqlclient-dev' or
+'yum install mysql-devel', check your installation of mysql and try again.\n-----"
+  end
 end
 
 # 2.0-only
@@ -67,10 +74,14 @@ elsif mc = (with_config('mysql-config') || Dir[GLOB].first)
 else
   inc, lib = dir_config('mysql', '/usr/local')
   libs = ['m', 'z', 'socket', 'nsl', 'mygcc']
+  found = false
   while not find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql") do
     exit 1 if libs.empty?
-    have_library(libs.shift)
+    found ||= have_library(libs.shift)
   end
+
+  asplode("mysql client") unless found
+
   rpath_dir = lib
 end
 

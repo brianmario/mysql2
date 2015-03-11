@@ -711,23 +711,18 @@ RSpec.describe Mysql2::Client do
   context "strings returned by #info" do
     before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-    it "should default to the connection's encoding if Encoding.default_internal is nil" do
-      with_internal_encoding nil do
-        expect(@client.info[:version].encoding).to eql(Encoding::UTF_8)
-
-        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-        expect(client2.info[:version].encoding).to eql(Encoding::ASCII)
-      end
+    it "should be tagged as ascii" do
+      expect(@client.info[:version].encoding).to eql(Encoding::US_ASCII)
+      expect(@client.info[:header_version].encoding).to eql(Encoding::US_ASCII)
     end
+  end
 
-    it "should use Encoding.default_internal" do
-      with_internal_encoding Encoding::UTF_8 do
-        expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
-      end
+  context "strings returned by .info" do
+    before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-      with_internal_encoding Encoding::ASCII do
-        expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
-      end
+    it "should be tagged as ascii" do
+      expect(Mysql2::Client.info[:version].encoding).to eql(Encoding::US_ASCII)
+      expect(Mysql2::Client.info[:header_version].encoding).to eql(Encoding::US_ASCII)
     end
   end
 

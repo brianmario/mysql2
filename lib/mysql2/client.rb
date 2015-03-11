@@ -74,6 +74,17 @@ module Mysql2
       @@default_query_options
     end
 
+    if Thread.respond_to?(:handle_interrupt)
+      def query(*args, &block)
+        Thread.handle_interrupt(Timeout::ExitException => :never) do
+          _query(*args, &block)
+        end
+      end
+    else
+      alias_method :query, :_query
+      public :query
+    end
+
     def query_info
       info = query_info_string
       return {} unless info

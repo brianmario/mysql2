@@ -155,6 +155,8 @@ describe Mysql2::Client do
   end
 
   it "should not leave dangling connections after garbage collection" do
+    pending('Rubinius misbehaves') if defined?(Rubinius)
+
     run_gc
 
     client = Mysql2::Client.new(DatabaseCredentials['root'])
@@ -413,32 +415,31 @@ describe Mysql2::Client do
         }.should raise_error(Mysql2::Error)
       end
 
-      if !defined? Rubinius
-        # XXX this test is not deterministic (because Unix signal handling is not)
-        # and may fail on a loaded system
-        it "should run signal handlers while waiting for a response" do
-          mark = {}
-          trap(:USR1) { mark[:USR1] = Time.now }
-          begin
-            mark[:START] = Time.now
-            pid = fork do
-              sleep 0.1 # wait for client query to start
-              Process.kill(:USR1, Process.ppid)
-              sleep # wait for explicit kill to prevent GC disconnect
-            end
-            @client.query('SELECT SLEEP(0.2)')
-            mark[:END] = Time.now
-            mark.include?(:USR1).should be_true
-            (mark[:USR1] - mark[:START]).should >= 0.1
-            (mark[:USR1] - mark[:START]).should < 0.13
-            (mark[:END] - mark[:USR1]).should > 0.09
-            (mark[:END] - mark[:START]).should >= 0.2
-            (mark[:END] - mark[:START]).should < 0.23
-            Process.kill(:TERM, pid)
-            Process.waitpid2(pid)
-          ensure
-            trap(:USR1, 'DEFAULT')
+      # XXX this test is not deterministic (because Unix signal handling is not)
+      # and may fail on a loaded system
+      it "should run signal handlers while waiting for a response" do
+        pending('Rubinius misbehaves') if defined?(Rubinius)
+        mark = {}
+        trap(:USR1) { mark[:USR1] = Time.now }
+        begin
+          mark[:START] = Time.now
+          pid = fork do
+            sleep 0.1 # wait for client query to start
+            Process.kill(:USR1, Process.ppid)
+            sleep # wait for explicit kill to prevent GC disconnect
           end
+          @client.query('SELECT SLEEP(0.2)')
+          mark[:END] = Time.now
+          mark.include?(:USR1).should be_true
+          (mark[:USR1] - mark[:START]).should >= 0.1
+          (mark[:USR1] - mark[:START]).should < 0.13
+          (mark[:END] - mark[:USR1]).should > 0.09
+          (mark[:END] - mark[:START]).should >= 0.2
+          (mark[:END] - mark[:START]).should < 0.23
+          Process.kill(:TERM, pid)
+          Process.waitpid2(pid)
+        ensure
+          trap(:USR1, 'DEFAULT')
         end
       end
 

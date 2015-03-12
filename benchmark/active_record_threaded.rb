@@ -2,41 +2,22 @@
 $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'rubygems'
-require 'benchmark'
+require 'benchmark/ips'
 require 'active_record'
 
-times = 25
+number_of_threads = 25
+opts = { :database => 'test', :pool => number_of_threads }
 
+Benchmark.ips do |x|
+  %w(mysql mysql2).each do |adapter|
+    ActiveRecord::Base.establish_connection(opts.merge(:adapter => adapter))
 
-# mysql2
-mysql2_opts = {
-  :adapter => 'mysql2',
-  :database => 'test',
-  :pool => times
-}
-ActiveRecord::Base.establish_connection(mysql2_opts)
-x = Benchmark.realtime do
-  threads = []
-  times.times do
-    threads << Thread.new { ActiveRecord::Base.connection.execute("select sleep(1)") }
+    x.report(adapter) do
+      number_of_threads.times.map do
+        Thread.new { ActiveRecord::Base.connection.execute('SELECT SLEEP(1)') }
+      end.each(&:join)
+    end
   end
-  threads.each {|t| t.join }
-end
-puts "mysql2: #{x} seconds"
 
-
-# mysql
-mysql2_opts = {
-  :adapter => 'mysql',
-  :database => 'test',
-  :pool => times
-}
-ActiveRecord::Base.establish_connection(mysql2_opts)
-x = Benchmark.realtime do
-  threads = []
-  times.times do
-    threads << Thread.new { ActiveRecord::Base.connection.execute("select sleep(1)") }
-  end
-  threads.each {|t| t.join }
+  x.compare!
 end
-puts "mysql: #{x} seconds"

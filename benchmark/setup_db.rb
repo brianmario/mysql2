@@ -52,6 +52,7 @@ create_table_sql = %[
 @client = Mysql2::Client.new :host => "localhost", :username => "root", :database => "test"
 
 @client.query create_table_sql
+@client.query 'TRUNCATE mysql2_test'
 
 def insert_record(args)
   insert_sql = "
@@ -95,12 +96,12 @@ num.times do |n|
     :timestamp_test => '2010-4-4 11:44:00',
     :time_test => '11:44:00',
     :year_test => Time.now.year,
-    :char_test => five_words,
-    :varchar_test => five_words,
-    :binary_test => five_words,
-    :varbinary_test => five_words,
-    :tiny_blob_test => five_words,
-    :tiny_text_test => Faker::Lorem.paragraph(rand(5)),
+    :char_test => five_words.join.slice(0, 10), # CHAR(10)
+    :varchar_test => five_words.join.slice(0, 10), # VARCHAR(10)
+    :binary_test => five_words.join.byteslice(0, 10), # BINARY(10)
+    :varbinary_test => five_words.join.byteslice(0, 10), # VARBINARY(10)
+    :tiny_blob_test => five_words.join.byteslice(0, 255), # TINYBLOB
+    :tiny_text_test => Faker::Lorem.paragraph(rand(5)).byteslice(0, 255), # TINYTEXT
     :blob_test => twenty5_paragraphs,
     :text_test => twenty5_paragraphs,
     :medium_blob_test => twenty5_paragraphs,

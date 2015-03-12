@@ -2,55 +2,48 @@
 $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'rubygems'
-require 'benchmark'
+require 'benchmark/ips'
 require 'mysql'
 require 'mysql2'
 require 'do_mysql'
 
-number_of = 100
 database = 'test'
 sql = "SELECT * FROM mysql2_test LIMIT 100"
 
-Benchmark.bmbm do |x|
+Benchmark.ips do |x|
   mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
   mysql2.query "USE #{database}"
   x.report "Mysql2 (cast: true)" do
-    number_of.times do
-      mysql2_result = mysql2.query sql, :symbolize_keys => true, :cast => true
-      mysql2_result.each do |res|
-        # puts res.inspect
-      end
+    mysql2_result = mysql2.query sql, :symbolize_keys => true, :cast => true
+    mysql2_result.each do |res|
+      # puts res.inspect
     end
   end
 
   x.report "Mysql2 (cast: false)" do
-    number_of.times do
-      mysql2_result = mysql2.query sql, :symbolize_keys => true, :cast => false
-      mysql2_result.each do |res|
-        # puts res.inspect
-      end
+    mysql2_result = mysql2.query sql, :symbolize_keys => true, :cast => false
+    mysql2_result.each do |res|
+      # puts res.inspect
     end
   end
 
   mysql = Mysql.new("localhost", "root")
   mysql.query "USE #{database}"
   x.report "Mysql" do
-    number_of.times do
-      mysql_result = mysql.query sql
-      mysql_result.each_hash do |res|
-        # puts res.inspect
-      end
+    mysql_result = mysql.query sql
+    mysql_result.each_hash do |res|
+      # puts res.inspect
     end
   end
 
   do_mysql = DataObjects::Connection.new("mysql://localhost/#{database}")
   command = DataObjects::Mysql::Command.new do_mysql, sql
   x.report "do_mysql" do
-    number_of.times do
-      do_result = command.execute_reader
-      do_result.each do |res|
-        # puts res.inspect
-      end
+    do_result = command.execute_reader
+    do_result.each do |res|
+      # puts res.inspect
     end
   end
+
+  x.compare!
 end

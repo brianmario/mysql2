@@ -244,9 +244,14 @@ RSpec.describe Mysql2::Statement do
       expect(@test_result['null_test']).to eql(nil)
     end
 
-    it "should return Fixnum for a BIT value" do
+    it "should return String for a BIT(64) value" do
       expect(@test_result['bit_test'].class).to eql(String)
       expect(@test_result['bit_test']).to eql("\000\000\000\000\000\000\000\005")
+    end
+
+    it "should return String for a BIT(1) value" do
+      expect(@test_result['single_bit_test'].class).to eql(String)
+      expect(@test_result['single_bit_test']).to eql("\001")
     end
 
     it "should return Fixnum for a TINYINT value" do
@@ -270,6 +275,20 @@ RSpec.describe Mysql2::Statement do
       expect(result3.first['bool_cast_test']).to be true
 
       @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
+    end
+
+    it "should return TrueClass or FalseClass for a BIT(1) value if :cast_booleans is enabled" do
+      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'
+      id1 = @client.last_id
+      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'
+      id2 = @client.last_id
+
+      result1 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id1}", :cast_booleans => true
+      result2 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id2}", :cast_booleans => true
+      expect(result1.first['single_bit_test']).to be true
+      expect(result2.first['single_bit_test']).to be false
+
+      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
     end
 
     it "should return Fixnum for a SMALLINT value" do
@@ -309,7 +328,7 @@ RSpec.describe Mysql2::Statement do
 
     it "should return Float for a DOUBLE value" do
       expect(@test_result['double_test'].class).to eql(Float)
-      expect(@test_result['double_test']).to be_within(1e-5).of(10.3)
+      expect(@test_result['double_test']).to eql(10.3)
     end
 
     it "should return Time for a DATETIME value when within the supported range" do
@@ -318,7 +337,7 @@ RSpec.describe Mysql2::Statement do
     end
 
     if 1.size == 4 # 32bit
-      if RUBY_VERSION =~ /1.8/
+      unless RUBY_VERSION =~ /1.8/
         klass = Time
       else
         klass = DateTime
@@ -384,26 +403,35 @@ RSpec.describe Mysql2::Statement do
       expect(@test_result['enum_test']).to eql('val1')
     end
 
+    it "should raise an error given an invalid DATETIME" do
+      expect { @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each }.to \
+        raise_error(Mysql2::Error, "Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
+    end
+
     if defined? Encoding
       context "string encoding for ENUM values" do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do
-          Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['enum_test'].encoding).to eql(Encoding.find('utf-8'))
+          with_internal_encoding nil do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['enum_test'].encoding).to eql(Encoding.find('utf-8'))
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "ascii"))
-          client2.query "USE test"
-          result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['enum_test'].encoding).to eql(Encoding.find('us-ascii'))
+            client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+            result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['enum_test'].encoding).to eql(Encoding.find('us-ascii'))
+            client2.close
+          end
         end
 
         it "should use Encoding.default_internal" do
-          Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['enum_test'].encoding).to eql(Encoding.default_internal)
-          Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['enum_test'].encoding).to eql(Encoding.default_internal)
+          with_internal_encoding 'utf-8' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['enum_test'].encoding).to eql(Encoding.default_internal)
+          end
+
+          with_internal_encoding 'us-ascii' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['enum_test'].encoding).to eql(Encoding.default_internal)
+          end
         end
       end
     end
@@ -416,23 +444,27 @@ RSpec.describe Mysql2::Statement do
     if defined? Encoding
       context "string encoding for SET values" do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do
-          Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['set_test'].encoding).to eql(Encoding.find('utf-8'))
+          with_internal_encoding nil do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['set_test'].encoding).to eql(Encoding.find('utf-8'))
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "ascii"))
-          client2.query "USE test"
-          result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['set_test'].encoding).to eql(Encoding.find('us-ascii'))
+            client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+            result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['set_test'].encoding).to eql(Encoding.find('us-ascii'))
+            client2.close
+          end
         end
 
         it "should use Encoding.default_internal" do
-          Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['set_test'].encoding).to eql(Encoding.default_internal)
-          Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['set_test'].encoding).to eql(Encoding.default_internal)
+          with_internal_encoding 'utf-8' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['set_test'].encoding).to eql(Encoding.default_internal)
+          end
+
+          with_internal_encoding 'us-ascii' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['set_test'].encoding).to eql(Encoding.default_internal)
+          end
         end
       end
     end
@@ -445,18 +477,22 @@ RSpec.describe Mysql2::Statement do
     if defined? Encoding
       context "string encoding for BINARY values" do
         it "should default to binary if Encoding.default_internal is nil" do
-          Encoding.default_internal = nil
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+          with_internal_encoding nil do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+          end
         end
 
         it "should not use Encoding.default_internal" do
-          Encoding.default_internal = Encoding.find('utf-8')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
-          Encoding.default_internal = Encoding.find('us-ascii')
-          result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-          expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+          with_internal_encoding 'utf-8' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+          end
+
+          with_internal_encoding 'us-ascii' do
+            result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+            expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+          end
         end
       end
     end
@@ -483,43 +519,50 @@ RSpec.describe Mysql2::Statement do
         context "string encoding for #{type} values" do
           if ['VARBINARY', 'TINYBLOB', 'BLOB', 'MEDIUMBLOB', 'LONGBLOB'].include?(type)
             it "should default to binary if Encoding.default_internal is nil" do
-              Encoding.default_internal = nil
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+              with_internal_encoding nil do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+              end
             end
 
             it "should not use Encoding.default_internal" do
-              Encoding.default_internal = Encoding.find('utf-8')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
-              Encoding.default_internal = Encoding.find('us-ascii')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+              with_internal_encoding 'utf-8' do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+              end
+
+              with_internal_encoding 'us-ascii' do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
+              end
             end
           else
             it "should default to utf-8 if Encoding.default_internal is nil" do
-              Encoding.default_internal = nil
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              expect(result[field].encoding).to eql(Encoding.find('utf-8'))
+              with_internal_encoding nil do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                expect(result[field].encoding).to eql(Encoding.find('utf-8'))
 
-              client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "ascii"))
-              client2.query "USE test"
-              result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              expect(result[field].encoding).to eql(Encoding.find('us-ascii'))
+                client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+                result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                expect(result[field].encoding).to eql(Encoding.find('us-ascii'))
+                client2.close
+              end
             end
 
             it "should use Encoding.default_internal" do
-              Encoding.default_internal = Encoding.find('utf-8')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              expect(result[field].encoding).to eql(Encoding.default_internal)
-              Encoding.default_internal = Encoding.find('us-ascii')
-              result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-              expect(result[field].encoding).to eql(Encoding.default_internal)
+              with_internal_encoding 'utf-8' do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                expect(result[field].encoding).to eql(Encoding.default_internal)
+              end
+
+              with_internal_encoding 'us-ascii' do
+                result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
+                expect(result[field].encoding).to eql(Encoding.default_internal)
+              end
             end
           end
         end
       end
     end
   end
-
 end

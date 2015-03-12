@@ -26,7 +26,7 @@ RSpec.describe Mysql2::Error do
     expect(error).to respond_to(:error)
   end
 
-  if "".respond_to? :encoding
+  context 'encoding' do
     let :error do
       client = Mysql2::Client.new(DatabaseCredentials['root'])
       begin
@@ -54,6 +54,7 @@ RSpec.describe Mysql2::Error do
     end
 
     it "returns error messages as UTF-8 by default" do
+      pending('String#encoding is not defined') unless String.public_method_defined?(:encoding)
       with_internal_encoding nil do
         expect(error.message.encoding).to eql(Encoding::UTF_8)
         error.message.valid_encoding?
@@ -66,11 +67,13 @@ RSpec.describe Mysql2::Error do
     end
 
     it "returns sql state as ASCII" do
+      pending('String#encoding is not defined') unless String.public_method_defined?(:encoding)
       expect(error.sql_state.encoding).to eql(Encoding::US_ASCII)
       error.sql_state.valid_encoding?
     end
 
     it "returns error messages and sql state in Encoding.default_internal if set" do
+      pending('String#encoding is not defined') unless String.public_method_defined?(:encoding)
       with_internal_encoding 'UTF-16LE' do
         expect(error.message.encoding).to eql(Encoding.default_internal)
         error.message.valid_encoding?

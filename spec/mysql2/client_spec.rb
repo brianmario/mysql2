@@ -27,22 +27,20 @@ RSpec.describe Mysql2::Client do
     }.to raise_error(Mysql2::Error)
   end
 
-  if defined? Encoding
-    it "should raise an exception on create for invalid encodings" do
-      expect {
-        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "fake"))
-      }.to raise_error(Mysql2::Error)
-    end
+  it "should raise an exception on create for invalid encodings" do
+    expect {
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "fake"))
+    }.to raise_error(Mysql2::Error)
+  end
 
-    it "should not raise an exception on create for a valid encoding" do
-      expect {
-        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
-      }.not_to raise_error
+  it "should not raise an exception on create for a valid encoding" do
+    expect {
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
+    }.not_to raise_error
 
-      expect {
-        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
-      }.not_to raise_error
-    end
+    expect {
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
+    }.not_to raise_error
   end
 
   it "should accept connect flags and pass them to #connect" do
@@ -119,9 +117,9 @@ RSpec.describe Mysql2::Client do
   it "should be able to connect via SSL options" do
     ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"
     ssl_uncompiled = ssl.any? {|x| x['Value'] == 'OFF'}
-    skip("DON'T WORRY, THIS TEST PASSES - but SSL is not compiled into your MySQL daemon.") if ssl_uncompiled
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not compiled into your MySQL daemon.") if ssl_uncompiled
     ssl_disabled = ssl.any? {|x| x['Value'] == 'DISABLED'}
-    skip("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
 
     # You may need to adjust the lines below to match your SSL certificate paths
     ssl_client = nil
@@ -150,13 +148,15 @@ RSpec.describe Mysql2::Client do
   end
 
   def run_gc
-    GC.start
-    sleep(1) if defined?(Rubinius) # Let the Rubinius GC thread do its work
+    if defined?(Rubinius)
+      GC.run(true)
+    else
+      GC.start
+    end
+    sleep(0.5)
   end
 
   it "should not leave dangling connections after garbage collection" do
-    skip('Rubinius misbehaves') if defined?(Rubinius)
-
     run_gc
 
     client = Mysql2::Client.new(DatabaseCredentials['root'])
@@ -173,23 +173,22 @@ RSpec.describe Mysql2::Client do
     expect(final_count).to eq(before_count)
   end
 
-  if Process.respond_to?(:fork)
-    it "should not close connections when running in a child process" do
+
+  it "should not close connections when running in a child process" do
+    run_gc
+    client = Mysql2::Client.new(DatabaseCredentials['root'])
+
+    fork do
+      client.query('SELECT 1')
+      client = nil
       run_gc
-      client = Mysql2::Client.new(DatabaseCredentials['root'])
-
-      fork do
-        client.query('SELECT 1')
-        client = nil
-        run_gc
-      end
-
-      Process.wait
-
-      # this will throw an error if the underlying socket was shutdown by the
-      # child's GC
-      expect { client.query('SELECT 1') }.to_not raise_exception
     end
+
+    Process.wait
+
+    # this will throw an error if the underlying socket was shutdown by the
+    # child's GC
+    expect { client.query('SELECT 1') }.to_not raise_exception
   end
 
   it "should be able to connect to database with numeric-only name" do
@@ -272,7 +271,7 @@ RSpec.describe Mysql2::Client do
       @client_i = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => true)
       local = @client_i.query "SHOW VARIABLES LIKE 'local_infile'"
       local_enabled = local.any? {|x| x['Value'] == 'ON'}
-      skip("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
+      pending("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
 
       @client_i.query %[
         CREATE TABLE IF NOT EXISTS infileTest (
@@ -418,7 +417,6 @@ RSpec.describe Mysql2::Client do
       # XXX this test is not deterministic (because Unix signal handling is not)
       # and may fail on a loaded system
       it "should run signal handlers while waiting for a response" do
-        skip('Rubinius misbehaves') if defined?(Rubinius)
         mark = {}
         trap(:USR1) { mark[:USR1] = Time.now }
         begin
@@ -703,25 +701,25 @@ RSpec.describe Mysql2::Client do
     expect(info[:version].class).to eql(String)
   end
 
-  if defined? Encoding
-    context "strings returned by #info" do
-      it "should default to the connection's encoding if Encoding.default_internal is nil" do
-        with_internal_encoding nil do
-          expect(@client.info[:version].encoding).to eql(Encoding.find('utf-8'))
+  context "strings returned by #info" do
+    before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          expect(client2.info[:version].encoding).to eql(Encoding.find('us-ascii'))
-        end
+    it "should default to the connection's encoding if Encoding.default_internal is nil" do
+      with_internal_encoding nil do
+        expect(@client.info[:version].encoding).to eql(Encoding.find('utf-8'))
+
+        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+        expect(client2.info[:version].encoding).to eql(Encoding.find('us-ascii'))
+      end
+    end
+
+    it "should use Encoding.default_internal" do
+      with_internal_encoding 'utf-8' do
+        expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
       end
 
-      it "should use Encoding.default_internal" do
-        with_internal_encoding 'utf-8' do
-          expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
-        end
-
-        with_internal_encoding 'us-ascii' do
-          expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
-        end
+      with_internal_encoding 'us-ascii' do
+        expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
       end
     end
   end
@@ -746,25 +744,25 @@ RSpec.describe Mysql2::Client do
     }.to raise_error(Mysql2::Error)
   end
 
-  if defined? Encoding
-    context "strings returned by #server_info" do
-      it "should default to the connection's encoding if Encoding.default_internal is nil" do
-        with_internal_encoding nil do
-          expect(@client.server_info[:version].encoding).to eql(Encoding.find('utf-8'))
+  context "strings returned by #server_info" do
+    before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          expect(client2.server_info[:version].encoding).to eql(Encoding.find('us-ascii'))
-        end
+    it "should default to the connection's encoding if Encoding.default_internal is nil" do
+      with_internal_encoding nil do
+        expect(@client.server_info[:version].encoding).to eql(Encoding.find('utf-8'))
+
+        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+        expect(client2.server_info[:version].encoding).to eql(Encoding.find('us-ascii'))
+      end
+    end
+
+    it "should use Encoding.default_internal" do
+      with_internal_encoding 'utf-8' do
+        expect(@client.server_info[:version].encoding).to eql(Encoding.default_internal)
       end
 
-      it "should use Encoding.default_internal" do
-        with_internal_encoding 'utf-8' do
-          expect(@client.server_info[:version].encoding).to eql(Encoding.default_internal)
-        end
-
-        with_internal_encoding 'us-ascii' do
-          expect(@client.server_info[:version].encoding).to eql(Encoding.default_internal)
-        end
+      with_internal_encoding 'us-ascii' do
+        expect(@client.server_info[:version].encoding).to eql(Encoding.default_internal)
       end
     end
   end

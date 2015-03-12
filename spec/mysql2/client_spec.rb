@@ -417,28 +417,31 @@ RSpec.describe Mysql2::Client do
       # XXX this test is not deterministic (because Unix signal handling is not)
       # and may fail on a loaded system
       it "should run signal handlers while waiting for a response" do
+        kill_time = 0.1
+        query_time = 2 * kill_time
+
         mark = {}
-        trap(:USR1) { mark[:USR1] = Time.now }
+
         begin
-          mark[:START] = Time.now
+          trap(:USR1) { mark.store(:USR1, Time.now) }
           pid = fork do
-            sleep 0.1 # wait for client query to start
+            sleep kill_time # wait for client query to start
             Process.kill(:USR1, Process.ppid)
             sleep # wait for explicit kill to prevent GC disconnect
           end
-          @client.query('SELECT SLEEP(0.2)')
-          mark[:END] = Time.now
-          expect(mark.include?(:USR1)).to be true
-          expect(mark[:USR1] - mark[:START]).to be >= 0.1
-          expect(mark[:USR1] - mark[:START]).to be < 0.13
-          expect(mark[:END] - mark[:USR1]).to be > 0.09
-          expect(mark[:END] - mark[:START]).to be >= 0.2
-          expect(mark[:END] - mark[:START]).to be < 0.23
+          mark.store(:QUERY_START, Time.now)
+          @client.query("SELECT SLEEP(#{query_time})")
+          mark.store(:QUERY_END, Time.now)
+        ensure
           Process.kill(:TERM, pid)
           Process.waitpid2(pid)
-        ensure
           trap(:USR1, 'DEFAULT')
         end
+
+        # the query ran uninterrupted
+        expect(mark.fetch(:QUERY_END) - mark.fetch(:QUERY_START)).to be_within(0.02).of(query_time)
+        # signals fired while the query was running
+        expect(mark.fetch(:USR1)).to be_between(mark.fetch(:QUERY_START), mark.fetch(:QUERY_END))
       end
 
       it "#socket should return a Fixnum (file descriptor from C)" do

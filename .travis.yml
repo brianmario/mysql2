@@ -2,32 +2,7 @@ language: ruby
 bundler_args: --without benchmarks development
 before_install:
   - gem --version
-  - |
-    bash -c " # Install MySQL 5.7 if DB=mysql57
-    if [[ x$DB =~ mysql57 ]]; then
-      sudo bash .travis_mysql57.sh
-    fi
-    "
-  - |
-    bash -c " # Install MariaDB if DB=mariadb
-    if [[ x$DB =~ xmariadb ]]; then
-      sudo bash .travis_mariadb.sh '$DB'
-    fi
-    "
-  - |
-    bash -c " # Install MySQL if OS=darwin
-    if [[ x$OSTYPE =~ ^xdarwin ]]; then
-      brew install mysql
-      mysql.server start
-    fi
-    "
-  - |
-    bash -c " # Configure SSL support
-    if [[ ! x$OSTYPE =~ ^xdarwin ]]; then
-      sudo bash .travis_ssl.sh
-      sudo service mysql restart
-    fi
-    "
+  - bash .travis_setup.sh
   - mysqld --version
   - mysql -u root -e "CREATE DATABASE IF NOT EXISTS test"
   - mysql -u root -e "CREATE USER '$USER'@'localhost'" || true

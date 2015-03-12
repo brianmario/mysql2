@@ -1,7 +1,6 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-# Halt the tests on error
-set -e
+set -eu
 
 # Wherever MySQL configs live, go there (this is for cross-platform)
 cd $(my_print_defaults --help | grep my.cnf | xargs find 2>/dev/null | xargs dirname)

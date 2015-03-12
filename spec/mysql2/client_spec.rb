@@ -498,23 +498,22 @@ describe Mysql2::Client do
       end
 
       it "threaded queries should be supported" do
-        threads, results = [], {}
-        lock = Mutex.new
-        connect = lambda{
-          Mysql2::Client.new(DatabaseCredentials['root'])
-        }
-        Timeout.timeout(0.7) do
-          5.times {
-            threads << Thread.new do
-              result = connect.call.query("SELECT sleep(0.5) as result")
-              lock.synchronize do
-                results[Thread.current.object_id] = result
-              end
-            end
-          }
+        sleep_time = 0.5
+
+        # Note that each thread opens its own database connection
+        threads = 5.times.map do
+          Thread.new do
+            client = Mysql2::Client.new(DatabaseCredentials.fetch('root'))
+            client.query("SELECT SLEEP(#{sleep_time})")
+            Thread.current.object_id
+          end
         end
-        threads.each{|t| t.join }
-        results.keys.sort.should eql(threads.map{|t| t.object_id }.sort)
+
+        # This timeout demonstrates that the threads are sleeping concurrently:
+        # In the serial case, the timeout would fire and the test would fail
+        values = Timeout.timeout(sleep_time * 1.1) { threads.map(&:value) }
+
+        values.should =~ threads.map(&:object_id)
       end
 
       it "evented async queries should be supported" do

@@ -96,10 +96,7 @@ describe Mysql2::Client do
     first_conn_id = result.first['CONNECTION_ID()']
 
     # break the current connection
-    begin
-      client.query("KILL #{first_conn_id}")
-    rescue Mysql2::Error
-    end
+    expect { client.query("KILL #{first_conn_id}") }.to raise_error(Mysql2::Error)
 
     client.ping # reconnect now
 
@@ -404,13 +401,7 @@ describe Mysql2::Client do
         thr = Thread.new { @client.query("SELECT 1", :async => true) }
 
         thr.join
-        begin
-          @client.query("SELECT 1")
-        rescue Mysql2::Error => e
-          message = e.message
-        end
-        re = Regexp.escape(thr.inspect)
-        message.should match(Regexp.new(re))
+        expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(thr.inspect)))
       end
 
       it "should timeout if we wait longer than :read_timeout" do
@@ -460,7 +451,6 @@ describe Mysql2::Client do
           @client.socket
         }.should raise_error(Mysql2::Error)
       end
-
 
       it 'should be impervious to connection-corrupting timeouts ' do
         pending('`Thread.handle_interrupt` is not defined') unless Thread.respond_to?(:handle_interrupt)

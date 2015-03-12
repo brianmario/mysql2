@@ -338,13 +338,8 @@ describe Mysql2::Result do
     end
 
     it "should raise an error given an invalid DATETIME" do
-      begin
-        @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each
-      rescue Mysql2::Error => e
-        error = e
-      end
-
-      error.message.should eql("Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
+      expect { @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each }.to \
+        raise_error(Mysql2::Error, "Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
     end
 
     if defined? Encoding

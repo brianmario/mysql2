@@ -7,33 +7,33 @@ describe Mysql2::Result do
   end
 
   it "should have included Enumerable" do
-    Mysql2::Result.ancestors.include?(Enumerable).should be_true
+    expect(Mysql2::Result.ancestors.include?(Enumerable)).to be true
   end
 
   it "should respond to #each" do
-    @result.should respond_to(:each)
+    expect(@result).to respond_to(:each)
   end
 
   it "should raise a Mysql2::Error exception upon a bad query" do
-    lambda {
+    expect {
       @client.query "bad sql"
-    }.should raise_error(Mysql2::Error)
+    }.to raise_error(Mysql2::Error)
 
-    lambda {
+    expect {
       @client.query "SELECT 1"
-    }.should_not raise_error(Mysql2::Error)
+    }.not_to raise_error
   end
 
   it "should respond to #count, which is aliased as #size" do
     r = @client.query "SELECT 1"
-    r.should respond_to :count
-    r.should respond_to :size
+    expect(r).to respond_to :count
+    expect(r).to respond_to :size
   end
 
   it "should be able to return the number of rows in the result set" do
     r = @client.query "SELECT 1"
-    r.count.should eql(1)
-    r.size.should eql(1)
+    expect(r.count).to eql(1)
+    expect(r.size).to eql(1)
   end
 
   context "metadata queries" do
@@ -45,39 +45,39 @@ describe Mysql2::Result do
   context "#each" do
     it "should yield rows as hash's" do
       @result.each do |row|
-        row.class.should eql(Hash)
+        expect(row.class).to eql(Hash)
       end
     end
 
     it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
       @result.each(:symbolize_keys => true) do |row|
-        row.keys.first.class.should eql(Symbol)
+        expect(row.keys.first.class).to eql(Symbol)
       end
     end
 
     it "should be able to return results as an array" do
       @result.each(:as => :array) do |row|
-        row.class.should eql(Array)
+        expect(row.class).to eql(Array)
       end
     end
 
     it "should cache previously yielded results by default" do
-      @result.first.object_id.should eql(@result.first.object_id)
+      expect(@result.first.object_id).to eql(@result.first.object_id)
     end
 
     it "should not cache previously yielded results if cache_rows is disabled" do
       result = @client.query "SELECT 1", :cache_rows => false
-      result.first.object_id.should_not eql(result.first.object_id)
+      expect(result.first.object_id).not_to eql(result.first.object_id)
     end
 
     it "should yield different value for #first if streaming" do
       result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
-      result.first.should_not eql(result.first)
+      expect(result.first).not_to eql(result.first)
     end
 
     it "should yield the same value for #first if streaming is disabled" do
       result = @client.query "SELECT 1 UNION SELECT 2", :stream => false
-      result.first.should eql(result.first)
+      expect(result.first).to eql(result.first)
     end
 
     it "should throw an exception if we try to iterate twice when streaming is enabled" do
@@ -96,43 +96,43 @@ describe Mysql2::Result do
     end
 
     it "method should exist" do
-      @test_result.should respond_to(:fields)
+      expect(@test_result).to respond_to(:fields)
     end
 
     it "should return an array of field names in proper order" do
       result = @client.query "SELECT 'a', 'b', 'c'"
-      result.fields.should eql(['a', 'b', 'c'])
+      expect(result.fields).to eql(['a', 'b', 'c'])
     end
   end
 
   context "streaming" do
     it "should maintain a count while streaming" do
       result = @client.query('SELECT 1', :stream => true, :cache_rows => false)
-      result.count.should eql(0)
+      expect(result.count).to eql(0)
       result.each.to_a
-      result.count.should eql(1)
+      expect(result.count).to eql(1)
     end
 
     it "should retain the count when mixing first and each" do
       result = @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false)
-      result.count.should eql(0)
+      expect(result.count).to eql(0)
       result.first
-      result.count.should eql(1)
+      expect(result.count).to eql(1)
       result.each.to_a
-      result.count.should eql(2)
+      expect(result.count).to eql(2)
     end
 
     it "should not yield nil at the end of streaming" do
       result = @client.query('SELECT * FROM mysql2_test', :stream => true, :cache_rows => false)
-      result.each { |r| r.should_not be_nil}
+      result.each { |r| expect(r).not_to be_nil}
     end
 
     it "#count should be zero for rows after streaming when there were no results" do
       @client.query "USE test"
       result = @client.query("SELECT * FROM mysql2_test WHERE null_test IS NOT NULL", :stream => true, :cache_rows => false)
-      result.count.should eql(0)
-      result.each {|r|  }
-      result.count.should eql(0)
+      expect(result.count).to eql(0)
+      result.each.to_a
+      expect(result.count).to eql(0)
     end
 
     it "should raise an exception if streaming ended due to a timeout" do
@@ -149,12 +149,12 @@ describe Mysql2::Result do
       client.query "SET net_write_timeout = 1"
       res = client.query "SELECT * FROM streamingTest", :stream => true, :cache_rows => false
 
-      lambda {
+      expect {
         res.each_with_index do |row, i|
           # Exhaust the first result packet then trigger a timeout
           sleep 2 if i > 0 && i % 1000 == 0
         end
-      }.should raise_error(Mysql2::Error, /Lost connection/)
+      }.to raise_error(Mysql2::Error, /Lost connection/)
     end
   end
 
@@ -165,32 +165,32 @@ describe Mysql2::Result do
 
     it "should return nil values for NULL and strings for everything else when :cast is false" do
       result = @client.query('SELECT null_test, tiny_int_test, bool_cast_test, int_test, date_test, enum_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast => false).first
-      result["null_test"].should be_nil
-      result["tiny_int_test"].should  eql("1")
-      result["bool_cast_test"].should eql("1")
-      result["int_test"].should       eql("10")
-      result["date_test"].should      eql("2010-04-04")
-      result["enum_test"].should      eql("val1")
+      expect(result["null_test"]).to be_nil
+      expect(result["tiny_int_test"]).to  eql("1")
+      expect(result["bool_cast_test"]).to eql("1")
+      expect(result["int_test"]).to       eql("10")
+      expect(result["date_test"]).to      eql("2010-04-04")
+      expect(result["enum_test"]).to      eql("val1")
     end
 
     it "should return nil for a NULL value" do
-      @test_result['null_test'].class.should eql(NilClass)
-      @test_result['null_test'].should eql(nil)
+      expect(@test_result['null_test'].class).to eql(NilClass)
+      expect(@test_result['null_test']).to eql(nil)
     end
 
     it "should return String for a BIT(64) value" do
-      @test_result['bit_test'].class.should eql(String)
-      @test_result['bit_test'].should eql("\000\000\000\000\000\000\000\005")
+      expect(@test_result['bit_test'].class).to eql(String)
+      expect(@test_result['bit_test']).to eql("\000\000\000\000\000\000\000\005")
     end
 
     it "should return String for a BIT(1) value" do
-      @test_result['single_bit_test'].class.should eql(String)
-      @test_result['single_bit_test'].should eql("\001")
+      expect(@test_result['single_bit_test'].class).to eql(String)
+      expect(@test_result['single_bit_test']).to eql("\001")
     end
 
     it "should return Fixnum for a TINYINT value" do
-      [Fixnum, Bignum].should include(@test_result['tiny_int_test'].class)
-      @test_result['tiny_int_test'].should eql(1)
+      expect([Fixnum, Bignum]).to include(@test_result['tiny_int_test'].class)
+      expect(@test_result['tiny_int_test']).to eql(1)
     end
 
     it "should return TrueClass or FalseClass for a TINYINT value if :cast_booleans is enabled" do
@@ -204,9 +204,9 @@ describe Mysql2::Result do
       result1 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast_booleans => true
       result2 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 0 LIMIT 1', :cast_booleans => true
       result3 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = -1 LIMIT 1', :cast_booleans => true
-      result1.first['bool_cast_test'].should be_true
-      result2.first['bool_cast_test'].should be_false
-      result3.first['bool_cast_test'].should be_true
+      expect(result1.first['bool_cast_test']).to be true
+      expect(result2.first['bool_cast_test']).to be false
+      expect(result3.first['bool_cast_test']).to be true
 
       @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
     end
@@ -219,55 +219,55 @@ describe Mysql2::Result do
 
       result1 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id1}", :cast_booleans => true
       result2 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id2}", :cast_booleans => true
-      result1.first['single_bit_test'].should be_true
-      result2.first['single_bit_test'].should be_false
+      expect(result1.first['single_bit_test']).to be true
+      expect(result2.first['single_bit_test']).to be false
 
       @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
     end
 
     it "should return Fixnum for a SMALLINT value" do
-      [Fixnum, Bignum].should include(@test_result['small_int_test'].class)
-      @test_result['small_int_test'].should eql(10)
+      expect([Fixnum, Bignum]).to include(@test_result['small_int_test'].class)
+      expect(@test_result['small_int_test']).to eql(10)
     end
 
     it "should return Fixnum for a MEDIUMINT value" do
-      [Fixnum, Bignum].should include(@test_result['medium_int_test'].class)
-      @test_result['medium_int_test'].should eql(10)
+      expect([Fixnum, Bignum]).to include(@test_result['medium_int_test'].class)
+      expect(@test_result['medium_int_test']).to eql(10)
     end
 
     it "should return Fixnum for an INT value" do
-      [Fixnum, Bignum].should include(@test_result['int_test'].class)
-      @test_result['int_test'].should eql(10)
+      expect([Fixnum, Bignum]).to include(@test_result['int_test'].class)
+      expect(@test_result['int_test']).to eql(10)
     end
 
     it "should return Fixnum for a BIGINT value" do
-      [Fixnum, Bignum].should include(@test_result['big_int_test'].class)
-      @test_result['big_int_test'].should eql(10)
+      expect([Fixnum, Bignum]).to include(@test_result['big_int_test'].class)
+      expect(@test_result['big_int_test']).to eql(10)
     end
 
     it "should return Fixnum for a YEAR value" do
-      [Fixnum, Bignum].should include(@test_result['year_test'].class)
-      @test_result['year_test'].should eql(2009)
+      expect([Fixnum, Bignum]).to include(@test_result['year_test'].class)
+      expect(@test_result['year_test']).to eql(2009)
     end
 
     it "should return BigDecimal for a DECIMAL value" do
-      @test_result['decimal_test'].class.should eql(BigDecimal)
-      @test_result['decimal_test'].should eql(10.3)
+      expect(@test_result['decimal_test'].class).to eql(BigDecimal)
+      expect(@test_result['decimal_test']).to eql(10.3)
     end
 
     it "should return Float for a FLOAT value" do
-      @test_result['float_test'].class.should eql(Float)
-      @test_result['float_test'].should eql(10.3)
+      expect(@test_result['float_test'].class).to eql(Float)
+      expect(@test_result['float_test']).to eql(10.3)
     end
 
     it "should return Float for a DOUBLE value" do
-      @test_result['double_test'].class.should eql(Float)
-      @test_result['double_test'].should eql(10.3)
+      expect(@test_result['double_test'].class).to eql(Float)
+      expect(@test_result['double_test']).to eql(10.3)
     end
 
     it "should return Time for a DATETIME value when within the supported range" do
-      @test_result['date_time_test'].class.should eql(Time)
-      @test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S").should eql('2010-04-04 11:44:00')
+      expect(@test_result['date_time_test'].class).to eql(Time)
+      expect(@test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
     if 1.size == 4 # 32bit
@@ -280,61 +280,61 @@ describe Mysql2::Result do
       it "should return DateTime when timestamp is < 1901-12-13 20:45:52" do
                                       # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
-        r.first['test'].class.should eql(klass)
+        expect(r.first['test'].class).to eql(klass)
       end
 
       it "should return DateTime when timestamp is > 2038-01-19T03:14:07" do
                                       # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-        r.first['test'].class.should eql(klass)
+        expect(r.first['test'].class).to eql(klass)
       end
     elsif 1.size == 8 # 64bit
       unless RUBY_VERSION =~ /1.8/
         it "should return Time when timestamp is < 1901-12-13 20:45:52" do
           r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
-          r.first['test'].class.should eql(Time)
+          expect(r.first['test'].class).to eql(Time)
         end
 
         it "should return Time when timestamp is > 2038-01-19T03:14:07" do
           r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-          r.first['test'].class.should eql(Time)
+          expect(r.first['test'].class).to eql(Time)
         end
       else
         it "should return Time when timestamp is > 0138-12-31 11:59:59" do
           r = @client.query("SELECT CAST('0139-1-1 00:00:00' AS DATETIME) as test")
-          r.first['test'].class.should eql(Time)
+          expect(r.first['test'].class).to eql(Time)
         end
 
         it "should return DateTime when timestamp is < 0139-1-1T00:00:00" do
           r = @client.query("SELECT CAST('0138-12-31 11:59:59' AS DATETIME) as test")
-          r.first['test'].class.should eql(DateTime)
+          expect(r.first['test'].class).to eql(DateTime)
         end
 
         it "should return Time when timestamp is > 2038-01-19T03:14:07" do
           r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-          r.first['test'].class.should eql(Time)
+          expect(r.first['test'].class).to eql(Time)
         end
       end
     end
 
     it "should return Time for a TIMESTAMP value when within the supported range" do
-      @test_result['timestamp_test'].class.should eql(Time)
-      @test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S").should eql('2010-04-04 11:44:00')
+      expect(@test_result['timestamp_test'].class).to eql(Time)
+      expect(@test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
     it "should return Time for a TIME value" do
-      @test_result['time_test'].class.should eql(Time)
-      @test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S").should eql('2000-01-01 11:44:00')
+      expect(@test_result['time_test'].class).to eql(Time)
+      expect(@test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2000-01-01 11:44:00')
     end
 
     it "should return Date for a DATE value" do
-      @test_result['date_test'].class.should eql(Date)
-      @test_result['date_test'].strftime("%Y-%m-%d").should eql('2010-04-04')
+      expect(@test_result['date_test'].class).to eql(Date)
+      expect(@test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')
     end
 
     it "should return String for an ENUM value" do
-      @test_result['enum_test'].class.should eql(String)
-      @test_result['enum_test'].should eql('val1')
+      expect(@test_result['enum_test'].class).to eql(String)
+      expect(@test_result['enum_test']).to eql('val1')
     end
 
     it "should raise an error given an invalid DATETIME" do
@@ -347,11 +347,11 @@ describe Mysql2::Result do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do
           with_internal_encoding nil do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['enum_test'].encoding.should eql(Encoding.find('utf-8'))
+            expect(result['enum_test'].encoding).to eql(Encoding.find('utf-8'))
 
             client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
             result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['enum_test'].encoding.should eql(Encoding.find('us-ascii'))
+            expect(result['enum_test'].encoding).to eql(Encoding.find('us-ascii'))
             client2.close
           end
         end
@@ -359,20 +359,20 @@ describe Mysql2::Result do
         it "should use Encoding.default_internal" do
           with_internal_encoding 'utf-8' do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['enum_test'].encoding.should eql(Encoding.default_internal)
+            expect(result['enum_test'].encoding).to eql(Encoding.default_internal)
           end
 
           with_internal_encoding 'us-ascii' do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['enum_test'].encoding.should eql(Encoding.default_internal)
+            expect(result['enum_test'].encoding).to eql(Encoding.default_internal)
           end
         end
       end
     end
 
     it "should return String for a SET value" do
-      @test_result['set_test'].class.should eql(String)
-      @test_result['set_test'].should eql('val1,val2')
+      expect(@test_result['set_test'].class).to eql(String)
+      expect(@test_result['set_test']).to eql('val1,val2')
     end
 
     if defined? Encoding
@@ -380,11 +380,11 @@ describe Mysql2::Result do
         it "should default to the connection's encoding if Encoding.default_internal is nil" do
           with_internal_encoding nil do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['set_test'].encoding.should eql(Encoding.find('utf-8'))
+            expect(result['set_test'].encoding).to eql(Encoding.find('utf-8'))
 
             client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
             result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['set_test'].encoding.should eql(Encoding.find('us-ascii'))
+            expect(result['set_test'].encoding).to eql(Encoding.find('us-ascii'))
             client2.close
           end
         end
@@ -392,20 +392,20 @@ describe Mysql2::Result do
         it "should use Encoding.default_internal" do
           with_internal_encoding 'utf-8' do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['set_test'].encoding.should eql(Encoding.default_internal)
+            expect(result['set_test'].encoding).to eql(Encoding.default_internal)
           end
 
           with_internal_encoding 'us-ascii' do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['set_test'].encoding.should eql(Encoding.default_internal)
+            expect(result['set_test'].encoding).to eql(Encoding.default_internal)
           end
         end
       end
     end
 
     it "should return String for a BINARY value" do
-      @test_result['binary_test'].class.should eql(String)
-      @test_result['binary_test'].should eql("test#{"\000"*6}")
+      expect(@test_result['binary_test'].class).to eql(String)
+      expect(@test_result['binary_test']).to eql("test#{"\000"*6}")
     end
 
     if defined? Encoding
@@ -413,19 +413,19 @@ describe Mysql2::Result do
         it "should default to binary if Encoding.default_internal is nil" do
           with_internal_encoding nil do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['binary_test'].encoding.should eql(Encoding.find('binary'))
+            expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
           end
         end
 
         it "should not use Encoding.default_internal" do
           with_internal_encoding 'utf-8' do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['binary_test'].encoding.should eql(Encoding.find('binary'))
+            expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
           end
 
           with_internal_encoding 'us-ascii' do
             result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-            result['binary_test'].encoding.should eql(Encoding.find('binary'))
+            expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
           end
         end
       end
@@ -445,8 +445,8 @@ describe Mysql2::Result do
       'long_text_test' => 'LONGTEXT'
     }.each do |field, type|
       it "should return a String for #{type}" do
-        @test_result[field].class.should eql(String)
-        @test_result[field].should eql("test")
+        expect(@test_result[field].class).to eql(String)
+        expect(@test_result[field]).to eql("test")
       end
 
       if defined? Encoding
@@ -455,30 +455,30 @@ describe Mysql2::Result do
             it "should default to binary if Encoding.default_internal is nil" do
               with_internal_encoding nil do
                 result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-                result['binary_test'].encoding.should eql(Encoding.find('binary'))
+                expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
               end
             end
 
             it "should not use Encoding.default_internal" do
               with_internal_encoding 'utf-8' do
                 result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-                result['binary_test'].encoding.should eql(Encoding.find('binary'))
+                expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
               end
 
               with_internal_encoding 'us-ascii' do
                 result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-                result['binary_test'].encoding.should eql(Encoding.find('binary'))
+                expect(result['binary_test'].encoding).to eql(Encoding.find('binary'))
               end
             end
           else
             it "should default to utf-8 if Encoding.default_internal is nil" do
               with_internal_encoding nil do
                 result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-                result[field].encoding.should eql(Encoding.find('utf-8'))
+                expect(result[field].encoding).to eql(Encoding.find('utf-8'))
 
                 client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
                 result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-                result[field].encoding.should eql(Encoding.find('us-ascii'))
+                expect(result[field].encoding).to eql(Encoding.find('us-ascii'))
                 client2.close
               end
             end
@@ -486,12 +486,12 @@ describe Mysql2::Result do
             it "should use Encoding.default_internal" do
               with_internal_encoding 'utf-8' do
                 result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-                result[field].encoding.should eql(Encoding.default_internal)
+                expect(result[field].encoding).to eql(Encoding.default_internal)
               end
 
               with_internal_encoding 'us-ascii' do
                 result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
-                result[field].encoding.should eql(Encoding.default_internal)
+                expect(result[field].encoding).to eql(Encoding.default_internal)
               end
             end
           end

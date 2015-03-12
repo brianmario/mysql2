@@ -18,12 +18,12 @@ describe Mysql2::Error do
   end
 
   it "responds to error_number and sql_state, with aliases" do
-    error.should respond_to(:error_number)
-    error.should respond_to(:sql_state)
+    expect(error).to respond_to(:error_number)
+    expect(error).to respond_to(:sql_state)
 
     # Mysql gem compatibility
-    error.should respond_to(:errno)
-    error.should respond_to(:error)
+    expect(error).to respond_to(:errno)
+    expect(error).to respond_to(:error)
   end
 
   if "".respond_to? :encoding
@@ -55,27 +55,27 @@ describe Mysql2::Error do
 
     it "returns error messages as UTF-8 by default" do
       with_internal_encoding nil do
-        error.message.encoding.should eql(Encoding::UTF_8)
+        expect(error.message.encoding).to eql(Encoding::UTF_8)
         error.message.valid_encoding?
 
-        bad_err.message.encoding.should eql(Encoding::UTF_8)
+        expect(bad_err.message.encoding).to eql(Encoding::UTF_8)
         bad_err.message.valid_encoding?
 
-        bad_err.message.should include("??}\u001F")
+        expect(bad_err.message).to include("??}\u001F")
       end
     end
 
     it "returns sql state as ASCII" do
-      error.sql_state.encoding.should eql(Encoding::US_ASCII)
+      expect(error.sql_state.encoding).to eql(Encoding::US_ASCII)
       error.sql_state.valid_encoding?
     end
 
     it "returns error messages and sql state in Encoding.default_internal if set" do
       with_internal_encoding 'UTF-16LE' do
-        error.message.encoding.should eql(Encoding.default_internal)
+        expect(error.message.encoding).to eql(Encoding.default_internal)
         error.message.valid_encoding?
 
-        bad_err.message.encoding.should eql(Encoding.default_internal)
+        expect(bad_err.message.encoding).to eql(Encoding.default_internal)
         bad_err.message.valid_encoding?
       end
     end

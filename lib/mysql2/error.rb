@@ -24,7 +24,7 @@ module Mysql2
       err = allocate
       err.instance_variable_set('@server_version', server_version)
       err.instance_variable_set('@error_number', error_number)
-      err.instance_variable_set('@sql_state', sql_state.respond_to?(:encode) ? sql_state.encode(ENCODE_OPTS) : sql_state)
+      err.instance_variable_set('@sql_state', sql_state.encode(ENCODE_OPTS))
       err.send(:initialize, msg)
       err
     end
@@ -55,12 +55,8 @@ module Mysql2
     # encoding, we'll assume UTF-8 and clean the string of anything that's not a
     # valid UTF-8 character.
     #
-    # Except for if we're on 1.8, where we'll do nothing ;)
-    #
-    # Returns a valid UTF-8 string in Ruby 1.9+, the original string on Ruby 1.8
+    # Returns a valid UTF-8 string.
     def clean_message(message)
-      return message unless message.respond_to?(:encode)
-
       if @server_version && @server_version > 50500
         message.encode(ENCODE_OPTS)
       else

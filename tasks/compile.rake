@@ -60,10 +60,10 @@ end
 file 'lib/mysql2/mysql2.rb' do |t|
   name = Mysql2::GEMSPEC.name
   File.open(t.name, 'wb') do |f|
-    f.write <<-eoruby
+    f.write <<-END_OF_RUBY
 RUBY_VERSION =~ /(\\d+.\\d+)/
 require "#{name}/\#{$1}/#{name}"
-    eoruby
+    END_OF_RUBY
   end
 end
 

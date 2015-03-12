@@ -1,7 +1,6 @@
 # encoding: UTF-8
 require 'date'
 require 'bigdecimal'
-require 'rational' unless RUBY_VERSION >= '1.9.2'
 
 # Load libmysql.dll before requiring mysql2/mysql2.so
 # This gives a chance to be flexible about the load path
@@ -73,8 +72,7 @@ module Mysql2
     #
     if Thread.respond_to?(:handle_interrupt)
       require 'timeout'
-      # rubocop:disable Style/ConstantName
-      TimeoutError = if defined?(::Timeout::ExitException)
+      TIMEOUT_ERROR_CLASS = if defined?(::Timeout::ExitException)
         ::Timeout::ExitException
       else
         ::Timeout::Error

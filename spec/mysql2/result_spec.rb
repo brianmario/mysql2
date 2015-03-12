@@ -292,75 +292,14 @@ RSpec.describe Mysql2::Result do
       expect(@test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
-    it "should return Time values with microseconds" do
-      now = Time.now
-      if RUBY_VERSION =~ /1.8/ || @client.server_info[:id] / 100 < 506
-        result = @client.query("SELECT CAST('#{now.strftime('%F %T %z')}' AS DATETIME) AS a")
-        expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
-      else
-        result = @client.query("SELECT CAST('#{now.strftime('%F %T.%6N %z')}' AS DATETIME(6)) AS a")
-        # microseconds is 6 digits after the decimal, but only test on 5 significant figures
-        expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
-      end
+    it "should return Time when timestamp is < 1901-12-13 20:45:52" do
+      r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
+      expect(r.first['test']).to be_an_instance_of(Time)
     end
 
-    it "should return DateTime values with microseconds" do
-      now = DateTime.now
-      if RUBY_VERSION =~ /1.8/ || @client.server_info[:id] / 100 < 506
-        result = @client.query("SELECT CAST('#{now.strftime('%F %T %z')}' AS DATETIME)  AS a")
-        expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
-      else
-        result = @client.query("SELECT CAST('#{now.strftime('%F %T.%6N %z')}' AS DATETIME(6)) AS a")
-        # microseconds is 6 digits after the decimal, but only test on 5 significant figures
-        expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
-      end
-    end
-
-    if 1.size == 4 # 32bit
-      klass = if RUBY_VERSION =~ /1.8/
-        DateTime
-      else
-        Time
-      end
-
-      it "should return DateTime when timestamp is < 1901-12-13 20:45:52" do
-        # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
-        r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
-        expect(r.first['test']).to be_an_instance_of(klass)
-      end
-
-      it "should return DateTime when timestamp is > 2038-01-19T03:14:07" do
-        # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
-        r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-        expect(r.first['test']).to be_an_instance_of(klass)
-      end
-    elsif 1.size == 8 # 64bit
-      if RUBY_VERSION =~ /1.8/
-        it "should return Time when timestamp is > 0138-12-31 11:59:59" do
-          r = @client.query("SELECT CAST('0139-1-1 00:00:00' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(Time)
-        end
-
-        it "should return DateTime when timestamp is < 0139-1-1T00:00:00" do
-          r = @client.query("SELECT CAST('0138-12-31 11:59:59' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(DateTime)
-        end
-
-        it "should return Time when timestamp is > 2038-01-19T03:14:07" do
-          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(Time)
-        end
-      else
-        it "should return Time when timestamp is < 1901-12-13 20:45:52" do
-          r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(Time)
-        end
-
-        it "should return Time when timestamp is > 2038-01-19T03:14:07" do
-          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(Time)
-        end
-      end
+    it "should return Time when timestamp is > 2038-01-19T03:14:07" do
+      r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+      expect(r.first['test']).to be_an_instance_of(Time)
     end
 
     it "should return Time for a TIMESTAMP value when within the supported range" do
@@ -389,8 +328,6 @@ RSpec.describe Mysql2::Result do
     end
 
     context "string encoding for ENUM values" do
-      before { pending('Encoding is undefined') unless defined?(Encoding) }
-
       it "should default to the connection's encoding if Encoding.default_internal is nil" do
         with_internal_encoding nil do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
@@ -421,8 +358,6 @@ RSpec.describe Mysql2::Result do
     end
 
     context "string encoding for SET values" do
-      before { pending('Encoding is undefined') unless defined?(Encoding) }
-
       it "should default to the connection's encoding if Encoding.default_internal is nil" do
         with_internal_encoding nil do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
@@ -453,8 +388,6 @@ RSpec.describe Mysql2::Result do
     end
 
     context "string encoding for BINARY values" do
-      before { pending('Encoding is undefined') unless defined?(Encoding) }
-
       it "should default to binary if Encoding.default_internal is nil" do
         with_internal_encoding nil do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
@@ -494,8 +427,6 @@ RSpec.describe Mysql2::Result do
       end
 
       context "string encoding for #{type} values" do
-        before { pending('Encoding is undefined') unless defined?(Encoding) }
-
         if %w(VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB).include?(type)
           it "should default to binary if Encoding.default_internal is nil" do
             with_internal_encoding nil do

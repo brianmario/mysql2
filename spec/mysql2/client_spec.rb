@@ -136,16 +136,14 @@ RSpec.describe Mysql2::Client do
     # You may need to adjust the lines below to match your SSL certificate paths
     ssl_client = nil
     expect {
-      # rubocop:disable Style/TrailingComma
       ssl_client = new_client(
         'host'     => 'mysql2gem.example.com', # must match the certificates
         :sslkey    => '/etc/mysql/client-key.pem',
         :sslcert   => '/etc/mysql/client-cert.pem',
         :sslca     => '/etc/mysql/ca-cert.pem',
         :sslcipher => 'DHE-RSA-AES256-SHA',
-        :sslverify => true
+        :sslverify => true,
       )
-      # rubocop:enable Style/TrailingComma
     }.not_to raise_error
 
     results = Hash[ssl_client.query('SHOW STATUS WHERE Variable_name LIKE "Ssl_%"').map { |x| x.values_at('Variable_name', 'Value') }]
@@ -784,7 +782,6 @@ RSpec.describe Mysql2::Client do
       }.not_to raise_error
     end
 
-    unless RUBY_VERSION =~ /1.8/
       it "should carry over the original string's encoding" do
         str = "abc'def\"ghi\0jkl%mno"
         escaped = Mysql2::Client.escape(str)
@@ -795,7 +792,6 @@ RSpec.describe Mysql2::Client do
         expect(escaped.encoding).to eql(str.encoding)
       end
     end
-  end
 
   it "should respond to #escape" do
     expect(@client).to respond_to(:escape)
@@ -831,8 +827,6 @@ RSpec.describe Mysql2::Client do
     end
 
     context 'when mysql encoding is not utf8' do
-      before { pending('Encoding is undefined') unless defined?(Encoding) }
-
       let(:client) { new_client(:encoding => "ujis") }
 
       it 'should return a internal encoding string if Encoding.default_internal is set' do
@@ -858,8 +852,6 @@ RSpec.describe Mysql2::Client do
   end
 
   context "strings returned by #info" do
-    before { pending('Encoding is undefined') unless defined?(Encoding) }
-
     it "should be tagged as ascii" do
       expect(@client.info[:version].encoding).to eql(Encoding::US_ASCII)
       expect(@client.info[:header_version].encoding).to eql(Encoding::US_ASCII)
@@ -867,8 +859,6 @@ RSpec.describe Mysql2::Client do
   end
 
   context "strings returned by .info" do
-    before { pending('Encoding is undefined') unless defined?(Encoding) }
-
     it "should be tagged as ascii" do
       expect(Mysql2::Client.info[:version].encoding).to eql(Encoding::US_ASCII)
       expect(Mysql2::Client.info[:header_version].encoding).to eql(Encoding::US_ASCII)
@@ -896,8 +886,6 @@ RSpec.describe Mysql2::Client do
   end
 
   context "strings returned by #server_info" do
-    before { pending('Encoding is undefined') unless defined?(Encoding) }
-
     it "should default to the connection's encoding if Encoding.default_internal is nil" do
       with_internal_encoding nil do
         expect(@client.server_info[:version].encoding).to eql(Encoding::UTF_8)
@@ -1031,9 +1019,7 @@ RSpec.describe Mysql2::Client do
     client.query('SELECT 1')
   end
 
-  unless RUBY_VERSION =~ /1.8/
     it "should respond to #encoding" do
       expect(@client).to respond_to(:encoding)
     end
   end
-end

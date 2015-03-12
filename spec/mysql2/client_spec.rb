@@ -149,9 +149,14 @@ describe Mysql2::Client do
     ssl_client.close
   end
 
-  it "should not leave dangling connections after garbage collection" do
+  def run_gc
     GC.start
-    sleep 0.300 # Let GC do its work
+    sleep(1) if defined?(Rubinius) # Let the Rubinius GC thread do its work
+  end
+
+  it "should not leave dangling connections after garbage collection" do
+    run_gc
+
     client = Mysql2::Client.new(DatabaseCredentials['root'])
     before_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
 
@@ -161,23 +166,20 @@ describe Mysql2::Client do
     after_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
     after_count.should == before_count + 10
 
-    GC.start
-    sleep 0.300 # Let GC do its work
+    run_gc
     final_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
     final_count.should == before_count
   end
 
   if Process.respond_to?(:fork)
     it "should not close connections when running in a child process" do
-      GC.start
-      sleep 1 if defined? Rubinius # Let the rbx GC thread do its work
+      run_gc
       client = Mysql2::Client.new(DatabaseCredentials['root'])
 
       fork do
         client.query('SELECT 1')
         client = nil
-        GC.start
-        sleep 1 if defined? Rubinius # Let the rbx GC thread do its work
+        run_gc
       end
 
       Process.wait

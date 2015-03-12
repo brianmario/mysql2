@@ -405,9 +405,9 @@ describe Mysql2::Client do
       end
 
       it "should timeout if we wait longer than :read_timeout" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => 1))
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => 0))
         lambda {
-          client.query("SELECT sleep(2)")
+          client.query('SELECT SLEEP(0.1)')
         }.should raise_error(Mysql2::Error)
       end
 
@@ -420,18 +420,18 @@ describe Mysql2::Client do
           begin
             mark[:START] = Time.now
             pid = fork do
-              sleep 1 # wait for client "SELECT sleep(2)" query to start
+              sleep 0.1 # wait for client query to start
               Process.kill(:USR1, Process.ppid)
               sleep # wait for explicit kill to prevent GC disconnect
             end
-            @client.query("SELECT sleep(2)")
+            @client.query('SELECT SLEEP(0.2)')
             mark[:END] = Time.now
             mark.include?(:USR1).should be_true
-            (mark[:USR1] - mark[:START]).should >= 1
-            (mark[:USR1] - mark[:START]).should < 1.3
-            (mark[:END] - mark[:USR1]).should > 0.9
-            (mark[:END] - mark[:START]).should >= 2
-            (mark[:END] - mark[:START]).should < 2.3
+            (mark[:USR1] - mark[:START]).should >= 0.1
+            (mark[:USR1] - mark[:START]).should < 0.13
+            (mark[:END] - mark[:USR1]).should > 0.09
+            (mark[:END] - mark[:START]).should >= 0.2
+            (mark[:END] - mark[:START]).should < 0.23
             Process.kill(:TERM, pid)
             Process.waitpid2(pid)
           ensure
@@ -455,7 +455,7 @@ describe Mysql2::Client do
       it 'should be impervious to connection-corrupting timeouts ' do
         pending('`Thread.handle_interrupt` is not defined') unless Thread.respond_to?(:handle_interrupt)
         # attempt to break the connection
-        expect { Timeout.timeout(0.1) { @client.query('SELECT SLEEP(1)') } }.to raise_error(Timeout::Error)
+        expect { Timeout.timeout(0.1) { @client.query('SELECT SLEEP(0.2)') } }.to raise_error(Timeout::Error)
 
         # expect the connection to not be broken
         expect { @client.query('SELECT 1') }.to_not raise_error

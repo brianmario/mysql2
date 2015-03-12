@@ -220,7 +220,7 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
  */
 static unsigned int msec_char_to_uint(char *msec_char, size_t len)
 {
-  int i;
+  size_t i;
   for (i = 0; i < (len - 1); i++) {
     if (msec_char[i] == '\0') {
       msec_char[i] = '0';

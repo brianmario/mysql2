@@ -40,9 +40,9 @@ inline
 #endif
 #endif
 static unsigned int
-mysql2_mysql_enc_name_to_rb_hash (str, len)
+mysql2_mysql_enc_name_to_rb_hash(str, len)
      register const char *str;
-     register unsigned int len;
+     register const unsigned int len;
 {
   static const unsigned char asso_values[] =
     {
@@ -83,9 +83,9 @@ __attribute__ ((__gnu_inline__))
 #endif
 #endif
 const struct mysql2_mysql_enc_name_to_rb_map *
-mysql2_mysql_enc_name_to_rb (str, len)
+mysql2_mysql_enc_name_to_rb(str, len)
      register const char *str;
-     register unsigned int len;
+     register const unsigned int len;
 {
   enum
     {
@@ -154,9 +154,9 @@ mysql2_mysql_enc_name_to_rb (str, len)
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
     {
-      register int key = mysql2_mysql_enc_name_to_rb_hash (str, len);
+      register const unsigned int key = mysql2_mysql_enc_name_to_rb_hash(str, len);
 
-      if (key <= MAX_HASH_VALUE && key >= 0)
+      if (key <= MAX_HASH_VALUE)
         {
           register const char *s = wordlist[key].name;
 

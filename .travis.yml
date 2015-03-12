@@ -17,7 +17,7 @@ before_install:
     fi
     "
   - |
-    bash -c " # Install MySQL is OS=darwin
+    bash -c " # Install MySQL if OS=darwin
     if [[ x$OSTYPE =~ ^xdarwin ]]; then
       brew install mysql
       mysql.server start

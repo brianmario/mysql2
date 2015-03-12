@@ -1,7 +1,5 @@
 language: ruby
 bundler_args: --without benchmarks
-script:
-  - bundle exec rake spec
 before_install:
   - gem --version
   - |

@@ -4,7 +4,7 @@ begin
   require 'eventmachine'
   require 'mysql2/em'
 
-  describe Mysql2::EM::Client do
+  RSpec.describe Mysql2::EM::Client do
     it "should support async queries" do
       results = []
       EM.run do

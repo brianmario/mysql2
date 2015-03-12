@@ -7,7 +7,7 @@ gem 'rake-compiler', '~> 0.9.5'
 
 group :test do
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
-  gem 'rspec', '~> 2.99'
+  gem 'rspec', '~> 3.2'
 end
 
 group :benchmarks do

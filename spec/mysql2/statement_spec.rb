@@ -1,7 +1,7 @@
 # encoding: UTF-8
 require './spec/spec_helper.rb'
 
-describe Mysql2::Statement do
+RSpec.describe Mysql2::Statement do
   before :each do
     @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
   end

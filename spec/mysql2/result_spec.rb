@@ -1,7 +1,7 @@
 # encoding: UTF-8
 require 'spec_helper'
 
-describe Mysql2::Result do
+RSpec.describe Mysql2::Result do
   before(:each) do
     @result = @client.query "SELECT 1"
   end

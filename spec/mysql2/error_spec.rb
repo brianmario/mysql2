@@ -2,7 +2,7 @@
 
 require 'spec_helper'
 
-describe Mysql2::Error do
+RSpec.describe Mysql2::Error do
   let(:client) { Mysql2::Client.new(DatabaseCredentials['root']) }
 
   let :error do

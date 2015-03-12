@@ -7,6 +7,8 @@ require 'yaml'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.configure do |config|
+  config.disable_monkey_patching!
+
   def with_internal_encoding(encoding)
     old_enc = Encoding.default_internal
     Encoding.default_internal = encoding

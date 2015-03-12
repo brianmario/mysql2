@@ -1,5 +1,5 @@
 language: ruby
-bundler_args: --without benchmarks
+bundler_args: --without benchmarks development
 before_install:
   - gem --version
   - |

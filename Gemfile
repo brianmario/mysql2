@@ -2,7 +2,14 @@ source 'https://rubygems.org'
 
 gemspec
 
-# benchmarks
+gem 'rake', '~> 10.4.2'
+gem 'rake-compiler', '~> 0.9.5'
+
+group :test do
+  gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
+  gem 'rspec', '~> 2.8.0'
+end
+
 group :benchmarks do
   gem 'activerecord', '>= 3.0'
   gem 'benchmark-ips'
@@ -13,7 +20,6 @@ group :benchmarks do
 end
 
 group :development do
-  gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
   gem 'pry'
 end
 

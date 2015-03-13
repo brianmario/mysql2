@@ -117,7 +117,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   # Use rake to rebuild only if these files change
   deffile = File.expand_path('../../../support/libmysql.def', __FILE__)
   libfile = File.expand_path(File.join(rpath_dir, 'libmysql.lib'))
-  file 'libmysql.a' => [deffile, libfile] do |t|
+  file 'libmysql.a' => [deffile, libfile] do
     when_writing 'building libmysql.a' do
       # Ruby kindly shows us where dllwrap is, but that tool does more than we want.
       # Maybe in the future Ruby could provide RbConfig::CONFIG['DLLTOOL'] directly.
@@ -144,7 +144,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
 
   vendordll = File.join(vendordir, 'libmysql.dll')
   dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
-  file vendordll => [dllfile, vendordir] do |t|
+  file vendordll => [dllfile, vendordir] do
     when_writing 'copying libmysql.dll' do
       cp dllfile, vendordll
     end

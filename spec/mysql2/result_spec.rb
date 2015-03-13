@@ -158,7 +158,7 @@ RSpec.describe Mysql2::Result do
       res = client.query "SELECT * FROM streamingTest", :stream => true, :cache_rows => false
 
       expect {
-        res.each_with_index do |row, i|
+        res.each_with_index do |_, i|
           # Exhaust the first result packet then trigger a timeout
           sleep 2 if i > 0 && i % 1000 == 0
         end

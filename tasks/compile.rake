@@ -50,7 +50,7 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
 end
 Rake::Task[:spec].prerequisites << :compile
 
-file 'vendor/README' do |t|
+file 'vendor/README' do
   connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir}", __FILE__)
   when_writing 'copying Connector/C README' do
     cp "#{connector_dir}/README", 'vendor/README'

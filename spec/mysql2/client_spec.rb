@@ -125,6 +125,7 @@ RSpec.describe Mysql2::Client do
     # You may need to adjust the lines below to match your SSL certificate paths
     ssl_client = nil
     expect {
+      # rubocop:disable Style/TrailingComma
       ssl_client = Mysql2::Client.new(
         DatabaseCredentials['root'].merge(
           'host'     => 'mysql2gem.example.com', # must match the certificates
@@ -132,9 +133,10 @@ RSpec.describe Mysql2::Client do
           :sslcert   => '/etc/mysql/client-cert.pem',
           :sslca     => '/etc/mysql/ca-cert.pem',
           :sslcipher => 'DHE-RSA-AES256-SHA',
-          :sslverify => true,
+          :sslverify => true
         )
       )
+      # rubocop:enable Style/TrailingComma
     }.not_to raise_error
 
     results = ssl_client.query("SHOW STATUS WHERE Variable_name = \"Ssl_version\" OR Variable_name = \"Ssl_cipher\"").to_a

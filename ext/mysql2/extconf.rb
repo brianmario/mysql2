@@ -53,7 +53,7 @@ if inc && lib
   abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
   warn "-----\nUsing --with-mysql-dir=#{File.dirname inc}\n-----"
   rpath_dir = lib
-elsif mc = (with_config('mysql-config') || Dir[GLOB].first)
+elsif (mc = (with_config('mysql-config') || Dir[GLOB].first))
   # If the user has provided a --with-mysql-config argument, we must respect it or fail.
   # If the user gave --with-mysql-config with no argument means we should try to find it.
   mc = Dir[GLOB].first if mc == true
@@ -170,7 +170,7 @@ else
     warn "-----\nSetting mysql rpath to #{explicit_rpath}\n-----"
     $LDFLAGS << rpath_flags
   else
-    if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
+    if (libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2])
       rpath_flags = " -Wl,-rpath,#{libdir}"
       if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', rpath_flags)
         # Usually Ruby sets RPATHFLAG the right way for each system, but not on OS X.

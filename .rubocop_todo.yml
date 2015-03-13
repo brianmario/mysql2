@@ -9,10 +9,6 @@
 Lint/UselessAccessModifier:
   Enabled: false
 
-# Offense count: 10
-Lint/UselessAssignment:
-  Enabled: false
-
 # Offense count: 1
 Lint/Void:
   Enabled: false

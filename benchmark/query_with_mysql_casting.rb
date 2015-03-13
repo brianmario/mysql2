@@ -38,12 +38,14 @@ def mysql_cast(type, value)
   end
 end
 
+debug = ENV['DEBUG']
+
 Benchmark.ips do |x|
   mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
   mysql2.query "USE #{database}"
   x.report "Mysql2" do
     mysql2_result = mysql2.query sql, :symbolize_keys => true
-    # mysql2_result.each { |res| puts res.inspect }
+    mysql2_result.each { |res| puts res.inspect } if debug
   end
 
   mysql = Mysql.new("localhost", "root")
@@ -55,7 +57,7 @@ Benchmark.ips do |x|
       row_hash = row.each_with_index.each_with_object({}) do |(f, j), hash|
         hash[fields[j].name.to_sym] = mysql_cast(fields[j].type, f)
       end
-      # puts row_hash.inspect
+      puts row_hash.inspect if debug
     end
   end
 
@@ -63,7 +65,7 @@ Benchmark.ips do |x|
   command = do_mysql.create_command sql
   x.report "do_mysql" do
     do_result = command.execute_reader
-    # do_result.each { |res| puts res.inspect }
+    do_result.each { |res| puts res.inspect } if debug
   end
 
   x.compare!

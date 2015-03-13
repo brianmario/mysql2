@@ -71,7 +71,7 @@ end
 task :devkit do
   begin
     require "devkit"
-  rescue LoadError => e
+  rescue LoadError
     abort "Failed to activate RubyInstaller's DevKit required for compilation."
   end
 end

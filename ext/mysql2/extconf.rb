@@ -42,6 +42,7 @@ GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5,mariadb_config}"
 # If the user has provided a --with-mysql-dir argument, we must respect it or fail.
 inc, lib = dir_config('mysql')
 if inc && lib
+  # TODO: Remove when 2.0.0 is the minimum supported version
   # Ruby versions not incorporating the mkmf fix at
   # https://bugs.ruby-lang.org/projects/ruby-trunk/repository/revisions/39717
   # do not properly search for lib directories, and must be corrected
@@ -73,11 +74,11 @@ elsif (mc = (with_config('mysql-config') || Dir[GLOB].first))
   $libs = libs + " " + $libs
   rpath_dir = libs
 else
-  inc, lib = dir_config('mysql', '/usr/local')
+  _, usr_local_lib = dir_config('mysql', '/usr/local')
 
-  asplode("mysql client") unless find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql")
+  asplode("mysql client") unless find_library('mysqlclient', 'mysql_query', usr_local_lib, "#{usr_local_lib}/mysql")
 
-  rpath_dir = lib
+  rpath_dir = usr_local_lib
 end
 
 if have_header('mysql.h')
@@ -90,7 +91,7 @@ end
 
 %w(errmsg.h mysqld_error.h).each do |h|
   header = [prefix, h].compact.join '/'
-  asplode h unless have_header h
+  asplode h unless have_header header
 end
 
 # This is our wishlist. We use whichever flags work on the host.

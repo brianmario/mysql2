@@ -647,7 +647,6 @@ static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
   struct async_query_args async_args;
 #endif
   struct nogvl_send_query_args args;
-  int async = 0;
   VALUE thread_current = rb_thread_current();
   GET_CLIENT(self);
 
@@ -657,8 +656,6 @@ static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
   RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   rb_iv_set(self, "@current_query_options", current);
-
-  async = rb_hash_aref(current, sym_async) == Qtrue;
 
   Check_Type(sql, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
@@ -689,15 +686,15 @@ static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
-  if (!async) {
+  if (rb_hash_aref(current, sym_async) == Qtrue) {
+    return Qnil;
+  } else {
     async_args.fd = wrapper->client->net.fd;
     async_args.self = self;
 
     rb_rescue2(do_query, (VALUE)&async_args, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
     return rb_mysql_client_async_result(self);
-  } else {
-    return Qnil;
   }
 #else
   do_send_query(&args);

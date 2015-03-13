@@ -75,14 +75,15 @@ module Mysql2
     end
 
     if Thread.respond_to?(:handle_interrupt)
-      def query(*args, &block)
+      def query(sql, options = {})
         Thread.handle_interrupt(Timeout::ExitException => :never) do
-          _query(*args, &block)
+          _query(sql, @query_options.merge(options))
         end
       end
     else
-      alias_method :query, :_query
-      public :query
+      def query(sql, options = {})
+        _query(sql, @query_options.merge(options))
+      end
     end
 
     def query_info

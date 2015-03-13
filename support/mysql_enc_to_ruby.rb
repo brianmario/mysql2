@@ -65,10 +65,10 @@ encodings_with_nil.sort! do |a, b|
 end
 
 encodings_with_nil = encodings_with_nil.map do |encoding|
-  name = "NULL"
-
-  if !encoding.nil? && encoding[1] != "NULL"
-    name = "\"#{encoding[1]}\""
+  name = if encoding.nil? || encoding[1] == 'NULL'
+    'NULL'
+  else
+    "\"#{encoding[1]}\""
   end
 
   "  #{name}"

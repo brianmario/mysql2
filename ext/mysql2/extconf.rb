@@ -66,9 +66,7 @@ elsif (mc = (with_config('mysql-config') || Dir[GLOB].first))
   abort unless $CHILD_STATUS.success?
   libs = `#{mc} --libs_r`.chomp
   # MySQL 5.5 and above already have re-entrant code in libmysqlclient (no _r).
-  if ver >= 5.5 || libs.empty?
-    libs = `#{mc} --libs`.chomp
-  end
+  libs = `#{mc} --libs`.chomp if ver >= 5.5 || libs.empty?
   abort unless $CHILD_STATUS.success?
   $INCFLAGS += ' ' + includes
   $libs = libs + " " + $libs
@@ -104,10 +102,8 @@ end
   -Wno-unused-function
   -Wno-declaration-after-statement
   -Wno-missing-field-initializers
-).select do |flag|
-  try_link('int main() {return 0;}', flag)
-end.each do |flag|
-  $CFLAGS << ' ' << flag
+).each do |flag|
+  $CFLAGS << ' ' << flag if try_link('int main() {return 0;}', flag)
 end
 
 if RUBY_PLATFORM =~ /mswin|mingw/

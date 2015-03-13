@@ -34,9 +34,8 @@ module Mysql2
       end
 
       def close(*args)
-        if @watch
-          @watch.detach if @watch.watching?
-        end
+        @watch.detach if @watch && @watch.watching?
+
         super(*args)
       end
 

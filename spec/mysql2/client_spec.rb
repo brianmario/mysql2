@@ -574,9 +574,7 @@ RSpec.describe Mysql2::Client do
 
       it "does not interfere with other statements" do
         @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'")
-        while  @multi_client.next_result
-          @multi_client.store_result
-        end
+        @multi_client.store_result while @multi_client.next_result
 
         expect(@multi_client.query("SELECT 3 AS 'next'").first).to eq('next' => 3)
       end

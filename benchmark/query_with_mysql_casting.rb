@@ -30,8 +30,8 @@ def mysql_cast(type, value)
   when Mysql::Field::TYPE_TIME, Mysql::Field::TYPE_DATETIME, Mysql::Field::TYPE_TIMESTAMP
     Time.parse(value)
   when Mysql::Field::TYPE_BLOB, Mysql::Field::TYPE_BIT, Mysql::Field::TYPE_STRING,
-      Mysql::Field::TYPE_VAR_STRING, Mysql::Field::TYPE_CHAR, Mysql::Field::TYPE_SET
-    Mysql::Field::TYPE_ENUM
+      Mysql::Field::TYPE_VAR_STRING, Mysql::Field::TYPE_CHAR, Mysql::Field::TYPE_SET,
+      Mysql::Field::TYPE_ENUM
     value
   else
     value

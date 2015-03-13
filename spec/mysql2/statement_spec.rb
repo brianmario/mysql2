@@ -366,10 +366,10 @@ RSpec.describe Mysql2::Statement do
     end
 
     if 1.size == 4 # 32bit
-      unless RUBY_VERSION =~ /1.8/
-        klass = Time
+      klass = if RUBY_VERSION =~ /1.8/
+        DateTime
       else
-        klass = DateTime
+        Time
       end
 
       it "should return DateTime when timestamp is < 1901-12-13 20:45:52" do
@@ -384,17 +384,7 @@ RSpec.describe Mysql2::Statement do
         expect(r.first['test']).to be_an_instance_of(klass)
       end
     elsif 1.size == 8 # 64bit
-      unless RUBY_VERSION =~ /1.8/
-        it "should return Time when timestamp is < 1901-12-13 20:45:52" do
-          r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(Time)
-        end
-
-        it "should return Time when timestamp is > 2038-01-19T03:14:07" do
-          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(Time)
-        end
-      else
+      if RUBY_VERSION =~ /1.8/
         it "should return Time when timestamp is > 0138-12-31 11:59:59" do
           r = @client.query("SELECT CAST('0139-1-1 00:00:00' AS DATETIME) as test")
           expect(r.first['test']).to be_an_instance_of(Time)
@@ -403,6 +393,16 @@ RSpec.describe Mysql2::Statement do
         it "should return DateTime when timestamp is < 0139-1-1T00:00:00" do
           r = @client.query("SELECT CAST('0138-12-31 11:59:59' AS DATETIME) as test")
           expect(r.first['test']).to be_an_instance_of(DateTime)
+        end
+
+        it "should return Time when timestamp is > 2038-01-19T03:14:07" do
+          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+          expect(r.first['test']).to be_an_instance_of(Time)
+        end
+      else
+        it "should return Time when timestamp is < 1901-12-13 20:45:52" do
+          r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
+          expect(r.first['test']).to be_an_instance_of(Time)
         end
 
         it "should return Time when timestamp is > 2038-01-19T03:14:07" do

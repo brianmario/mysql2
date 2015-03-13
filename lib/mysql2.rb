@@ -10,7 +10,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   dll_path = if ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
     # If this environment variable is set, it overrides any other paths
     # The user is advised to use backslashes not forward slashes
-    ENV['RUBY_MYSQL2_LIBMYSQL_DLL'].dup
+    ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
   elsif File.exist?(File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)))
     # Use vendor/libmysql.dll if it exists, convert slashes for Win32 LoadLibrary
     File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\')
@@ -53,12 +53,14 @@ if defined?(ActiveRecord::VERSION::STRING) && ActiveRecord::VERSION::STRING < "3
 end
 
 # For holding utility methods
-module Mysql2::Util
-  #
-  # Rekey a string-keyed hash with equivalent symbols.
-  #
-  def self.key_hash_as_symbols(hash)
-    return nil unless hash
-    Hash[hash.map { |k, v| [k.to_sym, v] }]
+module Mysql2
+  module Util
+    #
+    # Rekey a string-keyed hash with equivalent symbols.
+    #
+    def self.key_hash_as_symbols(hash)
+      return nil unless hash
+      Hash[hash.map { |k, v| [k.to_sym, v] }]
+    end
   end
 end

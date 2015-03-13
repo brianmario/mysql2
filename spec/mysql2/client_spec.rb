@@ -46,7 +46,7 @@ RSpec.describe Mysql2::Client do
   it "should accept connect flags and pass them to #connect" do
     klient = Class.new(Mysql2::Client) do
       attr_reader :connect_args
-      def connect *args
+      def connect(*args)
         @connect_args ||= []
         @connect_args << args
       end
@@ -58,7 +58,7 @@ RSpec.describe Mysql2::Client do
   it "should default flags to (REMEMBER_OPTIONS, LONG_PASSWORD, LONG_FLAG, TRANSACTIONS, PROTOCOL_41, SECURE_CONNECTION)" do
     klient = Class.new(Mysql2::Client) do
       attr_reader :connect_args
-      def connect *args
+      def connect(*args)
         @connect_args ||= []
         @connect_args << args
       end
@@ -117,9 +117,9 @@ RSpec.describe Mysql2::Client do
 
   it "should be able to connect via SSL options" do
     ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"
-    ssl_uncompiled = ssl.any? {|x| x['Value'] == 'OFF'}
+    ssl_uncompiled = ssl.any? { |x| x['Value'] == 'OFF' }
     pending("DON'T WORRY, THIS TEST PASSES - but SSL is not compiled into your MySQL daemon.") if ssl_uncompiled
-    ssl_disabled = ssl.any? {|x| x['Value'] == 'DISABLED'}
+    ssl_disabled = ssl.any? { |x| x['Value'] == 'DISABLED' }
     pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
 
     # You may need to adjust the lines below to match your SSL certificate paths
@@ -132,7 +132,7 @@ RSpec.describe Mysql2::Client do
           :sslcert   => '/etc/mysql/client-cert.pem',
           :sslca     => '/etc/mysql/ca-cert.pem',
           :sslcipher => 'DHE-RSA-AES256-SHA',
-          :sslverify => true
+          :sslverify => true,
         )
       )
     }.not_to raise_error
@@ -185,7 +185,7 @@ RSpec.describe Mysql2::Client do
 
     # this empty `fork` call fixes this tests on RBX; without it, the next
     # `fork` call hangs forever. WTF?
-    fork { }
+    fork {}
 
     fork do
       client.query('SELECT 1')
@@ -267,7 +267,7 @@ RSpec.describe Mysql2::Client do
         # # Note that mysql_info() returns a non-NULL value for INSERT ... VALUES only for the multiple-row form of the statement (that is, only if multiple value lists are specified).
         @client.query("INSERT INTO infoTest (blah) VALUES (1234),(4535)")
 
-        expect(@client.query_info).to  eql({:records => 2, :duplicates => 0, :warnings => 0})
+        expect(@client.query_info).to eql(:records => 2, :duplicates => 0, :warnings => 0)
         expect(@client.query_info_string).to eq('Records: 2  Duplicates: 0  Warnings: 0')
 
         @client.query "DROP TABLE infoTest"
@@ -279,7 +279,7 @@ RSpec.describe Mysql2::Client do
     before(:all) do
       @client_i = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => true)
       local = @client_i.query "SHOW VARIABLES LIKE 'local_infile'"
-      local_enabled = local.any? {|x| x['Value'] == 'ON'}
+      local_enabled = local.any? { |x| x['Value'] == 'ON' }
       pending("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
 
       @client_i.query %[
@@ -311,10 +311,10 @@ RSpec.describe Mysql2::Client do
     it "should LOAD DATA LOCAL INFILE" do
       @client_i.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
       info = @client_i.query_info
-      expect(info).to eql({:records => 1, :deleted => 0, :skipped => 0, :warnings => 0})
+      expect(info).to eql(:records => 1, :deleted => 0, :skipped => 0, :warnings => 0)
 
       result = @client_i.query "SELECT * FROM infileTest"
-      expect(result.first).to eql({'id' => 1, 'foo' => 'Hello', 'bar' => 'World'})
+      expect(result.first).to eql('id' => 1, 'foo' => 'Hello', 'bar' => 'World')
     end
   end
 
@@ -564,21 +564,21 @@ RSpec.describe Mysql2::Client do
       end
 
       it "returns multiple result sets" do
-        expect(@multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'").first).to eql({ 'set_1' => 1 })
+        expect(@multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'").first).to eql('set_1' => 1)
 
         expect(@multi_client.next_result).to be true
-        expect(@multi_client.store_result.first).to eql({ 'set_2' => 2 })
+        expect(@multi_client.store_result.first).to eql('set_2' => 2)
 
         expect(@multi_client.next_result).to be false
       end
 
       it "does not interfere with other statements" do
         @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'")
-        while( @multi_client.next_result )
+        while  @multi_client.next_result
           @multi_client.store_result
         end
 
-        expect(@multi_client.query("SELECT 3 AS 'next'").first).to eq({ 'next' => 3 })
+        expect(@multi_client.query("SELECT 3 AS 'next'").first).to eq('next' => 3)
       end
 
       it "will raise on query if there are outstanding results to read" do
@@ -609,11 +609,11 @@ RSpec.describe Mysql2::Client do
       it "#more_results? should work with stored procedures" do
         @multi_client.query("DROP PROCEDURE IF EXISTS test_proc")
         @multi_client.query("CREATE PROCEDURE test_proc() BEGIN SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'; END")
-        expect(@multi_client.query("CALL test_proc()").first).to eql({ 'set_1' => 1 })
+        expect(@multi_client.query("CALL test_proc()").first).to eql('set_1' => 1)
         expect(@multi_client.more_results?).to be true
 
         @multi_client.next_result
-        expect(@multi_client.store_result.first).to eql({ 'set_2' => 2 })
+        expect(@multi_client.store_result.first).to eql('set_2' => 2)
 
         @multi_client.next_result
         expect(@multi_client.store_result).to be_nil # this is the result from CALL itself

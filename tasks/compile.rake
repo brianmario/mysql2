@@ -11,10 +11,10 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
   # clean compiled extension
   CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
 
-  if RUBY_PLATFORM =~ /mswin|mingw/ then
+  if RUBY_PLATFORM =~ /mswin|mingw/
     # Expand the path because the build dir is 3-4 levels deep in tmp/platform/version/
     connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir}", __FILE__)
-    ext.config_options = [ "--with-mysql-dir=#{connector_dir}" ]
+    ext.config_options = ["--with-mysql-dir=#{connector_dir}"]
   else
     ext.cross_compile = true
     ext.cross_platform = ENV['CROSS_PLATFORMS'] ? ENV['CROSS_PLATFORMS'].split(':') : ['x86-mingw32', 'x86-mswin32-60', 'x64-mingw32']
@@ -78,11 +78,11 @@ task :devkit do
   end
 end
 
-if RUBY_PLATFORM =~ /mingw|mswin/ then
+if RUBY_PLATFORM =~ /mingw|mswin/
   Rake::Task['compile'].prerequisites.unshift 'vendor:mysql'
   Rake::Task['compile'].prerequisites.unshift 'devkit'
 else
-  if Rake::Task.tasks.map {|t| t.name }.include? 'cross'
+  if Rake::Task.tasks.map(&:name).include? 'cross'
     Rake::Task['cross'].prerequisites.unshift 'vendor:mysql:cross'
   end
 end

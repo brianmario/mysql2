@@ -86,10 +86,10 @@ num.times do |n|
     :medium_int_test => rand(8388607),
     :int_test => rand(2147483647),
     :big_int_test => rand(9223372036854775807),
-    :float_test => rand(32767)/1.87,
+    :float_test => rand(32767) / 1.87,
     :float_zero_test => 0.0,
-    :double_test => rand(8388607)/1.87,
-    :decimal_test => rand(8388607)/1.87,
+    :double_test => rand(8388607) / 1.87,
+    :decimal_test => rand(8388607) / 1.87,
     :decimal_zero_test => 0,
     :date_test => '2010-4-4',
     :date_time_test => '2010-4-4 11:44:00',
@@ -108,8 +108,8 @@ num.times do |n|
     :medium_text_test => twenty5_paragraphs,
     :long_blob_test => twenty5_paragraphs,
     :long_text_test => twenty5_paragraphs,
-    :enum_test => ['val1', 'val2'][rand(2)],
-    :set_test => ['val1', 'val2', 'val1,val2'][rand(3)]
+    :enum_test => %w(val1 val2).sample,
+    :set_test => %w(val1 val2 val1,val2).sample,
   )
   if n % 100 == 0
     $stdout.putc '.'

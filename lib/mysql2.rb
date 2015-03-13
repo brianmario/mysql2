@@ -8,16 +8,16 @@ require 'rational' unless RUBY_VERSION >= '1.9.2'
 # Or to bomb out with a clear error message instead of a linker crash
 if RUBY_PLATFORM =~ /mswin|mingw/
   dll_path = if ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
-               # If this environment variable is set, it overrides any other paths
-               # The user is advised to use backslashes not forward slashes
-               ENV['RUBY_MYSQL2_LIBMYSQL_DLL'].dup
-             elsif File.exist?(File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)))
-               # Use vendor/libmysql.dll if it exists, convert slashes for Win32 LoadLibrary
-               File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\')
-             else
-               # This will use default / system library paths
-               'libmysql.dll'
-             end
+    # If this environment variable is set, it overrides any other paths
+    # The user is advised to use backslashes not forward slashes
+    ENV['RUBY_MYSQL2_LIBMYSQL_DLL'].dup
+  elsif File.exist?(File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)))
+    # Use vendor/libmysql.dll if it exists, convert slashes for Win32 LoadLibrary
+    File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\')
+  else
+    # This will use default / system library paths
+    'libmysql.dll'
+  end
 
   require 'Win32API'
   LoadLibrary = Win32API.new('Kernel32', 'LoadLibrary', ['P'], 'I')
@@ -54,13 +54,11 @@ end
 
 # For holding utility methods
 module Mysql2::Util
-
   #
   # Rekey a string-keyed hash with equivalent symbols.
   #
   def self.key_hash_as_symbols(hash)
     return nil unless hash
-    Hash[hash.map { |k,v| [k.to_sym, v] }]
+    Hash[hash.map { |k, v| [k.to_sym, v] }]
   end
-
 end

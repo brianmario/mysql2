@@ -4,8 +4,8 @@ end.select { |x| x != 'setup_db' }
 
 namespace :bench do
   BENCHMARKS.each do |feature|
-      desc "Run #{feature} benchmarks"
-      task(feature){ ruby "benchmark/#{feature}.rb" }
+    desc "Run #{feature} benchmarks"
+    task(feature) { ruby "benchmark/#{feature}.rb" }
   end
 
   task :all do

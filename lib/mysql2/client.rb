@@ -12,11 +12,11 @@ module Mysql2
       :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
       :cast => true,
       :default_file => nil,
-      :default_group => nil
+      :default_group => nil,
     }
 
     def initialize(opts = {})
-      opts = Mysql2::Util.key_hash_as_symbols( opts )
+      opts = Mysql2::Util.key_hash_as_symbols(opts)
       @read_timeout = nil
       @query_options = @@default_query_options.dup
       @query_options.merge! opts
@@ -48,9 +48,9 @@ module Mysql2
       flags = 0
       flags |= @query_options[:connect_flags]
       flags |= opts[:flags] if opts[:flags]
-      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify] and ssl_options.any?
+      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify] && ssl_options.any?
 
-      if [:user,:pass,:hostname,:dbname,:db,:sock].any?{|k| @query_options.has_key?(k) }
+      if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @query_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="
         warn "The options :user, :pass, :hostname, :dbname, :db, and :sock will be deprecated at some point in the future."
         warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
@@ -106,8 +106,9 @@ module Mysql2
     end
 
     private
-      def self.local_offset
-        ::Time.local(2010).utc_offset.to_r / 86400
-      end
+
+    def self.local_offset
+      ::Time.local(2010).utc_offset.to_r / 86400
+    end
   end
 end

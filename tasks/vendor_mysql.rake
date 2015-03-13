@@ -3,7 +3,7 @@ require 'rake/extensioncompiler'
 
 CONNECTOR_VERSION = "6.1.6" # NOTE: Track the upstream version from time to time
 
-def vendor_mysql_platform(platform=nil)
+def vendor_mysql_platform(platform = nil)
   platform ||= RUBY_PLATFORM
   platform =~ /x64/ ? "winx64" : "win32"
 end
@@ -38,7 +38,7 @@ task "vendor:mysql", [:platform] do |t, args|
     when_writing "downloading #{t.name}" do
       cd "vendor" do
         sh "curl", "-C", "-", "-O", url do |ok, res|
-          sh "wget", "-c", url if ! ok
+          sh "wget", "-c", url unless ok
         end
       end
     end

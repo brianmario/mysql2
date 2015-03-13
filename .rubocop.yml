@@ -15,7 +15,7 @@ Style/IndentHash:
   EnforcedStyle: consistent
 
 Style/TrailingComma:
-  EnforcedStyleForMultiline: comma
+  EnforcedStyleForMultiline: consistent_comma
 
 Style/TrivialAccessors:
   AllowPredicates: true

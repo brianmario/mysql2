@@ -40,11 +40,11 @@ module Mysql2
         super(*args)
       end
 
-      def query(sql, opts={})
+      def query(sql, opts = {})
         if ::EM.reactor_running?
           super(sql, opts.merge(:async => true))
           deferable = ::EM::DefaultDeferrable.new
-          @watch = ::EM.watch(self.socket, Watcher, self, deferable)
+          @watch = ::EM.watch(socket, Watcher, self, deferable)
           @watch.notify_readable = true
           deferable
         else

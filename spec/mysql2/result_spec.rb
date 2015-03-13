@@ -109,7 +109,7 @@ RSpec.describe Mysql2::Result do
 
     it "should return an array of field names in proper order" do
       result = @client.query "SELECT 'a', 'b', 'c'"
-      expect(result.fields).to eql(['a', 'b', 'c'])
+      expect(result.fields).to eql(%w(a b c))
     end
   end
 
@@ -132,7 +132,7 @@ RSpec.describe Mysql2::Result do
 
     it "should not yield nil at the end of streaming" do
       result = @client.query('SELECT * FROM mysql2_test', :stream => true, :cache_rows => false)
-      result.each { |r| expect(r).not_to be_nil}
+      result.each { |r| expect(r).not_to be_nil }
     end
 
     it "#count should be zero for rows after streaming when there were no results" do
@@ -174,11 +174,11 @@ RSpec.describe Mysql2::Result do
     it "should return nil values for NULL and strings for everything else when :cast is false" do
       result = @client.query('SELECT null_test, tiny_int_test, bool_cast_test, int_test, date_test, enum_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast => false).first
       expect(result["null_test"]).to be_nil
-      expect(result["tiny_int_test"]).to  eql("1")
+      expect(result["tiny_int_test"]).to eql("1")
       expect(result["bool_cast_test"]).to eql("1")
-      expect(result["int_test"]).to       eql("10")
-      expect(result["date_test"]).to      eql("2010-04-04")
-      expect(result["enum_test"]).to      eql("val1")
+      expect(result["int_test"]).to eql("10")
+      expect(result["date_test"]).to eql("2010-04-04")
+      expect(result["enum_test"]).to eql("val1")
     end
 
     it "should return nil for a NULL value" do
@@ -286,13 +286,13 @@ RSpec.describe Mysql2::Result do
       end
 
       it "should return DateTime when timestamp is < 1901-12-13 20:45:52" do
-                                      # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
+        # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
         expect(r.first['test']).to be_an_instance_of(klass)
       end
 
       it "should return DateTime when timestamp is > 2038-01-19T03:14:07" do
-                                      # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
+        # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
         expect(r.first['test']).to be_an_instance_of(klass)
       end
@@ -413,7 +413,7 @@ RSpec.describe Mysql2::Result do
 
     it "should return String for a BINARY value" do
       expect(@test_result['binary_test']).to be_an_instance_of(String)
-      expect(@test_result['binary_test']).to eql("test#{"\000"*6}")
+      expect(@test_result['binary_test']).to eql("test#{"\000" * 6}")
     end
 
     context "string encoding for BINARY values" do
@@ -450,7 +450,7 @@ RSpec.describe Mysql2::Result do
       'medium_blob_test' => 'MEDIUMBLOB',
       'medium_text_test' => 'MEDIUMTEXT',
       'long_blob_test' => 'LONGBLOB',
-      'long_text_test' => 'LONGTEXT'
+      'long_text_test' => 'LONGTEXT',
     }.each do |field, type|
       it "should return a String for #{type}" do
         expect(@test_result[field]).to be_an_instance_of(String)
@@ -460,7 +460,7 @@ RSpec.describe Mysql2::Result do
       context "string encoding for #{type} values" do
         before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-        if ['VARBINARY', 'TINYBLOB', 'BLOB', 'MEDIUMBLOB', 'LONGBLOB'].include?(type)
+        if %w(VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB).include?(type)
           it "should default to binary if Encoding.default_internal is nil" do
             with_internal_encoding nil do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first

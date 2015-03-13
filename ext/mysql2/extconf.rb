@@ -1,7 +1,8 @@
 # encoding: UTF-8
 require 'mkmf'
+require 'English'
 
-def asplode lib
+def asplode(lib)
   if RUBY_PLATFORM =~ /mingw|mswin/
     abort "-----\n#{lib} is missing. Check your installation of MySQL or Connector/C, and try again.\n-----"
   elsif RUBY_PLATFORM =~ /darwin/
@@ -22,7 +23,7 @@ have_func('rb_intern3')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
-dirs = ENV['PATH'].split(File::PATH_SEPARATOR) + %w[
+dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w(
   /opt
   /opt/local
   /opt/local/mysql
@@ -34,7 +35,7 @@ dirs = ENV['PATH'].split(File::PATH_SEPARATOR) + %w[
   /usr/local/mysql-*
   /usr/local/lib/mysql5*
   /usr/local/opt/mysql5*
-].map{|dir| "#{dir}/bin" }
+).map { |dir| dir << '/bin' }
 
 GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5,mariadb_config}"
 
@@ -48,26 +49,26 @@ if inc && lib
     @libdir_basename = 'lib'
     inc, lib = dir_config('mysql')
   end
-  abort "-----\nCannot find include dir(s) #{inc}\n-----" unless inc && inc.split(File::PATH_SEPARATOR).any?{|dir| File.directory?(dir)}
-  abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any?{|dir| File.directory?(dir)}
-  warn  "-----\nUsing --with-mysql-dir=#{File.dirname inc}\n-----"
+  abort "-----\nCannot find include dir(s) #{inc}\n-----" unless inc && inc.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
+  abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
+  warn "-----\nUsing --with-mysql-dir=#{File.dirname inc}\n-----"
   rpath_dir = lib
 elsif mc = (with_config('mysql-config') || Dir[GLOB].first)
   # If the user has provided a --with-mysql-config argument, we must respect it or fail.
   # If the user gave --with-mysql-config with no argument means we should try to find it.
   mc = Dir[GLOB].first if mc == true
-  abort "-----\nCannot find mysql_config at #{mc}\n-----" unless mc && File.exists?(mc)
+  abort "-----\nCannot find mysql_config at #{mc}\n-----" unless mc && File.exist?(mc)
   abort "-----\nCannot execute mysql_config at #{mc}\n-----" unless File.executable?(mc)
-  warn  "-----\nUsing mysql_config at #{mc}\n-----"
+  warn "-----\nUsing mysql_config at #{mc}\n-----"
   ver = `#{mc} --version`.chomp.to_f
   includes = `#{mc} --include`.chomp
-  exit 1 if $? != 0
+  abort unless $CHILD_STATUS.success?
   libs = `#{mc} --libs_r`.chomp
   # MySQL 5.5 and above already have re-entrant code in libmysqlclient (no _r).
   if ver >= 5.5 || libs.empty?
     libs = `#{mc} --libs`.chomp
   end
-  exit 1 if $? != 0
+  abort unless $CHILD_STATUS.success?
   $INCFLAGS += ' ' + includes
   $libs = libs + " " + $libs
   rpath_dir = libs
@@ -87,7 +88,7 @@ else
   asplode 'mysql.h'
 end
 
-%w{ errmsg.h mysqld_error.h }.each do |h|
+%w(errmsg.h mysqld_error.h).each do |h|
   header = [prefix, h].compact.join '/'
   asplode h unless have_header h
 end
@@ -122,9 +123,9 @@ if RUBY_PLATFORM =~ /mswin|mingw/
       # Maybe in the future Ruby could provide RbConfig::CONFIG['DLLTOOL'] directly.
       dlltool = RbConfig::CONFIG['DLLWRAP'].gsub('dllwrap', 'dlltool')
       sh dlltool, '--kill-at',
-        '--dllname', 'libmysql.dll',
-        '--output-lib', 'libmysql.a',
-        '--input-def', deffile, libfile
+         '--dllname', 'libmysql.dll',
+         '--output-lib', 'libmysql.a',
+         '--input-def', deffile, libfile
     end
   end
 

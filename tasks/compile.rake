@@ -1,10 +1,8 @@
 require "rake/extensiontask"
 
-def gemspec
-  @clean_gemspec ||= eval(File.read(File.expand_path('../../mysql2.gemspec', __FILE__)))
-end
+load File.expand_path('../../mysql2.gemspec', __FILE__)
 
-Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
+Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
   # put binaries into lib/mysql2/ or lib/mysql2/x.y/
   ext.lib_dir = File.join 'lib', 'mysql2'
 
@@ -60,7 +58,7 @@ file 'vendor/README' do |t|
 end
 
 file 'lib/mysql2/mysql2.rb' do |t|
-  name = gemspec.name
+  name = Mysql2::GEMSPEC.name
   File.open(t.name, 'wb') do |f|
     f.write <<-eoruby
 RUBY_VERSION =~ /(\\d+.\\d+)/

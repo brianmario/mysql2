@@ -30,7 +30,7 @@ module Mysql2
     # variable.
     #
     # See http://dev.mysql.com/doc/refman/5.5/en/charset-errors.html for
-    # more contetx.
+    # more context.
     #
     # Before MySQL 5.5 error message template strings are in whatever encoding
     # is associated with the error message language.

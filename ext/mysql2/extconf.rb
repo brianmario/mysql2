@@ -36,10 +36,11 @@ class Platform
   end
 
   def detect_headers
-    headers = %w{ mysql.h errmsg.h mysqld_error.h }
+    headers = %w{ errmsg.h mysqld_error.h }
     prefix = ['', 'mysql/'].find do |prefix|
       have_header("#{prefix}mysql.h")
     end
+    asplode('mysql.h') unless prefix
 
     headers.each do |header|
       header = "#{prefix}#{header}"

@@ -1,6 +1,13 @@
 # encoding: UTF-8
 require 'mkmf'
 
+# For compatibility with Ruby 1.8 and Ruby EE, whose Rake breaks Object#rm_f
+class << self
+   alias_method :rm_f_original, :rm_f
+   require 'rake'
+   alias_method :rm_f, :rm_f_original
+end
+
 class Platform
   # Gets the proper platform object for the current platform.
   def self.current
@@ -234,29 +241,30 @@ class MacOS < Unix
 end
 
 class Windows < Platform
+  include Rake::DSL
+
   def configure
     super
-
-    require 'rake'
-
-    # Vendor libmysql.dll
-    vendordir = File.expand_path('../../../vendor/', __FILE__)
-    directory vendordir
-
-    vendordll = File.join(vendordir, 'libmysql.dll')
-    dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
-    file vendordll => [dllfile, vendordir] do |t|
-      when_writing 'copying libmysql.dll' do
-        cp dllfile, vendordll
-      end
-    end
 
     # Copy libmysql.dll to the local vendor directory by default
     if arg_config('--no-vendor-libmysql')
       # Fine, don't.
-      puts '--no-vendor-libmysql'
+      warn 'Not including local libmysql.dll'
+    elsif !rpath_dir
+      error 'Cannot deduce path to libmysql.dll'
     else # Default: arg_config('--vendor-libmysql')
-      # Let's do it!
+      # Vendor libmysql.dll
+      vendordir = File.expand_path('../../../vendor/', __FILE__)
+      directory vendordir
+
+      vendordll = File.join(vendordir, 'libmysql.dll')
+      dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
+      file vendordll => [dllfile, vendordir] do |t|
+        when_writing 'copying libmysql.dll' do
+          cp dllfile, vendordll
+        end
+      end
+
       Rake::Task[vendordll].invoke
     end
   end

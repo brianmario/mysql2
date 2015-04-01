@@ -42,7 +42,7 @@ class Platform
     end
 
     headers.each do |header|
-      header = [prefix, h].compact.join '/'
+      header = "#{prefix}#{header}"
       asplode(header) unless have_header(header)
     end
   end
@@ -119,7 +119,7 @@ class Platform
   end
 
   def asplode(library)
-    complain("#{library} is missing. #{asplode_suggestion}")
+    error("#{library} is missing. #{asplode_suggestion}")
   end
 
   def asplode_suggestion

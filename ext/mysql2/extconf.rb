@@ -87,25 +87,27 @@ class Platform
   end
 
   def detect_by_mysql_config
-    if with_config('mysql-config') && !mysql_config_path
-      error 'Cannot find mysql_config'
+    if mysql_config_path
+      warn  "Using mysql_config at #{mysql_config_path}"
+
+      ver = `#{mysql_config_path} --version`.chomp.to_f
+      includes = `#{mysql_config_path} --include`.chomp
+      exit 1 if $? != 0
+      libs = `#{mysql_config_path} --libs_r`.chomp
+
+      # MySQL 5.5 and above already have re-entrant code in libmysqlclient (no _r).
+      if ver >= 5.5 || libs.empty?
+        libs = `#{mysql_config_path} --libs`.chomp
+      end
+      exit 1 if $? != 0
+
+      $INCFLAGS += ' ' + includes
+      $libs = "#{libs} #{$libs}"
+      [includes, libs]
+    else
+      error 'Cannot find mysql_config' if with_config('mysql-config')
+      nil
     end
-    warn  "Using mysql_config at #{mysql_config_path}"
-
-    ver = `#{mysql_config_path} --version`.chomp.to_f
-    includes = `#{mysql_config_path} --include`.chomp
-    exit 1 if $? != 0
-    libs = `#{mysql_config_path} --libs_r`.chomp
-
-    # MySQL 5.5 and above already have re-entrant code in libmysqlclient (no _r).
-    if ver >= 5.5 || libs.empty?
-      libs = `#{mysql_config_path} --libs`.chomp
-    end
-    exit 1 if $? != 0
-
-    $INCFLAGS += ' ' + includes
-    $libs = "#{libs} #{$libs}"
-    [includes, libs]
   end
 
   def error(message)

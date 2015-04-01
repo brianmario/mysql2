@@ -14,9 +14,47 @@ class Platform
     end
   end
 
+  def configure
+    detect_paths
+    detect_headers
+    detect_libraries
+
+    configure_compiler
+  end
+
   # @return [(String, String)|nil] The include and library paths.
   def detect_paths
     detect_by_explicit_path || detect_by_mysql_config
+  end
+
+  def detect_headers
+    headers = %w{ mysql.h errmsg.h mysqld_error.h }
+    prefix = ['', 'mysql/'].find do |prefix|
+      have_header("#{prefix}mysql.h")
+    end
+
+    headers.each do |header|
+      header = [prefix, h].compact.join '/'
+      asplode(header) unless have_header(header)
+    end
+  end
+
+  def detect_libraries
+    libraries = %w{ mysqlclient libmysql }
+    library = libraries.find do |library|
+      have_library(library, 'mysql_query')
+    end
+
+    asplode 'mysqlclient or libmysql' unless library
+  end
+
+  def configure_compiler
+    # These gcc style flags are also supported by clang and xcode compilers,
+    # so we'll use a does-it-work test instead of an is-it-gcc test.
+    gcc_flags = ' -Wall -funroll-loops'
+    if try_link('int main() {return 0;}', gcc_flags)
+      $CFLAGS << gcc_flags
+    end
   end
 
   protected
@@ -166,38 +204,7 @@ have_func('rb_hash_dup')
 have_func('rb_intern3')
 
 _, rpath_dir = Platform.current.detect_paths
-
-if have_header('mysql.h')
-  prefix = nil
-elsif have_header('mysql/mysql.h')
-  prefix = 'mysql'
-else
-  asplode 'mysql.h'
-end
-
-  %w{ errmsg.h mysqld_error.h }.each do |h|
-    header = [prefix, h].compact.join '/'
-    asplode h unless have_header h
-  end
-
-  # This is our wishlist. We use whichever flags work on the host.
-  # -Wall and -Wextra are included by default.
-  # TODO: fix statement.c and remove -Wno-error=declaration-after-statement
-  %w(
-    -Werror
-    -Weverything
-    -fsanitize=address
-    -fsanitize=integer
-    -fsanitize=thread
-    -fsanitize=memory
-    -fsanitize=undefined
-    -fsanitize=cfi
-    -Wno-error=declaration-after-statement
-  ).each do |flag|
-    if try_link('int main() {return 0;}', flag)
-      $CFLAGS << ' ' << flag
-    end
-  end
+Platform.current.configure
 
   if RUBY_PLATFORM =~ /mswin|mingw/
     # Build libmysql.a interface link library

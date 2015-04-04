@@ -427,7 +427,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           break;
         case MYSQL_TYPE_TIME:         // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          val = rb_funcall(rb_cTime, args->db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second));
+          val = rb_funcall(rb_cTime, args->db_timezone, 7, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second), ULONG2NUM(ts->second_part));
           if (!NIL_P(args->app_timezone)) {
             if (args->app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);
@@ -458,7 +458,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
               }
             }
           } else {
-            val = rb_funcall(rb_cTime, args->db_timezone, 6, UINT2NUM(ts->year), UINT2NUM(ts->month), UINT2NUM(ts->day), UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second));
+            val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(ts->year), UINT2NUM(ts->month), UINT2NUM(ts->day), UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second), ULONG2NUM(ts->second_part));
             if (!NIL_P(args->app_timezone)) {
               if (args->app_timezone == intern_local) {
                 val = rb_funcall(val, intern_localtime, 0);

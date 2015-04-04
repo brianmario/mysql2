@@ -287,8 +287,8 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
             MYSQL_TIME t;
             VALUE rb_time = argv[i];
             memset(&t, 0, sizeof(MYSQL_TIME));
-            t.second_part = 0;
             t.neg = 0;
+            t.second_part = FIX2INT(rb_funcall(rb_time, rb_intern("usec"), 0));
             t.second = FIX2INT(rb_funcall(rb_time, rb_intern("sec"), 0));
             t.minute = FIX2INT(rb_funcall(rb_time, rb_intern("min"), 0));
             t.hour = FIX2INT(rb_funcall(rb_time, rb_intern("hour"), 0));

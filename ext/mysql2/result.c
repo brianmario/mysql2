@@ -90,16 +90,16 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
     if (wrapper->stmt) {
       mysql_stmt_free_result(wrapper->stmt);
 
-      if(wrapper->result_buffers) {
-        for(i = 0; i < wrapper->numberOfFields; i++) {
+      if (wrapper->result_buffers) {
+        for (i = 0; i < wrapper->numberOfFields; i++) {
           if (wrapper->result_buffers[i].buffer) {
-            free(wrapper->result_buffers[i].buffer);
+            xfree(wrapper->result_buffers[i].buffer);
           }
         }
-        free(wrapper->result_buffers);
-        free(wrapper->is_null);
-        free(wrapper->error);
-        free(wrapper->length);
+        xfree(wrapper->result_buffers);
+        xfree(wrapper->is_null);
+        xfree(wrapper->error);
+        xfree(wrapper->length);
       }
     }
     /* FIXME: this may call flush_use_result, which can hit the socket */
@@ -292,7 +292,7 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
       case MYSQL_TYPE_SET:          // char[]
       case MYSQL_TYPE_ENUM:         // char[]
       case MYSQL_TYPE_GEOMETRY:     // char[]
-        wrapper->result_buffers[i].buffer = malloc(fields[i].max_length);
+        wrapper->result_buffers[i].buffer = xmalloc(fields[i].max_length);
         wrapper->result_buffers[i].buffer_length = fields[i].max_length;
         break;
       default:

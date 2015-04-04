@@ -423,7 +423,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         case MYSQL_TYPE_DATE:         // MYSQL_TIME
         case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          val = rb_funcall(cDate, rb_intern("new"), 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
+          val = rb_funcall(cDate, intern_new, 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
           break;
         case MYSQL_TYPE_TIME:         // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
@@ -471,7 +471,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         }
         case MYSQL_TYPE_DECIMAL:      // char[]
         case MYSQL_TYPE_NEWDECIMAL:   // char[]
-          val = rb_funcall(cBigDecimal, rb_intern("new"), 1, rb_str_new(result_buffer->buffer, *(result_buffer->length)));
+          val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(result_buffer->buffer, *(result_buffer->length)));
           break;
         case MYSQL_TYPE_STRING:       // char[]
         case MYSQL_TYPE_VAR_STRING:   // char[]

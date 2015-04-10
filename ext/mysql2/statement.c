@@ -185,13 +185,19 @@ static void *nogvl_stmt_store_result(void *ptr) {
   }
 }
 
+/* Free each bind_buffer[i].buffer except when params_enc is non-nil, this means
+ * the buffer is a Ruby string pointer and not our memory to manage.
+ */
 #define FREE_BINDS                                          \
   for (i = 0; i < argc; i++) {                              \
     if (bind_buffers[i].buffer && NIL_P(params_enc[i])) {   \
       xfree(bind_buffers[i].buffer);                        \
     }                                                       \
   }                                                         \
-  if (argc > 0) xfree(bind_buffers);
+  if (argc > 0) {                                           \
+    xfree(bind_buffers);                                    \
+    xfree(length_buffers);                                  \
+  }
 
 /* call-seq: stmt.execute
  *
@@ -247,22 +253,22 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
         case T_FIXNUM:
 #if SIZEOF_INT < SIZEOF_LONG
           bind_buffers[i].buffer_type = MYSQL_TYPE_LONGLONG;
-          bind_buffers[i].buffer = malloc(sizeof(long long int));
+          bind_buffers[i].buffer = xmalloc(sizeof(long long int));
           *(long*)(bind_buffers[i].buffer) = FIX2LONG(argv[i]);
 #else
           bind_buffers[i].buffer_type = MYSQL_TYPE_LONG;
-          bind_buffers[i].buffer = malloc(sizeof(int));
+          bind_buffers[i].buffer = xmalloc(sizeof(int));
           *(long*)(bind_buffers[i].buffer) = FIX2INT(argv[i]);
 #endif
           break;
         case T_BIGNUM:
           bind_buffers[i].buffer_type = MYSQL_TYPE_LONGLONG;
-          bind_buffers[i].buffer = malloc(sizeof(long long int));
+          bind_buffers[i].buffer = xmalloc(sizeof(long long int));
           *(LONG_LONG*)(bind_buffers[i].buffer) = rb_big2ll(argv[i]);
           break;
         case T_FLOAT:
           bind_buffers[i].buffer_type = MYSQL_TYPE_DOUBLE;
-          bind_buffers[i].buffer = malloc(sizeof(double));
+          bind_buffers[i].buffer = xmalloc(sizeof(double));
           *(double*)(bind_buffers[i].buffer) = NUM2DBL(argv[i]);
           break;
         case T_STRING:
@@ -282,7 +288,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           // TODO: what Ruby type should support MYSQL_TYPE_TIME
           if (CLASS_OF(argv[i]) == rb_cTime || CLASS_OF(argv[i]) == cDateTime) {
             bind_buffers[i].buffer_type = MYSQL_TYPE_DATETIME;
-            bind_buffers[i].buffer = malloc(sizeof(MYSQL_TIME));
+            bind_buffers[i].buffer = xmalloc(sizeof(MYSQL_TIME));
 
             MYSQL_TIME t;
             VALUE rb_time = argv[i];
@@ -301,7 +307,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 
             bind_buffers[i].buffer_type = MYSQL_TYPE_DATE;
 
-            bind_buffers[i].buffer = malloc(sizeof(MYSQL_TIME));
+            bind_buffers[i].buffer = xmalloc(sizeof(MYSQL_TIME));
 
             MYSQL_TIME t;
             VALUE rb_time = argv[i];

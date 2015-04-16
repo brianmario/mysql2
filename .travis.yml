@@ -4,8 +4,7 @@ before_install:
   - gem --version
   - bash .travis_setup.sh
   - mysqld --version
-  - mysql -u root -e "CREATE DATABASE IF NOT EXISTS test"
-  - mysql -u root -e "CREATE USER '$USER'@'localhost'" || true
+  - mysql -u $USER -e "CREATE DATABASE IF NOT EXISTS test"
 os:
   - linux
 rvm:

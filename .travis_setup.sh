@@ -23,3 +23,5 @@ if ! [[ x$OSTYPE =~ ^xdarwin ]]; then
   sudo bash .travis_ssl.sh
   sudo service mysql restart
 fi
+
+sudo mysql -e "CREATE USER '$USER'@'localhost'" || true

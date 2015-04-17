@@ -5,13 +5,11 @@ require 'spec_helper'
 RSpec.describe Mysql2::Error do
   let(:client) { Mysql2::Client.new(DatabaseCredentials['root']) }
 
-  let :error do
+  let(:error) do
     begin
       client.query("HAHAHA")
     rescue Mysql2::Error => e
       error = e
-    ensure
-      client.close
     end
 
     error
@@ -27,34 +25,36 @@ RSpec.describe Mysql2::Error do
   end
 
   context 'encoding' do
-    let :error do
-      client = Mysql2::Client.new(DatabaseCredentials['root'])
+    let(:valid_utf8) { '造字' }
+    let(:error) do
       begin
-        client.query("\xE9\x80\xA0\xE5\xAD\x97")
+        client.query(valid_utf8)
       rescue Mysql2::Error => e
-        error = e
-      ensure
-        client.close
+        e
       end
-
-      error
     end
 
-    let :bad_err do
-      client = Mysql2::Client.new(DatabaseCredentials['root'])
+    let(:invalid_utf8) { "\xE5\xC6\x7D\x1F" }
+    let(:bad_err) do
       begin
-        client.query("\xE5\xC6\x7D\x1F")
+        client.query(invalid_utf8)
       rescue Mysql2::Error => e
-        error = e
-      ensure
-        client.close
+        e
       end
+    end
 
-      error
+    before do
+      pending('String#encoding is not defined') unless String.public_method_defined?(:encoding)
+
+      # sanity check
+      expect(valid_utf8.encoding).to eql(Encoding::UTF_8)
+      expect(valid_utf8).to be_valid_encoding
+
+      expect(invalid_utf8.encoding).to eql(Encoding::UTF_8)
+      expect(invalid_utf8).to_not be_valid_encoding
     end
 
     it "returns error messages as UTF-8 by default" do
-      pending('String#encoding is not defined') unless String.public_method_defined?(:encoding)
       with_internal_encoding nil do
         expect(error.message.encoding).to eql(Encoding::UTF_8)
         error.message.valid_encoding?
@@ -67,13 +67,11 @@ RSpec.describe Mysql2::Error do
     end
 
     it "returns sql state as ASCII" do
-      pending('String#encoding is not defined') unless String.public_method_defined?(:encoding)
       expect(error.sql_state.encoding).to eql(Encoding::US_ASCII)
       error.sql_state.valid_encoding?
     end
 
     it "returns error messages and sql state in Encoding.default_internal if set" do
-      pending('String#encoding is not defined') unless String.public_method_defined?(:encoding)
       with_internal_encoding 'UTF-16LE' do
         expect(error.message.encoding).to eql(Encoding.default_internal)
         error.message.valid_encoding?

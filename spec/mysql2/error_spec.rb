@@ -57,10 +57,10 @@ RSpec.describe Mysql2::Error do
     it "returns error messages as UTF-8 by default" do
       with_internal_encoding nil do
         expect(error.message.encoding).to eql(Encoding::UTF_8)
-        error.message.valid_encoding?
+        expect(error.message).to be_valid_encoding
 
         expect(bad_err.message.encoding).to eql(Encoding::UTF_8)
-        bad_err.message.valid_encoding?
+        expect(bad_err.message).to be_valid_encoding
 
         expect(bad_err.message).to include("??}\u001F")
       end
@@ -68,16 +68,16 @@ RSpec.describe Mysql2::Error do
 
     it "returns sql state as ASCII" do
       expect(error.sql_state.encoding).to eql(Encoding::US_ASCII)
-      error.sql_state.valid_encoding?
+      expect(error.sql_state).to be_valid_encoding
     end
 
     it "returns error messages and sql state in Encoding.default_internal if set" do
       with_internal_encoding 'UTF-16LE' do
         expect(error.message.encoding).to eql(Encoding.default_internal)
-        error.message.valid_encoding?
+        expect(error.message).to be_valid_encoding
 
         expect(bad_err.message.encoding).to eql(Encoding.default_internal)
-        bad_err.message.valid_encoding?
+        expect(bad_err.message).to be_valid_encoding
       end
     end
   end

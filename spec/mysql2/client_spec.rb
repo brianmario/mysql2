@@ -709,19 +709,19 @@ RSpec.describe Mysql2::Client do
 
     it "should default to the connection's encoding if Encoding.default_internal is nil" do
       with_internal_encoding nil do
-        expect(@client.info[:version].encoding).to eql(Encoding.find('utf-8'))
+        expect(@client.info[:version].encoding).to eql(Encoding::UTF_8)
 
         client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-        expect(client2.info[:version].encoding).to eql(Encoding.find('us-ascii'))
+        expect(client2.info[:version].encoding).to eql(Encoding::ASCII)
       end
     end
 
     it "should use Encoding.default_internal" do
-      with_internal_encoding 'utf-8' do
+      with_internal_encoding Encoding::UTF_8 do
         expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
       end
 
-      with_internal_encoding 'us-ascii' do
+      with_internal_encoding Encoding::ASCII do
         expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
       end
     end
@@ -752,19 +752,19 @@ RSpec.describe Mysql2::Client do
 
     it "should default to the connection's encoding if Encoding.default_internal is nil" do
       with_internal_encoding nil do
-        expect(@client.server_info[:version].encoding).to eql(Encoding.find('utf-8'))
+        expect(@client.server_info[:version].encoding).to eql(Encoding::UTF_8)
 
         client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-        expect(client2.server_info[:version].encoding).to eql(Encoding.find('us-ascii'))
+        expect(client2.server_info[:version].encoding).to eql(Encoding::ASCII)
       end
     end
 
     it "should use Encoding.default_internal" do
-      with_internal_encoding 'utf-8' do
+      with_internal_encoding Encoding::UTF_8 do
         expect(@client.server_info[:version].encoding).to eql(Encoding.default_internal)
       end
 
-      with_internal_encoding 'us-ascii' do
+      with_internal_encoding Encoding::ASCII do
         expect(@client.server_info[:version].encoding).to eql(Encoding.default_internal)
       end
     end

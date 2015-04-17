@@ -72,7 +72,7 @@ RSpec.describe Mysql2::Error do
     end
 
     it "returns error messages and sql state in Encoding.default_internal if set" do
-      with_internal_encoding 'UTF-16LE' do
+      with_internal_encoding Encoding::UTF_16LE do
         expect(error.message.encoding).to eql(Encoding.default_internal)
         expect(error.message).to be_valid_encoding
 

@@ -98,11 +98,21 @@ end
   asplode h unless have_header h
 end
 
-# These gcc style flags are also supported by clang and xcode compilers,
-# so we'll use a does-it-work test instead of an is-it-gcc test.
-gcc_flags = ' -Wall -funroll-loops'
-if try_link('int main() {return 0;}', gcc_flags)
-  $CFLAGS << gcc_flags
+# This is our wishlist. We use whichever flags work on the host.
+# -Wall and -Wextra are included by default.
+%w(
+  -Werror
+  -Weverything
+  -fsanitize=address
+  -fsanitize=integer
+  -fsanitize=thread
+  -fsanitize=memory
+  -fsanitize=undefined
+  -fsanitize=cfi
+).each do |flag|
+  if try_link('int main() {return 0;}', flag)
+    $CFLAGS << ' ' << flag
+  end
 end
 
 if RUBY_PLATFORM =~ /mswin|mingw/

@@ -59,7 +59,7 @@ typedef struct {
   int streaming;
   ID db_timezone;
   ID app_timezone;
-  int block_given;
+  VALUE block_given;
 } result_each_args;
 
 VALUE cBigDecimal, cDateTime, cDate;
@@ -346,8 +346,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   }
 
   {
-    int r = (int)rb_thread_call_without_gvl(nogvl_stmt_fetch, wrapper->stmt, RUBY_UBF_IO, 0);
-    switch(r) {
+    switch((uintptr_t)rb_thread_call_without_gvl(nogvl_stmt_fetch, wrapper->stmt, RUBY_UBF_IO, 0)) {
       case 0:
         /* success */
         break;

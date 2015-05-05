@@ -36,7 +36,7 @@ dirs = ENV['PATH'].split(File::PATH_SEPARATOR) + %w[
   /usr/local/lib/mysql5*
 ].map{|dir| "#{dir}/bin" }
 
-GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5}"
+GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5,mariadb_config}"
 
 # If the user has provided a --with-mysql-dir argument, we must respect it or fail.
 inc, lib = dir_config('mysql')

@@ -11,7 +11,7 @@ Gem::Specification.new do |s|
   s.rdoc_options = ["--charset=UTF-8"]
   s.summary = %q{A simple, fast Mysql library for Ruby, binding to libmysql}
 
-  s.files = `git ls-files README.md CHANGELOG.md MIT-LICENSE ext lib support`.split
+  s.files = `git ls-files README.md CHANGELOG.md LICENSE ext lib support`.split
   s.test_files = `git ls-files spec examples`.split
 
   # tests

@@ -100,6 +100,7 @@ else
 
   # This is our wishlist. We use whichever flags work on the host.
   # -Wall and -Wextra are included by default.
+  # TODO: fix statement.c and remove -Wno-error=declaration-after-statement
   %w(
     -Werror
     -Weverything
@@ -109,6 +110,7 @@ else
     -fsanitize=memory
     -fsanitize=undefined
     -fsanitize=cfi
+    -Wno-error=declaration-after-statement
   ).each do |flag|
     if try_link('int main() {return 0;}', flag)
       $CFLAGS << ' ' << flag

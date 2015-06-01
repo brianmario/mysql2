@@ -848,7 +848,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
-  VALUE defaults, opts, block;
+  VALUE defaults, opts, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone, dbTz, appTz;
   mysql2_result_wrapper * wrapper;
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
@@ -921,7 +921,6 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   args.app_timezone = app_timezone;
   args.block_given = block;
 
-  VALUE (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   if (wrapper->stmt) {
     fetch_row_func = rb_mysql_result_fetch_row_stmt;
   } else {

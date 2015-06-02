@@ -83,6 +83,20 @@ RSpec.describe Mysql2::Statement do
       result = statement.execute
       expect(result.to_a.length).to eq(1)
     end
+
+  it "should handle comparisons and likes" do
+    @client.query 'USE test'
+    @client.query 'CREATE TABLE IF NOT EXISTS mysql2_stmt_q(a int, b varchar(10))'
+    @client.query 'INSERT INTO mysql2_stmt_q (a, b) VALUES (1, "Hello"), (2, "World")'
+    statement = @client.prepare 'SELECT * FROM mysql2_stmt_q WHERE a < ?'
+    results = statement.execute(2)
+    results.first.should == {"a" => 1, "b" => "Hello"}
+
+    statement = @client.prepare 'SELECT * FROM mysql2_stmt_q WHERE b LIKE ?'
+    results = statement.execute('%orld')
+    results.first.should == {"a" => 2, "b" => "World"}
+
+    @client.query 'DROP TABLE IF EXISTS mysql2_stmt_q'
   end
 
   it "should select dates" do

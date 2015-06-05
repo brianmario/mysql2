@@ -178,6 +178,10 @@ RSpec.describe Mysql2::Client do
     run_gc
     client = Mysql2::Client.new(DatabaseCredentials['root'])
 
+    # this empty `fork` call fixes this tests on RBX; without it, the next
+    # `fork` call hangs forever. WTF?
+    fork { }
+
     fork do
       client.query('SELECT 1')
       client = nil

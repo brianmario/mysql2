@@ -558,3 +558,4 @@ though.
 * Kouhei Ueno (https://github.com/nyaxt) - for the original work on Prepared Statements way back in 2012
 * John Cant (http://github.com/johncant) - polishing and updating Prepared Statements support
 * Justin Case (http://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
+* Tamir Duberstein (http://github.com/tamird) - for help with timeouts and all around updates and cleanups

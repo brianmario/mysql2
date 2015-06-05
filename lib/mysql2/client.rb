@@ -74,6 +74,18 @@ module Mysql2
       @@default_query_options
     end
 
+    if Thread.respond_to?(:handle_interrupt)
+      def query(sql, options = {})
+        Thread.handle_interrupt(Timeout::ExitException => :never) do
+          _query(sql, @query_options.merge(options))
+        end
+      end
+    else
+      def query(sql, options = {})
+        _query(sql, @query_options.merge(options))
+      end
+    end
+
     def query_info
       info = query_info_string
       return {} unless info

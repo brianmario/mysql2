@@ -488,7 +488,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   }
 
   current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
-  RB_GC_GUARD(current);
+  (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, NULL);
 
@@ -602,7 +602,7 @@ void rb_mysql_client_set_active_thread(VALUE self) {
     const char *thr = StringValueCStr(inspect);
 
     rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
-    RB_GC_GUARD(inspect);
+    (void)RB_GC_GUARD(inspect);
   }
 }
 
@@ -652,7 +652,7 @@ static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
 
-  RB_GC_GUARD(current);
+  (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   rb_iv_set(self, "@current_query_options", current);
 
@@ -1059,7 +1059,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   }
 
   current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
-  RB_GC_GUARD(current);
+  (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, NULL);
 

@@ -713,23 +713,16 @@ describe Mysql2::Client do
 
   if defined? Encoding
     context "strings returned by #info" do
-      it "should default to the connection's encoding if Encoding.default_internal is nil" do
-        with_internal_encoding nil do
-          @client.info[:version].encoding.should eql(Encoding.find('utf-8'))
-
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          client2.info[:version].encoding.should eql(Encoding.find('us-ascii'))
-        end
+      it "should be tagged as ascii" do
+        @client.info[:version].encoding.should eql(Encoding::US_ASCII)
+        @client.info[:header_version].encoding.should eql(Encoding::US_ASCII)
       end
+    end
 
-      it "should use Encoding.default_internal" do
-        with_internal_encoding 'utf-8' do
-          @client.info[:version].encoding.should eql(Encoding.default_internal)
-        end
-
-        with_internal_encoding 'us-ascii' do
-          @client.info[:version].encoding.should eql(Encoding.default_internal)
-        end
+    context "strings returned by .info" do
+      it "should be tagged as ascii" do
+        Mysql2::Client.info[:version].encoding.should eql(Encoding::US_ASCII)
+        Mysql2::Client.info[:header_version].encoding.should eql(Encoding::US_ASCII)
       end
     end
   end

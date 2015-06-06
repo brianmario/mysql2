@@ -135,7 +135,7 @@ class Platform
   end
 
   def mysql_config_path
-    nil
+    @mysql_config_path ||= with_config('mysql-config')
   end
 end
 
@@ -219,6 +219,7 @@ class Unix < Platform
   end
 
   def mysql_config_path
+    super
     @mysql_config_path ||= Dir[mysql_config_glob].first
   end
 end

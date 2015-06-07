@@ -1,8 +1,9 @@
-#!/bin/sh
+#!/usr/bin/env bash
+
+set -eu
 
 service mysql stop
 apt-get purge '^mysql*' 'libmysql*'
-apt-get install python-software-properties
 apt-key adv --recv-keys --keyserver hkp://keyserver.ubuntu.com:80 0xcbcb082a1bb943db
 
 if [[ x$1 = xmariadb55 ]]; then

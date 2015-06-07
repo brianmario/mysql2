@@ -1,48 +1,46 @@
 # encoding: UTF-8
 require 'spec_helper'
 
-describe Mysql2::Client do
+RSpec.describe Mysql2::Client do
   context "using defaults file" do
     let(:cnf_file) { File.expand_path('../../my.cnf', __FILE__) }
 
     it "should not raise an exception for valid defaults group" do
-      lambda {
+      expect {
         opts = DatabaseCredentials['root'].merge(:default_file => cnf_file, :default_group => "test")
         @client = Mysql2::Client.new(opts)
-      }.should_not raise_error(Mysql2::Error)
+      }.not_to raise_error
     end
 
     it "should not raise an exception without default group" do
-      lambda {
+      expect {
         @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:default_file => cnf_file))
-      }.should_not raise_error(Mysql2::Error)
+      }.not_to raise_error
     end
   end
 
   it "should raise an exception upon connection failure" do
-    lambda {
+    expect {
       # The odd local host IP address forces the mysql client library to
       # use a TCP socket rather than a domain socket.
       Mysql2::Client.new DatabaseCredentials['root'].merge('host' => '127.0.0.2', 'port' => 999999)
-    }.should raise_error(Mysql2::Error)
+    }.to raise_error(Mysql2::Error)
   end
 
-  if defined? Encoding
-    it "should raise an exception on create for invalid encodings" do
-      lambda {
-        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "fake"))
-      }.should raise_error(Mysql2::Error)
-    end
+  it "should raise an exception on create for invalid encodings" do
+    expect {
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "fake"))
+    }.to raise_error(Mysql2::Error)
+  end
 
-    it "should not raise an exception on create for a valid encoding" do
-      lambda {
-        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
-      }.should_not raise_error(Mysql2::Error)
+  it "should not raise an exception on create for a valid encoding" do
+    expect {
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
+    }.not_to raise_error
 
-      lambda {
-        Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
-      }.should_not raise_error(Mysql2::Error)
-    end
+    expect {
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
+    }.not_to raise_error
   end
 
   it "should accept connect flags and pass them to #connect" do
@@ -54,7 +52,7 @@ describe Mysql2::Client do
       end
     end
     client = klient.new :flags => Mysql2::Client::FOUND_ROWS
-    (client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).should be_true
+    expect(client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).to be > 0
   end
 
   it "should default flags to (REMEMBER_OPTIONS, LONG_PASSWORD, LONG_FLAG, TRANSACTIONS, PROTOCOL_41, SECURE_CONNECTION)" do
@@ -66,12 +64,12 @@ describe Mysql2::Client do
       end
     end
     client = klient.new
-    (client.connect_args.last[6] & (Mysql2::Client::REMEMBER_OPTIONS |
+    expect(client.connect_args.last[6] & (Mysql2::Client::REMEMBER_OPTIONS |
                                      Mysql2::Client::LONG_PASSWORD |
                                      Mysql2::Client::LONG_FLAG |
                                      Mysql2::Client::TRANSACTIONS |
                                      Mysql2::Client::PROTOCOL_41 |
-                                     Mysql2::Client::SECURE_CONNECTION)).should be_true
+                                     Mysql2::Client::SECURE_CONNECTION)).to be > 0
   end
 
   it "should execute init command" do
@@ -79,7 +77,7 @@ describe Mysql2::Client do
     options[:init_command] = "SET @something = 'setting_value';"
     client = Mysql2::Client.new(options)
     result = client.query("SELECT @something;")
-    result.first['@something'].should eq('setting_value')
+    expect(result.first['@something']).to eq('setting_value')
   end
 
   it "should send init_command after reconnect" do
@@ -89,17 +87,14 @@ describe Mysql2::Client do
     client = Mysql2::Client.new(options)
 
     result = client.query("SELECT @something;")
-    result.first['@something'].should eq('setting_value')
+    expect(result.first['@something']).to eq('setting_value')
 
     # get the current connection id
     result = client.query("SELECT CONNECTION_ID()")
     first_conn_id = result.first['CONNECTION_ID()']
 
     # break the current connection
-    begin
-      client.query("KILL #{first_conn_id}")
-    rescue Mysql2::Error
-    end
+    expect { client.query("KILL #{first_conn_id}") }.to raise_error(Mysql2::Error)
 
     client.ping # reconnect now
 
@@ -108,15 +103,15 @@ describe Mysql2::Client do
     second_conn_id = result.first['CONNECTION_ID()']
 
     # confirm reconnect by checking the new connection id
-    first_conn_id.should_not == second_conn_id
+    expect(first_conn_id).not_to eq(second_conn_id)
 
     # At last, check that the init command executed
     result = client.query("SELECT @something;")
-    result.first['@something'].should eq('setting_value')
+    expect(result.first['@something']).to eq('setting_value')
   end
 
   it "should have a global default_query_options hash" do
-    Mysql2::Client.should respond_to(:default_query_options)
+    expect(Mysql2::Client).to respond_to(:default_query_options)
   end
 
   it "should be able to connect via SSL options" do
@@ -128,7 +123,7 @@ describe Mysql2::Client do
 
     # You may need to adjust the lines below to match your SSL certificate paths
     ssl_client = nil
-    lambda {
+    expect {
       ssl_client = Mysql2::Client.new(
         :sslkey    => '/etc/mysql/client-key.pem',
         :sslcert   => '/etc/mysql/client-cert.pem',
@@ -136,25 +131,34 @@ describe Mysql2::Client do
         :sslcapath => '/etc/mysql/',
         :sslcipher => 'DHE-RSA-AES256-SHA'
       )
-    }.should_not raise_error(Mysql2::Error)
+    }.not_to raise_error
 
     results = ssl_client.query("SHOW STATUS WHERE Variable_name = \"Ssl_version\" OR Variable_name = \"Ssl_cipher\"").to_a
-    results[0]['Variable_name'].should eql('Ssl_cipher')
-    results[0]['Value'].should_not be_nil
-    results[0]['Value'].should be_kind_of(String)
-    results[0]['Value'].should_not be_empty
+    expect(results[0]['Variable_name']).to eql('Ssl_cipher')
+    expect(results[0]['Value']).not_to be_nil
+    expect(results[0]['Value']).to be_kind_of(String)
+    expect(results[0]['Value']).not_to be_empty
 
-    results[1]['Variable_name'].should eql('Ssl_version')
-    results[1]['Value'].should_not be_nil
-    results[1]['Value'].should be_kind_of(String)
-    results[1]['Value'].should_not be_empty
+    expect(results[1]['Variable_name']).to eql('Ssl_version')
+    expect(results[1]['Value']).not_to be_nil
+    expect(results[1]['Value']).to be_kind_of(String)
+    expect(results[1]['Value']).not_to be_empty
 
     ssl_client.close
   end
 
+  def run_gc
+    if defined?(Rubinius)
+      GC.run(true)
+    else
+      GC.start
+    end
+    sleep(0.5)
+  end
+
   it "should not leave dangling connections after garbage collection" do
-    GC.start
-    sleep 0.300 # Let GC do its work
+    run_gc
+
     client = Mysql2::Client.new(DatabaseCredentials['root'])
     before_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
 
@@ -162,69 +166,69 @@ describe Mysql2::Client do
       Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
     end
     after_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-    after_count.should == before_count + 10
+    expect(after_count).to eq(before_count + 10)
 
-    GC.start
-    sleep 0.300 # Let GC do its work
+    run_gc
     final_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-    final_count.should == before_count
+    expect(final_count).to eq(before_count)
   end
 
-  if Process.respond_to?(:fork)
-    it "should not close connections when running in a child process" do
-      GC.start
-      sleep 1 if defined? Rubinius # Let the rbx GC thread do its work
-      client = Mysql2::Client.new(DatabaseCredentials['root'])
 
-      fork do
-        client.query('SELECT 1')
-        client = nil
-        GC.start
-        sleep 1 if defined? Rubinius # Let the rbx GC thread do its work
-      end
+  it "should not close connections when running in a child process" do
+    run_gc
+    client = Mysql2::Client.new(DatabaseCredentials['root'])
 
-      Process.wait
+    # this empty `fork` call fixes this tests on RBX; without it, the next
+    # `fork` call hangs forever. WTF?
+    fork { }
 
-      # this will throw an error if the underlying socket was shutdown by the
-      # child's GC
-      expect { client.query('SELECT 1') }.to_not raise_exception
+    fork do
+      client.query('SELECT 1')
+      client = nil
+      run_gc
     end
+
+    Process.wait
+
+    # this will throw an error if the underlying socket was shutdown by the
+    # child's GC
+    expect { client.query('SELECT 1') }.to_not raise_exception
   end
 
   it "should be able to connect to database with numeric-only name" do
-    lambda {
-      creds = DatabaseCredentials['numericuser']
-      @client.query "CREATE DATABASE IF NOT EXISTS `#{creds['database']}`"
-      @client.query "GRANT ALL ON `#{creds['database']}`.* TO #{creds['username']}@`#{creds['host']}`"
-      client = Mysql2::Client.new creds
-      @client.query "DROP DATABASE IF EXISTS `#{creds['database']}`"
-    }.should_not raise_error
+    creds = DatabaseCredentials['numericuser']
+    @client.query "CREATE DATABASE IF NOT EXISTS `#{creds['database']}`"
+    @client.query "GRANT ALL ON `#{creds['database']}`.* TO #{creds['username']}@`#{creds['host']}`"
+
+    expect { Mysql2::Client.new(creds) }.not_to raise_error
+
+    @client.query "DROP DATABASE IF EXISTS `#{creds['database']}`"
   end
 
   it "should respond to #close" do
-    @client.should respond_to(:close)
+    expect(@client).to respond_to(:close)
   end
 
   it "should be able to close properly" do
-    @client.close.should be_nil
-    lambda {
+    expect(@client.close).to be_nil
+    expect {
       @client.query "SELECT 1"
-    }.should raise_error(Mysql2::Error)
+    }.to raise_error(Mysql2::Error)
   end
 
   it "should respond to #query" do
-    @client.should respond_to(:query)
+    expect(@client).to respond_to(:query)
   end
 
   it "should respond to #warning_count" do
-    @client.should respond_to(:warning_count)
+    expect(@client).to respond_to(:warning_count)
   end
 
   context "#warning_count" do
     context "when no warnings" do
       it "should 0" do
         @client.query('select 1')
-        @client.warning_count.should == 0
+        expect(@client.warning_count).to eq(0)
       end
     end
     context "when has a warnings" do
@@ -232,21 +236,21 @@ describe Mysql2::Client do
         # "the statement produces extra information that can be viewed by issuing a SHOW WARNINGS"
         # http://dev.mysql.com/doc/refman/5.0/en/explain-extended.html
         @client.query("explain extended select 1")
-        @client.warning_count.should > 0
+        expect(@client.warning_count).to be > 0
       end
     end
   end
 
   it "should respond to #query_info" do
-    @client.should respond_to(:query_info)
+    expect(@client).to respond_to(:query_info)
   end
 
   context "#query_info" do
     context "when no info present" do
       it "should 0" do
         @client.query('select 1')
-        @client.query_info.should be_empty
-        @client.query_info_string.should be_nil
+        expect(@client.query_info).to be_empty
+        expect(@client.query_info_string).to be_nil
       end
     end
     context "when has some info" do
@@ -258,8 +262,8 @@ describe Mysql2::Client do
         # # Note that mysql_info() returns a non-NULL value for INSERT ... VALUES only for the multiple-row form of the statement (that is, only if multiple value lists are specified).
         @client.query("INSERT INTO infoTest (blah) VALUES (1234),(4535)")
 
-        @client.query_info.should  eql({:records => 2, :duplicates => 0, :warnings => 0})
-        @client.query_info_string.should eq('Records: 2  Duplicates: 0  Warnings: 0')
+        expect(@client.query_info).to  eql({:records => 2, :duplicates => 0, :warnings => 0})
+        expect(@client.query_info_string).to eq('Records: 2  Duplicates: 0  Warnings: 0')
 
         @client.query "DROP TABLE infoTest"
       end
@@ -288,43 +292,43 @@ describe Mysql2::Client do
 
     it "should raise an error when local_infile is disabled" do
       client = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => false)
-      lambda {
+      expect {
         client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
-      }.should raise_error(Mysql2::Error, %r{command is not allowed})
+      }.to raise_error(Mysql2::Error, /command is not allowed/)
     end
 
     it "should raise an error when a non-existent file is loaded" do
-      lambda {
+      expect {
         @client_i.query "LOAD DATA LOCAL INFILE 'this/file/is/not/here' INTO TABLE infileTest"
-      }.should_not raise_error(Mysql2::Error, %r{file not found: this/file/is/not/here})
+      }.to raise_error(Mysql2::Error, 'No such file or directory: this/file/is/not/here')
     end
 
     it "should LOAD DATA LOCAL INFILE" do
       @client_i.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
       info = @client_i.query_info
-      info.should eql({:records => 1, :deleted => 0, :skipped => 0, :warnings => 0})
+      expect(info).to eql({:records => 1, :deleted => 0, :skipped => 0, :warnings => 0})
 
       result = @client_i.query "SELECT * FROM infileTest"
-      result.first.should eql({'id' => 1, 'foo' => 'Hello', 'bar' => 'World'})
+      expect(result.first).to eql({'id' => 1, 'foo' => 'Hello', 'bar' => 'World'})
     end
   end
 
   it "should expect connect_timeout to be a positive integer" do
-    lambda {
+    expect {
       Mysql2::Client.new(:connect_timeout => -1)
-    }.should raise_error(Mysql2::Error)
+    }.to raise_error(Mysql2::Error)
   end
 
   it "should expect read_timeout to be a positive integer" do
-    lambda {
+    expect {
       Mysql2::Client.new(:read_timeout => -1)
-    }.should raise_error(Mysql2::Error)
+    }.to raise_error(Mysql2::Error)
   end
 
   it "should expect write_timeout to be a positive integer" do
-    lambda {
+    expect {
       Mysql2::Client.new(:write_timeout => -1)
-    }.should raise_error(Mysql2::Error)
+    }.to raise_error(Mysql2::Error)
   end
 
   context "#query" do
@@ -333,7 +337,7 @@ describe Mysql2::Client do
 
       expect {
         @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false)
-      }.to_not raise_exception(Mysql2::Error)
+      }.to_not raise_error
     end
 
     it "should not let you query again if iterating is not finished when streaming" do
@@ -345,127 +349,121 @@ describe Mysql2::Client do
     end
 
     it "should only accept strings as the query parameter" do
-      lambda {
+      expect {
         @client.query ["SELECT 'not right'"]
-      }.should raise_error(TypeError)
+      }.to raise_error(TypeError)
     end
 
     it "should not retain query options set on a query for subsequent queries, but should retain it in the result" do
       result = @client.query "SELECT 1", :something => :else
-      @client.query_options[:something].should be_nil
-      result.instance_variable_get('@query_options').should eql(@client.query_options.merge(:something => :else))
-      @client.instance_variable_get('@current_query_options').should eql(@client.query_options.merge(:something => :else))
+      expect(@client.query_options[:something]).to be_nil
+      expect(result.instance_variable_get('@query_options')).to eql(@client.query_options.merge(:something => :else))
+      expect(@client.instance_variable_get('@current_query_options')).to eql(@client.query_options.merge(:something => :else))
 
       result = @client.query "SELECT 1"
-      result.instance_variable_get('@query_options').should eql(@client.query_options)
-      @client.instance_variable_get('@current_query_options').should eql(@client.query_options)
+      expect(result.instance_variable_get('@query_options')).to eql(@client.query_options)
+      expect(@client.instance_variable_get('@current_query_options')).to eql(@client.query_options)
     end
 
     it "should allow changing query options for subsequent queries" do
       @client.query_options.merge!(:something => :else)
       result = @client.query "SELECT 1"
-      @client.query_options[:something].should eql(:else)
-      result.instance_variable_get('@query_options')[:something].should eql(:else)
+      expect(@client.query_options[:something]).to eql(:else)
+      expect(result.instance_variable_get('@query_options')[:something]).to eql(:else)
 
       # Clean up after this test
       @client.query_options.delete(:something)
-      @client.query_options[:something].should be_nil
+      expect(@client.query_options[:something]).to be_nil
     end
 
     it "should return results as a hash by default" do
-      @client.query("SELECT 1").first.class.should eql(Hash)
+      expect(@client.query("SELECT 1").first.class).to eql(Hash)
     end
 
     it "should be able to return results as an array" do
-      @client.query("SELECT 1", :as => :array).first.class.should eql(Array)
+      expect(@client.query("SELECT 1", :as => :array).first.class).to eql(Array)
       @client.query("SELECT 1").each(:as => :array)
     end
 
     it "should be able to return results with symbolized keys" do
-      @client.query("SELECT 1", :symbolize_keys => true).first.keys[0].class.should eql(Symbol)
+      expect(@client.query("SELECT 1", :symbolize_keys => true).first.keys[0].class).to eql(Symbol)
     end
 
     it "should require an open connection" do
       @client.close
-      lambda {
+      expect {
         @client.query "SELECT 1"
-      }.should raise_error(Mysql2::Error)
+      }.to raise_error(Mysql2::Error)
     end
 
     if RUBY_PLATFORM !~ /mingw|mswin/
       it "should not allow another query to be sent without fetching a result first" do
         @client.query("SELECT 1", :async => true)
-        lambda {
+        expect {
           @client.query("SELECT 1")
-        }.should raise_error(Mysql2::Error)
+        }.to raise_error(Mysql2::Error)
       end
 
       it "should describe the thread holding the active query" do
         thr = Thread.new { @client.query("SELECT 1", :async => true) }
 
         thr.join
-        begin
-          @client.query("SELECT 1")
-        rescue Mysql2::Error => e
-          message = e.message
-        end
-        re = Regexp.escape(thr.inspect)
-        message.should match(Regexp.new(re))
+        expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(thr.inspect)))
       end
 
       it "should timeout if we wait longer than :read_timeout" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => 1))
-        lambda {
-          client.query("SELECT sleep(2)")
-        }.should raise_error(Mysql2::Error)
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => 0))
+        expect {
+          client.query('SELECT SLEEP(0.1)')
+        }.to raise_error(Mysql2::Error)
       end
 
-      if !defined? Rubinius
-        # XXX this test is not deterministic (because Unix signal handling is not)
-        # and may fail on a loaded system
-        it "should run signal handlers while waiting for a response" do
-          mark = {}
-          trap(:USR1) { mark[:USR1] = Time.now }
-          begin
-            mark[:START] = Time.now
-            pid = fork do
-              sleep 1 # wait for client "SELECT sleep(2)" query to start
-              Process.kill(:USR1, Process.ppid)
-              sleep # wait for explicit kill to prevent GC disconnect
-            end
-            @client.query("SELECT sleep(2)")
-            mark[:END] = Time.now
-            mark.include?(:USR1).should be_true
-            (mark[:USR1] - mark[:START]).should >= 1
-            (mark[:USR1] - mark[:START]).should < 1.3
-            (mark[:END] - mark[:USR1]).should > 0.9
-            (mark[:END] - mark[:START]).should >= 2
-            (mark[:END] - mark[:START]).should < 2.3
-            Process.kill(:TERM, pid)
-            Process.waitpid2(pid)
-          ensure
-            trap(:USR1, 'DEFAULT')
+      # XXX this test is not deterministic (because Unix signal handling is not)
+      # and may fail on a loaded system
+      it "should run signal handlers while waiting for a response" do
+        kill_time = 0.1
+        query_time = 2 * kill_time
+
+        mark = {}
+
+        begin
+          trap(:USR1) { mark.store(:USR1, Time.now) }
+          pid = fork do
+            sleep kill_time # wait for client query to start
+            Process.kill(:USR1, Process.ppid)
+            sleep # wait for explicit kill to prevent GC disconnect
           end
+          mark.store(:QUERY_START, Time.now)
+          @client.query("SELECT SLEEP(#{query_time})")
+          mark.store(:QUERY_END, Time.now)
+        ensure
+          Process.kill(:TERM, pid)
+          Process.waitpid2(pid)
+          trap(:USR1, 'DEFAULT')
         end
+
+        # the query ran uninterrupted
+        expect(mark.fetch(:QUERY_END) - mark.fetch(:QUERY_START)).to be_within(0.02).of(query_time)
+        # signals fired while the query was running
+        expect(mark.fetch(:USR1)).to be_between(mark.fetch(:QUERY_START), mark.fetch(:QUERY_END))
       end
 
       it "#socket should return a Fixnum (file descriptor from C)" do
-        @client.socket.class.should eql(Fixnum)
-        @client.socket.should_not eql(0)
+        expect(@client.socket.class).to eql(Fixnum)
+        expect(@client.socket).not_to eql(0)
       end
 
       it "#socket should require an open connection" do
         @client.close
-        lambda {
+        expect {
           @client.socket
-        }.should raise_error(Mysql2::Error)
+        }.to raise_error(Mysql2::Error)
       end
-
 
       it 'should be impervious to connection-corrupting timeouts ' do
         pending('`Thread.handle_interrupt` is not defined') unless Thread.respond_to?(:handle_interrupt)
         # attempt to break the connection
-        expect { Timeout.timeout(0.1) { @client.query('SELECT SLEEP(1)') } }.to raise_error(Timeout::Error)
+        expect { Timeout.timeout(0.1) { @client.query('SELECT SLEEP(0.2)') } }.to raise_error(Timeout::Error)
 
         # expect the connection to not be broken
         expect { @client.query('SELECT 1') }.to_not raise_error
@@ -498,28 +496,27 @@ describe Mysql2::Client do
       end
 
       it "threaded queries should be supported" do
-        threads, results = [], {}
-        lock = Mutex.new
-        connect = lambda{
-          Mysql2::Client.new(DatabaseCredentials['root'])
-        }
-        Timeout.timeout(0.7) do
-          5.times {
-            threads << Thread.new do
-              result = connect.call.query("SELECT sleep(0.5) as result")
-              lock.synchronize do
-                results[Thread.current.object_id] = result
-              end
-            end
-          }
+        sleep_time = 0.5
+
+        # Note that each thread opens its own database connection
+        threads = 5.times.map do
+          Thread.new do
+            client = Mysql2::Client.new(DatabaseCredentials.fetch('root'))
+            client.query("SELECT SLEEP(#{sleep_time})")
+            Thread.current.object_id
+          end
         end
-        threads.each{|t| t.join }
-        results.keys.sort.should eql(threads.map{|t| t.object_id }.sort)
+
+        # This timeout demonstrates that the threads are sleeping concurrently:
+        # In the serial case, the timeout would fire and the test would fail
+        values = Timeout.timeout(sleep_time * 1.1) { threads.map(&:value) }
+
+        expect(values).to match_array(threads.map(&:object_id))
       end
 
       it "evented async queries should be supported" do
         # should immediately return nil
-        @client.query("SELECT sleep(0.1)", :async => true).should eql(nil)
+        expect(@client.query("SELECT sleep(0.1)", :async => true)).to eql(nil)
 
         io_wrapper = IO.for_fd(@client.socket)
         loops = 0
@@ -532,10 +529,10 @@ describe Mysql2::Client do
         end
 
         # make sure we waited some period of time
-        (loops >= 1).should be_true
+        expect(loops >= 1).to be true
 
         result = @client.async_result
-        result.class.should eql(Mysql2::Result)
+        expect(result.class).to eql(Mysql2::Result)
       end
     end
 
@@ -546,20 +543,20 @@ describe Mysql2::Client do
 
       it "should raise an exception when one of multiple statements fails" do
         result = @multi_client.query("SELECT 1 AS 'set_1'; SELECT * FROM invalid_table_name; SELECT 2 AS 'set_2';")
-        result.first['set_1'].should be(1)
-        lambda {
+        expect(result.first['set_1']).to be(1)
+        expect {
           @multi_client.next_result
-        }.should raise_error(Mysql2::Error)
-        @multi_client.next_result.should be_false
+        }.to raise_error(Mysql2::Error)
+        expect(@multi_client.next_result).to be false
       end
 
       it "returns multiple result sets" do
-        @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'").first.should eql({ 'set_1' => 1 })
+        expect(@multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'").first).to eql({ 'set_1' => 1 })
 
-        @multi_client.next_result.should be_true
-        @multi_client.store_result.first.should eql({ 'set_2' => 2 })
+        expect(@multi_client.next_result).to be true
+        expect(@multi_client.store_result.first).to eql({ 'set_2' => 2 })
 
-        @multi_client.next_result.should be_false
+        expect(@multi_client.next_result).to be false
       end
 
       it "does not interfere with other statements" do
@@ -568,223 +565,223 @@ describe Mysql2::Client do
           @multi_client.store_result
         end
 
-        @multi_client.query("SELECT 3 AS 'next'").first.should == { 'next' => 3 }
+        expect(@multi_client.query("SELECT 3 AS 'next'").first).to eq({ 'next' => 3 })
       end
 
       it "will raise on query if there are outstanding results to read" do
         @multi_client.query("SELECT 1; SELECT 2; SELECT 3")
-        lambda {
+        expect {
           @multi_client.query("SELECT 4")
-        }.should raise_error(Mysql2::Error)
+        }.to raise_error(Mysql2::Error)
       end
 
       it "#abandon_results! should work" do
         @multi_client.query("SELECT 1; SELECT 2; SELECT 3")
         @multi_client.abandon_results!
-        lambda {
+        expect {
           @multi_client.query("SELECT 4")
-        }.should_not raise_error(Mysql2::Error)
+        }.not_to raise_error
       end
 
       it "#more_results? should work" do
         @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'")
-        @multi_client.more_results?.should be_true
+        expect(@multi_client.more_results?).to be true
 
         @multi_client.next_result
         @multi_client.store_result
 
-        @multi_client.more_results?.should be_false
+        expect(@multi_client.more_results?).to be false
       end
 
       it "#more_results? should work with stored procedures" do
         @multi_client.query("DROP PROCEDURE IF EXISTS test_proc")
         @multi_client.query("CREATE PROCEDURE test_proc() BEGIN SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'; END")
-        @multi_client.query("CALL test_proc()").first.should eql({ 'set_1' => 1 })
-        @multi_client.more_results?.should be_true
+        expect(@multi_client.query("CALL test_proc()").first).to eql({ 'set_1' => 1 })
+        expect(@multi_client.more_results?).to be true
 
         @multi_client.next_result
-        @multi_client.store_result.first.should eql({ 'set_2' => 2 })
+        expect(@multi_client.store_result.first).to eql({ 'set_2' => 2 })
 
         @multi_client.next_result
-        @multi_client.store_result.should be_nil # this is the result from CALL itself
+        expect(@multi_client.store_result).to be_nil # this is the result from CALL itself
 
-        @multi_client.more_results?.should be_false
+        expect(@multi_client.more_results?).to be false
       end
     end
   end
 
   it "should respond to #socket" do
-    @client.should respond_to(:socket)
+    expect(@client).to respond_to(:socket)
   end
 
   if RUBY_PLATFORM =~ /mingw|mswin/
     it "#socket should raise as it's not supported" do
-      lambda {
+      expect {
         @client.socket
-      }.should raise_error(Mysql2::Error)
+      }.to raise_error(Mysql2::Error)
     end
   end
 
   it "should respond to escape" do
-    Mysql2::Client.should respond_to(:escape)
+    expect(Mysql2::Client).to respond_to(:escape)
   end
 
   context "escape" do
     it "should return a new SQL-escape version of the passed string" do
-      Mysql2::Client.escape("abc'def\"ghi\0jkl%mno").should eql("abc\\'def\\\"ghi\\0jkl%mno")
+      expect(Mysql2::Client.escape("abc'def\"ghi\0jkl%mno")).to eql("abc\\'def\\\"ghi\\0jkl%mno")
     end
 
     it "should return the passed string if nothing was escaped" do
       str = "plain"
-      Mysql2::Client.escape(str).object_id.should eql(str.object_id)
+      expect(Mysql2::Client.escape(str).object_id).to eql(str.object_id)
     end
 
     it "should not overflow the thread stack" do
-      lambda {
+      expect {
         Thread.new { Mysql2::Client.escape("'" * 256 * 1024) }.join
-      }.should_not raise_error(SystemStackError)
+      }.not_to raise_error
     end
 
     it "should not overflow the process stack" do
-      lambda {
+      expect {
         Thread.new { Mysql2::Client.escape("'" * 1024 * 1024 * 4) }.join
-      }.should_not raise_error(SystemStackError)
+      }.not_to raise_error
     end
 
     unless RUBY_VERSION =~ /1.8/
       it "should carry over the original string's encoding" do
         str = "abc'def\"ghi\0jkl%mno"
         escaped = Mysql2::Client.escape(str)
-        escaped.encoding.should eql(str.encoding)
+        expect(escaped.encoding).to eql(str.encoding)
 
         str.encode!('us-ascii')
         escaped = Mysql2::Client.escape(str)
-        escaped.encoding.should eql(str.encoding)
+        expect(escaped.encoding).to eql(str.encoding)
       end
     end
   end
 
   it "should respond to #escape" do
-    @client.should respond_to(:escape)
+    expect(@client).to respond_to(:escape)
   end
 
   context "#escape" do
     it "should return a new SQL-escape version of the passed string" do
-      @client.escape("abc'def\"ghi\0jkl%mno").should eql("abc\\'def\\\"ghi\\0jkl%mno")
+      expect(@client.escape("abc'def\"ghi\0jkl%mno")).to eql("abc\\'def\\\"ghi\\0jkl%mno")
     end
 
     it "should return the passed string if nothing was escaped" do
       str = "plain"
-      @client.escape(str).object_id.should eql(str.object_id)
+      expect(@client.escape(str).object_id).to eql(str.object_id)
     end
 
     it "should not overflow the thread stack" do
-      lambda {
+      expect {
         Thread.new { @client.escape("'" * 256 * 1024) }.join
-      }.should_not raise_error(SystemStackError)
+      }.not_to raise_error
     end
 
     it "should not overflow the process stack" do
-      lambda {
+      expect {
         Thread.new { @client.escape("'" * 1024 * 1024 * 4) }.join
-      }.should_not raise_error(SystemStackError)
+      }.not_to raise_error
     end
 
     it "should require an open connection" do
       @client.close
-      lambda {
+      expect {
         @client.escape ""
-      }.should raise_error(Mysql2::Error)
+      }.to raise_error(Mysql2::Error)
     end
   end
 
   it "should respond to #info" do
-    @client.should respond_to(:info)
+    expect(@client).to respond_to(:info)
   end
 
   it "#info should return a hash containing the client version ID and String" do
     info = @client.info
-    info.class.should eql(Hash)
-    info.should have_key(:id)
-    info[:id].class.should eql(Fixnum)
-    info.should have_key(:version)
-    info[:version].class.should eql(String)
+    expect(info.class).to eql(Hash)
+    expect(info).to have_key(:id)
+    expect(info[:id].class).to eql(Fixnum)
+    expect(info).to have_key(:version)
+    expect(info[:version].class).to eql(String)
   end
 
-  if defined? Encoding
-    context "strings returned by #info" do
-      it "should default to the connection's encoding if Encoding.default_internal is nil" do
-        with_internal_encoding nil do
-          @client.info[:version].encoding.should eql(Encoding.find('utf-8'))
+  context "strings returned by #info" do
+    before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          client2.info[:version].encoding.should eql(Encoding.find('us-ascii'))
-        end
+    it "should default to the connection's encoding if Encoding.default_internal is nil" do
+      with_internal_encoding nil do
+        expect(@client.info[:version].encoding).to eql(Encoding::UTF_8)
+
+        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+        expect(client2.info[:version].encoding).to eql(Encoding::ASCII)
+      end
+    end
+
+    it "should use Encoding.default_internal" do
+      with_internal_encoding Encoding::UTF_8 do
+        expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
       end
 
-      it "should use Encoding.default_internal" do
-        with_internal_encoding 'utf-8' do
-          @client.info[:version].encoding.should eql(Encoding.default_internal)
-        end
-
-        with_internal_encoding 'us-ascii' do
-          @client.info[:version].encoding.should eql(Encoding.default_internal)
-        end
+      with_internal_encoding Encoding::ASCII do
+        expect(@client.info[:version].encoding).to eql(Encoding.default_internal)
       end
     end
   end
 
   it "should respond to #server_info" do
-    @client.should respond_to(:server_info)
+    expect(@client).to respond_to(:server_info)
   end
 
   it "#server_info should return a hash containing the client version ID and String" do
     server_info = @client.server_info
-    server_info.class.should eql(Hash)
-    server_info.should have_key(:id)
-    server_info[:id].class.should eql(Fixnum)
-    server_info.should have_key(:version)
-    server_info[:version].class.should eql(String)
+    expect(server_info.class).to eql(Hash)
+    expect(server_info).to have_key(:id)
+    expect(server_info[:id].class).to eql(Fixnum)
+    expect(server_info).to have_key(:version)
+    expect(server_info[:version].class).to eql(String)
   end
 
   it "#server_info should require an open connection" do
     @client.close
-    lambda {
+    expect {
       @client.server_info
-    }.should raise_error(Mysql2::Error)
+    }.to raise_error(Mysql2::Error)
   end
 
-  if defined? Encoding
-    context "strings returned by #server_info" do
-      it "should default to the connection's encoding if Encoding.default_internal is nil" do
-        with_internal_encoding nil do
-          @client.server_info[:version].encoding.should eql(Encoding.find('utf-8'))
+  context "strings returned by #server_info" do
+    before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          client2.server_info[:version].encoding.should eql(Encoding.find('us-ascii'))
-        end
+    it "should default to the connection's encoding if Encoding.default_internal is nil" do
+      with_internal_encoding nil do
+        expect(@client.server_info[:version].encoding).to eql(Encoding::UTF_8)
+
+        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+        expect(client2.server_info[:version].encoding).to eql(Encoding::ASCII)
+      end
+    end
+
+    it "should use Encoding.default_internal" do
+      with_internal_encoding Encoding::UTF_8 do
+        expect(@client.server_info[:version].encoding).to eql(Encoding.default_internal)
       end
 
-      it "should use Encoding.default_internal" do
-        with_internal_encoding 'utf-8' do
-          @client.server_info[:version].encoding.should eql(Encoding.default_internal)
-        end
-
-        with_internal_encoding 'us-ascii' do
-          @client.server_info[:version].encoding.should eql(Encoding.default_internal)
-        end
+      with_internal_encoding Encoding::ASCII do
+        expect(@client.server_info[:version].encoding).to eql(Encoding.default_internal)
       end
     end
   end
 
   it "should raise a Mysql2::Error exception upon connection failure" do
-    lambda {
+    expect {
       Mysql2::Client.new :host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42'
-    }.should raise_error(Mysql2::Error)
+    }.to raise_error(Mysql2::Error)
 
-    lambda {
+    expect {
       Mysql2::Client.new DatabaseCredentials['root']
-    }.should_not raise_error(Mysql2::Error)
+    }.not_to raise_error
   end
 
   context 'write operations api' do
@@ -798,46 +795,46 @@ describe Mysql2::Client do
     end
 
     it "should respond to #last_id" do
-      @client.should respond_to(:last_id)
+      expect(@client).to respond_to(:last_id)
     end
 
     it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
-      @client.last_id.should eql(0)
+      expect(@client.last_id).to eql(0)
       @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
-      @client.last_id.should eql(1)
+      expect(@client.last_id).to eql(1)
     end
 
     it "should respond to #last_id" do
-      @client.should respond_to(:last_id)
+      expect(@client).to respond_to(:last_id)
     end
 
     it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
       @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
-      @client.affected_rows.should eql(1)
+      expect(@client.affected_rows).to eql(1)
       @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
-      @client.affected_rows.should eql(1)
+      expect(@client.affected_rows).to eql(1)
     end
 
     it "#last_id should handle BIGINT auto-increment ids above 32 bits" do
       # The id column type must be BIGINT. Surprise: INT(x) is limited to 32-bits for all values of x.
       # Insert a row with a given ID, this should raise the auto-increment state
       @client.query "INSERT INTO lastIdTest (id, blah) VALUES (5000000000, 5000)"
-      @client.last_id.should eql(5000000000)
+      expect(@client.last_id).to eql(5000000000)
       @client.query "INSERT INTO lastIdTest (blah) VALUES (5001)"
-      @client.last_id.should eql(5000000001)
+      expect(@client.last_id).to eql(5000000001)
     end
   end
 
   it "should respond to #thread_id" do
-    @client.should respond_to(:thread_id)
+    expect(@client).to respond_to(:thread_id)
   end
 
   it "#thread_id should be a Fixnum" do
-    @client.thread_id.class.should eql(Fixnum)
+    expect(@client.thread_id.class).to eql(Fixnum)
   end
 
   it "should respond to #ping" do
-    @client.should respond_to(:ping)
+    expect(@client).to respond_to(:ping)
   end
 
   context "select_db" do
@@ -856,38 +853,38 @@ describe Mysql2::Client do
     end
 
     it "should respond to #select_db" do
-      @client.should respond_to(:select_db)
+      expect(@client).to respond_to(:select_db)
     end
 
     it "should switch databases" do
       @client.select_db("test_selectdb_0")
-      @client.query("SHOW TABLES").first.values.first.should eql("test0")
+      expect(@client.query("SHOW TABLES").first.values.first).to eql("test0")
       @client.select_db("test_selectdb_1")
-      @client.query("SHOW TABLES").first.values.first.should eql("test1")
+      expect(@client.query("SHOW TABLES").first.values.first).to eql("test1")
       @client.select_db("test_selectdb_0")
-      @client.query("SHOW TABLES").first.values.first.should eql("test0")
+      expect(@client.query("SHOW TABLES").first.values.first).to eql("test0")
     end
 
     it "should raise a Mysql2::Error when the database doesn't exist" do
-      lambda {
+      expect {
         @client.select_db("nopenothere")
-      }.should raise_error(Mysql2::Error)
+      }.to raise_error(Mysql2::Error)
     end
 
     it "should return the database switched to" do
-      @client.select_db("test_selectdb_1").should eq("test_selectdb_1")
+      expect(@client.select_db("test_selectdb_1")).to eq("test_selectdb_1")
     end
   end
 
   it "#thread_id should return a boolean" do
-    @client.ping.should eql(true)
+    expect(@client.ping).to eql(true)
     @client.close
-    @client.ping.should eql(false)
+    expect(@client.ping).to eql(false)
   end
 
   unless RUBY_VERSION =~ /1.8/
     it "should respond to #encoding" do
-      @client.should respond_to(:encoding)
+      expect(@client).to respond_to(:encoding)
     end
   end
 end

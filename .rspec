@@ -1,3 +1,4 @@
---format documentation
 --colour
---fail-fast
+--format documentation
+--order rand
+--warnings

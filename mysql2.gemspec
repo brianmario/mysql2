@@ -13,9 +13,4 @@ Gem::Specification.new do |s|
 
   s.files = `git ls-files README.md CHANGELOG.md LICENSE ext lib support`.split
   s.test_files = `git ls-files spec examples`.split
-
-  # tests
-  s.add_development_dependency 'rake-compiler', '~> 0.9.5'
-  s.add_development_dependency 'rake', '~> 0.9.3'
-  s.add_development_dependency 'rspec', '~> 2.8.0'
 end

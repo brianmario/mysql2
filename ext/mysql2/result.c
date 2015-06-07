@@ -59,7 +59,7 @@ typedef struct {
   int streaming;
   ID db_timezone;
   ID app_timezone;
-  int block_given;
+  VALUE block_given;
 } result_each_args;
 
 VALUE cBigDecimal, cDateTime, cDate;
@@ -220,7 +220,7 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
  */
 static unsigned int msec_char_to_uint(char *msec_char, size_t len)
 {
-  int i;
+  size_t i;
   for (i = 0; i < (len - 1); i++) {
     if (msec_char[i] == '\0') {
       msec_char[i] = '0';
@@ -346,8 +346,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   }
 
   {
-    int r = (int)rb_thread_call_without_gvl(nogvl_stmt_fetch, wrapper->stmt, RUBY_UBF_IO, 0);
-    switch(r) {
+    switch((uintptr_t)rb_thread_call_without_gvl(nogvl_stmt_fetch, wrapper->stmt, RUBY_UBF_IO, 0)) {
       case 0:
         /* success */
         break;
@@ -849,7 +848,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
-  VALUE defaults, opts, block;
+  VALUE defaults, opts, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone, dbTz, appTz;
   mysql2_result_wrapper * wrapper;
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
@@ -922,7 +921,6 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   args.app_timezone = app_timezone;
   args.block_given = block;
 
-  VALUE (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   if (wrapper->stmt) {
     fetch_row_func = rb_mysql_result_fetch_row_stmt;
   } else {

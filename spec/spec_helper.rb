@@ -7,13 +7,20 @@ require 'yaml'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.configure do |config|
+  config.disable_monkey_patching!
+
   def with_internal_encoding(encoding)
     old_enc = Encoding.default_internal
+    old_verbose = $VERBOSE
+    $VERBOSE = nil
     Encoding.default_internal = encoding
+    $VERBOSE = old_verbose
 
     yield
   ensure
+    $VERBOSE = nil
     Encoding.default_internal = old_enc
+    $VERBOSE = old_verbose
   end
 
   config.before :each do

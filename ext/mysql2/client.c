@@ -322,8 +322,7 @@ static VALUE rb_mysql_info(VALUE self) {
 
 static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
-  time_t start_time, end_time;
-  unsigned int elapsed_time, connect_timeout;
+  time_t start_time, end_time, elapsed_time, connect_timeout;
   VALUE rv;
   GET_CLIENT(self);
 
@@ -489,7 +488,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   }
 
   current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
-  RB_GC_GUARD(current);
+  (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, NULL);
 
@@ -603,7 +602,7 @@ void rb_mysql_client_set_active_thread(VALUE self) {
     const char *thr = StringValueCStr(inspect);
 
     rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
-    RB_GC_GUARD(inspect);
+    (void)RB_GC_GUARD(inspect);
   }
 }
 
@@ -653,7 +652,7 @@ static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
 
-  RB_GC_GUARD(current);
+  (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   rb_iv_set(self, "@current_query_options", current);
 
@@ -1060,7 +1059,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   }
 
   current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
-  RB_GC_GUARD(current);
+  (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, NULL);
 
@@ -1131,7 +1130,6 @@ static VALUE set_write_timeout(VALUE self, VALUE value) {
 static VALUE set_charset_name(VALUE self, VALUE value) {
   char *charset_name;
 #ifdef HAVE_RUBY_ENCODING_H
-  size_t charset_name_len;
   const struct mysql2_mysql_enc_name_to_rb_map *mysql2rb;
   rb_encoding *enc;
   VALUE rb_enc;
@@ -1141,8 +1139,7 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
   charset_name = RSTRING_PTR(value);
 
 #ifdef HAVE_RUBY_ENCODING_H
-  charset_name_len = RSTRING_LEN(value);
-  mysql2rb = mysql2_mysql_enc_name_to_rb(charset_name, charset_name_len);
+  mysql2rb = mysql2_mysql_enc_name_to_rb(charset_name, (unsigned int)RSTRING_LEN(value));
   if (mysql2rb == NULL || mysql2rb->rb_name == NULL) {
     VALUE inspect = rb_inspect(value);
     rb_raise(cMysql2Error, "Unsupported charset: '%s'", RSTRING_PTR(inspect));

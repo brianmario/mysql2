@@ -2,8 +2,11 @@
 
 module Mysql2
   class Error < StandardError
-    REPLACEMENT_CHAR = '?'
-    ENCODE_OPTS      = {:undef => :replace, :invalid => :replace, :replace => REPLACEMENT_CHAR}
+    ENCODE_OPTS = {
+      :undef => :replace,
+      :invalid => :replace,
+      :replace => '?'.freeze,
+    }.freeze
 
     attr_accessor :error_number
     attr_reader   :sql_state
@@ -20,7 +23,7 @@ module Mysql2
     end
 
     def sql_state=(state)
-      @sql_state = ''.respond_to?(:encode) ? state.encode(ENCODE_OPTS) : state
+      @sql_state = state.respond_to?(:encode) ? state.encode(ENCODE_OPTS) : state
     end
 
     private
@@ -53,27 +56,12 @@ module Mysql2
     #
     # Returns a valid UTF-8 string in Ruby 1.9+, the original string on Ruby 1.8
     def clean_message(message)
-      return message if !message.respond_to?(:encoding)
+      return message unless message.respond_to?(:encode)
 
       if @server_version && @server_version > 50500
         message.encode(ENCODE_OPTS)
       else
-        if message.respond_to? :scrub
-          message.scrub(REPLACEMENT_CHAR).encode(ENCODE_OPTS)
-        else
-          # This is ugly as hell but Ruby 1.9 doesn't provide a way to clean a string
-          # and retain it's valid UTF-8 characters, that I know of.
-
-          new_message = "".force_encoding(Encoding::UTF_8)
-          message.chars.each do |char|
-            if char.valid_encoding?
-              new_message << char
-            else
-              new_message << REPLACEMENT_CHAR
-            end
-          end
-          new_message.encode(ENCODE_OPTS)
-        end
+        message.encode(Encoding::UTF_8, ENCODE_OPTS)
       end
     end
   end

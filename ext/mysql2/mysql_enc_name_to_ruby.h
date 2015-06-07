@@ -1,4 +1,4 @@
-/* C code produced by gperf version 3.0.3 */
+/* C code produced by gperf version 3.0.4 */
 /* Command-line: gperf  */
 /* Computed positions: -k'1,3,$' */
 
@@ -40,9 +40,9 @@ inline
 #endif
 #endif
 static unsigned int
-mysql2_mysql_enc_name_to_rb_hash(str, len)
+mysql2_mysql_enc_name_to_rb_hash (str, len)
      register const char *str;
-     register const unsigned int len;
+     register unsigned int len;
 {
   static const unsigned char asso_values[] =
     {
@@ -78,14 +78,14 @@ mysql2_mysql_enc_name_to_rb_hash(str, len)
 
 #ifdef __GNUC__
 __inline
-#ifdef __GNUC_STDC_INLINE__
+#if defined __GNUC_STDC_INLINE__ || defined __GNUC_GNU_INLINE__
 __attribute__ ((__gnu_inline__))
 #endif
 #endif
 const struct mysql2_mysql_enc_name_to_rb_map *
-mysql2_mysql_enc_name_to_rb(str, len)
+mysql2_mysql_enc_name_to_rb (str, len)
      register const char *str;
-     register const unsigned int len;
+     register unsigned int len;
 {
   enum
     {
@@ -154,9 +154,9 @@ mysql2_mysql_enc_name_to_rb(str, len)
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
     {
-      register const unsigned int key = mysql2_mysql_enc_name_to_rb_hash(str, len);
+      register int key = mysql2_mysql_enc_name_to_rb_hash (str, len);
 
-      if (key <= MAX_HASH_VALUE)
+      if (key <= MAX_HASH_VALUE && key >= 0)
         {
           register const char *s = wordlist[key].name;
 

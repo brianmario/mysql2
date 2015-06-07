@@ -45,7 +45,7 @@ Benchmark.ips do |x|
   mysql2.query "USE #{database}"
   x.report "Mysql2" do
     mysql2_result = mysql2.query sql, :symbolize_keys => true
-    mysql2_result.each { |res| puts res.inspect } if debug
+    mysql2_result.each { |res| puts res.inspect if debug }
   end
 
   mysql = Mysql.new("localhost", "root")
@@ -65,7 +65,7 @@ Benchmark.ips do |x|
   command = do_mysql.create_command sql
   x.report "do_mysql" do
     do_result = command.execute_reader
-    do_result.each { |res| puts res.inspect } if debug
+    do_result.each { |res| puts res.inspect if debug }
   end
 
   x.compare!

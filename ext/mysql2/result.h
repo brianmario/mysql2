@@ -1,7 +1,7 @@
 #ifndef MYSQL2_RESULT_H
 #define MYSQL2_RESULT_H
 
-void init_mysql2_result();
+void init_mysql2_result(void);
 VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement);
 
 typedef struct {

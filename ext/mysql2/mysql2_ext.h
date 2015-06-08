@@ -1,17 +1,13 @@
 #ifndef MYSQL2_EXT
 #define MYSQL2_EXT
 
+void Init_mysql2(void);
+
 /* tell rbx not to use it's caching compat layer
    by doing this we're making a promise to RBX that
    we'll never modify the pointers we get back from RSTRING_PTR */
 #define RSTRING_NOT_MODIFIED
 #include <ruby.h>
-
-#ifndef HAVE_UINT
-#define HAVE_UINT
-typedef unsigned short    ushort;
-typedef unsigned int    uint;
-#endif
 
 #ifdef HAVE_MYSQL_H
 #include <mysql.h>

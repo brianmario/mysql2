@@ -56,7 +56,7 @@ mysql2_local_infile_init(void **ptr, const char *filename, void *userdata)
  * < 0   error
  */
 static int
-mysql2_local_infile_read(void *ptr, char *buf, uint buf_len)
+mysql2_local_infile_read(void *ptr, char *buf, unsigned int buf_len)
 {
   int count;
   mysql2_local_infile_data *data = (mysql2_local_infile_data *)ptr;
@@ -95,7 +95,7 @@ mysql2_local_infile_end(void *ptr)
  * Error message number (see http://dev.mysql.com/doc/refman/5.0/en/error-messages-client.html)
  */
 static int
-mysql2_local_infile_error(void *ptr, char *error_msg, uint error_msg_len)
+mysql2_local_infile_error(void *ptr, char *error_msg, unsigned int error_msg_len)
 {
   mysql2_local_infile_data *data = (mysql2_local_infile_data *) ptr;
 

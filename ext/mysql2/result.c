@@ -140,7 +140,7 @@ static void *nogvl_stmt_fetch(void *ptr) {
 }
 
 
-static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
+static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbolize_keys) {
   mysql2_result_wrapper * wrapper;
   VALUE rb_field;
   GetMysql2Result(self, wrapper);
@@ -491,7 +491,6 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         default:
           rb_raise(cMysql2Error, "unhandled buffer type: %d",
               result_buffer->buffer_type);
-          break;
       }
     }
 

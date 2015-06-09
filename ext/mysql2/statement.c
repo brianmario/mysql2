@@ -363,7 +363,6 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   {
     mysql2_result_wrapper *result_wrapper;
 
-    GET_CLIENT(stmt_wrapper->client);
     GetMysql2Result(resultObj, result_wrapper);
     result_wrapper->encoding = wrapper->encoding;
   }

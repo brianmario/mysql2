@@ -3,7 +3,7 @@
 
 extern VALUE cMysql2Statement;
 
-void init_mysql2_statement();
+void init_mysql2_statement(void);
 
 typedef struct {
   VALUE client;

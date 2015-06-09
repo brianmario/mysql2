@@ -1,7 +1,7 @@
 #ifndef MYSQL2_RESULT_H
 #define MYSQL2_RESULT_H
 
-void init_mysql2_result();
+void init_mysql2_result(void);
 VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, MYSQL_STMT * s);
 
 typedef struct {
@@ -9,8 +9,8 @@ typedef struct {
   VALUE rows;
   VALUE client;
   VALUE encoding;
-  unsigned int numberOfFields;
-  unsigned long numberOfRows;
+  my_ulonglong numberOfFields;
+  my_ulonglong numberOfRows;
   unsigned long lastRowProcessed;
   char is_streaming;
   char streamingComplete;

@@ -59,7 +59,6 @@ typedef struct {
 void rb_mysql_client_set_active_thread(VALUE self);
 
 #define MARK_CONN_INACTIVE(conn) do {\
-    GET_CLIENT(conn); \
     wrapper->active_thread = Qnil; \
   } while(0)
 
@@ -67,7 +66,7 @@ void rb_mysql_client_set_active_thread(VALUE self);
   mysql_client_wrapper *wrapper; \
   Data_Get_Struct(self, mysql_client_wrapper, wrapper);
 
-void init_mysql2_client();
+void init_mysql2_client(void);
 void decr_mysql2_client(mysql_client_wrapper *wrapper);
 
 #endif

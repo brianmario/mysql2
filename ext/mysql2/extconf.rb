@@ -75,110 +75,120 @@ else
   inc, lib = dir_config('mysql', '/usr/local')
   libs = ['m', 'z', 'socket', 'nsl', 'mygcc']
   found = false
-  while not find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql") do
-      exit 1 if libs.empty?
-      found ||= have_library(libs.shift)
-    end
-
-    asplode("mysql client") unless found
-
-    rpath_dir = lib
+  while not find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql")
+    exit 1 if libs.empty?
+    found ||= have_library(libs.shift)
   end
 
-  if have_header('mysql.h')
-    prefix = nil
-  elsif have_header('mysql/mysql.h')
-    prefix = 'mysql'
+  asplode("mysql client") unless found
+
+  rpath_dir = lib
+end
+
+if have_header('mysql.h')
+  prefix = nil
+elsif have_header('mysql/mysql.h')
+  prefix = 'mysql'
+else
+  asplode 'mysql.h'
+end
+
+%w{ errmsg.h mysqld_error.h }.each do |h|
+  header = [prefix, h].compact.join '/'
+  asplode h unless have_header h
+end
+
+# This is our wishlist. We use whichever flags work on the host.
+# -Wall and -Wextra are included by default.
+[
+  '-fsanitize=address',
+  '-fsanitize=cfi',
+  '-fsanitize=integer',
+  '-fsanitize=memory',
+  '-fsanitize=thread',
+  '-fsanitize=undefined',
+  '-Werror',
+  '-Weverything',
+  '-Wno-bad-function-cast', # rb_thread_call_without_gvl returns void * that we cast to VALUE
+  '-Wno-conditional-uninitialized', # false positive in client.c
+  '-Wno-covered-switch-default', # result.c -- enum_field_types (when fully covered, e.g. mysql 5.5)
+  '-Wno-declaration-after-statement', # GET_CLIENT followed by GET_STATEMENT in statement.c
+  '-Wno-disabled-macro-expansion', # rubby :(
+  '-Wno-documentation-unknown-command', # rubby :(
+  '-Wno-missing-field-initializers', # gperf generates bad code
+  '-Wno-missing-variable-declarations', # missing symbols due to ruby native ext initialization
+  '-Wno-padded', # mysql :(
+  '-Wno-sign-conversion', # gperf generates bad code
+  '-Wno-static-in-inline', # gperf generates bad code
+  '-Wno-switch-enum', # result.c -- enum_field_types (when not fully covered, e.g. mysql 5.6+)
+  '-Wno-unused-function', # Init_mysql2
+  '-Wno-used-but-marked-unused', # rubby :(
+].select { |flag| try_link('int main() {return 0;}', flag) }.each do |flag|
+  $CFLAGS << ' ' << flag
+end
+
+if RUBY_PLATFORM =~ /mswin|mingw/
+  # Build libmysql.a interface link library
+  require 'rake'
+
+  # Build libmysql.a interface link library
+  # Use rake to rebuild only if these files change
+  deffile = File.expand_path('../../../support/libmysql.def', __FILE__)
+  libfile = File.expand_path(File.join(rpath_dir, 'libmysql.lib'))
+  file 'libmysql.a' => [deffile, libfile] do |t|
+    when_writing 'building libmysql.a' do
+      # Ruby kindly shows us where dllwrap is, but that tool does more than we want.
+      # Maybe in the future Ruby could provide RbConfig::CONFIG['DLLTOOL'] directly.
+      dlltool = RbConfig::CONFIG['DLLWRAP'].gsub('dllwrap', 'dlltool')
+      sh dlltool, '--kill-at',
+        '--dllname', 'libmysql.dll',
+        '--output-lib', 'libmysql.a',
+        '--input-def', deffile, libfile
+    end
+  end
+
+  Rake::Task['libmysql.a'].invoke
+  $LOCAL_LIBS << ' ' << 'libmysql.a'
+
+  # Make sure the generated interface library works (if cross-compiling, trust without verifying)
+  unless RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
+    abort "-----\nCannot find libmysql.a\n----" unless have_library('libmysql')
+    abort "-----\nCannot link to libmysql.a (my_init)\n----" unless have_func('my_init')
+  end
+
+  # Vendor libmysql.dll
+  vendordir = File.expand_path('../../../vendor/', __FILE__)
+  directory vendordir
+
+  vendordll = File.join(vendordir, 'libmysql.dll')
+  dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
+  file vendordll => [dllfile, vendordir] do |t|
+    when_writing 'copying libmysql.dll' do
+      cp dllfile, vendordll
+    end
+  end
+
+  # Copy libmysql.dll to the local vendor directory by default
+  if arg_config('--no-vendor-libmysql')
+    # Fine, don't.
+    puts "--no-vendor-libmysql"
+  else # Default: arg_config('--vendor-libmysql')
+    # Let's do it!
+    Rake::Task[vendordll].invoke
+  end
+else
+  case explicit_rpath = with_config('mysql-rpath')
+  when true
+    abort "-----\nOption --with-mysql-rpath must have an argument\n-----"
+  when false
+    warn "-----\nOption --with-mysql-rpath has been disabled at your request\n-----"
+  when String
+    # The user gave us a value so use it
+    rpath_flags = " -Wl,-rpath,#{explicit_rpath}"
+    warn "-----\nSetting mysql rpath to #{explicit_rpath}\n-----"
+    $LDFLAGS << rpath_flags
   else
-    asplode 'mysql.h'
-  end
-
-  %w{ errmsg.h mysqld_error.h }.each do |h|
-    header = [prefix, h].compact.join '/'
-    asplode h unless have_header h
-  end
-
-  # This is our wishlist. We use whichever flags work on the host.
-  # -Wall and -Wextra are included by default.
-  # TODO: fix statement.c and remove -Wno-error=declaration-after-statement
-  %w(
-    -Werror
-    -Weverything
-    -fsanitize=address
-    -fsanitize=integer
-    -fsanitize=thread
-    -fsanitize=memory
-    -fsanitize=undefined
-    -fsanitize=cfi
-    -Wno-error=declaration-after-statement
-  ).each do |flag|
-    if try_link('int main() {return 0;}', flag)
-      $CFLAGS << ' ' << flag
-    end
-  end
-
-  if RUBY_PLATFORM =~ /mswin|mingw/
-    # Build libmysql.a interface link library
-    require 'rake'
-
-    # Build libmysql.a interface link library
-    # Use rake to rebuild only if these files change
-    deffile = File.expand_path('../../../support/libmysql.def', __FILE__)
-    libfile = File.expand_path(File.join(rpath_dir, 'libmysql.lib'))
-    file 'libmysql.a' => [deffile, libfile] do |t|
-      when_writing 'building libmysql.a' do
-        # Ruby kindly shows us where dllwrap is, but that tool does more than we want.
-        # Maybe in the future Ruby could provide RbConfig::CONFIG['DLLTOOL'] directly.
-        dlltool = RbConfig::CONFIG['DLLWRAP'].gsub('dllwrap', 'dlltool')
-        sh dlltool, '--kill-at',
-          '--dllname', 'libmysql.dll',
-          '--output-lib', 'libmysql.a',
-          '--input-def', deffile, libfile
-      end
-    end
-
-    Rake::Task['libmysql.a'].invoke
-    $LOCAL_LIBS << ' ' << 'libmysql.a'
-
-    # Make sure the generated interface library works (if cross-compiling, trust without verifying)
-    unless RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
-      abort "-----\nCannot find libmysql.a\n----" unless have_library('libmysql')
-      abort "-----\nCannot link to libmysql.a (my_init)\n----" unless have_func('my_init')
-    end
-
-    # Vendor libmysql.dll
-    vendordir = File.expand_path('../../../vendor/', __FILE__)
-    directory vendordir
-
-    vendordll = File.join(vendordir, 'libmysql.dll')
-    dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
-    file vendordll => [dllfile, vendordir] do |t|
-      when_writing 'copying libmysql.dll' do
-        cp dllfile, vendordll
-      end
-    end
-
-    # Copy libmysql.dll to the local vendor directory by default
-    if arg_config('--no-vendor-libmysql')
-      # Fine, don't.
-      puts "--no-vendor-libmysql"
-    else # Default: arg_config('--vendor-libmysql')
-      # Let's do it!
-      Rake::Task[vendordll].invoke
-    end
-  else
-    case explicit_rpath = with_config('mysql-rpath')
-    when true
-      abort "-----\nOption --with-mysql-rpath must have an argument\n-----"
-    when false
-      warn "-----\nOption --with-mysql-rpath has been disabled at your request\n-----"
-    when String
-      # The user gave us a value so use it
-      rpath_flags = " -Wl,-rpath,#{explicit_rpath}"
-      warn "-----\nSetting mysql rpath to #{explicit_rpath}\n-----"
-      $LDFLAGS << rpath_flags
-    else
-      if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
+    if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
       rpath_flags = " -Wl,-rpath,#{libdir}"
       if RbConfig::CONFIG["RPATHFLAG"].to_s.empty? && try_link('int main() {return 0;}', rpath_flags)
         # Usually Ruby sets RPATHFLAG the right way for each system, but not on OS X.

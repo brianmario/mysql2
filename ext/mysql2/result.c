@@ -1,7 +1,5 @@
 #include <mysql2_ext.h>
 
-#include <stdint.h>
-
 #include "mysql_enc_to_ruby.h"
 
 #ifdef HAVE_RUBY_ENCODING_H
@@ -746,7 +744,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  if (RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
+  if ((my_ulonglong)RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
       rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     }

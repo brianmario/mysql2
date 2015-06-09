@@ -9,8 +9,8 @@ typedef struct {
   VALUE rows;
   VALUE client;
   VALUE encoding;
-  unsigned int numberOfFields;
-  unsigned long numberOfRows;
+  my_ulonglong numberOfFields;
+  my_ulonglong numberOfRows;
   unsigned long lastRowProcessed;
   char is_streaming;
   char streamingComplete;

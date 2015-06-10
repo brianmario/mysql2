@@ -349,7 +349,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
         /* avoid an early timeout due to time truncating milliseconds off the start time */
         if (elapsed_time > 0)
           elapsed_time--;
-        if (elapsed_time >= wrapper->connect_timeout)
+        if (elapsed_time >= (time_t)wrapper->connect_timeout)
           break;
         connect_timeout = wrapper->connect_timeout - elapsed_time;
         mysql_options(wrapper->client, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout);

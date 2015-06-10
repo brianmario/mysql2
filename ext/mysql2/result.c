@@ -747,7 +747,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  if (RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
+  if ((unsigned)RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
       rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     }

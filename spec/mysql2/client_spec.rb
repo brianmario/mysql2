@@ -173,8 +173,9 @@ RSpec.describe Mysql2::Client do
     expect(final_count).to eq(before_count)
   end
 
-
   it "should not close connections when running in a child process" do
+    pending("fork is not available on this platform") unless Process.respond_to?(:fork)
+
     run_gc
     client = Mysql2::Client.new(DatabaseCredentials['root'])
 

@@ -881,14 +881,10 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
  * Return the file descriptor number for this client.
  */
 static VALUE rb_mysql_client_socket(VALUE self) {
-  GET_CLIENT(self);
 #ifndef _WIN32
-  {
-    int fd_set_fd;
-    REQUIRE_CONNECTED(wrapper);
-    fd_set_fd = wrapper->client->net.fd;
-    return INT2NUM(fd_set_fd);
-  }
+  GET_CLIENT(self);
+  REQUIRE_CONNECTED(wrapper);
+  return INT2NUM(wrapper->client->net.fd);
 #else
   rb_raise(cMysql2Error, "Raw access to the mysql file descriptor isn't supported on Windows");
 #endif

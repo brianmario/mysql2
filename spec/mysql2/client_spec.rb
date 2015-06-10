@@ -64,12 +64,13 @@ RSpec.describe Mysql2::Client do
       end
     end
     client = klient.new
-    expect(client.connect_args.last[6] & (Mysql2::Client::REMEMBER_OPTIONS |
-                                     Mysql2::Client::LONG_PASSWORD |
-                                     Mysql2::Client::LONG_FLAG |
-                                     Mysql2::Client::TRANSACTIONS |
-                                     Mysql2::Client::PROTOCOL_41 |
-                                     Mysql2::Client::SECURE_CONNECTION)).to be > 0
+    client_flags = Mysql2::Client::REMEMBER_OPTIONS |
+                   Mysql2::Client::LONG_PASSWORD |
+                   Mysql2::Client::LONG_FLAG |
+                   Mysql2::Client::TRANSACTIONS |
+                   Mysql2::Client::PROTOCOL_41 |
+                   Mysql2::Client::SECURE_CONNECTION
+    expect(client.connect_args.last[6]).to eql(client_flags)
   end
 
   it "should execute init command" do

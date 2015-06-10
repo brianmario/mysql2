@@ -65,11 +65,20 @@ class Platform
   end
 
   def configure_compiler
-    # These gcc style flags are also supported by clang and xcode compilers,
-    # so we'll use a does-it-work test instead of an is-it-gcc test.
-    gcc_flags = ' -Wall -funroll-loops'
-    if try_link('int main() {return 0;}', gcc_flags)
-      $CFLAGS << gcc_flags
+    # This is our wishlist. We use whichever flags work on the host.
+    # TODO: fix statement.c and remove -Wno-declaration-after-statement
+    # TODO: fix gperf mysql_enc_name_to_ruby.h and remove -Wno-missing-field-initializers
+    %w(
+      -Wall
+      -Wextra
+      -Werror
+      -Wno-unused-function
+      -Wno-declaration-after-statement
+      -Wno-missing-field-initializers
+    ).select do |flag|
+      try_link('int main() {return 0;}', flag)
+    end.each do |flag|
+      $CFLAGS << ' ' << flag
     end
   end
 

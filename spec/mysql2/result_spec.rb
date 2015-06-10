@@ -6,6 +6,14 @@ RSpec.describe Mysql2::Result do
     @result = @client.query "SELECT 1"
   end
 
+  it "should raise a TypeError exception when it doesn't wrap a result set" do
+    r = Mysql2::Result.new
+    expect { r.count }.to raise_error(TypeError)
+    expect { r.fields }.to raise_error(TypeError)
+    expect { r.size }.to raise_error(TypeError)
+    expect { r.each }.to raise_error(TypeError)
+  end
+
   it "should have included Enumerable" do
     expect(Mysql2::Result.ancestors.include?(Enumerable)).to be true
   end

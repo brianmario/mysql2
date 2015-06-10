@@ -25,6 +25,4 @@ typedef struct {
   unsigned long *length;
 } mysql2_result_wrapper;
 
-#define GetMysql2Result(obj, sval) (sval = (mysql2_result_wrapper*)DATA_PTR(obj));
-
 #endif

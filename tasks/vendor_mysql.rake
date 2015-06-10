@@ -1,7 +1,7 @@
 require 'rake/clean'
 require 'rake/extensioncompiler'
 
-CONNECTOR_VERSION = "6.1.5" # NOTE: Track the upstream version from time to time
+CONNECTOR_VERSION = "6.1.6" # NOTE: Track the upstream version from time to time
 
 def vendor_mysql_platform(platform=nil)
   platform ||= RUBY_PLATFORM

@@ -99,22 +99,19 @@ end
 end
 
 # This is our wishlist. We use whichever flags work on the host.
-# -Wall and -Wextra are included by default.
-# TODO: fix statement.c and remove -Wno-error=declaration-after-statement
+# TODO: fix statement.c and remove -Wno-declaration-after-statement
+# TODO: fix gperf mysql_enc_name_to_ruby.h and remove -Wno-missing-field-initializers
 %w(
+  -Wall
+  -Wextra
   -Werror
-  -Weverything
-  -fsanitize=address
-  -fsanitize=integer
-  -fsanitize=thread
-  -fsanitize=memory
-  -fsanitize=undefined
-  -fsanitize=cfi
-  -Wno-error=declaration-after-statement
-).each do |flag|
-  if try_link('int main() {return 0;}', flag)
-    $CFLAGS << ' ' << flag
-  end
+  -Wno-unused-function
+  -Wno-declaration-after-statement
+  -Wno-missing-field-initializers
+).select do |flag|
+  try_link('int main() {return 0;}', flag)
+end.each do |flag|
+  $CFLAGS << ' ' << flag
 end
 
 if RUBY_PLATFORM =~ /mswin|mingw/

@@ -478,6 +478,10 @@ RSpec.describe Mysql2::Client do
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
+          if RUBY_PLATFORM.include?('darwin') && Mysql2::Client.info.fetch(:version).start_with?('5.5')
+            pending('libmysqlclient 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
+          end
+
           client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
@@ -485,6 +489,10 @@ RSpec.describe Mysql2::Client do
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction" do
+          if RUBY_PLATFORM.include?('darwin') && Mysql2::Client.info.fetch(:version).start_with?('5.5')
+            pending('libmysqlclient 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
+          end
+
           client = Mysql2::Client.new(DatabaseCredentials['root'])
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)

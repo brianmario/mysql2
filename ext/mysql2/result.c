@@ -50,6 +50,10 @@ static rb_encoding *binaryEncoding;
 #define MYSQL2_MIN_TIME 62171150401ULL
 #endif
 
+#define GET_RESULT(obj) \
+  mysql2_result_wrapper *wrapper; \
+  Data_Get_Struct(self, mysql2_result_wrapper, wrapper);
+
 static VALUE cMysql2Result;
 static VALUE cBigDecimal, cDate, cDateTime;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
@@ -103,9 +107,8 @@ static void *nogvl_fetch_row(void *ptr) {
 }
 
 static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
-  mysql2_result_wrapper * wrapper;
   VALUE rb_field;
-  GetMysql2Result(self, wrapper);
+  GET_RESULT(self);
 
   if (wrapper->fields == Qnil) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
@@ -193,7 +196,6 @@ static unsigned int msec_char_to_uint(char *msec_char, size_t len)
 
 static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezone, int symbolizeKeys, int asArray, int castBool, int cast, MYSQL_FIELD * fields) {
   VALUE rowVal;
-  mysql2_result_wrapper * wrapper;
   MYSQL_ROW row;
   unsigned int i = 0;
   unsigned long * fieldLengths;
@@ -202,7 +204,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
   rb_encoding *default_internal_enc;
   rb_encoding *conn_enc;
 #endif
-  GetMysql2Result(self, wrapper);
+  GET_RESULT(self);
 
 #ifdef HAVE_RUBY_ENCODING_H
   default_internal_enc = rb_default_internal_encoding();
@@ -413,12 +415,11 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
 }
 
 static VALUE rb_mysql_result_fetch_fields(VALUE self) {
-  mysql2_result_wrapper * wrapper;
   unsigned int i = 0;
   short int symbolizeKeys = 0;
   VALUE defaults;
 
-  GetMysql2Result(self, wrapper);
+  GET_RESULT(self);
 
   defaults = rb_iv_get(self, "@query_options");
   Check_Type(defaults, T_HASH);
@@ -443,13 +444,12 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   VALUE defaults, opts, block;
   ID db_timezone, app_timezone, dbTz, appTz;
-  mysql2_result_wrapper * wrapper;
   unsigned long i;
   const char * errstr;
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
   MYSQL_FIELD * fields = NULL;
 
-  GetMysql2Result(self, wrapper);
+  GET_RESULT(self);
 
   defaults = rb_iv_get(self, "@query_options");
   Check_Type(defaults, T_HASH);
@@ -466,7 +466,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   cast          = RTEST(rb_hash_aref(opts, sym_cast));
 
   if (wrapper->is_streaming && cacheRows) {
-    rb_warn("cacheRows is ignored if streaming is true");
+    rb_warn(":cache_rows is ignored if :stream is true");
   }
 
   dbTz = rb_hash_aref(opts, sym_database_timezone);
@@ -577,9 +577,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 }
 
 static VALUE rb_mysql_result_count(VALUE self) {
-  mysql2_result_wrapper *wrapper;
+  GET_RESULT(self);
 
-  GetMysql2Result(self, wrapper);
   if (wrapper->is_streaming) {
     /* This is an unsigned long per result.h */
     return ULONG2NUM(wrapper->numberOfRows);
@@ -598,6 +597,7 @@ static VALUE rb_mysql_result_count(VALUE self) {
 VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r) {
   VALUE obj;
   mysql2_result_wrapper * wrapper;
+
   obj = Data_Make_Struct(cMysql2Result, mysql2_result_wrapper, rb_mysql_result_mark, rb_mysql_result_free, wrapper);
   wrapper->numberOfFields = 0;
   wrapper->numberOfRows = 0;

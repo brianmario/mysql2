@@ -326,13 +326,13 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   VALUE rv;
   GET_CLIENT(self);
 
-  args.host = NIL_P(host) ? NULL : StringValueCStr(host);
-  args.unix_socket = NIL_P(socket) ? NULL : StringValueCStr(socket);
-  args.port = NIL_P(port) ? 0 : NUM2INT(port);
-  args.user = NIL_P(user) ? NULL : StringValueCStr(user);
-  args.passwd = NIL_P(pass) ? NULL : StringValueCStr(pass);
-  args.db = NIL_P(database) ? NULL : StringValueCStr(database);
-  args.mysql = wrapper->client;
+  args.host        = NIL_P(host)     ? NULL : StringValueCStr(host);
+  args.unix_socket = NIL_P(socket)   ? NULL : StringValueCStr(socket);
+  args.port        = NIL_P(port)     ? 0    : NUM2INT(port);
+  args.user        = NIL_P(user)     ? NULL : StringValueCStr(user);
+  args.passwd      = NIL_P(pass)     ? NULL : StringValueCStr(pass);
+  args.db          = NIL_P(database) ? NULL : StringValueCStr(database);
+  args.mysql       = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
 
   if (wrapper->connect_timeout)
@@ -1155,9 +1155,9 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
   GET_CLIENT(self);
 
   mysql_ssl_set(wrapper->client,
-      NIL_P(key) ? NULL : StringValueCStr(key),
-      NIL_P(cert) ? NULL : StringValueCStr(cert),
-      NIL_P(ca) ? NULL : StringValueCStr(ca),
+      NIL_P(key)    ? NULL : StringValueCStr(key),
+      NIL_P(cert)   ? NULL : StringValueCStr(cert),
+      NIL_P(ca)     ? NULL : StringValueCStr(ca),
       NIL_P(capath) ? NULL : StringValueCStr(capath),
       NIL_P(cipher) ? NULL : StringValueCStr(cipher));
 

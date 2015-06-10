@@ -224,7 +224,7 @@ class Unix < Platform
   end
 
   def mysql_config_glob
-    "{#{default_mysql_config_search_path.join(',')}}/{mysql_config,mysql_config5}"
+    "{#{default_mysql_config_search_path.join(',')}}/{mysql_config,mysql_config5,mariadb_config}"
   end
 
   def mysql_config_path

@@ -867,15 +867,15 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   cast          = RTEST(rb_hash_aref(opts, sym_cast));
 
   if (wrapper->is_streaming && cacheRows) {
-    rb_warn("cacheRows is ignored if streaming is true");
+    rb_warn(":cache_rows is ignored if :stream is true");
   }
 
   if (wrapper->stmt && !cacheRows && !wrapper->is_streaming) {
-    rb_warn("cacheRows is forced for prepared statements (if not streaming)");
+    rb_warn(":cache_rows is forced for prepared statements (if not streaming)");
   }
 
   if (wrapper->stmt && !cast) {
-    rb_warn("cast is forced for prepared statements");
+    rb_warn(":cast is forced for prepared statements");
   }
 
   dbTz = rb_hash_aref(opts, sym_database_timezone);

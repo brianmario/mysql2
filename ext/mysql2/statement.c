@@ -53,12 +53,13 @@ static void rb_raise_mysql2_stmt_error(VALUE self) {
   rb_encoding *conn_enc;
 #endif
   GET_STATEMENT(self);
+
+#ifdef HAVE_RUBY_ENCODING_H
   {
     GET_CLIENT(stmt_wrapper->client);
-#ifdef HAVE_RUBY_ENCODING_H
     conn_enc = rb_to_encoding(wrapper->encoding);
-#endif
   }
+#endif
 
   rb_raise_mysql2_stmt_error2(stmt_wrapper->stmt
 #ifdef HAVE_RUBY_ENCODING_H

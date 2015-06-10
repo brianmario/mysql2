@@ -135,7 +135,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     // ensure the string is in the encoding the connection is expecting
     args.sql = rb_str_export_to_enc(args.sql, conn_enc);
 #endif
-    args.sql_ptr = StringValuePtr(sql);
+    args.sql_ptr = RSTRING_PTR(sql);
     args.sql_len = RSTRING_LEN(sql);
 
     if ((VALUE)rb_thread_call_without_gvl(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {

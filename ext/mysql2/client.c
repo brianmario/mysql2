@@ -277,7 +277,7 @@ static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
   oldLen = RSTRING_LEN(str);
   newStr = xmalloc(oldLen*2+1);
 
-  newLen = mysql_escape_string((char *)newStr, StringValuePtr(str), oldLen);
+  newLen = mysql_escape_string((char *)newStr, RSTRING_PTR(str), oldLen);
   if (newLen == oldLen) {
     /* no need to return a new ruby string if nothing changed */
     xfree(newStr);
@@ -326,12 +326,12 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   VALUE rv;
   GET_CLIENT(self);
 
-  args.host = NIL_P(host) ? NULL : StringValuePtr(host);
-  args.unix_socket = NIL_P(socket) ? NULL : StringValuePtr(socket);
+  args.host = NIL_P(host) ? NULL : StringValueCStr(host);
+  args.unix_socket = NIL_P(socket) ? NULL : StringValueCStr(socket);
   args.port = NIL_P(port) ? 0 : NUM2INT(port);
-  args.user = NIL_P(user) ? NULL : StringValuePtr(user);
-  args.passwd = NIL_P(pass) ? NULL : StringValuePtr(pass);
-  args.db = NIL_P(database) ? NULL : StringValuePtr(database);
+  args.user = NIL_P(user) ? NULL : StringValueCStr(user);
+  args.passwd = NIL_P(pass) ? NULL : StringValueCStr(pass);
+  args.db = NIL_P(database) ? NULL : StringValueCStr(database);
   args.mysql = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
 
@@ -663,7 +663,7 @@ static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
 #else
   args.sql = sql;
 #endif
-  args.sql_ptr = StringValuePtr(args.sql);
+  args.sql_ptr = RSTRING_PTR(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
   args.wrapper = wrapper;
 
@@ -717,7 +717,7 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
   oldLen = RSTRING_LEN(str);
   newStr = xmalloc(oldLen*2+1);
 
-  newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, StringValuePtr(str), oldLen);
+  newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, RSTRING_PTR(str), oldLen);
   if (newLen == oldLen) {
     /* no need to return a new ruby string if nothing changed */
     xfree(newStr);
@@ -781,17 +781,17 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       break;
 
     case MYSQL_READ_DEFAULT_FILE:
-      charval = (const char *)StringValuePtr(value);
+      charval = (const char *)StringValueCStr(value);
       retval  = charval;
       break;
 
     case MYSQL_READ_DEFAULT_GROUP:
-      charval = (const char *)StringValuePtr(value);
+      charval = (const char *)StringValueCStr(value);
       retval  = charval;
       break;
 
     case MYSQL_INIT_COMMAND:
-      charval = (const char *)StringValuePtr(value);
+      charval = (const char *)StringValueCStr(value);
       retval  = charval;
       break;
 
@@ -961,7 +961,7 @@ static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
   REQUIRE_CONNECTED(wrapper);
 
   args.mysql = wrapper->client;
-  args.db = StringValuePtr(db);
+  args.db = StringValueCStr(db);
 
   if (rb_thread_call_without_gvl(nogvl_select_db, &args, RUBY_UBF_IO, 0) == Qfalse)
     rb_raise_mysql2_error(wrapper);
@@ -1155,11 +1155,11 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
   GET_CLIENT(self);
 
   mysql_ssl_set(wrapper->client,
-      NIL_P(key) ? NULL : StringValuePtr(key),
-      NIL_P(cert) ? NULL : StringValuePtr(cert),
-      NIL_P(ca) ? NULL : StringValuePtr(ca),
-      NIL_P(capath) ? NULL : StringValuePtr(capath),
-      NIL_P(cipher) ? NULL : StringValuePtr(cipher));
+      NIL_P(key) ? NULL : StringValueCStr(key),
+      NIL_P(cert) ? NULL : StringValueCStr(cert),
+      NIL_P(ca) ? NULL : StringValueCStr(ca),
+      NIL_P(capath) ? NULL : StringValueCStr(capath),
+      NIL_P(cipher) ? NULL : StringValueCStr(cipher));
 
   return self;
 }

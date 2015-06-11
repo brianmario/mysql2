@@ -34,6 +34,7 @@ dirs = ENV['PATH'].split(File::PATH_SEPARATOR) + %w[
   /usr/local/mysql
   /usr/local/mysql-*
   /usr/local/lib/mysql5*
+  /usr/local/opt/mysql5*
 ].map{|dir| "#{dir}/bin" }
 
 GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5,mariadb_config}"
@@ -73,14 +74,8 @@ elsif mc = (with_config('mysql-config') || Dir[GLOB].first)
   rpath_dir = libs
 else
   inc, lib = dir_config('mysql', '/usr/local')
-  libs = ['m', 'z', 'socket', 'nsl', 'mygcc']
-  found = false
-  while not find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql") do
-    exit 1 if libs.empty?
-    found ||= have_library(libs.shift)
-  end
 
-  asplode("mysql client") unless found
+  asplode("mysql client") unless find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql")
 
   rpath_dir = lib
 end

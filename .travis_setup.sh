@@ -14,8 +14,9 @@ fi
 
 # Install MySQL if OS=darwin
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
-  brew install mysql
-  mysql.server start
+  brew update
+  brew install "$DB"
+  $(brew --prefix "$DB")/bin/mysql.server start
 fi
 
 # TODO: get SSL working on OS X in Travis
@@ -25,3 +26,12 @@ if ! [[ x$OSTYPE =~ ^xdarwin ]]; then
 fi
 
 sudo mysql -e "CREATE USER '$USER'@'localhost'" || true
+
+# Print the MySQL version and create the test DB
+if [[ x$OSTYPE =~ ^xdarwin ]]; then
+  $(brew --prefix "$DB")/bin/mysqld --version
+  $(brew --prefix "$DB")/bin/mysql -u $USER -e "CREATE DATABASE IF NOT EXISTS test"
+else
+  mysqld --version
+  mysql -u $USER -e "CREATE DATABASE IF NOT EXISTS test"
+fi

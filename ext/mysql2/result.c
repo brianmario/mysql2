@@ -755,50 +755,60 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   return wrapper->fields;
 }
 
-static void rb_mysql_row_query_options(VALUE opts, ID *db_timezone, ID *app_timezone, int *symbolizeKeys, int *asArray, int *castBool, int *cast, int *cacheRows) {
+static result_each_args rb_mysql_row_query_options(VALUE self, VALUE opts) {
   ID dbTz, appTz;
+  VALUE defaults;
+  result_each_args args;
 
-   *symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
-   *asArray       = rb_hash_aref(opts, sym_as) == sym_array;
-   *castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
-   *cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
-   *cast          = RTEST(rb_hash_aref(opts, sym_cast));
+  defaults = rb_iv_get(self, "@query_options");
+  Check_Type(defaults, T_HASH);
+  if (!NIL_P(opts)) {
+    opts = rb_funcall(defaults, intern_merge, 1, opts);
+  } else {
+    opts = defaults;
+  }
+
+  args.symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
+  args.asArray       = rb_hash_aref(opts, sym_as) == sym_array;
+  args.castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
+  args.cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
+  args.cast          = RTEST(rb_hash_aref(opts, sym_cast));
+  args.block_given   = Qnil;
 
   dbTz = rb_hash_aref(opts, sym_database_timezone);
   if (dbTz == sym_local) {
-    *db_timezone = intern_local;
+    args.db_timezone = intern_local;
   } else if (dbTz == sym_utc) {
-    *db_timezone = intern_utc;
+    args.db_timezone = intern_utc;
   } else {
     if (!NIL_P(dbTz)) {
       rb_warn(":database_timezone option must be :utc or :local - defaulting to :local");
     }
-    *db_timezone = intern_local;
+    args.db_timezone = intern_local;
   }
 
   appTz = rb_hash_aref(opts, sym_application_timezone);
   if (appTz == sym_local) {
-    *app_timezone = intern_local;
+    args.app_timezone = intern_local;
   } else if (appTz == sym_utc) {
-    *app_timezone = intern_utc;
+    args.app_timezone = intern_utc;
   } else {
-    *app_timezone = Qnil;
+    args.app_timezone = Qnil;
   }
+
+  return args;
 }
 
 static VALUE rb_mysql_result_element(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
   MYSQL_FIELD *fields = NULL;
-  ID db_timezone, app_timezone;
   VALUE seek, count, row, rows;
   long i, c_seek, c_count = 0;
-  int symbolizeKeys, asArray, castBool, cacheRows, cast;
-  VALUE defaults, block, opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+  VALUE (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+  VALUE block, opts;
 
   GET_RESULT(self);
 
-  defaults = rb_iv_get(self, "@query_options");
-  Check_Type(defaults, T_HASH);
   rb_scan_args(argc, argv, "12&", &seek, &count, &opts, &block);
 
   /* If the second arg is a hash, it's the opts and there's no count */
@@ -814,13 +824,8 @@ static VALUE rb_mysql_result_element(int argc, VALUE * argv, VALUE self) {
     if (!c_count) return rb_ary_new();
   }
 
-  if (!NIL_P(opts)) {
-    opts = rb_funcall(defaults, intern_merge, 1, opts);
-  } else {
-    opts = defaults;
-  }
-
-  rb_mysql_row_query_options(opts, &db_timezone, &app_timezone, &symbolizeKeys, &asArray, &castBool, &cast, &cacheRows);
+  args = rb_mysql_row_query_options(self, opts);
+  args.block_given = block;
 
   if (wrapper->is_streaming) {
     rb_raise(cMysql2Error, "Element reference operator #[] cannot be used in streaming mode.");
@@ -848,16 +853,7 @@ static VALUE rb_mysql_result_element(int argc, VALUE * argv, VALUE self) {
   }
 
   mysql_data_seek(wrapper->result, c_seek);
-
-  // Backward compat
-  args.symbolizeKeys = symbolizeKeys;
-  args.asArray = asArray;
-  args.castBool = castBool;
-  args.cacheRows = cacheRows;
-  args.cast = cast;
-  args.db_timezone = db_timezone;
-  args.app_timezone = app_timezone;
-  args.block_given = block;
+  fields = mysql_fetch_fields(wrapper->result);
 
   if (wrapper->stmt) {
     fetch_row_func = rb_mysql_result_fetch_row_stmt;
@@ -974,21 +970,14 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
-  VALUE defaults, opts, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
-  ID db_timezone, app_timezone;
-  int symbolizeKeys, asArray, castBool, cacheRows, cast;
+  VALUE (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+  VALUE opts, block;
 
   GET_RESULT(self);
 
-  defaults = rb_iv_get(self, "@query_options");
-  Check_Type(defaults, T_HASH);
-  if (rb_scan_args(argc, argv, "01&", &opts, &block) == 1) {
-    opts = rb_funcall(defaults, intern_merge, 1, opts);
-  } else {
-    opts = defaults;
-  }
-
-  rb_mysql_row_query_options(opts, &db_timezone, &app_timezone, &symbolizeKeys, &asArray, &castBool, &cast, &cacheRows);
+  rb_scan_args(argc, argv, "01&", &opts, &block);
+  args = rb_mysql_row_query_options(self, opts);
+  args.block_given = block;
 
   if (wrapper->lastRowProcessed == 0 && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt ? mysql_stmt_num_rows(wrapper->stmt) : mysql_num_rows(wrapper->result);
@@ -998,16 +987,6 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     }
     wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
   }
-
-  // Backward compat
-  args.symbolizeKeys = symbolizeKeys;
-  args.asArray = asArray;
-  args.castBool = castBool;
-  args.cacheRows = cacheRows;
-  args.cast = cast;
-  args.db_timezone = db_timezone;
-  args.app_timezone = app_timezone;
-  args.block_given = block;
 
   if (wrapper->stmt) {
     fetch_row_func = rb_mysql_result_fetch_row_stmt;

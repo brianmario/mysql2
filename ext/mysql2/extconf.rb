@@ -207,14 +207,7 @@ class Unix < Platform
 
   def detect_by_known_paths
     inc, lib = dir_config('mysql', '/usr/local')
-    libs = ['m', 'z', 'socket', 'nsl', 'mygcc']
-    found = false
-    until find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql") do
-      break if libs.empty?
-      found ||= have_library(libs.shift)
-    end
-
-    asplode('mysql client') unless found
+    asplode('mysql client') unless has_mysql_client?(lib)
 
     [inc, lib]
   end
@@ -231,6 +224,12 @@ class Unix < Platform
   def mysql_config_path
     super
     @mysql_config_path ||= Dir[mysql_config_glob].first
+  end
+
+  private
+
+  def has_mysql_client?(lib)
+    find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql")
   end
 end
 

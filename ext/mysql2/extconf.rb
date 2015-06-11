@@ -162,6 +162,7 @@ class Unix < Platform
     /usr/local/mysql
     /usr/local/mysql-*
     /usr/local/lib/mysql5*
+    /usr/local/opt/mysql5*
   ].freeze
 
   def configure

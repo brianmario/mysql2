@@ -484,7 +484,7 @@ RSpec.describe Mysql2::Client do
           expect { client.query('SELECT 1') }.to_not raise_error
         end
 
-        it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction true" do
+        it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction" do
           client = Mysql2::Client.new(DatabaseCredentials['root'])
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)

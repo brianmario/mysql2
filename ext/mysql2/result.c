@@ -66,6 +66,8 @@ typedef struct {
   VALUE block_given;
 } result_each_args;
 
+typedef VALUE (*fetch_row_func_t)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+
 VALUE cBigDecimal, cDateTime, cDate;
 static VALUE cMysql2Result;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
@@ -804,8 +806,8 @@ static VALUE rb_mysql_result_element(int argc, VALUE * argv, VALUE self) {
   MYSQL_FIELD *fields = NULL;
   VALUE seek, count, row, rows;
   long i, c_seek, c_count = 0;
-  VALUE (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   VALUE block, opts;
+  fetch_row_func_t fetch_row_func;
 
   GET_RESULT(self);
 
@@ -880,7 +882,7 @@ static VALUE rb_mysql_result_element(int argc, VALUE * argv, VALUE self) {
 }
 
 static VALUE rb_mysql_result_each_(VALUE self,
-                                   VALUE(*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args),
+                                   fetch_row_func_t fetch_row_func,
                                    const result_each_args *args)
 {
   unsigned long i;
@@ -970,8 +972,8 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
-  VALUE (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   VALUE opts, block;
+  fetch_row_func_t fetch_row_func;
 
   GET_RESULT(self);
 

@@ -3,29 +3,13 @@ module Mysql2
     attr_reader :connect_options, :query_options, :read_timeout
 
     VALID_CONNECT_KEYS = [:connect_flags, :connect_timeout, :encoding, :default_file, :default_group, :read_timeout, :write_timeout, :secure_auth, :init_command, :reconnect, :local_infile]
-    @@default_connect_options = {
-      :connect_flags   => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
-      :connect_timeout => 120,        # Set default connect_timeout to avoid unlimited retries from signal interruption
-      :encoding        => 'utf8'
-    }
-
     VALID_QUERY_KEYS = [:as, :async, :cast_booleans, :symbolize_keys, :database_timezone, :application_timezone, :cache_rows, :cast]
-    @@default_query_options = {
-      :as                   => :hash,  # the type of object you want each row back as; also supports :array (an array of values)
-      :async                => false,  # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
-      :cast_booleans        => false,  # cast tinyint(1) fields as true/false in ruby
-      :symbolize_keys       => false,  # return field names as symbols instead of strings
-      :database_timezone    => :local, # timezone Mysql2 will assume datetime objects are stored in
-      :application_timezone => nil,    # timezone Mysql2 will convert to before handing the object back to the caller
-      :cache_rows           => true,   # tells Mysql2 to use it's internal row cache for results
-      :cast                 => true    # cast result fields to corresponding Ruby data types
-    }
 
     def initialize(opts = {})
       opts = Mysql2::Util.key_hash_as_symbols(opts)
       @read_timeout = nil # by default don't timeout on read
-      @connect_options = @@default_connect_options.merge Hash[ opts.select { |k, v| VALID_CONNECT_KEYS.include? k } ]
-      @query_options = @@default_query_options.merge Hash[ opts.select { |k, v| VALID_QUERY_KEYS.include? k } ]
+      @connect_options = self.class.default_connect_options.merge Hash[ opts.select { |k, v| VALID_CONNECT_KEYS.include? k } ]
+      @query_options = self.class.default_query_options.merge Hash[ opts.select { |k, v| VALID_QUERY_KEYS.include? k } ]
 
       initialize_ext
 
@@ -68,11 +52,24 @@ DEPR
     end
 
     def self.default_connect_options
-      @@default_connect_options
+      @default_connect_options ||= {
+        :connect_flags   => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
+        :connect_timeout => 120,         # Set default connect_timeout to avoid unlimited retries from signal interruption
+        :encoding        => 'utf8',
+      }
     end
 
     def self.default_query_options
-      @@default_query_options
+      @default_query_options ||= {
+        :as                   => :hash,  # the type of object you want each row back as; also supports :array (an array of values)
+        :async                => false,  # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
+        :cast_booleans        => false,  # cast tinyint(1) fields as true/false in ruby
+        :symbolize_keys       => false,  # return field names as symbols instead of strings
+        :database_timezone    => :local, # timezone Mysql2 will assume datetime objects are stored in
+        :application_timezone => nil,    # timezone Mysql2 will convert to before handing the object back to the caller
+        :cache_rows           => true,   # tells Mysql2 to use it's internal row cache for results
+        :cast                 => true,   # cast result fields to corresponding Ruby data types
+      }
     end
 
     if Thread.respond_to?(:handle_interrupt)

@@ -98,6 +98,53 @@ RSpec.describe Mysql2::Result do
     end
   end
 
+  context "#[]" do
+    it "should return results when accessed by [offset]" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      expect(result[1]).to eql({"col" => 2})
+      expect(result[0]).to eql({"col" => 1})
+    end
+
+    it "should return results when accessed by negative [offset]" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      expect(result[-1]).to eql({"col" => 2})
+      expect(result[-2]).to eql({"col" => 1})
+    end
+
+    it "should return array of results when accessed by [offset, count]" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      expect(result[1, 1]).to  eql([{"col" => 2}])
+      expect(result[-2, 10]).to eql([{"col" => 1}, {"col" => 2}])
+    end
+
+    it "should return nil if we use too large [offset]" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      expect(result[2]).to be_nil
+      expect(result[200]).to be_nil
+    end
+
+    it "should return nil if we use too negative [offset]" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      expect(result[-3]).to be_nil
+      expect(result[-300]).to be_nil
+    end
+
+    it "should accept hash args in [offset, {:foo => bar}] and [offset, count, {:foo => bar}]" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col"
+      expect(result[1, {:symbolize_keys => true}]).to eql({:col => 2})
+      expect(result[1, 1, {:symbolize_keys => true}]).to eql([{:col => 2}])
+
+      # This syntax can't be parsed by Ruby 1.8:
+      # expect(result[1, :symbolize_keys => true]).to eql({:col => 2})
+      # expect(result[1, 1, :symbolize_keys => true]).to eql([{:col => 2}])
+    end
+
+    it "should throw an exception if we use an [offset] in streaming mode" do
+      result = @client.query "SELECT 1 AS col UNION SELECT 2 AS col", :stream => true
+      expect { result[0] }.to raise_exception(Mysql2::Error)
+    end
+  end
+
   context "#fields" do
     before(:each) do
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1")

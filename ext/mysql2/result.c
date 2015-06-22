@@ -75,6 +75,7 @@ static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_a
           sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream, sym_name;
 static ID intern_merge;
 
+/* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
@@ -82,12 +83,12 @@ static void rb_mysql_result_mark(void * wrapper) {
     rb_gc_mark(w->rows);
     rb_gc_mark(w->encoding);
     rb_gc_mark(w->client);
+    rb_gc_mark(w->statement);
   }
 }
 
 /* this may be called manually or during GC */
 static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
-  unsigned int i;
   if (!wrapper) return;
 
   if (wrapper->resultFreed != 1) {
@@ -95,6 +96,7 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
       mysql_stmt_free_result(wrapper->stmt);
 
       if (wrapper->result_buffers) {
+        unsigned int i;
         for (i = 0; i < wrapper->numberOfFields; i++) {
           if (wrapper->result_buffers[i].buffer) {
             xfree(wrapper->result_buffers[i].buffer);
@@ -107,6 +109,7 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
       }
     }
     /* FIXME: this may call flush_use_result, which can hit the socket */
+    /* For prepared statements, wrapper->result is the result metadata */
     mysql_free_result(wrapper->result);
     wrapper->resultFreed = 1;
   }
@@ -949,7 +952,7 @@ static VALUE rb_mysql_result_count(VALUE self) {
 }
 
 /* Mysql2::Result */
-VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, MYSQL_STMT * s) {
+VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement) {
   VALUE obj;
   mysql2_result_wrapper * wrapper;
 
@@ -966,11 +969,18 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->client = client;
   wrapper->client_wrapper = DATA_PTR(client);
   wrapper->client_wrapper->refcount++;
-  wrapper->stmt = s;
   wrapper->result_buffers = NULL;
   wrapper->is_null = NULL;
   wrapper->error = NULL;
   wrapper->length = NULL;
+
+  /* Keep a handle to the Statement to ensure it doesn't get garbage collected first */
+  wrapper->statement = statement;
+  if (statement != Qnil) {
+    mysql_stmt_wrapper *stmt_wrapper = DATA_PTR(statement);
+    wrapper->stmt = stmt_wrapper->stmt;
+    stmt_wrapper->refcount++;
+  }
 
   rb_obj_call_init(obj, 0, NULL);
   rb_iv_set(obj, "@query_options", options);

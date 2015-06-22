@@ -359,12 +359,13 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   if (!is_streaming) {
     // recieve the whole result set from the server
     if (rb_thread_call_without_gvl(nogvl_stmt_store_result, stmt, RUBY_UBF_IO, 0) == Qfalse) {
+      mysql_free_result(metadata);
       rb_raise_mysql2_stmt_error(self);
     }
     MARK_CONN_INACTIVE(stmt_wrapper->client);
   }
 
-  resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, stmt);
+  resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);
 
   if (!is_streaming) {
     // cache all result

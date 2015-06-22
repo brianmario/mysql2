@@ -490,7 +490,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
-  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, NULL);
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
 
   return resultObj;
 }
@@ -1050,7 +1050,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
-  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, NULL);
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
 
   return resultObj;
 }

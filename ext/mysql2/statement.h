@@ -8,6 +8,7 @@ void init_mysql2_statement();
 typedef struct {
   VALUE client;
   MYSQL_STMT *stmt;
+  int refcount;
 } mysql_stmt_wrapper;
 
 VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql);

@@ -19,10 +19,16 @@ static void rb_mysql_stmt_mark(void * ptr) {
 
 static void rb_mysql_stmt_free(void * ptr) {
   mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
+  decr_mysql2_stmt(stmt_wrapper);
+}
 
-  mysql_stmt_close(stmt_wrapper->stmt);
+void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
+  stmt_wrapper->refcount--;
 
-  xfree(ptr);
+  if (stmt_wrapper->refcount == 0) {
+    mysql_stmt_close(stmt_wrapper->stmt);
+    xfree(stmt_wrapper);
+  }
 }
 
 VALUE rb_raise_mysql2_stmt_error2(MYSQL_STMT *stmt
@@ -103,6 +109,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
   {
     stmt_wrapper->client = rb_client;
+    stmt_wrapper->refcount = 0;
     stmt_wrapper->stmt = NULL;
   }
 

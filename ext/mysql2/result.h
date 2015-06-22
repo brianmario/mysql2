@@ -17,7 +17,7 @@ typedef struct {
   char streamingComplete;
   char resultFreed;
   MYSQL_RES *result;
-  MYSQL_STMT *stmt;
+  mysql_stmt_wrapper *stmt_wrapper;
   mysql_client_wrapper *client_wrapper;
   /* statement result bind buffers */
   MYSQL_BIND *result_buffers;

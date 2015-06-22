@@ -12,7 +12,7 @@ static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, inter
 
 static void rb_mysql_stmt_mark(void * ptr) {
   mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
-  if(! stmt_wrapper) return;
+  if (!stmt_wrapper) return;
 
   rb_gc_mark(stmt_wrapper->client);
 }
@@ -176,7 +176,7 @@ static VALUE field_count(VALUE self) {
 static void *nogvl_execute(void *ptr) {
   MYSQL_STMT *stmt = ptr;
 
-  if(mysql_stmt_execute(stmt)) {
+  if (mysql_stmt_execute(stmt)) {
     return (void*)Qfalse;
   } else {
     return (void*)Qtrue;
@@ -186,7 +186,7 @@ static void *nogvl_execute(void *ptr) {
 static void *nogvl_stmt_store_result(void *ptr) {
   MYSQL_STMT *stmt = ptr;
 
-  if(mysql_stmt_store_result(stmt)) {
+  if (mysql_stmt_store_result(stmt)) {
     return (void *)Qfalse;
   } else {
     return (void *)Qtrue;
@@ -347,8 +347,8 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   FREE_BINDS;
 
   metadata = mysql_stmt_result_metadata(stmt);
-  if(metadata == NULL) {
-    if(mysql_stmt_errno(stmt) != 0) {
+  if (metadata == NULL) {
+    if (mysql_stmt_errno(stmt) != 0) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
 
       MARK_CONN_INACTIVE(stmt_wrapper->client);

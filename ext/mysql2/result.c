@@ -107,6 +107,8 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
         xfree(wrapper->error);
         xfree(wrapper->length);
       }
+      /* Clue that the next statement execute will need to allocate a new result buffer. */
+      wrapper->result_buffers = NULL;
     }
     /* FIXME: this may call flush_use_result, which can hit the socket */
     /* For prepared statements, wrapper->result is the result metadata */

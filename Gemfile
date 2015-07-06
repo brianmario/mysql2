@@ -14,6 +14,7 @@ end
 group :development do
   gem 'pry'
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
+  gem 'rake-compiler-dock', '~> 0.4.2'
 end
 
 platforms :rbx do

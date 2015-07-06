@@ -21,6 +21,7 @@ end
 
 group :development do
   gem 'pry'
+  gem 'rake-compiler-dock', '~> 0.4.2'
 end
 
 platforms :rbx do

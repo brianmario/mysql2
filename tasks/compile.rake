@@ -86,3 +86,12 @@ else
     Rake::Task['cross'].prerequisites.unshift 'vendor:mysql:cross'
   end
 end
+
+desc "Build the windows binary gems per rake-compiler-dock"
+task 'gem:windows' do
+  require 'rake_compiler_dock'
+  RakeCompilerDock.sh <<-EOT
+    bundle install "--without=test benchmarks development rbx" &&
+    rake cross native gem
+  EOT
+end

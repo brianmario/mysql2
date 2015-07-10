@@ -75,6 +75,7 @@ static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_a
           sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream, sym_name;
 static ID intern_merge;
 
+/* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
@@ -82,19 +83,29 @@ static void rb_mysql_result_mark(void * wrapper) {
     rb_gc_mark(w->rows);
     rb_gc_mark(w->encoding);
     rb_gc_mark(w->client);
+    rb_gc_mark(w->statement);
   }
 }
 
 /* this may be called manually or during GC */
 static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
-  unsigned int i;
   if (!wrapper) return;
 
   if (wrapper->resultFreed != 1) {
-    if (wrapper->stmt) {
-      mysql_stmt_free_result(wrapper->stmt);
+    if (wrapper->stmt_wrapper) {
+      mysql_stmt_free_result(wrapper->stmt_wrapper->stmt);
+
+      /* MySQL BUG? If the statement handle was previously used, and so
+       * mysql_stmt_bind_result was called, and if that result set and bind buffers were freed,
+       * MySQL still thinks the result set buffer is available and will prefetch the
+       * first result in mysql_stmt_execute. This will corrupt or crash the program.
+       * By setting bind_result_done back to 0, we make MySQL think that a result set
+       * has never been bound to this statement handle before to prevent the prefetch.
+       */
+      wrapper->stmt_wrapper->stmt->bind_result_done = 0;
 
       if (wrapper->result_buffers) {
+        unsigned int i;
         for (i = 0; i < wrapper->numberOfFields; i++) {
           if (wrapper->result_buffers[i].buffer) {
             xfree(wrapper->result_buffers[i].buffer);
@@ -105,8 +116,11 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
         xfree(wrapper->error);
         xfree(wrapper->length);
       }
+      /* Clue that the next statement execute will need to allocate a new result buffer. */
+      wrapper->result_buffers = NULL;
     }
     /* FIXME: this may call flush_use_result, which can hit the socket */
+    /* For prepared statements, wrapper->result is the result metadata */
     mysql_free_result(wrapper->result);
     wrapper->resultFreed = 1;
   }
@@ -120,6 +134,10 @@ static void rb_mysql_result_free(void *ptr) {
   // If the GC gets to client first it will be nil
   if (wrapper->client != Qnil) {
     decr_mysql2_client(wrapper->client_wrapper);
+  }
+
+  if (wrapper->statement != Qnil) {
+    decr_mysql2_stmt(wrapper->stmt_wrapper);
   }
 
   xfree(wrapper);
@@ -338,8 +356,8 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     rb_mysql_result_alloc_result_buffers(self, fields);
   }
 
-  if(mysql_stmt_bind_result(wrapper->stmt, wrapper->result_buffers)) {
-    rb_raise_mysql2_stmt_error2(wrapper->stmt
+  if (mysql_stmt_bind_result(wrapper->stmt_wrapper->stmt, wrapper->result_buffers)) {
+    rb_raise_mysql2_stmt_error2(wrapper->stmt_wrapper->stmt
 #ifdef HAVE_RUBY_ENCODING_H
       , conn_enc
 #endif
@@ -347,14 +365,14 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   }
 
   {
-    switch((uintptr_t)rb_thread_call_without_gvl(nogvl_stmt_fetch, wrapper->stmt, RUBY_UBF_IO, 0)) {
+    switch((uintptr_t)rb_thread_call_without_gvl(nogvl_stmt_fetch, wrapper->stmt_wrapper->stmt, RUBY_UBF_IO, 0)) {
       case 0:
         /* success */
         break;
 
       case 1:
         /* error */
-        rb_raise_mysql2_stmt_error2(wrapper->stmt
+        rb_raise_mysql2_stmt_error2(wrapper->stmt_wrapper->stmt
 #ifdef HAVE_RUBY_ENCODING_H
           , conn_enc
 #endif
@@ -870,11 +888,11 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     rb_warn(":cache_rows is ignored if :stream is true");
   }
 
-  if (wrapper->stmt && !cacheRows && !wrapper->is_streaming) {
+  if (wrapper->stmt_wrapper && !cacheRows && !wrapper->is_streaming) {
     rb_warn(":cache_rows is forced for prepared statements (if not streaming)");
   }
 
-  if (wrapper->stmt && !cast) {
+  if (wrapper->stmt_wrapper && !cast) {
     rb_warn(":cast is forced for prepared statements");
   }
 
@@ -900,7 +918,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   if (wrapper->lastRowProcessed == 0 && !wrapper->is_streaming) {
-    wrapper->numberOfRows = wrapper->stmt ? mysql_stmt_num_rows(wrapper->stmt) : mysql_num_rows(wrapper->result);
+    wrapper->numberOfRows = wrapper->stmt_wrapper ? mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt) : mysql_num_rows(wrapper->result);
     if (wrapper->numberOfRows == 0) {
       wrapper->rows = rb_ary_new();
       return wrapper->rows;
@@ -918,7 +936,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   args.app_timezone = app_timezone;
   args.block_given = block;
 
-  if (wrapper->stmt) {
+  if (wrapper->stmt_wrapper) {
     fetch_row_func = rb_mysql_result_fetch_row_stmt;
   } else {
     fetch_row_func = rb_mysql_result_fetch_row;
@@ -940,8 +958,8 @@ static VALUE rb_mysql_result_count(VALUE self) {
     return LONG2NUM(RARRAY_LEN(wrapper->rows));
   } else {
     /* MySQL returns an unsigned 64-bit long here */
-    if(wrapper->stmt) {
-      return ULL2NUM(mysql_stmt_num_rows(wrapper->stmt));
+    if (wrapper->stmt_wrapper) {
+      return ULL2NUM(mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt));
     } else {
       return ULL2NUM(mysql_num_rows(wrapper->result));
     }
@@ -949,7 +967,7 @@ static VALUE rb_mysql_result_count(VALUE self) {
 }
 
 /* Mysql2::Result */
-VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, MYSQL_STMT * s) {
+VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement) {
   VALUE obj;
   mysql2_result_wrapper * wrapper;
 
@@ -966,11 +984,19 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->client = client;
   wrapper->client_wrapper = DATA_PTR(client);
   wrapper->client_wrapper->refcount++;
-  wrapper->stmt = s;
   wrapper->result_buffers = NULL;
   wrapper->is_null = NULL;
   wrapper->error = NULL;
   wrapper->length = NULL;
+
+  /* Keep a handle to the Statement to ensure it doesn't get garbage collected first */
+  wrapper->statement = statement;
+  if (statement != Qnil) {
+    wrapper->stmt_wrapper = DATA_PTR(statement);
+    wrapper->stmt_wrapper->refcount++;
+  } else {
+    wrapper->stmt_wrapper = NULL;
+  }
 
   rb_obj_call_init(obj, 0, NULL);
   rb_iv_set(obj, "@query_options", options);

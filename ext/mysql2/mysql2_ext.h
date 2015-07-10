@@ -39,8 +39,8 @@ typedef unsigned int    uint;
 #endif
 
 #include <client.h>
-#include <result.h>
 #include <statement.h>
+#include <result.h>
 #include <infile.h>
 
 #endif

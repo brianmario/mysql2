@@ -12,17 +12,23 @@ static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, inter
 
 static void rb_mysql_stmt_mark(void * ptr) {
   mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
-  if(! stmt_wrapper) return;
+  if (!stmt_wrapper) return;
 
   rb_gc_mark(stmt_wrapper->client);
 }
 
 static void rb_mysql_stmt_free(void * ptr) {
   mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
+  decr_mysql2_stmt(stmt_wrapper);
+}
 
-  mysql_stmt_close(stmt_wrapper->stmt);
+void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
+  stmt_wrapper->refcount--;
 
-  xfree(ptr);
+  if (stmt_wrapper->refcount == 0) {
+    mysql_stmt_close(stmt_wrapper->stmt);
+    xfree(stmt_wrapper);
+  }
 }
 
 VALUE rb_raise_mysql2_stmt_error2(MYSQL_STMT *stmt
@@ -103,6 +109,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
   {
     stmt_wrapper->client = rb_client;
+    stmt_wrapper->refcount = 1;
     stmt_wrapper->stmt = NULL;
   }
 
@@ -169,7 +176,7 @@ static VALUE field_count(VALUE self) {
 static void *nogvl_execute(void *ptr) {
   MYSQL_STMT *stmt = ptr;
 
-  if(mysql_stmt_execute(stmt)) {
+  if (mysql_stmt_execute(stmt)) {
     return (void*)Qfalse;
   } else {
     return (void*)Qtrue;
@@ -179,7 +186,7 @@ static void *nogvl_execute(void *ptr) {
 static void *nogvl_stmt_store_result(void *ptr) {
   MYSQL_STMT *stmt = ptr;
 
-  if(mysql_stmt_store_result(stmt)) {
+  if (mysql_stmt_store_result(stmt)) {
     return (void *)Qfalse;
   } else {
     return (void *)Qtrue;
@@ -340,8 +347,8 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   FREE_BINDS;
 
   metadata = mysql_stmt_result_metadata(stmt);
-  if(metadata == NULL) {
-    if(mysql_stmt_errno(stmt) != 0) {
+  if (metadata == NULL) {
+    if (mysql_stmt_errno(stmt) != 0) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
 
       MARK_CONN_INACTIVE(stmt_wrapper->client);
@@ -359,12 +366,13 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   if (!is_streaming) {
     // recieve the whole result set from the server
     if (rb_thread_call_without_gvl(nogvl_stmt_store_result, stmt, RUBY_UBF_IO, 0) == Qfalse) {
+      mysql_free_result(metadata);
       rb_raise_mysql2_stmt_error(self);
     }
     MARK_CONN_INACTIVE(stmt_wrapper->client);
   }
 
-  resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, stmt);
+  resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);
 
   if (!is_streaming) {
     // cache all result

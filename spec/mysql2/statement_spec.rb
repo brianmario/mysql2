@@ -70,6 +70,22 @@ RSpec.describe Mysql2::Statement do
     @client.query 'DROP TABLE IF EXISTS mysql2_stmt_q'
   end
 
+  it "should be reusable 1000 times" do
+    statement = @client.prepare 'SELECT 1'
+    1000.times do
+      result = statement.execute
+      expect(result.to_a.length).to eq(1)
+    end
+  end
+
+  it "should be reusable 10000 times" do
+    statement = @client.prepare 'SELECT 1'
+    10000.times do
+      result = statement.execute
+      expect(result.to_a.length).to eq(1)
+    end
+  end
+
   it "should select dates" do
     statement = @client.prepare 'SELECT NOW()'
     result = statement.execute

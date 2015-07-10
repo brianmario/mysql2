@@ -95,6 +95,15 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
     if (wrapper->stmt_wrapper) {
       mysql_stmt_free_result(wrapper->stmt_wrapper->stmt);
 
+      /* MySQL BUG? If the statement handle was previously used, and so
+       * mysql_stmt_bind_result was called, and if that result set and bind buffers were freed,
+       * MySQL still thinks the result set buffer is available and will prefetch the
+       * first result in mysql_stmt_execute. This will corrupt or crash the program.
+       * By setting bind_result_done back to 0, we make MySQL think that a result set
+       * has never been bound to this statement handle before to prevent the prefetch.
+       */
+      wrapper->stmt_wrapper->stmt->bind_result_done = 0;
+
       if (wrapper->result_buffers) {
         unsigned int i;
         for (i = 0; i < wrapper->numberOfFields; i++) {

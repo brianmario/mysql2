@@ -2,6 +2,7 @@
 
 module Mysql2
   class Statement
+    attr_reader :query_options
     include Enumerable
 
     if Thread.respond_to?(:handle_interrupt)

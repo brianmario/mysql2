@@ -241,7 +241,7 @@ RSpec.describe Mysql2::Statement do
       n = 1
       stmt = @client.prepare("SELECT 1 UNION SELECT 2")
 
-      @client.query_options.merge!(stream: true, cache_rows: false, as: :array)
+      stmt.query_options.merge!(stream: true, cache_rows: false, as: :array)
 
       stmt.execute.each do |r|
         case n

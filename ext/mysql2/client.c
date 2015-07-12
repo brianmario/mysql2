@@ -413,7 +413,7 @@ static int opt_connect_attr_add_i(VALUE key, VALUE value, VALUE arg)
 }
 #endif
 
-static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags, VALUE conn_attrs) {
+static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags, VALUE conn_attrs) {
   struct nogvl_connect_args args;
   time_t start_time, end_time, elapsed_time, connect_timeout;
   VALUE rv;
@@ -754,7 +754,7 @@ static VALUE rb_mysql_client_abandon_results(VALUE self) {
  * Query the database with +sql+, with optional +options+.  For the possible
  * options, see default_query_options on the Mysql2::Client class.
  */
-static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
+static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 #ifndef _WIN32
   struct async_query_args async_args;
 #endif
@@ -1421,8 +1421,8 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
   rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
-  rb_define_private_method(cMysql2Client, "connect", rb_connect, 8);
-  rb_define_private_method(cMysql2Client, "_query", rb_query, 2);
+  rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 8);
+  rb_define_private_method(cMysql2Client, "_query", rb_mysql_query, 2);
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));

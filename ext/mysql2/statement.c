@@ -21,7 +21,7 @@ static void rb_mysql_stmt_mark(void * ptr) {
   rb_gc_mark(stmt_wrapper->client);
 }
 
-static void *nogvl_stmt_close(void * ptr) {
+static void *nogvl_stmt_close(void *ptr) {
   mysql_stmt_wrapper *stmt_wrapper = ptr;
   if (stmt_wrapper->stmt) {
     mysql_stmt_close(stmt_wrapper->stmt);
@@ -30,7 +30,7 @@ static void *nogvl_stmt_close(void * ptr) {
   return NULL;
 }
 
-static void rb_mysql_stmt_free(void * ptr) {
+static void rb_mysql_stmt_free(void *ptr) {
   mysql_stmt_wrapper *stmt_wrapper = ptr;
   decr_mysql2_stmt(stmt_wrapper);
 }

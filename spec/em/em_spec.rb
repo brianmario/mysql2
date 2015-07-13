@@ -63,7 +63,7 @@ begin
             EM.stop_event_loop
           end
         end
-      }.to raise_error
+      }.to raise_error('some error')
     end
 
     context 'when an exception is raised by the client' do

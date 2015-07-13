@@ -40,8 +40,7 @@ RSpec.describe Mysql2::Statement do
 
   it "should raise an exception without a block" do
     statement = @client.prepare 'SELECT 1'
-    statement.execute
-    expect { statement.each }.to raise_error
+    expect { statement.execute.each }.to raise_error(LocalJumpError)
   end
 
   it "should tell us the result count" do

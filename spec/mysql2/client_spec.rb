@@ -716,6 +716,19 @@ describe Mysql2::Client do
         @client.escape ""
       }.should raise_error(Mysql2::Error)
     end
+
+    context 'when mysql encoding is not utf8' do
+      before { pending('Encoding is undefined') unless defined?(Encoding) }
+
+      let(:client) { Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "ujis")) }
+
+      it 'should return a internal encoding string if Encoding.default_internal is set' do
+        with_internal_encoding Encoding::UTF_8 do
+          client.escape("\u{30C6}\u{30B9}\u{30C8}").should eql("\u{30C6}\u{30B9}\u{30C8}")
+          client.escape("\u{30C6}'\u{30B9}\"\u{30C8}").should eql("\u{30C6}\\'\u{30B9}\\\"\u{30C8}")
+        end
+      end
+    end
   end
 
   it "should respond to #info" do

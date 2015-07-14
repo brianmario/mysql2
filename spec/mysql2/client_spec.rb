@@ -705,6 +705,8 @@ RSpec.describe Mysql2::Client do
     end
 
     context 'when mysql encoding is not utf8' do
+      before { pending('Encoding is undefined') unless defined?(Encoding) }
+
       let(:client) { Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "ujis")) }
 
       it 'should return a internal encoding string if Encoding.default_internal is set' do

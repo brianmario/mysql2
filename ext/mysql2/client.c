@@ -720,6 +720,11 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
   newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, RSTRING_PTR(str), oldLen);
   if (newLen == oldLen) {
     /* no need to return a new ruby string if nothing changed */
+#ifdef HAVE_RUBY_ENCODING_H
+    if (default_internal_enc) {
+      str = rb_str_export_to_enc(str, default_internal_enc);
+    }
+#endif
     xfree(newStr);
     return str;
   } else {

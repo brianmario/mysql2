@@ -239,10 +239,7 @@ RSpec.describe Mysql2::Statement do
   context "streaming result" do
     it "should be able to stream query result" do
       n = 1
-      stmt = @client.prepare("SELECT 1 UNION SELECT 2")
-
-      stmt.query_options.merge!(stream: true, cache_rows: false, as: :array)
-
+      stmt = @client.prepare("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false, as: :array)
       stmt.execute.each do |r|
         case n
         when 1
@@ -262,67 +259,55 @@ RSpec.describe Mysql2::Statement do
     #       The drawback of this is that args of Result#each is ignored...
 
     it "should yield rows as hash's" do
-      @result = @client.prepare("SELECT 1").execute
-      @result.each do |row|
+      result = @client.prepare("SELECT 1").execute
+      result.each do |row|
         expect(row).to be_an_instance_of(Hash)
       end
     end
 
     it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
-      @client.query_options[:symbolize_keys] = true
-      @result = @client.prepare("SELECT 1").execute
-      @result.each do |row|
+      result = @client.prepare("SELECT 1", symbolize_keys: true).execute
+      result.each do |row|
         expect(row.keys.first).to be_an_instance_of(Symbol)
       end
-      @client.query_options[:symbolize_keys] = false
+    end
+
+    it "should be able to return results as a hash" do
+      result = @client.prepare("SELECT 1", as: :hash).execute
+      result.each do |row|
+        expect(row).to be_an_instance_of(Hash)
+      end
     end
 
     it "should be able to return results as an array" do
-      @client.query_options[:as] = :array
-
-      @result = @client.prepare("SELECT 1").execute
-      @result.each do |row|
+      result = @client.prepare("SELECT 1", as: :array).execute
+      result.each do |row|
         expect(row).to be_an_instance_of(Array)
       end
-
-      @client.query_options[:as] = :hash
     end
 
     it "should cache previously yielded results by default" do
-      @result = @client.prepare("SELECT 1").execute
-      expect(@result.first.object_id).to eql(@result.first.object_id)
+      result = @client.prepare("SELECT 1").execute
+      expect(result.first.object_id).to eql(result.first.object_id)
     end
 
     it "should yield different value for #first if streaming" do
-      @client.query_options[:stream] = true
-      @client.query_options[:cache_rows] = false
-
-      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
+      result = @client.prepare("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false).execute
       expect(result.first).not_to eql(result.first)
-
-      @client.query_options[:stream] = false
-      @client.query_options[:cache_rows] = true
     end
 
     it "should yield the same value for #first if streaming is disabled" do
-      @client.query_options[:stream] = false
-      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
+      result = @client.prepare("SELECT 1 UNION SELECT 2", stream: false).execute
       expect(result.first).to eql(result.first)
     end
 
     it "should throw an exception if we try to iterate twice when streaming is enabled" do
-      @client.query_options[:stream] = true
-      @client.query_options[:cache_rows] = false
-
-      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
+      result = @client.prepare("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false).execute
 
       expect do
         result.each {}
         result.each {}
       end.to raise_exception(Mysql2::Error)
-
-      @client.query_options[:stream] = false
-      @client.query_options[:cache_rows] = true
     end
   end
 

@@ -88,6 +88,31 @@ RSpec.describe Mysql2::Statement do
     expect(result.to_a).to eq(['max1' => int64_max1, 'max2' => int64_max2, 'max3' => int64_max3, 'min1' => int64_min1, 'min2' => int64_min2, 'min3' => int64_min3])
   end
 
+  it "should keep query options per prepared statement" do
+    stmt1 = @client.prepare 'SELECT 1 AS a', as: :hash
+    stmt2 = @client.prepare 'SELECT 1 AS a', as: :array
+
+    expect(stmt1.execute.first).to eq("a" => 1)
+    expect(stmt2.execute.first).to eq([1])
+
+    expect(stmt1.query_options).to include(as: :hash)
+    expect(stmt2.query_options).to include(as: :array)
+  end
+
+  it "should capture query options when preparing the statement" do
+    @client.query_options[:as] = :hash
+    stmt1 = @client.prepare 'SELECT 1 AS a'
+
+    @client.query_options[:as] = :array
+    stmt2 = @client.prepare 'SELECT 1 AS a'
+
+    expect(stmt1.execute.first).to eq("a" => 1)
+    expect(stmt2.execute.first).to eq([1])
+
+    expect(stmt1.query_options).to include(as: :hash)
+    expect(stmt2.query_options).to include(as: :array)
+  end
+
   it "should keep its result after other query" do
     @client.query 'USE test'
     @client.query 'CREATE TABLE IF NOT EXISTS mysql2_stmt_q(a int)'
@@ -258,14 +283,14 @@ RSpec.describe Mysql2::Statement do
     # note: The current impl. of prepared statement requires results to be cached on #execute except for streaming queries
     #       The drawback of this is that args of Result#each is ignored...
 
-    it "should yield rows as hash's" do
+    it "should yield rows as hashes" do
       result = @client.prepare("SELECT 1").execute
       result.each do |row|
         expect(row).to be_an_instance_of(Hash)
       end
     end
 
-    it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
+    it "should yield rows as hashes with symbol keys if :symbolize_keys was set to true" do
       result = @client.prepare("SELECT 1", symbolize_keys: true).execute
       result.each do |row|
         expect(row.keys.first).to be_an_instance_of(Symbol)

@@ -108,7 +108,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql, VALUE options) {
   }
 
   rb_obj_call_init(rb_stmt, 0, NULL);
-  rb_iv_set(rb_stmt, "@query_options", options);
+  rb_iv_set(rb_stmt, "@query_options", rb_hash_dup(options));
 
   // instantiate stmt
   {

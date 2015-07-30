@@ -885,7 +885,7 @@ static VALUE rb_mysql_client_server_info(VALUE self) {
  *
  * Return the file descriptor number for this client.
  */
-static VALUE rb_mysql_client_socket(VALUE self) {
+static VALUE rb_mysql_client_socket(RB_MYSQL_UNUSED VALUE self) {
 #ifndef _WIN32
   GET_CLIENT(self);
   REQUIRE_CONNECTED(wrapper);

@@ -19,6 +19,4 @@ typedef struct {
   mysql_client_wrapper *client_wrapper;
 } mysql2_result_wrapper;
 
-#define GetMysql2Result(obj, sval) (sval = (mysql2_result_wrapper*)DATA_PTR(obj));
-
 #endif

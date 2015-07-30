@@ -66,12 +66,13 @@ describe Mysql2::Client do
       end
     end
     client = klient.new
-    (client.connect_args.last[6] & (Mysql2::Client::REMEMBER_OPTIONS |
-                                     Mysql2::Client::LONG_PASSWORD |
-                                     Mysql2::Client::LONG_FLAG |
-                                     Mysql2::Client::TRANSACTIONS |
-                                     Mysql2::Client::PROTOCOL_41 |
-                                     Mysql2::Client::SECURE_CONNECTION)).should be_true
+    client_flags = Mysql2::Client::REMEMBER_OPTIONS |
+                   Mysql2::Client::LONG_PASSWORD |
+                   Mysql2::Client::LONG_FLAG |
+                   Mysql2::Client::TRANSACTIONS |
+                   Mysql2::Client::PROTOCOL_41 |
+                   Mysql2::Client::SECURE_CONNECTION
+    client.connect_args.last[6].should eql(client_flags)
   end
 
   it "should execute init command" do
@@ -715,6 +716,19 @@ describe Mysql2::Client do
         @client.escape ""
       }.should raise_error(Mysql2::Error)
     end
+
+    context 'when mysql encoding is not utf8' do
+      before { pending('Encoding is undefined') unless defined?(Encoding) }
+
+      let(:client) { Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "ujis")) }
+
+      it 'should return a internal encoding string if Encoding.default_internal is set' do
+        with_internal_encoding Encoding::UTF_8 do
+          client.escape("\u{30C6}\u{30B9}\u{30C8}").should eql("\u{30C6}\u{30B9}\u{30C8}")
+          client.escape("\u{30C6}'\u{30B9}\"\u{30C8}").should eql("\u{30C6}\\'\u{30B9}\\\"\u{30C8}")
+        end
+      end
+    end
   end
 
   it "should respond to #info" do
@@ -730,26 +744,21 @@ describe Mysql2::Client do
     info[:version].class.should eql(String)
   end
 
-  if defined? Encoding
-    context "strings returned by #info" do
-      it "should default to the connection's encoding if Encoding.default_internal is nil" do
-        with_internal_encoding nil do
-          @client.info[:version].encoding.should eql(Encoding.find('utf-8'))
+  context "strings returned by #info" do
+    before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
-          client2.info[:version].encoding.should eql(Encoding.find('us-ascii'))
-        end
-      end
+    it "should be tagged as ascii" do
+      @client.info[:version].encoding.should eql(Encoding::US_ASCII)
+      @client.info[:header_version].encoding.should eql(Encoding::US_ASCII)
+    end
+  end
 
-      it "should use Encoding.default_internal" do
-        with_internal_encoding 'utf-8' do
-          @client.info[:version].encoding.should eql(Encoding.default_internal)
-        end
+  context "strings returned by .info" do
+    before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-        with_internal_encoding 'us-ascii' do
-          @client.info[:version].encoding.should eql(Encoding.default_internal)
-        end
-      end
+    it "should be tagged as ascii" do
+      Mysql2::Client.info[:version].encoding.should eql(Encoding::US_ASCII)
+      Mysql2::Client.info[:header_version].encoding.should eql(Encoding::US_ASCII)
     end
   end
 

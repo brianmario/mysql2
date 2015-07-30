@@ -17,7 +17,7 @@ Rake::ExtensionTask.new("mysql2", gemspec) do |ext|
     ext.config_options = [ "--with-mysql-dir=#{connector_dir}" ]
   else
     ext.cross_compile = true
-    ext.cross_platform = ['x86-mingw32', 'x86-mswin32-60', 'x64-mingw32']
+    ext.cross_platform = ENV['CROSS_PLATFORMS'] ? ENV['CROSS_PLATFORMS'].split(':') : ['x86-mingw32', 'x86-mswin32-60', 'x64-mingw32']
     ext.cross_config_options << {
       'x86-mingw32'    => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__),
       'x86-mswin32-60' => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__),
@@ -87,11 +87,19 @@ else
   end
 end
 
-desc "Build the windows binary gems per rake-compiler-dock"
+desc "Build binary gems for Windows with rake-compiler-dock"
 task 'gem:windows' do
   require 'rake_compiler_dock'
   RakeCompilerDock.sh <<-EOT
-    bundle install "--without=test benchmarks development rbx" &&
-    rake cross native gem
+    bundle install
+    rake clean
+    rm vendor/libmysql.dll
+    rake cross native gem CROSS_PLATFORMS=x86-mingw32:x86-mswin32-60
+  EOT
+  RakeCompilerDock.sh <<-EOT
+    bundle install
+    rake clean
+    rm vendor/libmysql.dll
+    rake cross native gem CROSS_PLATFORMS=x64-mingw32
   EOT
 end

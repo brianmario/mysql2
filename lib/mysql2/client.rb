@@ -1,77 +1,75 @@
 module Mysql2
   class Client
-    attr_reader :query_options, :read_timeout
-    @@default_query_options = {
-      :as => :hash,                   # the type of object you want each row back as; also supports :array (an array of values)
-      :async => false,                # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
-      :cast_booleans => false,        # cast tinyint(1) fields as true/false in ruby
-      :symbolize_keys => false,       # return field names as symbols instead of strings
-      :database_timezone => :local,   # timezone Mysql2 will assume datetime objects are stored in
-      :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller
-      :cache_rows => true,            # tells Mysql2 to use it's internal row cache for results
-      :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
-      :cast => true,
-      :default_file => nil,
-      :default_group => nil
-    }
+    attr_reader :connect_options, :query_options, :read_timeout
+
+    VALID_CONNECT_KEYS = [:connect_flags, :connect_timeout, :encoding, :default_file, :default_group, :read_timeout, :write_timeout, :secure_auth, :init_command, :reconnect, :local_infile]
+    VALID_QUERY_KEYS = [:as, :async, :cast_booleans, :symbolize_keys, :database_timezone, :application_timezone, :cache_rows, :cast]
 
     def initialize(opts = {})
-      opts = Mysql2::Util.key_hash_as_symbols( opts )
-      @read_timeout = nil
-      @query_options = @@default_query_options.dup
-      @query_options.merge! opts
+      opts = Mysql2::Util.key_hash_as_symbols(opts)
+      @read_timeout = nil # by default don't timeout on read
+      @connect_options = self.class.default_connect_options.merge Hash[ opts.select { |k, v| VALID_CONNECT_KEYS.include? k } ]
+      @query_options = self.class.default_query_options.merge Hash[ opts.select { |k, v| VALID_QUERY_KEYS.include? k } ]
 
       initialize_ext
 
-      # Set default connect_timeout to avoid unlimited retries from signal interruption
-      opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
-
       [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command].each do |key|
-        next unless opts.key?(key)
+        next unless @connect_options.key?(key)
         case key
         when :reconnect, :local_infile, :secure_auth
-          send(:"#{key}=", !!opts[key])
+          send(:"#{key}=", !!@connect_options[key])
         when :connect_timeout, :read_timeout, :write_timeout
-          send(:"#{key}=", opts[key].to_i)
+          send(:"#{key}=", @connect_options[key].to_i)
         else
-          send(:"#{key}=", opts[key])
+          send(:"#{key}=", @connect_options[key])
         end
       end
 
-      # force the encoding to utf8
-      self.charset_name = opts[:encoding] || 'utf8'
+      # force the encoding to utf8 even if set to nil
+      self.charset_name = @connect_options[:encoding] || 'utf8'
 
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any?
 
-      if [:user,:pass,:hostname,:dbname,:db,:sock].any?{|k| @query_options.has_key?(k) }
-        warn "============= WARNING FROM mysql2 ============="
-        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock will be deprecated at some point in the future."
-        warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
-        warn "============= END WARNING FROM mysql2 ========="
+      if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @connect_options.has_key? k }
+        raise <<-DEPR
+The options :user, :pass, :hostname, :dbname, :db, :sock are removed.
+Please use :username, :password, :host, :port, :database, :socket instead.
+DEPR
       end
 
-      user     = opts[:username] || opts[:user]
-      pass     = opts[:password] || opts[:pass]
-      host     = opts[:host] || opts[:hostname]
-      port     = opts[:port]
-      database = opts[:database] || opts[:dbname] || opts[:db]
-      socket   = opts[:socket] || opts[:sock]
-      flags    = opts[:flags] ? opts[:flags] | @query_options[:connect_flags] : @query_options[:connect_flags]
-
       # Correct the data types before passing these values down to the C level
-      user = user.to_s unless user.nil?
-      pass = pass.to_s unless pass.nil?
-      host = host.to_s unless host.nil?
-      port = port.to_i unless port.nil?
-      database = database.to_s unless database.nil?
-      socket = socket.to_s unless socket.nil?
+      user     = opts[:username].to_s unless opts[:username].nil?
+      pass     = opts[:password].to_s unless opts[:password].nil?
+      host     = opts[:host].to_s     unless opts[:host].nil?
+      port     = opts[:port].to_i     unless opts[:port].nil?
+      database = opts[:database].to_s unless opts[:database].nil?
+      socket   = opts[:socket].to_s   unless opts[:socket].nil?
+      flags    = opts[:flags] ? opts[:flags] | @connect_options[:connect_flags] : @connect_options[:connect_flags]
+      flags  ||= 0 # if nil then 0
 
       connect user, pass, host, port, database, socket, flags
     end
 
+    def self.default_connect_options
+      @default_connect_options ||= {
+        :connect_flags   => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
+        :connect_timeout => 120,         # Set default connect_timeout to avoid unlimited retries from signal interruption
+        :encoding        => 'utf8',
+      }
+    end
+
     def self.default_query_options
-      @@default_query_options
+      @default_query_options ||= {
+        :as                   => :hash,  # the type of object you want each row back as; also supports :array (an array of values)
+        :async                => false,  # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
+        :cast_booleans        => false,  # cast tinyint(1) fields as true/false in ruby
+        :symbolize_keys       => false,  # return field names as symbols instead of strings
+        :database_timezone    => :local, # timezone Mysql2 will assume datetime objects are stored in
+        :application_timezone => nil,    # timezone Mysql2 will convert to before handing the object back to the caller
+        :cache_rows           => true,   # tells Mysql2 to use it's internal row cache for results
+        :cast                 => true,   # cast result fields to corresponding Ruby data types
+      }
     end
 
     if Thread.respond_to?(:handle_interrupt)

@@ -639,8 +639,8 @@ static VALUE rb_mysql_client_abandon_results(VALUE self) {
 /* call-seq:
  *    client.query(sql, options = {})
  *
- * Query the database with +sql+, with optional +options+.  For the possible
- * options, see @@default_query_options on the Mysql2::Client class.
+ * Query the database with +sql+, with optional +options+.
+ * For available options, see VALID_QUERY_KEYS in the Mysql2::Client class.
  */
 static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
 #ifndef _WIN32

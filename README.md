@@ -186,7 +186,8 @@ Setting any of the following options will enable an SSL connection, but only if
 your MySQL client library and server have been compiled with SSL support.
 MySQL client library defaults will be used for any parameters that are left out
 or set to nil. Relative paths are allowed, and may be required by managed
-hosting providers such as Heroku.
+hosting providers such as Heroku. Set `:sslverify => true` to require that the
+server presents a valid certificate.
 
 ``` ruby
 Mysql2::Client.new(
@@ -195,7 +196,8 @@ Mysql2::Client.new(
   :sslcert => '/path/to/client-cert.pem',
   :sslca => '/path/to/ca-cert.pem',
   :sslcapath => '/path/to/cacerts',
-  :sslcipher => 'DHE-RSA-AES256-SHA'
+  :sslcipher => 'DHE-RSA-AES256-SHA',
+  :sslverify => true,
   )
 ```
 

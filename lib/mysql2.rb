@@ -13,7 +13,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
     ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
   elsif File.exist?(File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)))
     # Use vendor/libmysql.dll if it exists, convert slashes for Win32 LoadLibrary
-    File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).gsub('/', '\\')
+    File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).tr('/', '\\')
   else
     # This will use default / system library paths
     'libmysql.dll'

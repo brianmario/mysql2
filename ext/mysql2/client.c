@@ -182,23 +182,31 @@ static void *nogvl_connect(void *ptr) {
  */
 static VALUE invalidate_fd(int clientfd)
 {
-#ifdef SOCK_CLOEXEC
+#ifdef O_CLOEXEC
   /* Atomically set CLOEXEC on the new FD in case another thread forks */
   int sockfd = open("/dev/null", O_RDWR | O_CLOEXEC);
-  if (sockfd < 0) {
-    /* Maybe SOCK_CLOEXEC is defined but not available on this kernel */
-    int sockfd = open("/dev/null", O_RDWR);
-    fcntl(sockfd, F_SETFD, FD_CLOEXEC);
-  }
 #else
-  /* Well we don't have SOCK_CLOEXEC, so just set FD_CLOEXEC quickly */
-  int sockfd = open("/dev/null", O_RDWR);
-  fcntl(sockfd, F_SETFD, FD_CLOEXEC);
+  /* Well we don't have O_CLOEXEC, trigger the fallback code below */
+  int sockfd = -1;
 #endif
 
   if (sockfd < 0) {
-    /*
-     * Cannot raise here, because one or both of the following may be true:
+    /* Either O_CLOEXEC wasn't defined at compile time, or it was defined at
+     * compile time, but isn't available at run-time. So we'll just be quick
+     * about setting FD_CLOEXEC now.
+     */
+    int flags;
+    sockfd = open("/dev/null", O_RDWR);
+    flags = fcntl(sockfd, F_GETFD);
+    /* Do the flags dance in case there are more defined flags in the future */
+    if (flags != -1) {
+      flags |= FD_CLOEXEC;
+      fcntl(sockfd, F_SETFD, flags);
+    }
+  }
+
+  if (sockfd < 0) {
+    /* Cannot raise here, because one or both of the following may be true:
      * a) we have no GVL (in C Ruby)
      * b) are running as a GC finalizer
      */

@@ -1,3 +1,4 @@
+sudo: required
 language: ruby
 bundler_args: --without benchmarks development
 before_install:

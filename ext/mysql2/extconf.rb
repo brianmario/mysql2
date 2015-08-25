@@ -3,12 +3,11 @@ require 'mkmf'
 
 def asplode lib
   if RUBY_PLATFORM =~ /mingw|mswin/
-    abort "-----\n#{lib} is missing. please check your installation of mysql and try again.\n-----"
+    abort "-----\n#{lib} is missing. Check your installation of MySQL or Connector/C, and try again.\n-----"
   elsif RUBY_PLATFORM =~ /darwin/
-    abort "-----\n#{lib} is missing. Try 'brew install mysql', check your installation of mysql and try again.\n-----"
+    abort "-----\n#{lib} is missing. You may need to 'brew install mysql' or 'port install mysql', and try again.\n-----"
   else
-    abort "-----\n#{lib} is missing. Try 'apt-get install libmysqlclient-dev' or
-'yum install mysql-devel', check your installation of mysql and try again.\n-----"
+    abort "-----\n#{lib} is missing. You may need to 'apt-get install libmysqlclient-dev' or 'yum install mysql-devel', and try again.\n-----"
   end
 end
 

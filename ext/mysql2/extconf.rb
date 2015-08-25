@@ -3,12 +3,11 @@ require 'mkmf'
 
 def asplode lib
   if RUBY_PLATFORM =~ /mingw|mswin/
-    abort "-----\n#{lib} is missing. please check your installation of mysql and try again.\n-----"
+    abort "-----\n#{lib} is missing. Check your installation of MySQL or Connector/C, and try again.\n-----"
   elsif RUBY_PLATFORM =~ /darwin/
-    abort "-----\n#{lib} is missing. Try 'brew install mysql', check your installation of mysql and try again.\n-----"
+    abort "-----\n#{lib} is missing. You may need to 'brew install mysql' or 'port install mysql', and try again.\n-----"
   else
-    abort "-----\n#{lib} is missing. Try 'apt-get install libmysqlclient-dev' or
-'yum install mysql-devel', check your installation of mysql and try again.\n-----"
+    abort "-----\n#{lib} is missing. You may need to 'apt-get install libmysqlclient-dev' or 'yum install mysql-devel', and try again.\n-----"
   end
 end
 
@@ -73,14 +72,21 @@ elsif mc = (with_config('mysql-config') || Dir[GLOB].first)
   rpath_dir = libs
 else
   inc, lib = dir_config('mysql', '/usr/local')
-  libs = ['m', 'z', 'socket', 'nsl', 'mygcc']
-  found = false
-  while not find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql") do
-    exit 1 if libs.empty?
-    found ||= have_library(libs.shift)
-  end
+  unless find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql")
+    found = false
+    # For some systems and some versions of libmysqlclient, there were extra
+    # libraries needed to link. Try each typical extra library, add it to the
+    # global compile flags, and see if that allows us to link libmysqlclient.
+    warn "-----\nlibmysqlclient is missing. Trying again with extra runtime libraries...\n-----"
 
-  asplode("mysql client") unless found
+    %w{ m z socket nsl mygcc }.each do |extra_lib|
+      if have_library(extra_lib) && find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql")
+        found = true
+        break
+      end
+    end
+    asplode('libmysqlclient') unless found
+  end
 
   rpath_dir = lib
 end

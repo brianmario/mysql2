@@ -214,27 +214,13 @@ static void *nogvl_close(void *ptr) {
   if (wrapper->connected) {
     MARK_CONN_INACTIVE(self);
     wrapper->connected = 0;
-#ifndef _WIN32
-    /* Invalidate the socket before calling mysql_close(). This prevents
-     * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
-     * the socket. The difference is that invalidate_fd will drop this
-     * process's reference to the socket only, while a QUIT or shutdown()
-     * would render the underlying connection unusable, interrupting other
-     * processes which share this object across a fork().
-     */
-    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
-      fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, leaking some memory\n");
-      close(wrapper->client->net.fd);
-      return NULL;
-    }
-#endif
-
-    mysql_close(wrapper->client); /* only used to free memory at this point */
+    mysql_close(wrapper->client);
   }
 
   return NULL;
 }
 
+/* this is called during GC */
 static void rb_mysql_client_free(void *ptr) {
   mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
   decr_mysql2_client(wrapper);
@@ -245,6 +231,22 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
   wrapper->refcount--;
 
   if (wrapper->refcount == 0) {
+#ifndef _WIN32
+    if (wrapper->connected) {
+      /* The client is being garbage collected while connected. Prevent
+       * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
+       * the socket by invalidating it. invalidate_fd() will drop this
+       * process's reference to the socket only, while a QUIT or shutdown()
+       * would render the underlying connection unusable, interrupting other
+       * processes which share this object across a fork().
+       */
+      if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+        fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely\n");
+        close(wrapper->client->net.fd);
+      }
+    }
+#endif
+
     nogvl_close(wrapper);
     xfree(wrapper->client);
     xfree(wrapper);
@@ -378,10 +380,13 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 }
 
 /*
- * Immediately disconnect from the server, normally the garbage collector
- * will disconnect automatically when a connection is no longer needed.
- * Explicitly closing this will free up server resources sooner than waiting
- * for the garbage collector.
+ * Terminate the connection; call this when the connection is no longer needed.
+ * The garbage collector can close the connection, but doing so emits an
+ * "Aborted connection" error on the server and increments the Aborted_clients
+ * status variable.
+ *
+ * @see http://dev.mysql.com/doc/en/communication-errors.html
+ * @return [void]
  */
 static VALUE rb_mysql_client_close(VALUE self) {
   GET_CLIENT(self);

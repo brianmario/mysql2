@@ -3,9 +3,9 @@ require File.expand_path('../lib/mysql2/version', __FILE__)
 Gem::Specification.new do |s|
   s.name = %q{mysql2}
   s.version = Mysql2::VERSION
-  s.authors = ["Brian Lopez"]
+  s.authors = ['Brian Lopez', 'Aaron Stone']
   s.license = "MIT"
-  s.email = %q{seniorlopez@gmail.com}
+  s.email = ['seniorlopez@gmail.com', 'aaron@serendipity.cx']
   s.extensions = ["ext/mysql2/extconf.rb"]
   s.homepage = %q{http://github.com/brianmario/mysql2}
   s.rdoc_options = ["--charset=UTF-8"]

@@ -12,3 +12,9 @@ apt-get update
 apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confnew -y install mysql-server libmysqlclient-dev
 
 mysql_upgrade -u root --force --upgrade-system-tables
+
+# Replace the final line of the mysql apparmor, allowing /etc/mysql/*.pem
+sed -ie '$ s|}|\
+  /etc/mysql/*.pem r,\
+}|' /etc/apparmor.d/usr.sbin.mysqld
+service apparmor restart

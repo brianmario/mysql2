@@ -35,3 +35,5 @@ cache:
   - vendor
 services:
   - mysql
+hosts:
+  mysql2gem.example.com: 127.0.0.1

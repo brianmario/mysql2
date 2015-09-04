@@ -127,6 +127,7 @@ RSpec.describe Mysql2::Client do
     expect {
       ssl_client = Mysql2::Client.new(
         DatabaseCredentials['root'].merge(
+          'host'     => 'mysql2gem.example.com', # must match the certificates
           :sslkey    => '/etc/mysql/client-key.pem',
           :sslcert   => '/etc/mysql/client-cert.pem',
           :sslca     => '/etc/mysql/ca-cert.pem',

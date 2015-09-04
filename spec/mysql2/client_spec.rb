@@ -126,11 +126,13 @@ RSpec.describe Mysql2::Client do
     ssl_client = nil
     expect {
       ssl_client = Mysql2::Client.new(
-        :sslkey    => '/etc/mysql/client-key.pem',
-        :sslcert   => '/etc/mysql/client-cert.pem',
-        :sslca     => '/etc/mysql/ca-cert.pem',
-        :sslcapath => '/etc/mysql/',
-        :sslcipher => 'DHE-RSA-AES256-SHA'
+        DatabaseCredentials['root'].merge(
+          :sslkey    => '/etc/mysql/client-key.pem',
+          :sslcert   => '/etc/mysql/client-cert.pem',
+          :sslca     => '/etc/mysql/ca-cert.pem',
+          :sslcipher => 'DHE-RSA-AES256-SHA',
+          :sslverify => true
+        )
       )
     }.not_to raise_error
 

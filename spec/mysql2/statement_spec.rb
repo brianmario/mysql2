@@ -9,7 +9,7 @@ RSpec.describe Mysql2::Statement do
   it "should create a statement" do
     statement = nil
     expect { statement = @client.prepare 'SELECT 1' }.not_to raise_error
-    expect(statement).to be_kind_of Mysql2::Statement
+    expect(statement).to be_an_instance_of(Mysql2::Statement)
   end
 
   it "should raise an exception when server disconnects" do
@@ -103,7 +103,7 @@ RSpec.describe Mysql2::Statement do
   it "should select dates" do
     statement = @client.prepare 'SELECT NOW()'
     result = statement.execute
-    expect(result.first.first[1]).to be_kind_of Time
+    expect(result.first.first[1]).to be_an_instance_of(Time)
   end
 
   it "should tell us about the fields" do
@@ -185,7 +185,7 @@ RSpec.describe Mysql2::Statement do
     it "should yield rows as hash's" do
       @result = @client.prepare("SELECT 1").execute
       @result.each do |row|
-        expect(row.class).to eql(Hash)
+        expect(row).to be_an_instance_of(Hash)
       end
     end
 
@@ -193,7 +193,7 @@ RSpec.describe Mysql2::Statement do
       @client.query_options[:symbolize_keys] = true
       @result = @client.prepare("SELECT 1").execute
       @result.each do |row|
-        expect(row.keys.first.class).to eql(Symbol)
+        expect(row.keys.first).to be_an_instance_of(Symbol)
       end
       @client.query_options[:symbolize_keys] = false
     end
@@ -203,7 +203,7 @@ RSpec.describe Mysql2::Statement do
 
       @result = @client.prepare("SELECT 1").execute
       @result.each do |row|
-        expect(row.class).to eql(Array)
+        expect(row).to be_an_instance_of(Array)
       end
 
       @client.query_options[:as] = :hash
@@ -270,17 +270,17 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should return nil for a NULL value" do
-      expect(@test_result['null_test'].class).to eql(NilClass)
+      expect(@test_result['null_test']).to be_an_instance_of(NilClass)
       expect(@test_result['null_test']).to eql(nil)
     end
 
     it "should return String for a BIT(64) value" do
-      expect(@test_result['bit_test'].class).to eql(String)
+      expect(@test_result['bit_test']).to be_an_instance_of(String)
       expect(@test_result['bit_test']).to eql("\000\000\000\000\000\000\000\005")
     end
 
     it "should return String for a BIT(1) value" do
-      expect(@test_result['single_bit_test'].class).to eql(String)
+      expect(@test_result['single_bit_test']).to be_an_instance_of(String)
       expect(@test_result['single_bit_test']).to eql("\001")
     end
 
@@ -347,22 +347,22 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should return BigDecimal for a DECIMAL value" do
-      expect(@test_result['decimal_test'].class).to eql(BigDecimal)
+      expect(@test_result['decimal_test']).to be_an_instance_of(BigDecimal)
       expect(@test_result['decimal_test']).to eql(10.3)
     end
 
     it "should return Float for a FLOAT value" do
-      expect(@test_result['float_test'].class).to eql(Float)
+      expect(@test_result['float_test']).to be_an_instance_of(Float)
       expect(@test_result['float_test']).to be_within(1e-5).of(10.3)
     end
 
     it "should return Float for a DOUBLE value" do
-      expect(@test_result['double_test'].class).to eql(Float)
+      expect(@test_result['double_test']).to be_an_instance_of(Float)
       expect(@test_result['double_test']).to eql(10.3)
     end
 
     it "should return Time for a DATETIME value when within the supported range" do
-      expect(@test_result['date_time_test'].class).to eql(Time)
+      expect(@test_result['date_time_test']).to be_an_instance_of(Time)
       expect(@test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
@@ -376,60 +376,60 @@ RSpec.describe Mysql2::Statement do
       it "should return DateTime when timestamp is < 1901-12-13 20:45:52" do
                                       # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
-        expect(r.first['test'].class).to eql(klass)
+        expect(r.first['test']).to be_an_instance_of(klass)
       end
 
       it "should return DateTime when timestamp is > 2038-01-19T03:14:07" do
                                       # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-        expect(r.first['test'].class).to eql(klass)
+        expect(r.first['test']).to be_an_instance_of(klass)
       end
     elsif 1.size == 8 # 64bit
       unless RUBY_VERSION =~ /1.8/
         it "should return Time when timestamp is < 1901-12-13 20:45:52" do
           r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
-          expect(r.first['test'].class).to eql(Time)
+          expect(r.first['test']).to be_an_instance_of(Time)
         end
 
         it "should return Time when timestamp is > 2038-01-19T03:14:07" do
           r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-          expect(r.first['test'].class).to eql(Time)
+          expect(r.first['test']).to be_an_instance_of(Time)
         end
       else
         it "should return Time when timestamp is > 0138-12-31 11:59:59" do
           r = @client.query("SELECT CAST('0139-1-1 00:00:00' AS DATETIME) as test")
-          expect(r.first['test'].class).to eql(Time)
+          expect(r.first['test']).to be_an_instance_of(Time)
         end
 
         it "should return DateTime when timestamp is < 0139-1-1T00:00:00" do
           r = @client.query("SELECT CAST('0138-12-31 11:59:59' AS DATETIME) as test")
-          expect(r.first['test'].class).to eql(DateTime)
+          expect(r.first['test']).to be_an_instance_of(DateTime)
         end
 
         it "should return Time when timestamp is > 2038-01-19T03:14:07" do
           r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-          expect(r.first['test'].class).to eql(Time)
+          expect(r.first['test']).to be_an_instance_of(Time)
         end
       end
     end
 
     it "should return Time for a TIMESTAMP value when within the supported range" do
-      expect(@test_result['timestamp_test'].class).to eql(Time)
+      expect(@test_result['timestamp_test']).to be_an_instance_of(Time)
       expect(@test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
     it "should return Time for a TIME value" do
-      expect(@test_result['time_test'].class).to eql(Time)
+      expect(@test_result['time_test']).to be_an_instance_of(Time)
       expect(@test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2000-01-01 11:44:00')
     end
 
     it "should return Date for a DATE value" do
-      expect(@test_result['date_test'].class).to eql(Date)
+      expect(@test_result['date_test']).to be_an_instance_of(Date)
       expect(@test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')
     end
 
     it "should return String for an ENUM value" do
-      expect(@test_result['enum_test'].class).to eql(String)
+      expect(@test_result['enum_test']).to be_an_instance_of(String)
       expect(@test_result['enum_test']).to eql('val1')
     end
 
@@ -467,7 +467,7 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should return String for a SET value" do
-      expect(@test_result['set_test'].class).to eql(String)
+      expect(@test_result['set_test']).to be_an_instance_of(String)
       expect(@test_result['set_test']).to eql('val1,val2')
     end
 
@@ -500,7 +500,7 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should return String for a BINARY value" do
-      expect(@test_result['binary_test'].class).to eql(String)
+      expect(@test_result['binary_test']).to be_an_instance_of(String)
       expect(@test_result['binary_test']).to eql("test#{"\000"*6}")
     end
 
@@ -541,7 +541,7 @@ RSpec.describe Mysql2::Statement do
       'long_text_test' => 'LONGTEXT'
     }.each do |field, type|
       it "should return a String for #{type}" do
-        expect(@test_result[field].class).to eql(String)
+        expect(@test_result[field]).to be_an_instance_of(String)
         expect(@test_result[field]).to eql("test")
       end
 

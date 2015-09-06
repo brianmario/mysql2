@@ -140,12 +140,12 @@ RSpec.describe Mysql2::Client do
     results = ssl_client.query("SHOW STATUS WHERE Variable_name = \"Ssl_version\" OR Variable_name = \"Ssl_cipher\"").to_a
     expect(results[0]['Variable_name']).to eql('Ssl_cipher')
     expect(results[0]['Value']).not_to be_nil
-    expect(results[0]['Value']).to be_kind_of(String)
+    expect(results[0]['Value']).to be_an_instance_of(String)
     expect(results[0]['Value']).not_to be_empty
 
     expect(results[1]['Variable_name']).to eql('Ssl_version')
     expect(results[1]['Value']).not_to be_nil
-    expect(results[1]['Value']).to be_kind_of(String)
+    expect(results[1]['Value']).to be_an_instance_of(String)
     expect(results[1]['Value']).not_to be_empty
 
     ssl_client.close
@@ -382,16 +382,16 @@ RSpec.describe Mysql2::Client do
     end
 
     it "should return results as a hash by default" do
-      expect(@client.query("SELECT 1").first.class).to eql(Hash)
+      expect(@client.query("SELECT 1").first).to be_an_instance_of(Hash)
     end
 
     it "should be able to return results as an array" do
-      expect(@client.query("SELECT 1", :as => :array).first.class).to eql(Array)
+      expect(@client.query("SELECT 1", :as => :array).first).to be_an_instance_of(Array)
       @client.query("SELECT 1").each(:as => :array)
     end
 
     it "should be able to return results with symbolized keys" do
-      expect(@client.query("SELECT 1", :symbolize_keys => true).first.keys[0].class).to eql(Symbol)
+      expect(@client.query("SELECT 1", :symbolize_keys => true).first.keys[0]).to be_an_instance_of(Symbol)
     end
 
     it "should require an open connection" do
@@ -454,7 +454,7 @@ RSpec.describe Mysql2::Client do
       end
 
       it "#socket should return a Fixnum (file descriptor from C)" do
-        expect(@client.socket.class).to eql(Fixnum)
+        expect(@client.socket).to be_an_instance_of(Fixnum)
         expect(@client.socket).not_to eql(0)
       end
 
@@ -545,7 +545,7 @@ RSpec.describe Mysql2::Client do
         expect(loops >= 1).to be true
 
         result = @client.async_result
-        expect(result.class).to eql(Mysql2::Result)
+        expect(result).to be_an_instance_of(Mysql2::Result)
       end
     end
 
@@ -727,11 +727,11 @@ RSpec.describe Mysql2::Client do
 
   it "#info should return a hash containing the client version ID and String" do
     info = @client.info
-    expect(info.class).to eql(Hash)
+    expect(info).to be_an_instance_of(Hash)
     expect(info).to have_key(:id)
-    expect(info[:id].class).to eql(Fixnum)
+    expect(info[:id]).to be_an_instance_of(Fixnum)
     expect(info).to have_key(:version)
-    expect(info[:version].class).to eql(String)
+    expect(info[:version]).to be_an_instance_of(String)
   end
 
   context "strings returned by #info" do
@@ -758,11 +758,11 @@ RSpec.describe Mysql2::Client do
 
   it "#server_info should return a hash containing the client version ID and String" do
     server_info = @client.server_info
-    expect(server_info.class).to eql(Hash)
+    expect(server_info).to be_an_instance_of(Hash)
     expect(server_info).to have_key(:id)
-    expect(server_info[:id].class).to eql(Fixnum)
+    expect(server_info[:id]).to be_an_instance_of(Fixnum)
     expect(server_info).to have_key(:version)
-    expect(server_info[:version].class).to eql(String)
+    expect(server_info[:version]).to be_an_instance_of(String)
   end
 
   it "#server_info should require an open connection" do
@@ -851,7 +851,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "#thread_id should be a Fixnum" do
-    expect(@client.thread_id.class).to eql(Fixnum)
+    expect(@client.thread_id).to be_an_instance_of(Fixnum)
   end
 
   it "should respond to #ping" do

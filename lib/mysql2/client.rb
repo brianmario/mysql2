@@ -80,8 +80,10 @@ module Mysql2
     end
 
     if Thread.respond_to?(:handle_interrupt)
+      require 'timeout'
+
       def query(sql, options = {})
-        Thread.handle_interrupt(Timeout::ExitException => :never) do
+        Thread.handle_interrupt(::Timeout::ExitException => :never) do
           _query(sql, @query_options.merge(options))
         end
       end

@@ -9,11 +9,13 @@ This one is not.
 
 It also forces the use of UTF-8 [or binary] for the connection [and all strings in 1.9, unless Encoding.default_internal is set then it'll convert from UTF-8 to that encoding] and uses encoding-aware MySQL API calls where it can.
 
-The API consists of two classes:
+The API consists of three classes:
 
 `Mysql2::Client` - your connection to the database.
 
 `Mysql2::Result` - returned from issuing a #query on the connection. It includes Enumerable.
+
+`Mysql2::Statement` - returned from issuing a #prepare on the connection. Execute the statement to get a Result.
 
 ## Installing
 ### General Instructions
@@ -151,6 +153,20 @@ results.each(:as => :array) do |row|
 # Each row is an array, ordered the same as the query results
 # An otter's den is called a "holt" or "couch"
 end
+```
+
+Prepared statements are supported, as well. In a prepared statement, use a `?`
+in place of each value and then execute the statement to retrieve a result set.
+Pass your arguments to the execute method in the same number and order as the
+question marks in the statement.
+
+``` ruby
+statement = @client.prepare("SELECT * FROM users WHERE login_count = ?")
+result1 = statement.execute(1)
+result2 = statement.execute(2)
+
+statement = @client.prepare("SELECT * FROM users WHERE last_login >= ? AND location LIKE ?")
+result = statement.execute(1, "CA")
 ```
 
 ## Connection options
@@ -538,4 +554,8 @@ though.
 * Yury Korolev (http://github.com/yury) - for TONS of help testing the Active Record adapter
 * Aaron Patterson (http://github.com/tenderlove) - tons of contributions, suggestions and general badassness
 * Mike Perham (http://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
-* Aaron Stone (http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support.
+* Aaron Stone (http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support
+* Kouhei Ueno (https://github.com/nyaxt) - for the original work on Prepared Statements way back in 2012
+* John Cant (http://github.com/johncant) - polishing and updating Prepared Statements support
+* Justin Case (http://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
+* Tamir Duberstein (http://github.com/tamird) - for help with timeouts and all around updates and cleanups

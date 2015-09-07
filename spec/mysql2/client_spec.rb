@@ -213,7 +213,7 @@ RSpec.describe Mysql2::Client do
   it "should be able to connect to database with numeric-only name" do
     creds = DatabaseCredentials['numericuser']
     @client.query "CREATE DATABASE IF NOT EXISTS `#{creds['database']}`"
-    @client.query "GRANT ALL ON `#{creds['database']}`.* TO #{creds['username']}@`#{creds['host']}`"
+    @client.query "GRANT ALL ON `#{creds['database']}`.* TO #{creds['username']}@`#{creds['host']}` IDENTIFIED BY '#{creds['password']}'"
 
     expect { Mysql2::Client.new(creds) }.not_to raise_error
 

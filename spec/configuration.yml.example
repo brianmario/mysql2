@@ -7,11 +7,11 @@ root:
 user:
   host: localhost
   username: LOCALUSERNAME
-  password:
+  password: test
   database: mysql2_test
 
 numericuser:
   host: localhost
   username: LOCALUSERNAME
-  password:
+  password: test
   database: 12345

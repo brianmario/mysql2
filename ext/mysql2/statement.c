@@ -430,6 +430,33 @@ static VALUE fields(VALUE self) {
   return field_list;
 }
 
+/* call-seq:
+ *    stmt.last_id
+ *
+ * Returns the AUTO_INCREMENT value from the executed INSERT or UPDATE.
+ */
+static VALUE rb_mysql_stmt_last_id(VALUE self) {
+  GET_STATEMENT(self);
+  return ULL2NUM(mysql_stmt_insert_id(stmt_wrapper->stmt));
+}
+
+/* call-seq:
+ *    stmt.affected_rows
+ *
+ * Returns the number of rows changed, deleted, or inserted.
+ */
+static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
+  my_ulonglong affected;
+  GET_STATEMENT(self);
+
+  affected = mysql_stmt_affected_rows(stmt_wrapper->stmt);
+  if (affected == (my_ulonglong)-1) {
+    rb_raise_mysql2_stmt_error(self);
+  }
+
+  return ULL2NUM(affected);
+}
+
 void init_mysql2_statement() {
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
 
@@ -437,6 +464,8 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "field_count", field_count, 0);
   rb_define_method(cMysql2Statement, "execute", execute, -1);
   rb_define_method(cMysql2Statement, "fields", fields, 0);
+  rb_define_method(cMysql2Statement, "last_id", rb_mysql_stmt_last_id, 0);
+  rb_define_method(cMysql2Statement, "affected_rows", rb_mysql_stmt_affected_rows, 0);
 
   sym_stream = ID2SYM(rb_intern("stream"));
 

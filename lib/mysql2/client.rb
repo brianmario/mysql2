@@ -45,8 +45,12 @@ module Mysql2
       # force the encoding to utf8
       self.charset_name = opts[:encoding] || 'utf8'
 
+      # Enable SSL if any of the options are configured, or:
+      # :ssl => true requests an all-defaults SSL connection
+      # :ssl => false disables SSL even if configured by the other :ssl* options
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
-      ssl_set(*ssl_options) if ssl_options.any?
+      ssl_enabled = opts[:ssl].nil? ? ssl_options.any? : !!opts[:ssl] # rubocop:disable Style/DoubleNegation
+      ssl_set(*ssl_options) if ssl_enabled
 
       case opts[:flags]
       when Array
@@ -60,7 +64,7 @@ module Mysql2
       end
 
       # SSL verify is a connection flag rather than a mysql_ssl_set option
-      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify] && ssl_options.any?
+      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify] && ssl_enabled
 
       if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @query_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="

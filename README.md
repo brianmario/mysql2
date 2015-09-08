@@ -221,7 +221,7 @@ server presents a valid certificate.
 
 ``` ruby
 Mysql2::Client.new(
-  # ...options as above...,
+  # ... connection options ...,
   :sslkey => '/path/to/client-key.pem',
   :sslcert => '/path/to/client-cert.pem',
   :sslca => '/path/to/ca-cert.pem',
@@ -229,6 +229,16 @@ Mysql2::Client.new(
   :sslcipher => 'DHE-RSA-AES256-SHA',
   :sslverify => true,
   )
+```
+
+To enable SSL with default options, set `:ssl => true`. Set `:ssl => false` to
+disable SSL even if other options are set.
+
+``` ruby
+Mysql2::Client.new(
+  # ... connection options ...,
+  :ssl => true,
+  :sslverify => true,
 ```
 
 ### Multiple result sets

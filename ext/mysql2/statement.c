@@ -17,6 +17,15 @@ static void rb_mysql_stmt_mark(void * ptr) {
   rb_gc_mark(stmt_wrapper->client);
 }
 
+static void *nogvl_stmt_close(void *ptr) {
+  mysql_stmt_wrapper *stmt_wrapper = (mysql_stmt_wrapper *)ptr;
+  if (stmt_wrapper->closed == 0) {
+    mysql_stmt_close(stmt_wrapper->stmt);
+    stmt_wrapper->closed = 1;
+  }
+  return NULL;
+}
+
 static void rb_mysql_stmt_free(void * ptr) {
   mysql_stmt_wrapper* stmt_wrapper = (mysql_stmt_wrapper *)ptr;
   decr_mysql2_stmt(stmt_wrapper);
@@ -26,7 +35,7 @@ void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
   stmt_wrapper->refcount--;
 
   if (stmt_wrapper->refcount == 0) {
-    mysql_stmt_close(stmt_wrapper->stmt);
+    nogvl_stmt_close(stmt_wrapper);
     xfree(stmt_wrapper);
   }
 }
@@ -94,6 +103,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
   {
     stmt_wrapper->client = rb_client;
+    stmt_wrapper->closed = 0;
     stmt_wrapper->refcount = 1;
     stmt_wrapper->stmt = NULL;
   }
@@ -442,6 +452,19 @@ static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
   return ULL2NUM(affected);
 }
 
+/* call-seq:
+ *    stmt.close
+ *
+ * Explicitly closing this will free up server resources immediately rather
+ * than waiting for the garbage collector. Useful if you're managing your
+ * own prepared statement cache.
+ */
+static VALUE rb_mysql_stmt_close(VALUE self) {
+  GET_STATEMENT(self);
+  rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+  return Qnil;
+}
+
 void init_mysql2_statement() {
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
 
@@ -451,6 +474,7 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "fields", fields, 0);
   rb_define_method(cMysql2Statement, "last_id", rb_mysql_stmt_last_id, 0);
   rb_define_method(cMysql2Statement, "affected_rows", rb_mysql_stmt_affected_rows, 0);
+  rb_define_method(cMysql2Statement, "close", rb_mysql_stmt_close, 0);
 
   sym_stream = ID2SYM(rb_intern("stream"));
 

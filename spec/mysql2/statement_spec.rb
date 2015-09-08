@@ -664,4 +664,17 @@ RSpec.describe Mysql2::Statement do
       expect(stmt.affected_rows).to eq 1
     end
   end
+
+  context 'close' do
+    it 'should free server resources' do
+      stmt = @client.prepare 'SELECT 1'
+      expect(stmt.close).to eq nil
+    end
+
+    it 'should raise an error on subsequent execution' do
+      stmt = @client.prepare 'SELECT 1'
+      stmt.close
+      expect { stmt.execute }.to raise_error(Mysql2::Error)
+    end
+  end
 end

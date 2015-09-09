@@ -37,7 +37,7 @@ mysql_to_rb = {
   "binary"   => "ASCII-8BIT",
   "geostd8"  => nil,
   "cp932"    => "Windows-31J",
-  "eucjpms"  => "eucJP-ms"
+  "eucjpms"  => "eucJP-ms",
 }
 
 puts <<-header

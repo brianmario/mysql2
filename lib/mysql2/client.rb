@@ -1,24 +1,27 @@
 module Mysql2
   class Client
     attr_reader :query_options, :read_timeout
-    @@default_query_options = {
-      :as => :hash,                   # the type of object you want each row back as; also supports :array (an array of values)
-      :async => false,                # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
-      :cast_booleans => false,        # cast tinyint(1) fields as true/false in ruby
-      :symbolize_keys => false,       # return field names as symbols instead of strings
-      :database_timezone => :local,   # timezone Mysql2 will assume datetime objects are stored in
-      :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller
-      :cache_rows => true,            # tells Mysql2 to use it's internal row cache for results
-      :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
-      :cast => true,
-      :default_file => nil,
-      :default_group => nil
-    }
+
+    def self.default_query_options
+      @default_query_options ||= {
+        :as => :hash,                   # the type of object you want each row back as; also supports :array (an array of values)
+        :async => false,                # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
+        :cast_booleans => false,        # cast tinyint(1) fields as true/false in ruby
+        :symbolize_keys => false,       # return field names as symbols instead of strings
+        :database_timezone => :local,   # timezone Mysql2 will assume datetime objects are stored in
+        :application_timezone => nil,   # timezone Mysql2 will convert to before handing the object back to the caller
+        :cache_rows => true,            # tells Mysql2 to use it's internal row cache for results
+        :connect_flags => REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
+        :cast => true,
+        :default_file => nil,
+        :default_group => nil,
+      }
+    end
 
     def initialize(opts = {})
-      opts = Mysql2::Util.key_hash_as_symbols( opts )
+      opts = Mysql2::Util.key_hash_as_symbols(opts)
       @read_timeout = nil
-      @query_options = @@default_query_options.dup
+      @query_options = self.class.default_query_options.dup
       @query_options.merge! opts
 
       initialize_ext
@@ -26,11 +29,12 @@ module Mysql2
       # Set default connect_timeout to avoid unlimited retries from signal interruption
       opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
 
+      # TODO: stricter validation rather than silent massaging
       [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command].each do |key|
         next unless opts.key?(key)
         case key
         when :reconnect, :local_infile, :secure_auth
-          send(:"#{key}=", !!opts[key])
+          send(:"#{key}=", !!opts[key]) # rubocop:disable Style/DoubleNegation
         when :connect_timeout, :read_timeout, :write_timeout
           send(:"#{key}=", opts[key].to_i)
         else
@@ -48,9 +52,9 @@ module Mysql2
       flags = 0
       flags |= @query_options[:connect_flags]
       flags |= opts[:flags] if opts[:flags]
-      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify] and ssl_options.any?
+      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify] && ssl_options.any?
 
-      if [:user,:pass,:hostname,:dbname,:db,:sock].any?{|k| @query_options.has_key?(k) }
+      if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @query_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="
         warn "The options :user, :pass, :hostname, :dbname, :db, and :sock will be deprecated at some point in the future."
         warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
@@ -73,10 +77,6 @@ module Mysql2
       socket = socket.to_s unless socket.nil?
 
       connect user, pass, host, port, database, socket, flags
-    end
-
-    def self.default_query_options
-      @@default_query_options
     end
 
     if Thread.respond_to?(:handle_interrupt)
@@ -105,9 +105,12 @@ module Mysql2
       self.class.info
     end
 
-    private
-      def self.local_offset
+    class << self
+      private
+
+      def local_offset
         ::Time.local(2010).utc_offset.to_r / 86400
       end
+    end
   end
 end

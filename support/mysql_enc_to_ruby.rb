@@ -42,7 +42,7 @@ mysql_to_rb = {
   "binary"   => "ASCII-8BIT",
   "geostd8"  => "NULL",
   "cp932"    => "Windows-31J",
-  "eucjpms"  => "eucJP-ms"
+  "eucjpms"  => "eucJP-ms",
 }
 
 client     = Mysql2::Client.new(:username => user, :password => pass, :host => host, :port => port.to_i)
@@ -53,7 +53,7 @@ encodings_with_nil = Array.new(encodings.size)
 collations.each do |collation|
   mysql_col_idx = collation[2].to_i
   rb_enc = mysql_to_rb[collation[1]]
-  encodings[mysql_col_idx-1] = [mysql_col_idx, rb_enc]
+  encodings[mysql_col_idx - 1] = [mysql_col_idx, rb_enc]
 end
 
 encodings.each_with_index do |encoding, idx|
@@ -65,10 +65,10 @@ encodings_with_nil.sort! do |a, b|
 end
 
 encodings_with_nil = encodings_with_nil.map do |encoding|
-  name = "NULL"
-
-  if !encoding.nil? && encoding[1] != "NULL"
-    name = "\"#{encoding[1]}\""
+  name = if encoding.nil? || encoding[1] == 'NULL'
+    'NULL'
+  else
+    "\"#{encoding[1]}\""
   end
 
   "  #{name}"
@@ -76,7 +76,6 @@ end
 
 # start printing output
 
-puts "const char *mysql2_mysql_enc_to_rb[] = {"
+puts "static const char *mysql2_mysql_enc_to_rb[] = {"
 puts encodings_with_nil.join(",\n")
 puts "};"
-puts

@@ -9,14 +9,14 @@ module Mysql2
     }.freeze
 
     attr_accessor :error_number
-    attr_reader   :sql_state
-    attr_writer   :server_version
+    attr_reader :sql_state
+    attr_writer :server_version
 
     # Mysql gem compatibility
     alias_method :errno, :error_number
     alias_method :error, :message
 
-    def initialize(msg, server_version=nil)
+    def initialize(msg, server_version = nil)
       self.server_version = server_version
 
       super(clean_message(msg))

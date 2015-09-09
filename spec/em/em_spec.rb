@@ -53,11 +53,11 @@ begin
         EM.run do
           client = Mysql2::EM::Client.new DatabaseCredentials['root']
           defer = client.query "SELECT sleep(0.1) as first_query"
-          defer.callback do |result|
+          defer.callback do
             client.close
-            raise 'some error'
+            fail 'some error'
           end
-          defer.errback do |err|
+          defer.errback do
             # This _shouldn't_ be run, but it needed to prevent the specs from
             # freezing if this test fails.
             EM.stop_event_loop
@@ -75,7 +75,7 @@ begin
         errors = []
         EM.run do
           defer = client.query "SELECT sleep(0.1) as first_query"
-          defer.callback do |result|
+          defer.callback do
             # This _shouldn't_ be run, but it is needed to prevent the specs from
             # freezing if this test fails.
             EM.stop_event_loop
@@ -93,13 +93,13 @@ begin
         EM.run do
           defer = client.query "SELECT sleep(0.025) as first_query"
           EM.add_timer(0.1) do
-            defer.callback do |result|
+            defer.callback do
               callbacks_run << :callback
               # This _shouldn't_ be run, but it is needed to prevent the specs from
               # freezing if this test fails.
               EM.stop_event_loop
             end
-            defer.errback do |err|
+            defer.errback do
               callbacks_run << :errback
               EM.stop_event_loop
             end
@@ -114,10 +114,10 @@ begin
       EM.run do
         client = Mysql2::EM::Client.new DatabaseCredentials['root']
         defer = client.query("select sleep(0.025)")
-        defer.callback do |result|
+        defer.callback do
           callbacks_run << :callback
         end
-        defer.errback do |err|
+        defer.errback do
           callbacks_run << :errback
         end
         EM.add_timer(0.1) do

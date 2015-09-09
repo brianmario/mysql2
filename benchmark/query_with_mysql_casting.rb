@@ -30,22 +30,22 @@ def mysql_cast(type, value)
   when Mysql::Field::TYPE_TIME, Mysql::Field::TYPE_DATETIME, Mysql::Field::TYPE_TIMESTAMP
     Time.parse(value)
   when Mysql::Field::TYPE_BLOB, Mysql::Field::TYPE_BIT, Mysql::Field::TYPE_STRING,
-      Mysql::Field::TYPE_VAR_STRING, Mysql::Field::TYPE_CHAR, Mysql::Field::TYPE_SET
-    Mysql::Field::TYPE_ENUM
+      Mysql::Field::TYPE_VAR_STRING, Mysql::Field::TYPE_CHAR, Mysql::Field::TYPE_SET,
+      Mysql::Field::TYPE_ENUM
     value
   else
     value
   end
 end
 
+debug = ENV['DEBUG']
+
 Benchmark.ips do |x|
   mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
   mysql2.query "USE #{database}"
   x.report "Mysql2" do
     mysql2_result = mysql2.query sql, :symbolize_keys => true
-    mysql2_result.each do |res|
-      # puts res.inspect
-    end
+    mysql2_result.each { |res| puts res.inspect if debug }
   end
 
   mysql = Mysql.new("localhost", "root")
@@ -55,9 +55,9 @@ Benchmark.ips do |x|
     fields = mysql_result.fetch_fields
     mysql_result.each do |row|
       row_hash = row.each_with_index.each_with_object({}) do |(f, j), hash|
-        hash[fields[j].name.to_sym] = mysql_cast(fields[j].type, row[j])
+        hash[fields[j].name.to_sym] = mysql_cast(fields[j].type, f)
       end
-      # puts row_hash.inspect
+      puts row_hash.inspect if debug
     end
   end
 
@@ -65,9 +65,7 @@ Benchmark.ips do |x|
   command = do_mysql.create_command sql
   x.report "do_mysql" do
     do_result = command.execute_reader
-    do_result.each do |res|
-      # puts res.inspect
-    end
+    do_result.each { |res| puts res.inspect if debug }
   end
 
   x.compare!

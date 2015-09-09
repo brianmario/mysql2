@@ -4,8 +4,6 @@ $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 require 'rubygems'
 require 'active_record'
 
-raise Mysql2::Error.new("GC allocation benchmarks only supported on Ruby 1.9!") unless RUBY_VERSION > '1.9'
-
 ActiveRecord::Base.default_timezone = :local
 ActiveRecord::Base.time_zone_aware_attributes = true
 

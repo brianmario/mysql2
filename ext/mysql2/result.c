@@ -2,9 +2,9 @@
 
 #include <stdint.h>
 
+#ifdef HAVE_RUBY_ENCODING_H
 #include "mysql_enc_to_ruby.h"
 
-#ifdef HAVE_RUBY_ENCODING_H
 static rb_encoding *binaryEncoding;
 #endif
 

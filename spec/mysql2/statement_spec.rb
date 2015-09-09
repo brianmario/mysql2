@@ -53,8 +53,8 @@ RSpec.describe Mysql2::Statement do
     statement = @client.prepare 'SELECT 1'
     result = statement.execute
     rows = []
-    result.each {|r| rows << r}
-    expect(rows).to eq([{"1"=>1}])
+    result.each { |r| rows << r }
+    expect(rows).to eq([{ "1" => 1 }])
   end
 
   it "should keep its result after other query" do
@@ -64,8 +64,8 @@ RSpec.describe Mysql2::Statement do
     stmt = @client.prepare('SELECT a FROM mysql2_stmt_q WHERE a = ?')
     result1 = stmt.execute(1)
     result2 = stmt.execute(2)
-    expect(result2.first).to eq({"a"=>2})
-    expect(result1.first).to eq({"a"=>1})
+    expect(result2.first).to eq("a" => 2)
+    expect(result1.first).to eq("a" => 1)
     @client.query 'DROP TABLE IF EXISTS mysql2_stmt_q'
   end
 
@@ -91,11 +91,11 @@ RSpec.describe Mysql2::Statement do
     @client.query 'INSERT INTO mysql2_stmt_q (a, b) VALUES (1, "Hello"), (2, "World")'
     statement = @client.prepare 'SELECT * FROM mysql2_stmt_q WHERE a < ?'
     results = statement.execute(2)
-    expect(results.first).to eq({"a" => 1, "b" => "Hello"})
+    expect(results.first).to eq("a" => 1, "b" => "Hello")
 
     statement = @client.prepare 'SELECT * FROM mysql2_stmt_q WHERE b LIKE ?'
     results = statement.execute('%orld')
-    expect(results.first).to eq({"a" => 2, "b" => "World"})
+    expect(results.first).to eq("a" => 2, "b" => "World")
 
     @client.query 'DROP TABLE IF EXISTS mysql2_stmt_q'
   end
@@ -130,10 +130,10 @@ RSpec.describe Mysql2::Statement do
 
     it "should be able to retrieve utf8 field names correctly" do
       stmt = @client.prepare 'SELECT * FROM `テーブル`'
-      expect(stmt.fields).to eq(['整数', '文字列'])
+      expect(stmt.fields).to eq(%w(整数 文字列))
       result = stmt.execute
 
-      expect(result.to_a).to eq([{"整数"=>1, "文字列"=>"イチ"}, {"整数"=>2, "文字列"=>"弐"}, {"整数"=>3, "文字列"=>"さん"}])
+      expect(result.to_a).to eq([{ "整数" => 1, "文字列" => "イチ" }, { "整数" => 2, "文字列" => "弐" }, { "整数" => 3, "文字列" => "さん" }])
     end
 
     it "should be able to retrieve utf8 param query correctly" do
@@ -142,7 +142,7 @@ RSpec.describe Mysql2::Statement do
 
       result = stmt.execute 'イチ'
 
-      expect(result.to_a).to eq([{"整数"=>1}])
+      expect(result.to_a).to eq([{ "整数" => 1 }])
     end
 
     it "should be able to retrieve query with param in different encoding correctly" do
@@ -152,9 +152,8 @@ RSpec.describe Mysql2::Statement do
       param = 'イチ'.encode("EUC-JP")
       result = stmt.execute param
 
-      expect(result.to_a).to eq([{"整数"=>1}])
+      expect(result.to_a).to eq([{ "整数" => 1 }])
     end
-
   end if defined? Encoding
 
   context "streaming result" do
@@ -162,7 +161,7 @@ RSpec.describe Mysql2::Statement do
       n = 1
       stmt = @client.prepare("SELECT 1 UNION SELECT 2")
 
-      @client.query_options.merge!({:stream => true, :cache_rows => false, :as => :array})
+      @client.query_options.merge!(:stream => true, :cache_rows => false, :as => :array)
 
       stmt.execute.each do |r|
         case n
@@ -259,7 +258,7 @@ RSpec.describe Mysql2::Statement do
 
     it "should return an array of field names in proper order" do
       result = @client.prepare("SELECT 'a', 'b', 'c'").execute
-      expect(result.fields).to eql(['a', 'b', 'c'])
+      expect(result.fields).to eql(%w(a b c))
     end
   end
 
@@ -367,35 +366,25 @@ RSpec.describe Mysql2::Statement do
     end
 
     if 1.size == 4 # 32bit
-      unless RUBY_VERSION =~ /1.8/
-        klass = Time
+      klass = if RUBY_VERSION =~ /1.8/
+        DateTime
       else
-        klass = DateTime
+        Time
       end
 
       it "should return DateTime when timestamp is < 1901-12-13 20:45:52" do
-                                      # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
+        # 1901-12-13T20:45:52 is the min for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
         expect(r.first['test']).to be_an_instance_of(klass)
       end
 
       it "should return DateTime when timestamp is > 2038-01-19T03:14:07" do
-                                      # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
+        # 2038-01-19T03:14:07 is the max for 32bit Ruby 1.8
         r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
         expect(r.first['test']).to be_an_instance_of(klass)
       end
     elsif 1.size == 8 # 64bit
-      unless RUBY_VERSION =~ /1.8/
-        it "should return Time when timestamp is < 1901-12-13 20:45:52" do
-          r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(Time)
-        end
-
-        it "should return Time when timestamp is > 2038-01-19T03:14:07" do
-          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
-          expect(r.first['test']).to be_an_instance_of(Time)
-        end
-      else
+      if RUBY_VERSION =~ /1.8/
         it "should return Time when timestamp is > 0138-12-31 11:59:59" do
           r = @client.query("SELECT CAST('0139-1-1 00:00:00' AS DATETIME) as test")
           expect(r.first['test']).to be_an_instance_of(Time)
@@ -404,6 +393,16 @@ RSpec.describe Mysql2::Statement do
         it "should return DateTime when timestamp is < 0139-1-1T00:00:00" do
           r = @client.query("SELECT CAST('0138-12-31 11:59:59' AS DATETIME) as test")
           expect(r.first['test']).to be_an_instance_of(DateTime)
+        end
+
+        it "should return Time when timestamp is > 2038-01-19T03:14:07" do
+          r = @client.query("SELECT CAST('2038-01-19 03:14:08' AS DATETIME) as test")
+          expect(r.first['test']).to be_an_instance_of(Time)
+        end
+      else
+        it "should return Time when timestamp is < 1901-12-13 20:45:52" do
+          r = @client.query("SELECT CAST('1901-12-13 20:45:51' AS DATETIME) as test")
+          expect(r.first['test']).to be_an_instance_of(Time)
         end
 
         it "should return Time when timestamp is > 2038-01-19T03:14:07" do
@@ -501,7 +500,7 @@ RSpec.describe Mysql2::Statement do
 
     it "should return String for a BINARY value" do
       expect(@test_result['binary_test']).to be_an_instance_of(String)
-      expect(@test_result['binary_test']).to eql("test#{"\000"*6}")
+      expect(@test_result['binary_test']).to eql("test#{"\000" * 6}")
     end
 
     context "string encoding for BINARY values" do
@@ -538,7 +537,7 @@ RSpec.describe Mysql2::Statement do
       'medium_blob_test' => 'MEDIUMBLOB',
       'medium_text_test' => 'MEDIUMTEXT',
       'long_blob_test' => 'LONGBLOB',
-      'long_text_test' => 'LONGTEXT'
+      'long_text_test' => 'LONGTEXT',
     }.each do |field, type|
       it "should return a String for #{type}" do
         expect(@test_result[field]).to be_an_instance_of(String)
@@ -548,7 +547,7 @@ RSpec.describe Mysql2::Statement do
       context "string encoding for #{type} values" do
         before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-        if ['VARBINARY', 'TINYBLOB', 'BLOB', 'MEDIUMBLOB', 'LONGBLOB'].include?(type)
+        if %w(VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB).include?(type)
           it "should default to binary if Encoding.default_internal is nil" do
             with_internal_encoding nil do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first

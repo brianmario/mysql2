@@ -82,8 +82,18 @@ module Mysql2
     if Thread.respond_to?(:handle_interrupt)
       require 'timeout'
 
+      # Timeout::ExitException was removed in Ruby 2.3.0, 2.2.3, and 2.1.8,
+      # but is present in earlier 2.1.x and 2.2.x, so we provide a shim.
+      #
+      # Set our own constant instead of modifying core ::Timeout.
+      TimeoutError = if defined?(::Timeout::ExitException)
+        ::Timeout::ExitException
+      else
+        ::Timeout::Error
+      end
+
       def query(sql, options = {})
-        Thread.handle_interrupt(::Timeout::ExitException => :never) do
+        Thread.handle_interrupt(TimeoutError => :never) do
           _query(sql, @query_options.merge(options))
         end
       end

@@ -462,8 +462,7 @@ describe Mysql2::Client do
         }.should raise_error(Mysql2::Error)
       end
 
-
-      it 'should be impervious to connection-corrupting timeouts ' do
+      it 'should be impervious to connection-corrupting timeouts in #query' do
         pending('`Thread.handle_interrupt` is not defined') unless Thread.respond_to?(:handle_interrupt)
         # attempt to break the connection
         expect { Timeout.timeout(0.1) { @client.query('SELECT SLEEP(1)') } }.to raise_error(Timeout::Error)

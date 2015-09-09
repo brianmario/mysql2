@@ -470,7 +470,7 @@ void init_mysql2_statement() {
 
   rb_define_method(cMysql2Statement, "param_count", param_count, 0);
   rb_define_method(cMysql2Statement, "field_count", field_count, 0);
-  rb_define_method(cMysql2Statement, "execute", execute, -1);
+  rb_define_method(cMysql2Statement, "_execute", execute, -1);
   rb_define_method(cMysql2Statement, "fields", fields, 0);
   rb_define_method(cMysql2Statement, "last_id", rb_mysql_stmt_last_id, 0);
   rb_define_method(cMysql2Statement, "affected_rows", rb_mysql_stmt_affected_rows, 0);

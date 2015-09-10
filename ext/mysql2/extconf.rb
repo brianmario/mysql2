@@ -94,14 +94,7 @@ end
 
 # This is our wishlist. We use whichever flags work on the host.
 # -Wall and -Wextra are included by default.
-usable_flags = [
-  '-fsanitize=address',
-  '-fsanitize=cfi',
-  '-fsanitize=integer',
-  '-fsanitize=memory',
-  '-fsanitize=thread',
-  '-fsanitize=undefined',
-  '-Werror',
+wishlist = [
   '-Weverything',
   '-Wno-bad-function-cast', # rb_thread_call_without_gvl returns void * that we cast to VALUE
   '-Wno-conditional-uninitialized', # false positive in client.c
@@ -117,7 +110,21 @@ usable_flags = [
   '-Wno-switch-enum', # result.c -- enum_field_types (when not fully covered, e.g. mysql 5.6+)
   '-Wno-undef', # rubinius :(
   '-Wno-used-but-marked-unused', # rubby :(
-].select do |flag|
+]
+
+if ENV['CI']
+  wishlist += [
+    '-Werror',
+    '-fsanitize=address',
+    '-fsanitize=cfi',
+    '-fsanitize=integer',
+    '-fsanitize=memory',
+    '-fsanitize=thread',
+    '-fsanitize=undefined',
+  ]
+end
+
+usable_flags = wishlist.select do |flag|
   try_link('int main() {return 0;}', flag)
 end
 

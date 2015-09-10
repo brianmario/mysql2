@@ -29,8 +29,10 @@ void Init_mysql2(void);
 #endif
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)
+#define RB_MYSQL_NORETURN __attribute__ ((noreturn))
 #define RB_MYSQL_UNUSED __attribute__ ((unused))
 #else
+#define RB_MYSQL_NORETURN
 #define RB_MYSQL_UNUSED
 #endif
 

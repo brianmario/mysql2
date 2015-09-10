@@ -1,10 +1,8 @@
 #include <mysql2_ext.h>
 
-#include <stdint.h>
-
-#ifdef HAVE_RUBY_ENCODING_H
 #include "mysql_enc_to_ruby.h"
 
+#ifdef HAVE_RUBY_ENCODING_H
 static rb_encoding *binaryEncoding;
 #endif
 
@@ -161,8 +159,7 @@ static void *nogvl_stmt_fetch(void *ptr) {
   return (void *)r;
 }
 
-
-static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, short int symbolize_keys) {
+static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbolize_keys) {
   VALUE rb_field;
   GET_RESULT(self);
 
@@ -502,7 +499,6 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         default:
           rb_raise(cMysql2Error, "unhandled buffer type: %d",
               result_buffer->buffer_type);
-          break;
       }
     }
 
@@ -756,7 +752,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  if ((unsigned)RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
+  if ((my_ulonglong)RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
       rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     }

@@ -213,7 +213,7 @@ static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper;
   wrapper = ptr;
   if (wrapper->connected) {
-    wrapper->active_thread = Qnil;
+    MARK_CONN_INACTIVE(self);
     wrapper->connected = 0;
 #ifndef _WIN32
     /* Invalidate the socket before calling mysql_close(). This prevents
@@ -257,7 +257,7 @@ static VALUE allocate(VALUE klass) {
   mysql_client_wrapper * wrapper;
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
-  wrapper->active_thread = Qnil;
+  MARK_CONN_INACTIVE(self);
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
   wrapper->connect_timeout = 0;
@@ -413,7 +413,7 @@ static VALUE do_send_query(void *args) {
   mysql_client_wrapper *wrapper = query_args->wrapper;
   if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, args, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, we're not active anymore */
-    wrapper->active_thread = Qnil;
+    MARK_CONN_INACTIVE(self);
     return rb_raise_mysql2_error(wrapper);
   }
   return Qnil;
@@ -444,7 +444,7 @@ static void *nogvl_do_result(void *ptr, char use_result) {
 
   /* once our result is stored off, this connection is
      ready for another command to be issued */
-  wrapper->active_thread = Qnil;
+  MARK_CONN_INACTIVE(self);
 
   return result;
 }
@@ -513,7 +513,7 @@ struct async_query_args {
 static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   GET_CLIENT(self);
 
-  wrapper->active_thread = Qnil;
+  MARK_CONN_INACTIVE(self);
   wrapper->connected = 0;
 
   /* Invalidate the MySQL socket to prevent further communication.
@@ -589,7 +589,7 @@ static VALUE finish_and_mark_inactive(void *args) {
     result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
     mysql_free_result(result);
 
-    wrapper->active_thread = Qnil;
+    MARK_CONN_INACTIVE(self);
   }
 
   return Qnil;
@@ -611,7 +611,6 @@ void rb_mysql_client_set_active_thread(VALUE self) {
     const char *thr = StringValueCStr(inspect);
 
     rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
-    (void)RB_GC_GUARD(inspect);
   }
 }
 
@@ -1231,7 +1230,6 @@ void init_mysql2_client() {
     }
     if (lib[i] != MYSQL_LINK_VERSION[i]) {
       rb_raise(rb_eRuntimeError, "Incorrect MySQL client library version! This gem was compiled for %s but the client library is %s.", MYSQL_LINK_VERSION, lib);
-      return;
     }
   }
 #endif
@@ -1240,7 +1238,6 @@ void init_mysql2_client() {
   /* without race condition in the library */
   if (mysql_library_init(0, NULL, NULL) != 0) {
     rb_raise(rb_eRuntimeError, "Could not initialize MySQL client library");
-    return;
   }
 
 #if 0

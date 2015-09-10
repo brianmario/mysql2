@@ -93,18 +93,42 @@ end
 end
 
 # This is our wishlist. We use whichever flags work on the host.
-# TODO: fix statement.c and remove -Wno-declaration-after-statement
-# TODO: fix gperf mysql_enc_name_to_ruby.h and remove -Wno-missing-field-initializers
-%w(
-  -Wall
-  -Wextra
-  -Werror
-  -Wno-unused-function
-  -Wno-declaration-after-statement
-  -Wno-missing-field-initializers
-).each do |flag|
-  $CFLAGS << ' ' << flag if try_link('int main() {return 0;}', flag)
+# -Wall and -Wextra are included by default.
+wishlist = [
+  '-Weverything',
+  '-Wno-bad-function-cast', # rb_thread_call_without_gvl returns void * that we cast to VALUE
+  '-Wno-conditional-uninitialized', # false positive in client.c
+  '-Wno-covered-switch-default', # result.c -- enum_field_types (when fully covered, e.g. mysql 5.5)
+  '-Wno-declaration-after-statement', # GET_CLIENT followed by GET_STATEMENT in statement.c
+  '-Wno-disabled-macro-expansion', # rubby :(
+  '-Wno-documentation-unknown-command', # rubby :(
+  '-Wno-missing-field-initializers', # gperf generates bad code
+  '-Wno-missing-variable-declarations', # missing symbols due to ruby native ext initialization
+  '-Wno-padded', # mysql :(
+  '-Wno-sign-conversion', # gperf generates bad code
+  '-Wno-static-in-inline', # gperf generates bad code
+  '-Wno-switch-enum', # result.c -- enum_field_types (when not fully covered, e.g. mysql 5.6+)
+  '-Wno-undef', # rubinius :(
+  '-Wno-used-but-marked-unused', # rubby :(
+]
+
+if ENV['CI']
+  wishlist += [
+    '-Werror',
+    '-fsanitize=address',
+    '-fsanitize=cfi',
+    '-fsanitize=integer',
+    '-fsanitize=memory',
+    '-fsanitize=thread',
+    '-fsanitize=undefined',
+  ]
 end
+
+usable_flags = wishlist.select do |flag|
+  try_link('int main() {return 0;}', flag)
+end
+
+$CFLAGS << ' ' << usable_flags.join(' ')
 
 if RUBY_PLATFORM =~ /mswin|mingw/
   # Build libmysql.a interface link library

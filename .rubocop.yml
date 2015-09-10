@@ -3,7 +3,9 @@ inherit_from: .rubocop_todo.yml
 AllCops:
   DisplayCopNames: true
   Exclude:
+    - 'pkg/**/*'
     - 'tmp/**/*'
+    - 'vendor/**/*'
 
 Lint/EndAlignment:
   AlignWith: variable

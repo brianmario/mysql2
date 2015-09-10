@@ -17,8 +17,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
-static ID intern_merge, intern_merge_bang, intern_error_number_eql, intern_sql_state_eql;
-static ID intern_brackets, intern_new;
+static ID intern_brackets, intern_new, intern_merge, intern_merge_bang, intern_new_with_args;
 
 #ifndef HAVE_RB_HASH_DUP
 VALUE rb_hash_dup(VALUE other) {
@@ -124,9 +123,11 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   rb_enc_associate(rb_sql_state, rb_usascii_encoding());
 #endif
 
-  e = rb_funcall(cMysql2Error, intern_new, 2, rb_error_msg, LONG2FIX(wrapper->server_version));
-  rb_funcall(e, intern_error_number_eql, 1, UINT2NUM(mysql_errno(wrapper->client)));
-  rb_funcall(e, intern_sql_state_eql, 1, rb_sql_state);
+  e = rb_funcall(cMysql2Error, intern_new_with_args, 4,
+                 rb_error_msg,
+                 LONG2FIX(wrapper->server_version),
+                 UINT2NUM(mysql_errno(wrapper->client)),
+                 rb_sql_state);
   rb_exc_raise(e);
   return Qnil;
 }
@@ -1301,8 +1302,7 @@ void init_mysql2_client() {
   intern_new = rb_intern("new");
   intern_merge = rb_intern("merge");
   intern_merge_bang = rb_intern("merge!");
-  intern_error_number_eql = rb_intern("error_number=");
-  intern_sql_state_eql = rb_intern("sql_state=");
+  intern_new_with_args = rb_intern("new_with_args");
 
 #ifdef CLIENT_LONG_PASSWORD
   rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),

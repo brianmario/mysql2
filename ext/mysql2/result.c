@@ -357,11 +357,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   }
 
   if (mysql_stmt_bind_result(wrapper->stmt_wrapper->stmt, wrapper->result_buffers)) {
-    rb_raise_mysql2_stmt_error2(wrapper->stmt_wrapper->stmt
-#ifdef HAVE_RUBY_ENCODING_H
-      , conn_enc
-#endif
-      );
+    rb_raise_mysql2_stmt_error(wrapper->stmt_wrapper);
   }
 
   {
@@ -372,11 +368,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
       case 1:
         /* error */
-        rb_raise_mysql2_stmt_error2(wrapper->stmt_wrapper->stmt
-#ifdef HAVE_RUBY_ENCODING_H
-          , conn_enc
-#endif
-          );
+        rb_raise_mysql2_stmt_error(wrapper->stmt_wrapper);
 
       case MYSQL_NO_DATA:
         /* no more row */

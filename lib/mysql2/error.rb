@@ -8,22 +8,25 @@ module Mysql2
       :replace => '?'.freeze,
     }.freeze
 
-    attr_accessor :error_number
-    attr_reader :sql_state
-    attr_writer :server_version
+    attr_reader :error_number, :sql_state
 
     # Mysql gem compatibility
     alias_method :errno, :error_number
     alias_method :error, :message
 
-    def initialize(msg, server_version = nil)
-      self.server_version = server_version
+    def initialize(msg)
+      @server_version ||= nil
 
       super(clean_message(msg))
     end
 
-    def sql_state=(state)
-      @sql_state = state.respond_to?(:encode) ? state.encode(ENCODE_OPTS) : state
+    def self.new_with_args(msg, server_version, error_number, sql_state)
+      err = allocate
+      err.instance_variable_set('@server_version', server_version)
+      err.instance_variable_set('@error_number', error_number)
+      err.instance_variable_set('@sql_state', sql_state.respond_to?(:encode) ? sql_state.encode(ENCODE_OPTS) : sql_state)
+      err.send(:initialize, msg)
+      err
     end
 
     private

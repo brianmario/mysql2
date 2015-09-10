@@ -129,7 +129,6 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
                  UINT2NUM(mysql_errno(wrapper->client)),
                  rb_sql_state);
   rb_exc_raise(e);
-  return Qnil;
 }
 
 static void *nogvl_init(void *ptr) {
@@ -525,8 +524,6 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   }
 
   rb_exc_raise(error);
-
-  return Qnil;
 }
 
 static VALUE do_query(void *args) {

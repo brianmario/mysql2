@@ -594,4 +594,74 @@ RSpec.describe Mysql2::Statement do
       end
     end
   end
+
+  context 'last_id' do
+    before(:each) do
+      @client.query 'USE test'
+      @client.query 'CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))'
+    end
+
+    after(:each) do
+      @client.query 'DROP TABLE lastIdTest'
+    end
+
+    it 'should return last insert id' do
+      stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
+      expect(stmt.last_id).to eq 0
+      stmt.execute 1
+      expect(stmt.last_id).to eq 1
+    end
+
+    it 'should handle bigint ids' do
+      stmt = @client.prepare 'INSERT INTO lastIdTest (id, blah) VALUES (?, ?)'
+      stmt.execute 5000000000, 5000
+      expect(stmt.last_id).to eql(5000000000)
+
+      stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
+      stmt.execute 5001
+      expect(stmt.last_id).to eql(5000000001)
+    end
+  end
+
+  context 'affected_rows' do
+    before :each do
+      @client.query 'USE test'
+      @client.query 'CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))'
+    end
+
+    after :each do
+      @client.query 'DROP TABLE lastIdTest'
+    end
+
+    it 'should return number of rows affected by an insert' do
+      stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
+      expect(stmt.affected_rows).to eq 0
+      stmt.execute 1
+      expect(stmt.affected_rows).to eq 1
+    end
+
+    it 'should return number of rows affected by an update' do
+      stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
+      stmt.execute 1
+      expect(stmt.affected_rows).to eq 1
+      stmt.execute 2
+      expect(stmt.affected_rows).to eq 1
+
+      stmt = @client.prepare 'UPDATE lastIdTest SET blah=? WHERE blah=?'
+      stmt.execute 0, 1
+      expect(stmt.affected_rows).to eq 1
+    end
+
+    it 'should return number of rows affected by a delete' do
+      stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
+      stmt.execute 1
+      expect(stmt.affected_rows).to eq 1
+      stmt.execute 2
+      expect(stmt.affected_rows).to eq 1
+
+      stmt = @client.prepare 'DELETE FROM lastIdTest WHERE blah=?'
+      stmt.execute 1
+      expect(stmt.affected_rows).to eq 1
+    end
+  end
 end

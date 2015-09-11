@@ -436,7 +436,7 @@ static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
 
   affected = mysql_stmt_affected_rows(stmt_wrapper->stmt);
   if (affected == (my_ulonglong)-1) {
-    rb_raise_mysql2_stmt_error(self);
+    rb_raise_mysql2_stmt_error(stmt_wrapper);
   }
 
   return ULL2NUM(affected);

@@ -597,12 +597,12 @@ RSpec.describe Mysql2::Statement do
 
   context 'last_id' do
     before(:each) do
-      @client.query "USE test"
-      @client.query "CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
+      @client.query 'USE test'
+      @client.query 'CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))'
     end
 
     after(:each) do
-      @client.query "DROP TABLE lastIdTest"
+      @client.query 'DROP TABLE lastIdTest'
     end
 
     it 'should return last insert id' do
@@ -625,29 +625,41 @@ RSpec.describe Mysql2::Statement do
 
   context 'affected_rows' do
     before :each do
-      @client.query 'DELETE FROM mysql2_test'
-      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (1)'
+      @client.query 'USE test'
+      @client.query 'CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))'
     end
 
     after :each do
-      @client.query 'DELETE FROM mysql2_test'
+      @client.query 'DROP TABLE lastIdTest'
     end
 
     it 'should return number of rows affected by an insert' do
-      stmt = @client.prepare 'INSERT INTO mysql2_test (bool_cast_test) VALUES (?)'
+      stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
       expect(stmt.affected_rows).to eq 0
       stmt.execute 1
       expect(stmt.affected_rows).to eq 1
     end
 
     it 'should return number of rows affected by an update' do
-      stmt = @client.prepare 'UPDATE mysql2_test SET bool_cast_test=? WHERE bool_cast_test=?'
+      stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
+      stmt.execute 1
+      expect(stmt.affected_rows).to eq 1
+      stmt.execute 2
+      expect(stmt.affected_rows).to eq 1
+
+      stmt = @client.prepare 'UPDATE lastIdTest SET blah=? WHERE blah=?'
       stmt.execute 0, 1
       expect(stmt.affected_rows).to eq 1
     end
 
     it 'should return number of rows affected by a delete' do
-      stmt = @client.prepare 'DELETE FROM mysql2_test WHERE bool_cast_test=?'
+      stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
+      stmt.execute 1
+      expect(stmt.affected_rows).to eq 1
+      stmt.execute 2
+      expect(stmt.affected_rows).to eq 1
+
+      stmt = @client.prepare 'DELETE FROM lastIdTest WHERE blah=?'
       stmt.execute 1
       expect(stmt.affected_rows).to eq 1
     end

@@ -7,7 +7,8 @@ static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, inter
 
 #define GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
-  Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper);
+  Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper); \
+  if (!stmt_wrapper->stmt) { rb_raise(cMysql2Error, "Invalid statement handle"); }
 
 
 static void rb_mysql_stmt_mark(void * ptr) {
@@ -17,11 +18,11 @@ static void rb_mysql_stmt_mark(void * ptr) {
   rb_gc_mark(stmt_wrapper->client);
 }
 
-static void *nogvl_stmt_close(void *ptr) {
+static void *nogvl_stmt_close(void * ptr) {
   mysql_stmt_wrapper *stmt_wrapper = (mysql_stmt_wrapper *)ptr;
-  if (stmt_wrapper->closed == 0) {
+  if (stmt_wrapper->stmt) {
     mysql_stmt_close(stmt_wrapper->stmt);
-    stmt_wrapper->closed = 1;
+    stmt_wrapper->stmt = NULL;
   }
   return NULL;
 }
@@ -103,7 +104,6 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
   {
     stmt_wrapper->client = rb_client;
-    stmt_wrapper->closed = 0;
     stmt_wrapper->refcount = 1;
     stmt_wrapper->stmt = NULL;
   }

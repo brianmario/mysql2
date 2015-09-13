@@ -674,7 +674,7 @@ RSpec.describe Mysql2::Statement do
     it 'should raise an error on subsequent execution' do
       stmt = @client.prepare 'SELECT 1'
       stmt.close
-      expect { stmt.execute }.to raise_error(Mysql2::Error)
+      expect { stmt.execute }.to raise_error(Mysql2::Error, /Invalid statement handle/)
     end
   end
 end

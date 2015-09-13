@@ -7,7 +7,8 @@ static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, inter
 
 #define GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
-  Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper);
+  Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper); \
+  if (!stmt_wrapper->stmt) { rb_raise(cMysql2Error, "Invalid statement handle"); }
 
 
 static void rb_mysql_stmt_mark(void * ptr) {
@@ -15,6 +16,15 @@ static void rb_mysql_stmt_mark(void * ptr) {
   if (!stmt_wrapper) return;
 
   rb_gc_mark(stmt_wrapper->client);
+}
+
+static void *nogvl_stmt_close(void * ptr) {
+  mysql_stmt_wrapper *stmt_wrapper = (mysql_stmt_wrapper *)ptr;
+  if (stmt_wrapper->stmt) {
+    mysql_stmt_close(stmt_wrapper->stmt);
+    stmt_wrapper->stmt = NULL;
+  }
+  return NULL;
 }
 
 static void rb_mysql_stmt_free(void * ptr) {
@@ -26,7 +36,7 @@ void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
   stmt_wrapper->refcount--;
 
   if (stmt_wrapper->refcount == 0) {
-    mysql_stmt_close(stmt_wrapper->stmt);
+    nogvl_stmt_close(stmt_wrapper);
     xfree(stmt_wrapper);
   }
 }
@@ -442,6 +452,19 @@ static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
   return ULL2NUM(affected);
 }
 
+/* call-seq:
+ *    stmt.close
+ *
+ * Explicitly closing this will free up server resources immediately rather
+ * than waiting for the garbage collector. Useful if you're managing your
+ * own prepared statement cache.
+ */
+static VALUE rb_mysql_stmt_close(VALUE self) {
+  GET_STATEMENT(self);
+  rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+  return Qnil;
+}
+
 void init_mysql2_statement() {
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
 
@@ -451,6 +474,7 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "fields", fields, 0);
   rb_define_method(cMysql2Statement, "last_id", rb_mysql_stmt_last_id, 0);
   rb_define_method(cMysql2Statement, "affected_rows", rb_mysql_stmt_affected_rows, 0);
+  rb_define_method(cMysql2Statement, "close", rb_mysql_stmt_close, 0);
 
   sym_stream = ID2SYM(rb_intern("stream"));
 

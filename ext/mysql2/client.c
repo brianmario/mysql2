@@ -17,7 +17,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
-static ID intern_brackets, intern_new, intern_merge, intern_merge_bang, intern_new_with_args;
+static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
 
 #ifndef HAVE_RB_HASH_DUP
 VALUE rb_hash_dup(VALUE other) {
@@ -1293,7 +1293,6 @@ void init_mysql2_client() {
   sym_stream          = ID2SYM(rb_intern("stream"));
 
   intern_brackets = rb_intern("[]");
-  intern_new = rb_intern("new");
   intern_merge = rb_intern("merge");
   intern_merge_bang = rb_intern("merge!");
   intern_new_with_args = rb_intern("new_with_args");

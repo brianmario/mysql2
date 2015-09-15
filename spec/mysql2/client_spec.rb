@@ -162,6 +162,14 @@ RSpec.describe Mysql2::Client do
     sleep(0.5)
   end
 
+  it "should terminate connections when calling close" do
+    expect {
+      Mysql2::Client.new(DatabaseCredentials['root']).close
+    }.to_not change {
+      @client.query("SHOW STATUS LIKE 'Aborted_clients'").first['Value'].to_i
+    }
+  end
+
   it "should not leave dangling connections after garbage collection" do
     run_gc
 

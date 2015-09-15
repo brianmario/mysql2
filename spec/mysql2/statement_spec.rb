@@ -8,7 +8,9 @@ RSpec.describe Mysql2::Statement do
 
   it "should create a statement" do
     statement = nil
-    expect { statement = @client.prepare 'SELECT 1' }.not_to raise_error
+    expect { statement = @client.prepare 'SELECT 1' }.to change {
+      @client.query("SHOW STATUS LIKE 'Prepared_stmt_count'").first['Value'].to_i
+    }.by(1)
     expect(statement).to be_an_instance_of(Mysql2::Statement)
   end
 
@@ -668,7 +670,9 @@ RSpec.describe Mysql2::Statement do
   context 'close' do
     it 'should free server resources' do
       stmt = @client.prepare 'SELECT 1'
-      expect(stmt.close).to eq nil
+      expect { stmt.close }.to change {
+        @client.query("SHOW STATUS LIKE 'Prepared_stmt_count'").first['Value'].to_i
+      }.by(-1)
     end
 
     it 'should raise an error on subsequent execution' do

@@ -209,12 +209,13 @@ static VALUE invalidate_fd(int clientfd)
 #endif /* _WIN32 */
 
 static void *nogvl_close(void *ptr) {
-  mysql_client_wrapper *wrapper;
-  wrapper = ptr;
-  if (wrapper->connected) {
-    MARK_CONN_INACTIVE(self);
-    wrapper->connected = 0;
+  mysql_client_wrapper *wrapper = ptr;
+
+  if (wrapper->client) {
     mysql_close(wrapper->client);
+    wrapper->client = NULL;
+    wrapper->connected = 0;
+    wrapper->active_thread = Qnil;
   }
 
   return NULL;

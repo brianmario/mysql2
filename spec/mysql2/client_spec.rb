@@ -210,6 +210,62 @@ RSpec.describe Mysql2::Client do
     expect { client.query('SELECT 1') }.to_not raise_exception
   end
 
+  context "#automatic_close" do
+    if RUBY_PLATFORM =~ /mingw|mswin/
+      it "is enabled by default" do
+        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        expect(client.automatic_close?).to be(true)
+      end
+
+      it "cannot be disabled" do
+        expect {
+          Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
+        }.to raise_error(Mysql2::Error)
+
+        client = Mysql2::Client.new(DatabaseCredentials['root'])
+
+        expect { client.automatic_close = false }.to raise_error(Mysql2::Error)
+        expect { client.automatic_close = true }.to_not raise_error
+      end
+    else
+      it "is disabled by default" do
+        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        expect(client.automatic_close?).to be(false)
+      end
+
+      it "can be configured" do
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true))
+        expect(client.automatic_close?).to be(true)
+      end
+
+      it "can be assigned" do
+        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        client.automatic_close = true
+        expect(client.automatic_close?).to be(true)
+
+        client.automatic_close = false
+        expect(client.automatic_close?).to be(false)
+
+        client.automatic_close = 9
+        expect(client.automatic_close?).to be(true)
+
+        client.automatic_close = nil
+        expect(client.automatic_close?).to be(false)
+      end
+    end
+
+    it "should terminate connections during garbage collection" do
+      run_gc
+      expect {
+        Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true)).query('SELECT 1')
+        run_gc
+      }.to_not change {
+        @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
+          @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
+      }
+    end
+  end
+
   it "should be able to connect to database with numeric-only name" do
     creds = DatabaseCredentials['numericuser']
     @client.query "CREATE DATABASE IF NOT EXISTS `#{creds['database']}`"

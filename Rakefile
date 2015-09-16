@@ -9,11 +9,12 @@ load 'tasks/generate.rake'
 load 'tasks/benchmarks.rake'
 
 # TODO: remove when we end support for < 1.9.3
-if RUBY_VERSION =~ /1.8/
-  task :default => :spec
-else
+begin
   require 'rubocop/rake_task'
   RuboCop::RakeTask.new
-
   task :default => [:spec, :rubocop]
+
+rescue LoadError
+  warn 'RuboCop is not available'
+  task :default => :spec
 end

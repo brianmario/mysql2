@@ -43,27 +43,33 @@ RSpec.describe Mysql2::Client do
     }.not_to raise_error
   end
 
-  it "should accept connect flags and pass them to #connect" do
-    klient = Class.new(Mysql2::Client) do
-      attr_reader :connect_args
-      def connect(*args)
-        @connect_args ||= []
-        @connect_args << args
-      end
+  Klient = Class.new(Mysql2::Client) do
+    attr_reader :connect_args
+    def connect(*args)
+      @connect_args ||= []
+      @connect_args << args
     end
-    client = klient.new :flags => Mysql2::Client::FOUND_ROWS
+  end
+
+  it "should accept connect flags and pass them to #connect" do
+    client = Klient.new :flags => Mysql2::Client::FOUND_ROWS
     expect(client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).to be > 0
   end
 
+  it "should parse flags array" do
+    client = Klient.new :flags => %w( FOUND_ROWS !PROTOCOL_41 )
+    expect(client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).to eql(Mysql2::Client::FOUND_ROWS)
+    expect(client.connect_args.last[6] & Mysql2::Client::PROTOCOL_41).to eql(0)
+  end
+
+  it "should parse flags string" do
+    client = Klient.new :flags => "FOUND_ROWS !PROTOCOL_41"
+    expect(client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).to eql(Mysql2::Client::FOUND_ROWS)
+    expect(client.connect_args.last[6] & Mysql2::Client::PROTOCOL_41).to eql(0)
+  end
+
   it "should default flags to (REMEMBER_OPTIONS, LONG_PASSWORD, LONG_FLAG, TRANSACTIONS, PROTOCOL_41, SECURE_CONNECTION)" do
-    klient = Class.new(Mysql2::Client) do
-      attr_reader :connect_args
-      def connect(*args)
-        @connect_args ||= []
-        @connect_args << args
-      end
-    end
-    client = klient.new
+    client = Klient.new
     client_flags = Mysql2::Client::REMEMBER_OPTIONS |
                    Mysql2::Client::LONG_PASSWORD |
                    Mysql2::Client::LONG_FLAG |

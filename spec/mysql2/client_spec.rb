@@ -166,57 +166,36 @@ RSpec.describe Mysql2::Client do
     expect {
       Mysql2::Client.new(DatabaseCredentials['root']).close
     }.to_not change {
-      @client.query("SHOW STATUS LIKE 'Aborted_clients'").first['Value'].to_i
+      @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
+        @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
     }
   end
 
   it "should not leave dangling connections after garbage collection" do
     run_gc
+    expect {
+      expect {
+        10.times do
+          Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
+        end
+      }.to change {
+        @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+      }.by(10)
 
-    client = Mysql2::Client.new(DatabaseCredentials['root'])
-    before_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-
-    10.times do
-      Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
-    end
-    after_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-    expect(after_count).to eq(before_count + 10)
-
-    run_gc
-    final_count = client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-    expect(final_count).to eq(before_count)
-  end
-
-  it "should not close connections when running in a child process" do
-    pending("fork is not available on this platform") unless Process.respond_to?(:fork)
-
-    run_gc
-    client = Mysql2::Client.new(DatabaseCredentials['root'])
-
-    # this empty `fork` call fixes this tests on RBX; without it, the next
-    # `fork` call hangs forever. WTF?
-    fork {}
-
-    fork do
-      client.query('SELECT 1')
-      client = nil
       run_gc
-    end
-
-    Process.wait
-
-    # this will throw an error if the underlying socket was shutdown by the
-    # child's GC
-    expect { client.query('SELECT 1') }.to_not raise_exception
+    }.to_not change {
+      @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
+        @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
+    }
   end
 
   context "#automatic_close" do
-    if RUBY_PLATFORM =~ /mingw|mswin/
-      it "is enabled by default" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'])
-        expect(client.automatic_close?).to be(true)
-      end
+    it "is enabled by default" do
+      client = Mysql2::Client.new(DatabaseCredentials['root'])
+      expect(client.automatic_close?).to be(true)
+    end
 
+    if RUBY_PLATFORM =~ /mingw|mswin/
       it "cannot be disabled" do
         expect {
           Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
@@ -228,41 +207,47 @@ RSpec.describe Mysql2::Client do
         expect { client.automatic_close = true }.to_not raise_error
       end
     else
-      it "is disabled by default" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'])
-        expect(client.automatic_close?).to be(false)
-      end
-
       it "can be configured" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true))
-        expect(client.automatic_close?).to be(true)
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
+        expect(client.automatic_close?).to be(false)
       end
 
       it "can be assigned" do
         client = Mysql2::Client.new(DatabaseCredentials['root'])
-        client.automatic_close = true
-        expect(client.automatic_close?).to be(true)
-
         client.automatic_close = false
         expect(client.automatic_close?).to be(false)
 
-        client.automatic_close = 9
+        client.automatic_close = true
         expect(client.automatic_close?).to be(true)
 
         client.automatic_close = nil
         expect(client.automatic_close?).to be(false)
-      end
-    end
 
-    it "should terminate connections during garbage collection" do
-      run_gc
-      expect {
-        Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true)).query('SELECT 1')
+        client.automatic_close = 9
+        expect(client.automatic_close?).to be(true)
+      end
+
+      it "should not close connections when running in a child process" do
         run_gc
-      }.to_not change {
-        @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
-          @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
-      }
+        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        client.automatic_close = false
+
+        # this empty `fork` call fixes this tests on RBX; without it, the next
+        # `fork` call hangs forever. WTF?
+        fork {}
+
+        fork do
+          client.query('SELECT 1')
+          client = nil
+          run_gc
+        end
+
+        Process.wait
+
+        # this will throw an error if the underlying socket was shutdown by the
+        # child's GC
+        expect { client.query('SELECT 1') }.to_not raise_exception
+      end
     end
   end
 

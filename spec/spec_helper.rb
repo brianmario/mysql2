@@ -90,6 +90,5 @@ RSpec.configure do |config|
         "test", "test", 'val1', 'val1,val2'
       )
     ]
-    client.close
   end
 end

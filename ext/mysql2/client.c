@@ -260,11 +260,7 @@ static VALUE allocate(VALUE klass) {
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
   MARK_CONN_INACTIVE(self);
-#ifndef _WIN32
-  wrapper->automatic_close = 0;
-#else
   wrapper->automatic_close = 1;
-#endif
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
   wrapper->connect_timeout = 0;
@@ -386,8 +382,10 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 }
 
 /*
- * Terminate the connection; call this when the connection is no longer needed.
- * To have the garbage collector close the connection, enable +automatic_close+.
+ * Immediately disconnect from the server; normally the garbage collector
+ * will disconnect automatically when a connection is no longer needed.
+ * Explicitly closing this will free up server resources sooner than waiting
+ * for the garbage collector.
  *
  * @return [nil]
  */
@@ -1098,9 +1096,13 @@ static VALUE get_automatic_close(VALUE self) {
 }
 
 /* call-seq:
- *    client.automatic_close = true
+ *    client.automatic_close = false
  *
- * Set this to +true+ to let the garbage collector close this connection.
+ * Set this to +false+ to leave the connection open after it is garbage
+ * collected. To avoid "Aborted connection" errors on the server, explicitly
+ * call +close+ when the connection is no longer needed.
+ *
+ * @see http://dev.mysql.com/doc/en/communication-errors.html
  */
 static VALUE set_automatic_close(VALUE self, VALUE value) {
   GET_CLIENT(self);

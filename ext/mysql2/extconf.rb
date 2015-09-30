@@ -2,6 +2,9 @@
 require 'mkmf'
 require 'English'
 
+# Disable these cops, because they make the build script _harder_ to read.
+# rubocop:disable Metrics/ClassLength, Style/GuardClause
+
 # For compatibility with Ruby 1.8 and Ruby EE, whose Rake breaks Object#rm_f
 class << self
    alias_method :rm_f_original, :rm_f
@@ -9,18 +12,21 @@ class << self
    alias_method :rm_f, :rm_f_original
 end
 
+# Represents the base configuration for all platforms.
 class Platform
+  attr_accessor :rpath_dir
+
   # Gets the proper platform object for the current platform.
   def self.current
     case RUBY_PLATFORM
-      when /mswin/
-        Windows.new
-      when /mingw/
-        WindowsMingw.new
-      when /darwin/
-        MacOS.new
-      else
-        Linux.new
+    when /mswin/
+      Windows.new
+    when /mingw/
+      WindowsMingw.new
+    when /darwin/
+      MacOS.new
+    else
+      Linux.new
     end
   end
 
@@ -34,19 +40,15 @@ class Platform
 
   protected
 
-  def rpath_dir
-    @rpath_dir
-  end
-
   # @return [(String, String)|nil] The include and library paths.
   def detect_paths
     detect_by_explicit_path || detect_by_mysql_config
   end
 
   def detect_headers
-    headers = %w{ errmsg.h mysqld_error.h }
-    prefix = ['', 'mysql/'].find do |prefix|
-      have_header("#{prefix}mysql.h")
+    headers = %w(errmsg.h mysqld_error.h)
+    prefix = ['', 'mysql/'].find do |candidate|
+      have_header("#{candidate}mysql.h")
     end
     asplode('mysql.h') unless prefix
 
@@ -57,9 +59,9 @@ class Platform
   end
 
   def detect_libraries
-    libraries = %w{ mysqlclient libmysql }
-    library = libraries.find do |library|
-      have_library(library, 'mysql_query')
+    libraries = %w(mysqlclient libmysql)
+    library = libraries.find do |candidate|
+      have_library(candidate, 'mysql_query')
     end
 
     asplode 'mysqlclient or libmysql' unless library
@@ -119,18 +121,16 @@ class Platform
         inc, lib = dir_config('mysql')
       end
 
-      error "Cannot find include dir(s) #{inc}" unless inc && inc.split(File::PATH_SEPARATOR).any?{|dir| File.directory?(dir)}
-      error "Cannot find library dir(s) #{lib}" unless lib && lib.split(File::PATH_SEPARATOR).any?{|dir| File.directory?(dir)}
+      error "Cannot find include dir(s) #{inc}" unless inc && inc.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
+      error "Cannot find library dir(s) #{lib}" unless lib && lib.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
       warn "Using --with-mysql-dir=#{File.dirname(inc)}"
       [inc, lib]
-    else
-      nil
     end
   end
 
   def detect_by_mysql_config
     if mysql_config_path
-      warn  "Using mysql_config at #{mysql_config_path}"
+      warn "Using mysql_config at #{mysql_config_path}"
 
       ver = `#{mysql_config_path} --version`.chomp.to_f
       includes = `#{mysql_config_path} --include`.chomp
@@ -171,10 +171,11 @@ class Platform
   end
 end
 
+# Configuration for generic Unix
 class Unix < Platform
   # borrowed from mysqlplus
   # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
-  DEFAULT_MYSQL_CONFIG_SEARCH_PATHS = %w[
+  DEFAULT_MYSQL_CONFIG_SEARCH_PATHS = %w(
     /opt
     /opt/local
     /opt/local/mysql
@@ -186,7 +187,7 @@ class Unix < Platform
     /usr/local/mysql-*
     /usr/local/lib/mysql5*
     /usr/local/opt/mysql5*
-  ].freeze
+  ).freeze
 
   def configure
     super
@@ -202,7 +203,7 @@ class Unix < Platform
       warn "Setting mysql rpath to #{explicit_rpath}"
       $LDFLAGS << rpath_flags
     else
-      if libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2]
+      if (libdir = rpath_dir[%r{(-L)?(/[^ ]+)}, 2])
         rpath_flags = " -Wl,-rpath,#{libdir}"
         if RbConfig::CONFIG['RPATHFLAG'].to_s.empty? && try_link('int main() {return 0;}', rpath_flags)
           # Usually Ruby sets RPATHFLAG the right way for each system, but not on OS X.
@@ -230,14 +231,14 @@ class Unix < Platform
 
   def detect_by_known_paths
     inc, lib = dir_config('mysql', '/usr/local')
-    asplode('mysql client') unless has_mysql_client?(lib)
+    asplode('mysql client') unless mysql_client?(lib)
 
     [inc, lib]
   end
 
   def default_mysql_config_search_path
     ENV.fetch('PATH').split(File::PATH_SEPARATOR) +
-      DEFAULT_MYSQL_CONFIG_SEARCH_PATHS.map {|dir| "#{dir}/bin" }
+      DEFAULT_MYSQL_CONFIG_SEARCH_PATHS.map { |dir| "#{dir}/bin" }
   end
 
   def mysql_config_glob
@@ -251,11 +252,12 @@ class Unix < Platform
 
   private
 
-  def has_mysql_client?(lib)
+  def mysql_client?(lib)
     find_library('mysqlclient', 'mysql_query', lib, "#{lib}/mysql")
   end
 end
 
+# Configuration for Linux
 class Linux < Unix
   protected
 
@@ -265,6 +267,7 @@ class Linux < Unix
   end
 end
 
+# Configuration for Mac OS
 class MacOS < Unix
   protected
 
@@ -273,6 +276,7 @@ class MacOS < Unix
   end
 end
 
+# Configuration for Windows
 class Windows < Platform
   include Rake::DSL
 
@@ -292,7 +296,7 @@ class Windows < Platform
 
       vendordll = File.join(vendordir, 'libmysql.dll')
       dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
-      file vendordll => [dllfile, vendordir] do |t|
+      file vendordll => [dllfile, vendordir] do
         when_writing 'copying libmysql.dll' do
           cp dllfile, vendordll
         end
@@ -303,21 +307,22 @@ class Windows < Platform
   end
 end
 
+# Configuration for MingW builds on Windows
 class WindowsMingw < Windows
   def configure
     super
 
     deffile = File.expand_path('../../../support/libmysql.def', __FILE__)
     libfile = File.expand_path(File.join(rpath_dir, 'libmysql.lib'))
-    file 'libmysql.a' => [deffile, libfile] do |t|
+    file 'libmysql.a' => [deffile, libfile] do
       when_writing 'building libmysql.a' do
         # Ruby kindly shows us where dllwrap is, but that tool does more than we want.
         # Maybe in the future Ruby could provide RbConfig::CONFIG['DLLTOOL'] directly.
         dlltool = RbConfig::CONFIG['DLLWRAP'].gsub('dllwrap', 'dlltool')
         sh dlltool, '--kill-at',
-          '--dllname', 'libmysql.dll',
-          '--output-lib', 'libmysql.a',
-          '--input-def', deffile, libfile
+           '--dllname', 'libmysql.dll',
+           '--output-lib', 'libmysql.a',
+           '--input-def', deffile, libfile
       end
     end
 

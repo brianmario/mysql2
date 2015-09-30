@@ -1,5 +1,6 @@
 # encoding: UTF-8
 require 'mkmf'
+require 'English'
 
 # For compatibility with Ruby 1.8 and Ruby EE, whose Rake breaks Object#rm_f
 class << self
@@ -68,24 +69,48 @@ class Platform
     # This is our wishlist. We use whichever flags work on the host.
     # TODO: fix statement.c and remove -Wno-declaration-after-statement
     # TODO: fix gperf mysql_enc_name_to_ruby.h and remove -Wno-missing-field-initializers
-    %w(
-      -Wall
-      -Wextra
-      -Werror
-      -Wno-unused-function
-      -Wno-declaration-after-statement
-      -Wno-missing-field-initializers
-    ).select do |flag|
-      try_link('int main() {return 0;}', flag)
-    end.each do |flag|
-      $CFLAGS << ' ' << flag
+    wishlist = [
+      '-Weverything',
+      '-Wno-bad-function-cast', # rb_thread_call_without_gvl returns void * that we cast to VALUE
+      '-Wno-conditional-uninitialized', # false positive in client.c
+      '-Wno-covered-switch-default', # result.c -- enum_field_types (when fully covered, e.g. mysql 5.5)
+      '-Wno-declaration-after-statement', # GET_CLIENT followed by GET_STATEMENT in statement.c
+      '-Wno-disabled-macro-expansion', # rubby :(
+      '-Wno-documentation-unknown-command', # rubby :(
+      '-Wno-missing-field-initializers', # gperf generates bad code
+      '-Wno-missing-variable-declarations', # missing symbols due to ruby native ext initialization
+      '-Wno-padded', # mysql :(
+      '-Wno-sign-conversion', # gperf generates bad code
+      '-Wno-static-in-inline', # gperf generates bad code
+      '-Wno-switch-enum', # result.c -- enum_field_types (when not fully covered, e.g. mysql 5.6+)
+      '-Wno-undef', # rubinius :(
+      '-Wno-used-but-marked-unused', # rubby :(
+    ]
+
+    if ENV['CI']
+      wishlist += [
+        '-Werror',
+        '-fsanitize=address',
+        '-fsanitize=cfi',
+        '-fsanitize=integer',
+        '-fsanitize=memory',
+        '-fsanitize=thread',
+        '-fsanitize=undefined',
+      ]
     end
+
+    usable_flags = wishlist.select do |flag|
+      try_link('int main() {return 0;}', flag)
+    end
+
+    $CFLAGS << ' ' << usable_flags.join(' ')
   end
 
   def detect_by_explicit_path
     # If the user has provided a --with-mysql-dir argument, we must respect it or fail.
     inc, lib = dir_config('mysql')
     if inc && lib
+      # TODO: Remove when 2.0.0 is the minimum supported version
       # Ruby versions not incorporating the mkmf fix at
       # https://bugs.ruby-lang.org/projects/ruby-trunk/repository/revisions/39717
       # do not properly search for lib directories, and must be corrected
@@ -96,7 +121,7 @@ class Platform
 
       error "Cannot find include dir(s) #{inc}" unless inc && inc.split(File::PATH_SEPARATOR).any?{|dir| File.directory?(dir)}
       error "Cannot find library dir(s) #{lib}" unless lib && lib.split(File::PATH_SEPARATOR).any?{|dir| File.directory?(dir)}
-      warn  "Using --with-mysql-dir=#{File.dirname(inc)}"
+      warn "Using --with-mysql-dir=#{File.dirname(inc)}"
       [inc, lib]
     else
       nil
@@ -109,14 +134,12 @@ class Platform
 
       ver = `#{mysql_config_path} --version`.chomp.to_f
       includes = `#{mysql_config_path} --include`.chomp
-      exit 1 if $? != 0
+      abort unless $CHILD_STATUS.success?
       libs = `#{mysql_config_path} --libs_r`.chomp
 
       # MySQL 5.5 and above already have re-entrant code in libmysqlclient (no _r).
-      if ver >= 5.5 || libs.empty?
-        libs = `#{mysql_config_path} --libs`.chomp
-      end
-      exit 1 if $? != 0
+      libs = `#{mysql_config_path} --libs`.chomp if ver >= 5.5 || libs.empty?
+      abort unless $CHILD_STATUS.success?
 
       $INCFLAGS += ' ' + includes
       $libs = "#{libs} #{$libs}"
@@ -140,7 +163,7 @@ class Platform
   end
 
   def asplode_suggestion
-    'Please check your installation of MySQL and try again.'
+    'Check your installation of MySQL or Connector/C and try again.'
   end
 
   def mysql_config_path
@@ -213,8 +236,8 @@ class Unix < Platform
   end
 
   def default_mysql_config_search_path
-    ENV['PATH'].split(File::PATH_SEPARATOR) +
-      DEFAULT_MYSQL_CONFIG_SEARCH_PATHS.map{|dir| "#{dir}/bin" }
+    ENV.fetch('PATH').split(File::PATH_SEPARATOR) +
+      DEFAULT_MYSQL_CONFIG_SEARCH_PATHS.map {|dir| "#{dir}/bin" }
   end
 
   def mysql_config_glob
@@ -237,8 +260,8 @@ class Linux < Unix
   protected
 
   def asplode_suggestion
-    'Try `apt-get install libmysqlclient-dev` or `yum install mysql-devel`, '\
-    'check your installation of MySQL and try again.'
+    "You may need to 'apt-get install libmysqlclient-dev' or 'yum install mysql-devel', and try "\
+    "again."
   end
 end
 
@@ -246,7 +269,7 @@ class MacOS < Unix
   protected
 
   def asplode_suggestion
-    'Try `brew install mysql`, check your installation of MySQL and try again.'
+    "You may need to 'brew install mysql' or 'port install mysql', and try again."
   end
 end
 

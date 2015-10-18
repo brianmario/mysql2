@@ -669,7 +669,8 @@ RSpec.describe Mysql2::Statement do
 
   context 'close' do
     it 'should free server resources' do
-      stmt = @client.prepare 'SELECT 1'
+      stmt = @client.prepare 'SELECT 1 FROM dual WHERE 0 = ?'
+      stmt.execute(1).free
       expect { stmt.close }.to change {
         @client.query("SHOW STATUS LIKE 'Prepared_stmt_count'").first['Value'].to_i
       }.by(-1)

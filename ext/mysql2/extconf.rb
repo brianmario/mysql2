@@ -105,14 +105,16 @@ wishlist = [
   '-Wno-missing-field-initializers', # gperf generates bad code
   '-Wno-missing-variable-declarations', # missing symbols due to ruby native ext initialization
   '-Wno-padded', # mysql :(
+  '-Wno-reserved-id-macro', # rubby :(
   '-Wno-sign-conversion', # gperf generates bad code
   '-Wno-static-in-inline', # gperf generates bad code
   '-Wno-switch-enum', # result.c -- enum_field_types (when not fully covered, e.g. mysql 5.6+)
   '-Wno-undef', # rubinius :(
+  '-Wno-unreachable-code', # rubby :(
   '-Wno-used-but-marked-unused', # rubby :(
 ]
 
-if ENV['CI']
+if ENV['MYSQL2_CI']
   wishlist += [
     '-Werror',
     '-fsanitize=address',

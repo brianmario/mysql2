@@ -127,7 +127,7 @@ if ENV['MYSQL2_CI']
 end
 
 usable_flags = wishlist.select do |flag|
-  try_link('int main() {return 0;}', flag)
+  try_link('int main() {return 0;}', "-Werror -Wunknown-warning-option #{flag}")
 end
 
 $CFLAGS << ' ' << usable_flags.join(' ')

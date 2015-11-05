@@ -117,7 +117,7 @@ wishlist = [
 if ENV['MYSQL2_CI']
   wishlist += [
     '-Werror',
-    '-fsanitize=address',
+    '-fsanitize=address -lasan',
     '-fsanitize=cfi',
     '-fsanitize=integer',
     '-fsanitize=memory',

@@ -8,7 +8,8 @@ static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, inter
 #define GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
   Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper); \
-  if (!stmt_wrapper->stmt) { rb_raise(cMysql2Error, "Invalid statement handle"); }
+  if (!stmt_wrapper->stmt) { rb_raise(cMysql2Error, "Invalid statement handle"); } \
+  if (stmt_wrapper->closed) { rb_raise(cMysql2Error, "Statement handle already closed"); }
 
 
 static void rb_mysql_stmt_mark(void * ptr) {
@@ -105,6 +106,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   {
     stmt_wrapper->client = rb_client;
     stmt_wrapper->refcount = 1;
+    stmt_wrapper->closed = 0;
     stmt_wrapper->stmt = NULL;
   }
 
@@ -461,6 +463,7 @@ static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
  */
 static VALUE rb_mysql_stmt_close(VALUE self) {
   GET_STATEMENT(self);
+  stmt_wrapper->closed = 1;
   rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
   return Qnil;
 }

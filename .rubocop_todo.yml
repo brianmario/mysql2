@@ -8,15 +8,19 @@
 
 # Offense count: 2
 Metrics/AbcSize:
-  Max: 68
+  Max: 80
 
 # Offense count: 1
 Metrics/BlockNesting:
   Max: 5
 
+# Offense count: 1
+Metrics/ClassLength:
+  Max: 125
+
 # Offense count: 2
 Metrics/CyclomaticComplexity:
-  Max: 23
+  Max: 25
 
 # Offense count: 290
 # Configuration parameters: AllowURI, URISchemes.
@@ -26,7 +30,7 @@ Metrics/LineLength:
 # Offense count: 5
 # Configuration parameters: CountComments.
 Metrics/MethodLength:
-  Max: 43
+  Max: 50
 
 # Offense count: 1
 Metrics/PerceivedComplexity:

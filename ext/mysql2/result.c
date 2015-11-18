@@ -309,11 +309,10 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
       case MYSQL_TYPE_SET:          // char[]
       case MYSQL_TYPE_ENUM:         // char[]
       case MYSQL_TYPE_GEOMETRY:     // char[]
+      default:
         wrapper->result_buffers[i].buffer = xmalloc(fields[i].max_length);
         wrapper->result_buffers[i].buffer_length = fields[i].max_length;
         break;
-      default:
-        rb_raise(cMysql2Error, "unhandled mysql type: %d", fields[i].type);
     }
 
     wrapper->result_buffers[i].is_null = &wrapper->is_null[i];
@@ -491,14 +490,12 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         case MYSQL_TYPE_SET:          // char[]
         case MYSQL_TYPE_ENUM:         // char[]
         case MYSQL_TYPE_GEOMETRY:     // char[]
+        default:
           val = rb_str_new(result_buffer->buffer, *(result_buffer->length));
 #ifdef HAVE_RUBY_ENCODING_H
           val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
 #endif
           break;
-        default:
-          rb_raise(cMysql2Error, "unhandled buffer type: %d",
-              result_buffer->buffer_type);
       }
     }
 

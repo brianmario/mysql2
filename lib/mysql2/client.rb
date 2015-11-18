@@ -48,10 +48,18 @@ module Mysql2
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any?
 
+      case opts[:flags]
+      when Array
+        flags = parse_flags_array(opts[:flags], @query_options[:connect_flags])
+      when String
+        flags = parse_flags_array(opts[:flags].split(' '), @query_options[:connect_flags])
+      when Integer
+        flags = @query_options[:connect_flags] | opts[:flags]
+      else
+        flags = @query_options[:connect_flags]
+      end
+
       # SSL verify is a connection flag rather than a mysql_ssl_set option
-      flags = 0
-      flags |= @query_options[:connect_flags]
-      flags |= opts[:flags] if opts[:flags]
       flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify] && ssl_options.any?
 
       if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @query_options.key?(k) }
@@ -77,6 +85,20 @@ module Mysql2
       socket = socket.to_s unless socket.nil?
 
       connect user, pass, host, port, database, socket, flags
+    end
+
+    def parse_flags_array(flags, initial = 0)
+      flags.reduce(initial) do |memo, f|
+        # const_defined? does not like a leading !
+        if !f.start_with?('!') && Mysql2::Client.const_defined?(f)
+          memo | Mysql2::Client.const_get(f)
+        elsif f.start_with?('!') && Mysql2::Client.const_defined?(f[1..-1])
+          memo & ~ Mysql2::Client.const_get(f[1..-1])
+        else
+          warn "Unknown MySQL connection flag: #{f}"
+          memo
+        end
+      end
     end
 
     if Thread.respond_to?(:handle_interrupt)

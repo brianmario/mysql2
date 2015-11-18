@@ -133,7 +133,7 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
 
 static void *nogvl_init(void *ptr) {
   MYSQL *client;
-  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
+  mysql_client_wrapper *wrapper = ptr;
 
   /* may initialize embedded server and read /etc/services off disk */
   client = mysql_init(wrapper->client);
@@ -224,7 +224,7 @@ static void *nogvl_close(void *ptr) {
 
 /* this is called during GC */
 static void rb_mysql_client_free(void *ptr) {
-  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)ptr;
+  mysql_client_wrapper *wrapper = ptr;
   decr_mysql2_client(wrapper);
 }
 
@@ -437,10 +437,9 @@ static void *nogvl_read_query_result(void *ptr) {
 }
 
 static void *nogvl_do_result(void *ptr, char use_result) {
-  mysql_client_wrapper *wrapper;
+  mysql_client_wrapper *wrapper = ptr;
   MYSQL_RES *result;
 
-  wrapper = (mysql_client_wrapper *)ptr;
   if (use_result) {
     result = mysql_use_result(wrapper->client);
   } else {
@@ -533,14 +532,13 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
 }
 
 static VALUE do_query(void *args) {
-  struct async_query_args *async_args;
+  struct async_query_args *async_args = args;
   struct timeval tv;
   struct timeval* tvp;
   long int sec;
   int retval;
   VALUE read_timeout;
 
-  async_args = (struct async_query_args *)args;
   read_timeout = rb_iv_get(async_args->self, "@read_timeout");
 
   tvp = NULL;
@@ -578,10 +576,8 @@ static VALUE do_query(void *args) {
 }
 #else
 static VALUE finish_and_mark_inactive(void *args) {
-  VALUE self;
+  VALUE self = args;
   MYSQL_RES *result;
-
-  self = (VALUE)args;
 
   GET_CLIENT(self);
 

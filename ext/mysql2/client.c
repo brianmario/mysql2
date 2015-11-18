@@ -534,7 +534,7 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
 static VALUE do_query(void *args) {
   struct async_query_args *async_args = args;
   struct timeval tv;
-  struct timeval* tvp;
+  struct timeval *tvp;
   long int sec;
   int retval;
   VALUE read_timeout;

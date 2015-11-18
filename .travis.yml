@@ -1,3 +1,4 @@
+sudo: required
 language: ruby
 bundler_args: --without benchmarks development
 before_install:
@@ -20,9 +21,17 @@ rvm:
 matrix:
   include:
     - rvm: 2.0.0
-      env: DB=mariadb55
+      addons:
+         mariadb: 5.5
+      env: DB=mariadb
     - rvm: 2.0.0
-      env: DB=mariadb10
+      addons:
+         mariadb: 10.0
+      env: DB=mariadb
+    - rvm: 2.0.0
+      addons:
+         mariadb: 10.1
+      env: DB=mariadb
     - rvm: 2.0.0
       env: DB=mysql57
     - rvm: 2.0.0

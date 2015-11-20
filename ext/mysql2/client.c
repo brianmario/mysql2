@@ -213,6 +213,7 @@ static void *nogvl_close(void *ptr) {
 
   if (wrapper->client) {
     mysql_close(wrapper->client);
+    xfree(wrapper->client);
     wrapper->client = NULL;
     wrapper->connected = 0;
     wrapper->active_thread = Qnil;

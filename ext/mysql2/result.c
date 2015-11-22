@@ -48,7 +48,7 @@ static rb_encoding *binaryEncoding;
 #define MYSQL2_MIN_TIME 62171150401ULL
 #endif
 
-#define GET_RESULT(obj) \
+#define GET_RESULT(self) \
   mysql2_result_wrapper *wrapper; \
   Data_Get_Struct(self, mysql2_result_wrapper, wrapper);
 
@@ -86,7 +86,7 @@ static void rb_mysql_result_mark(void * wrapper) {
 }
 
 /* this may be called manually or during GC */
-static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
+static void rb_mysql_result_free_result_(mysql2_result_wrapper * wrapper) {
   if (!wrapper) return;
 
   if (wrapper->resultFreed != 1) {
@@ -101,6 +101,10 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
        * has never been bound to this statement handle before to prevent the prefetch.
        */
       wrapper->stmt_wrapper->stmt->bind_result_done = 0;
+
+      if (wrapper->statement != Qnil) {
+        decr_mysql2_stmt(wrapper->stmt_wrapper);
+      }
 
       if (wrapper->result_buffers) {
         unsigned int i;
@@ -127,18 +131,20 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
 /* this is called during GC */
 static void rb_mysql_result_free(void *ptr) {
   mysql2_result_wrapper *wrapper = ptr;
-  rb_mysql_result_free_result(wrapper);
+  rb_mysql_result_free_result_(wrapper);
 
   // If the GC gets to client first it will be nil
   if (wrapper->client != Qnil) {
     decr_mysql2_client(wrapper->client_wrapper);
   }
 
-  if (wrapper->statement != Qnil) {
-    decr_mysql2_stmt(wrapper->stmt_wrapper);
-  }
-
   xfree(wrapper);
+}
+
+static VALUE rb_mysql_result_free_result(VALUE self) {
+  GET_RESULT(self);
+  rb_mysql_result_free_result_(wrapper);
+  return Qnil;
 }
 
 /*
@@ -789,7 +795,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
         }
       } while(row != Qnil);
 
-      rb_mysql_result_free_result(wrapper);
+      rb_mysql_result_free_result_(wrapper);
       wrapper->streamingComplete = 1;
 
       // Check for errors, the connection might have gone out from under us
@@ -827,7 +833,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
         if (row == Qnil) {
           /* we don't need the mysql C dataset around anymore, peace it */
-          rb_mysql_result_free_result(wrapper);
+          rb_mysql_result_free_result_(wrapper);
           return Qnil;
         }
 
@@ -837,7 +843,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
       }
       if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
         /* we don't need the mysql C dataset around anymore, peace it */
-        rb_mysql_result_free_result(wrapper);
+        rb_mysql_result_free_result_(wrapper);
       }
     }
   }
@@ -1001,6 +1007,7 @@ void init_mysql2_result() {
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
+  rb_define_method(cMysql2Result, "free", rb_mysql_result_free_result, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
   rb_define_alias(cMysql2Result, "size", "count");
 

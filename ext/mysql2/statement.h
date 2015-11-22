@@ -6,6 +6,7 @@ extern VALUE cMysql2Statement;
 typedef struct {
   VALUE client;
   MYSQL_STMT *stmt;
+  char closed;
   int refcount;
 } mysql_stmt_wrapper;
 

@@ -7,11 +7,6 @@ if [[ -n ${DB-} && x$DB =~ ^xmysql57 ]]; then
   sudo bash .travis_mysql57.sh
 fi
 
-# Install MariaDB if DB=mariadb
-if [[ -n ${DB-} && x$DB =~ ^xmariadb ]]; then
-  sudo apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y install libmariadbclient-dev
-fi
-
 # Install MySQL if OS=darwin
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
   brew update

@@ -48,7 +48,7 @@ static rb_encoding *binaryEncoding;
 #define MYSQL2_MIN_TIME 62171150401ULL
 #endif
 
-#define GET_RESULT(obj) \
+#define GET_RESULT(self) \
   mysql2_result_wrapper *wrapper; \
   Data_Get_Struct(self, mysql2_result_wrapper, wrapper);
 
@@ -91,16 +91,18 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
 
   if (wrapper->resultFreed != 1) {
     if (wrapper->stmt_wrapper) {
-      mysql_stmt_free_result(wrapper->stmt_wrapper->stmt);
+      if (!wrapper->stmt_wrapper->closed) {
+        mysql_stmt_free_result(wrapper->stmt_wrapper->stmt);
 
-      /* MySQL BUG? If the statement handle was previously used, and so
-       * mysql_stmt_bind_result was called, and if that result set and bind buffers were freed,
-       * MySQL still thinks the result set buffer is available and will prefetch the
-       * first result in mysql_stmt_execute. This will corrupt or crash the program.
-       * By setting bind_result_done back to 0, we make MySQL think that a result set
-       * has never been bound to this statement handle before to prevent the prefetch.
-       */
-      wrapper->stmt_wrapper->stmt->bind_result_done = 0;
+        /* MySQL BUG? If the statement handle was previously used, and so
+         * mysql_stmt_bind_result was called, and if that result set and bind buffers were freed,
+         * MySQL still thinks the result set buffer is available and will prefetch the
+         * first result in mysql_stmt_execute. This will corrupt or crash the program.
+         * By setting bind_result_done back to 0, we make MySQL think that a result set
+         * has never been bound to this statement handle before to prevent the prefetch.
+         */
+        wrapper->stmt_wrapper->stmt->bind_result_done = 0;
+      }
 
       if (wrapper->result_buffers) {
         unsigned int i;
@@ -854,6 +856,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
 
   GET_RESULT(self);
+
+  if (wrapper->stmt_wrapper && wrapper->stmt_wrapper->closed) {
+    rb_raise(cMysql2Error, "Statement handle already closed");
+  }
 
   defaults = rb_iv_get(self, "@query_options");
   Check_Type(defaults, T_HASH);

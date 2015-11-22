@@ -7,6 +7,7 @@ typedef struct {
   VALUE client;
   MYSQL_STMT *stmt;
   int refcount;
+  int closed;
 } mysql_stmt_wrapper;
 
 void init_mysql2_statement(void);

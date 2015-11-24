@@ -105,30 +105,51 @@ wishlist = [
   '-Wno-missing-field-initializers', # gperf generates bad code
   '-Wno-missing-variable-declarations', # missing symbols due to ruby native ext initialization
   '-Wno-padded', # mysql :(
+  '-Wno-reserved-id-macro', # rubby :(
   '-Wno-sign-conversion', # gperf generates bad code
   '-Wno-static-in-inline', # gperf generates bad code
   '-Wno-switch-enum', # result.c -- enum_field_types (when not fully covered, e.g. mysql 5.6+)
   '-Wno-undef', # rubinius :(
+  '-Wno-unreachable-code', # rubby :(
   '-Wno-used-but-marked-unused', # rubby :(
 ]
 
-if ENV['CI']
-  wishlist += [
-    '-Werror',
-    '-fsanitize=address',
-    '-fsanitize=cfi',
-    '-fsanitize=integer',
-    '-fsanitize=memory',
-    '-fsanitize=thread',
-    '-fsanitize=undefined',
-  ]
-end
-
 usable_flags = wishlist.select do |flag|
-  try_link('int main() {return 0;}', flag)
+  try_link('int main() {return 0;}',  "-Werror -Wunknown-warning-option #{flag}")
 end
 
 $CFLAGS << ' ' << usable_flags.join(' ')
+
+enabled_sanitizers = disabled_sanitizers = []
+# Specify a commna-separated list of sanitizers, or try them all by default
+sanitizers = with_config('sanitize')
+case sanitizers
+when true
+  # Try them all, turn on whatever we can
+  enabled_sanitizers = %w(address cfi integer memory thread undefined).select do |s|
+    try_link('int main() {return 0;}',  "-Werror -Wunknown-warning-option -fsanitize=#{s}")
+  end
+when String
+  # Figure out which sanitizers are supported
+  enabled_sanitizers, disabled_sanitizers = sanitizers.split(',').partition do |s|
+    try_link('int main() {return 0;}',  "-Werror -Wunknown-warning-option -fsanitize=#{s}")
+  end
+end
+
+unless disabled_sanitizers.empty?
+  abort "-----\nCould not enable requested sanitizers: #{disabled_sanitizers.join(',')}\n-----"
+end
+
+unless enabled_sanitizers.empty?
+  warn "-----\nEnabling sanitizers: #{enabled_sanitizers.join(',')}\n-----"
+  enabled_sanitizers.each do |s|
+    # address sanitizer requires runtime support
+    if s == 'address' # rubocop:disable Style/IfUnlessModifier
+      have_library('asan') || $LDFLAGS << ' -fsanitize=address'
+    end
+    $CFLAGS << " -fsanitize=#{s}"
+  end
+end
 
 if RUBY_PLATFORM =~ /mswin|mingw/
   # Build libmysql.a interface link library
@@ -155,8 +176,8 @@ if RUBY_PLATFORM =~ /mswin|mingw/
 
   # Make sure the generated interface library works (if cross-compiling, trust without verifying)
   unless RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
-    abort "-----\nCannot find libmysql.a\n----" unless have_library('libmysql')
-    abort "-----\nCannot link to libmysql.a (my_init)\n----" unless have_func('my_init')
+    abort "-----\nCannot find libmysql.a\n-----" unless have_library('libmysql')
+    abort "-----\nCannot link to libmysql.a (my_init)\n-----" unless have_func('my_init')
   end
 
   # Vendor libmysql.dll

@@ -58,6 +58,13 @@ This may be needed if you deploy to a system where these libraries
 are located somewhere different than on your build system.
 This overrides any rpath calculated by default or by the options above.
 
+* `--with-sanitize[=address,cfi,integer,memory,thread,undefined]` -
+Enable sanitizers for Clang / GCC. If no argument is given, try to enable
+all sanitizers or fail if none are available. If a command-separated list of
+specific sanitizers is given, configure will fail unless they all are available.
+Note that the some sanitizers may incur a performance penalty, and the Address
+Sanitizer may require a runtime library.
+
 ### Linux and other Unixes
 
 You may need to install a package such as `libmysqlclient-dev` or `mysql-devel`;

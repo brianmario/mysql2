@@ -115,7 +115,7 @@ wishlist = [
 ]
 
 usable_flags = wishlist.select do |flag|
-  try_link('int main() {return 0;}',  "-Werror -Wunknown-warning-option #{flag}")
+  try_link('int main() {return 0;}',  "-Werror #{flag}")
 end
 
 $CFLAGS << ' ' << usable_flags.join(' ')
@@ -127,12 +127,12 @@ case sanitizers
 when true
   # Try them all, turn on whatever we can
   enabled_sanitizers = %w(address cfi integer memory thread undefined).select do |s|
-    try_link('int main() {return 0;}',  "-Werror -Wunknown-warning-option -fsanitize=#{s}")
+    try_link('int main() {return 0;}',  "-Werror -fsanitize=#{s}")
   end
 when String
   # Figure out which sanitizers are supported
   enabled_sanitizers, disabled_sanitizers = sanitizers.split(',').partition do |s|
-    try_link('int main() {return 0;}',  "-Werror -Wunknown-warning-option -fsanitize=#{s}")
+    try_link('int main() {return 0;}',  "-Werror -fsanitize=#{s}")
   end
 end
 

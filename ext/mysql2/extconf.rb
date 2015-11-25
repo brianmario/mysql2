@@ -150,6 +150,8 @@ unless enabled_sanitizers.empty?
     end
     $CFLAGS << " -fsanitize=#{s}"
   end
+  # Options for line numbers in backtraces
+  $CFLAGS << ' -g -fno-omit-frame-pointer'
 end
 
 if RUBY_PLATFORM =~ /mswin|mingw/

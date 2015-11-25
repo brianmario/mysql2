@@ -64,6 +64,13 @@ all sanitizers or fail if none are available. If a command-separated list of
 specific sanitizers is given, configure will fail unless they all are available.
 Note that the some sanitizers may incur a performance penalty, and the Address
 Sanitizer may require a runtime library.
+To see line numbers in backtraces, declare these environment variables
+(adjust the llvm-symbolizer path as needed for your system):
+
+``` sh
+  export ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer-3.4
+  export ASAN_OPTIONS=symbolize=1
+```
 
 ### Linux and other Unixes
 

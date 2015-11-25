@@ -272,15 +272,26 @@ Yields:
 next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
 ```
 
-See https://gist.github.com/1367987 for using MULTI_STATEMENTS with Active Record.
-
 ### Secure auth
 
 Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
 When secure_auth is enabled, the server will refuse a connection if the account password is stored in old pre-MySQL 4.1 format.
 The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
-To bypass this restriction in the client, pass the option :secure_auth => false to Mysql2::Client.new().
-If using ActiveRecord, your database.yml might look something like this:
+To bypass this restriction in the client, pass the option `:secure_auth => false` to Mysql2::Client.new().
+
+### Flags option parsing
+
+The `:flags` parameter accepts an integer, a string, or an array. The integer
+form allows the client to assemble flags from constants defined under
+`Mysql2::Client` such as `Mysql2::Client::FOUND_ROWS`. Use a bitwise `|` (OR)
+to specify several flags.
+
+The string form will be split on whitespace and parsed as with the array form:
+Plain flags are added to the default flags, while flags prefixed with `-`
+(minus) are removed from the default flags.
+
+This allows easier use with ActiveRecord's database.yml, avoiding the need for magic flag numbers.
+For example, to disable protocol compression, and enable multiple statements and result sets:
 
 ``` yaml
 development:
@@ -291,13 +302,17 @@ development:
   password: my_password
   host: 127.0.0.1
   port: 3306
+  flags:
+    - -COMPRESS
+    - FOUND_ROWS
+    - MULTI_STATEMENTS
   secure_auth: false
 ```
 
 ### Reading a MySQL config file
 
 You may read configuration options from a MySQL configuration file by passing
-the `:default_file` and `:default_group` paramters. For example:
+the `:default_file` and `:default_group` parameters. For example:
 
 ``` ruby
 Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
@@ -305,7 +320,7 @@ Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
 
 ### Initial command on connect and reconnect
 
-If you specify the init_command option, the SQL string you provide will be executed after the connection is established.
+If you specify the `:init_command` option, the SQL string you provide will be executed after the connection is established.
 If `:reconnect` is set to `true`, init_command will also be executed after a successful reconnect.
 It is useful if you want to provide session options which survive reconnection.
 

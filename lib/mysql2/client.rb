@@ -89,13 +89,13 @@ module Mysql2
 
     def parse_flags_array(flags, initial = 0)
       flags.reduce(initial) do |memo, f|
-        # const_defined? does not like a leading !
-        if !f.start_with?('!') && Mysql2::Client.const_defined?(f)
+        fneg = f.start_with?('-') ? f[1..-1] : nil
+        if fneg && fneg =~ /^\w+$/ && Mysql2::Client.const_defined?(fneg)
+          memo & ~ Mysql2::Client.const_get(fneg)
+        elsif f && f =~ /^\w+$/ && Mysql2::Client.const_defined?(f)
           memo | Mysql2::Client.const_get(f)
-        elsif f.start_with?('!') && Mysql2::Client.const_defined?(f[1..-1])
-          memo & ~ Mysql2::Client.const_get(f[1..-1])
         else
-          warn "Unknown MySQL connection flag: #{f}"
+          warn "Unknown MySQL connection flag: '#{f}'"
           memo
         end
       end

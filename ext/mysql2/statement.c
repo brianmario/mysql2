@@ -177,16 +177,6 @@ static void *nogvl_execute(void *ptr) {
   }
 }
 
-static void *nogvl_stmt_store_result(void *ptr) {
-  MYSQL_STMT *stmt = ptr;
-
-  if (mysql_stmt_store_result(stmt)) {
-    return (void *)Qfalse;
-  } else {
-    return (void *)Qtrue;
-  }
-}
-
 static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length_buffer, VALUE string) {
   int length;
 
@@ -380,7 +370,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
   if (!is_streaming) {
     // recieve the whole result set from the server
-    if (rb_thread_call_without_gvl(nogvl_stmt_store_result, stmt, RUBY_UBF_IO, 0) == Qfalse) {
+    if (mysql_stmt_store_result(stmt)) {
       mysql_free_result(metadata);
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }

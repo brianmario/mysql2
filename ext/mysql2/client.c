@@ -373,7 +373,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
     if (wrapper->connect_timeout)
       mysql_options(wrapper->client, MYSQL_OPT_CONNECT_TIMEOUT, &wrapper->connect_timeout);
     if (rv == Qfalse)
-      return rb_raise_mysql2_error(wrapper);
+      rb_raise_mysql2_error(wrapper);
   }
 
   wrapper->server_version = mysql_get_server_version(wrapper->client);
@@ -419,7 +419,7 @@ static VALUE do_send_query(void *args) {
   if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, args, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, we're not active anymore */
     wrapper->active_thread = Qnil;
-    return rb_raise_mysql2_error(wrapper);
+    rb_raise_mysql2_error(wrapper);
   }
   return Qnil;
 }
@@ -481,7 +481,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, mark this connection inactive */
     wrapper->active_thread = Qnil;
-    return rb_raise_mysql2_error(wrapper);
+    rb_raise_mysql2_error(wrapper);
   }
 
   is_streaming = rb_hash_aref(rb_iv_get(self, "@current_query_options"), sym_stream);
@@ -1228,7 +1228,7 @@ static VALUE initialize_ext(VALUE self) {
 
   if ((VALUE)rb_thread_call_without_gvl(nogvl_init, wrapper, RUBY_UBF_IO, 0) == Qfalse) {
     /* TODO: warning - not enough memory? */
-    return rb_raise_mysql2_error(wrapper);
+    rb_raise_mysql2_error(wrapper);
   }
 
   wrapper->initialized = 1;

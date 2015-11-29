@@ -11,7 +11,6 @@ static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, inter
   if (!stmt_wrapper->stmt) { rb_raise(cMysql2Error, "Invalid statement handle"); } \
   if (stmt_wrapper->closed) { rb_raise(cMysql2Error, "Statement handle already closed"); }
 
-
 static void rb_mysql_stmt_mark(void * ptr) {
   mysql_stmt_wrapper *stmt_wrapper = ptr;
   if (!stmt_wrapper) return;
@@ -42,7 +41,6 @@ void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
   }
 }
 
-
 void rb_raise_mysql2_stmt_error(mysql_stmt_wrapper *stmt_wrapper) {
   VALUE e;
   GET_CLIENT(stmt_wrapper->client);
@@ -70,7 +68,6 @@ void rb_raise_mysql2_stmt_error(mysql_stmt_wrapper *stmt_wrapper) {
                  rb_sql_state);
   rb_exc_raise(e);
 }
-
 
 /*
  * used to pass all arguments to mysql_stmt_prepare while inside
@@ -369,8 +366,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   if (metadata == NULL) {
     if (mysql_stmt_errno(stmt) != 0) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
-
-      MARK_CONN_INACTIVE(stmt_wrapper->client);
+      MARK_CONN_INACTIVE(wrapper);
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     // no data and no error, so query was not a SELECT
@@ -388,7 +384,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
       mysql_free_result(metadata);
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
-    MARK_CONN_INACTIVE(stmt_wrapper->client);
+    MARK_CONN_INACTIVE(wrapper);
   }
 
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);

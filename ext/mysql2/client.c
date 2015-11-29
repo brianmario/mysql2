@@ -259,7 +259,7 @@ static VALUE allocate(VALUE klass) {
   mysql_client_wrapper * wrapper;
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
-  MARK_CONN_INACTIVE(self);
+  MARK_CONN_INACTIVE(wrapper);
   wrapper->automatic_close = 1;
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
@@ -418,7 +418,7 @@ static VALUE do_send_query(void *args) {
   mysql_client_wrapper *wrapper = query_args->wrapper;
   if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, args, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, we're not active anymore */
-    MARK_CONN_INACTIVE(self);
+    MARK_CONN_INACTIVE(wrapper);
     return rb_raise_mysql2_error(wrapper);
   }
   return Qnil;
@@ -448,7 +448,7 @@ static void *nogvl_do_result(void *ptr, char use_result) {
 
   /* once our result is stored off, this connection is
      ready for another command to be issued */
-  MARK_CONN_INACTIVE(self);
+  MARK_CONN_INACTIVE(wrapper);
 
   return result;
 }
@@ -480,7 +480,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   REQUIRE_CONNECTED(wrapper);
   if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, mark this connection inactive */
-    MARK_CONN_INACTIVE(self);
+    MARK_CONN_INACTIVE(wrapper);
     return rb_raise_mysql2_error(wrapper);
   }
 
@@ -493,7 +493,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   if (result == NULL) {
     if (mysql_errno(wrapper->client) != 0) {
-      MARK_CONN_INACTIVE(self);
+      MARK_CONN_INACTIVE(wrapper);
       rb_raise_mysql2_error(wrapper);
     }
     /* no data and no error, so query was not a SELECT */
@@ -517,7 +517,7 @@ struct async_query_args {
 static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   GET_CLIENT(self);
 
-  MARK_CONN_INACTIVE(self);
+  MARK_CONN_INACTIVE(wrapper);
   wrapper->connected = 0;
 
   /* Invalidate the MySQL socket to prevent further communication.
@@ -588,7 +588,7 @@ static VALUE finish_and_mark_inactive(void *args) {
     result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
     mysql_free_result(result);
 
-    MARK_CONN_INACTIVE(self);
+    MARK_CONN_INACTIVE(wrapper);
   }
 
   return Qnil;

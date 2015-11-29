@@ -1011,10 +1011,10 @@ static VALUE rb_mysql_client_ping(VALUE self) {
 static VALUE rb_mysql_client_more_results(VALUE self)
 {
   GET_CLIENT(self);
-    if (mysql_more_results(wrapper->client) == 0)
-      return Qfalse;
-    else
-      return Qtrue;
+  if (mysql_more_results(wrapper->client) == 0)
+    return Qfalse;
+  else
+    return Qtrue;
 }
 
 /* call-seq:

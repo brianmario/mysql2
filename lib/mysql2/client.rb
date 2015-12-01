@@ -36,7 +36,7 @@ module Mysql2
         when :reconnect, :local_infile, :secure_auth
           send(:"#{key}=", !!opts[key]) # rubocop:disable Style/DoubleNegation
         when :connect_timeout, :read_timeout, :write_timeout
-          send(:"#{key}=", opts[key].to_i)
+          send(:"#{key}=", opts[key]) unless opts[key].nil?
         else
           send(:"#{key}=", opts[key])
         end

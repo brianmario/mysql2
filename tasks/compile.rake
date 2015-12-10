@@ -1,6 +1,6 @@
 require "rake/extensiontask"
 
-load File.expand_path('../../mysql2.gemspec', __FILE__)
+load File.expand_path('../../mysql2.gemspec', __FILE__) unless defined? Mysql2::GEMSPEC
 
 Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
   # put binaries into lib/mysql2/ or lib/mysql2/x.y/

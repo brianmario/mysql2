@@ -1,8 +1,6 @@
-require File.expand_path('../lib/mysql2/version', __FILE__)
-
 Mysql2::GEMSPEC = Gem::Specification.new do |s|
   s.name = 'mysql2'
-  s.version = Mysql2::VERSION
+  s.version = '0.4.2'
   s.authors = ['Brian Lopez', 'Aaron Stone']
   s.license = "MIT"
   s.email = ['seniorlopez@gmail.com', 'aaron@serendipity.cx']

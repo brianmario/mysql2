@@ -1112,7 +1112,7 @@ static VALUE set_automatic_close(VALUE self, VALUE value) {
 #ifndef _WIN32
     wrapper->automatic_close = 0;
 #else
-    rb_raise(cMysql2Error, "Connections are always closed by garbage collector on Windows");
+    rb_warn("Connections are always closed by garbage collector on Windows");
 #endif
   }
   return value;

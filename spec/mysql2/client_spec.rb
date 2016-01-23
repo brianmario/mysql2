@@ -1,5 +1,6 @@
 # encoding: UTF-8
 require 'spec_helper'
+require 'stringio'
 
 RSpec.describe Mysql2::Client do
   context "using defaults file" do
@@ -197,14 +198,22 @@ RSpec.describe Mysql2::Client do
 
     if RUBY_PLATFORM =~ /mingw|mswin/
       it "cannot be disabled" do
-        expect {
+        stderr, $stderr = $stderr, StringIO.new
+
+        begin
           Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
-        }.to raise_error(Mysql2::Error)
+          expect($stderr.string).to include('always closed by garbage collector')
+          $stderr.reopen
 
-        client = Mysql2::Client.new(DatabaseCredentials['root'])
+          client = Mysql2::Client.new(DatabaseCredentials['root'])
+          client.automatic_close = false
+          expect($stderr.string).to include('always closed by garbage collector')
+          $stderr.reopen
 
-        expect { client.automatic_close = false }.to raise_error(Mysql2::Error)
-        expect { client.automatic_close = true }.to_not raise_error
+          expect { client.automatic_close = true }.to_not change { $stderr.string }
+        ensure
+          $stderr = stderr
+        end
       end
     else
       it "can be configured" do

@@ -104,6 +104,10 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
         wrapper->stmt_wrapper->stmt->bind_result_done = 0;
       }
 
+      if (wrapper->statement != Qnil) {
+        decr_mysql2_stmt(wrapper->stmt_wrapper);
+      }
+
       if (wrapper->result_buffers) {
         unsigned int i;
         for (i = 0; i < wrapper->numberOfFields; i++) {
@@ -136,11 +140,13 @@ static void rb_mysql_result_free(void *ptr) {
     decr_mysql2_client(wrapper->client_wrapper);
   }
 
-  if (wrapper->statement != Qnil) {
-    decr_mysql2_stmt(wrapper->stmt_wrapper);
-  }
-
   xfree(wrapper);
+}
+
+static VALUE rb_mysql_result_free_(VALUE self) {
+  GET_RESULT(self);
+  rb_mysql_result_free_result(wrapper);
+  return Qnil;
 }
 
 /*
@@ -510,7 +516,6 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
   return rowVal;
 }
-
 
 static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const result_each_args *args)
 {
@@ -911,6 +916,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   if (wrapper->lastRowProcessed == 0 && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt_wrapper ? mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt) : mysql_num_rows(wrapper->result);
     if (wrapper->numberOfRows == 0) {
+      rb_mysql_result_free_result(wrapper);
       wrapper->rows = rb_ary_new();
       return wrapper->rows;
     }
@@ -1007,6 +1013,7 @@ void init_mysql2_result() {
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
+  rb_define_method(cMysql2Result, "free", rb_mysql_result_free_, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
   rb_define_alias(cMysql2Result, "size", "count");
 

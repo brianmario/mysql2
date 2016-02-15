@@ -22,6 +22,10 @@ RSpec.describe Mysql2::Result do
     expect(@result).to respond_to(:each)
   end
 
+  it "should respond to #free" do
+    expect(@result).to respond_to(:free)
+  end
+
   it "should raise a Mysql2::Error exception upon a bad query" do
     expect {
       @client.query "bad sql"

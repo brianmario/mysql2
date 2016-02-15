@@ -1,7 +1,9 @@
 sudo: required
 language: ruby
 bundler_args: --without benchmarks development
+# Temporary workaround for broken Rubygems on Travis
 before_install:
+  - gem update --system 2.4.8
   - gem --version
   - bash .travis_setup.sh
 os:

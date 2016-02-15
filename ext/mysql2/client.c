@@ -1259,7 +1259,6 @@ void init_mysql2_client() {
   rb_define_singleton_method(cMysql2Client, "info", rb_mysql_client_info, 0);
 
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
-  rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
   rb_define_method(cMysql2Client, "abandon_results!", rb_mysql_client_abandon_results, 0);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_real_escape, 1);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
@@ -1280,6 +1279,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
 #endif
 
+  rb_define_private_method(cMysql2Client, "_query", rb_mysql_client_query, -1);
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
   rb_define_private_method(cMysql2Client, "read_timeout=", set_read_timeout, 1);
   rb_define_private_method(cMysql2Client, "write_timeout=", set_write_timeout, 1);

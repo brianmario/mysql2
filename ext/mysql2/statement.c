@@ -3,7 +3,7 @@
 VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each;
-static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year;
+static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year, intern_to_s;
 
 #define GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
@@ -190,6 +190,19 @@ static void *nogvl_stmt_store_result(void *ptr) {
   }
 }
 
+static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length_buffer, VALUE string) {
+  int length;
+
+  bind_buffer->buffer_type = MYSQL_TYPE_STRING;
+  bind_buffer->buffer = RSTRING_PTR(string);
+
+  length = RSTRING_LEN(string);
+  bind_buffer->buffer_length = length;
+  *length_buffer = length;
+
+  bind_buffer->length = length_buffer;
+}
+
 /* Free each bind_buffer[i].buffer except when params_enc is non-nil, this means
  * the buffer is a Ruby string pointer and not our memory to manage.
  */
@@ -280,11 +293,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 #ifdef HAVE_RUBY_ENCODING_H
             params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
 #endif
-            bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
-            bind_buffers[i].buffer = RSTRING_PTR(params_enc[i]);
-            bind_buffers[i].buffer_length = RSTRING_LEN(params_enc[i]);
-            length_buffers[i] = bind_buffers[i].buffer_length;
-            bind_buffers[i].length = &length_buffers[i];
+            set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
           }
           break;
         default:
@@ -324,6 +333,19 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
             *(MYSQL_TIME*)(bind_buffers[i].buffer) = t;
           } else if (CLASS_OF(argv[i]) == cBigDecimal) {
             bind_buffers[i].buffer_type = MYSQL_TYPE_NEWDECIMAL;
+
+            // DECIMAL are represented with the "string representation of the
+            // original server-side value", see
+            // https://dev.mysql.com/doc/refman/5.7/en/c-api-prepared-statement-type-conversions.html
+            // This should be independent of the locale used both on the server
+            // and the client side.
+            VALUE rb_val_as_string = rb_funcall(argv[i], intern_to_s, 0);
+
+            params_enc[i] = rb_val_as_string;
+#ifdef HAVE_RUBY_ENCODING_H
+            params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
+#endif
+            set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
           }
           break;
       }
@@ -491,4 +513,6 @@ void init_mysql2_statement() {
   intern_day = rb_intern("day");
   intern_month = rb_intern("month");
   intern_year = rb_intern("year");
+
+  intern_to_s = rb_intern("to_s");
 }

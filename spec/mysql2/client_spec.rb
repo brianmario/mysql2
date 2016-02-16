@@ -352,6 +352,12 @@ RSpec.describe Mysql2::Client do
     }.to raise_error(Mysql2::Error)
   end
 
+  it "should allow nil read_timeout" do
+    client = Mysql2::Client.new(:read_timeout => nil)
+
+    expect(client.read_timeout).to be_nil
+  end
+
   context "#query" do
     it "should let you query again if iterating is finished when streaming" do
       @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).each.to_a

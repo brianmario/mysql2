@@ -234,7 +234,7 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
 
   if (wrapper->refcount == 0) {
 #ifndef _WIN32
-    if (wrapper->connected) {
+    if (wrapper->connected && !wrapper->automatic_close) {
       /* The client is being garbage collected while connected. Prevent
        * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
        * the socket by invalidating it. invalidate_fd() will drop this
@@ -260,6 +260,7 @@ static VALUE allocate(VALUE klass) {
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
   MARK_CONN_INACTIVE(self);
+  wrapper->automatic_close = 1;
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
   wrapper->connect_timeout = 0;
@@ -381,13 +382,12 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 }
 
 /*
- * Terminate the connection; call this when the connection is no longer needed.
- * The garbage collector can close the connection, but doing so emits an
- * "Aborted connection" error on the server and increments the Aborted_clients
- * status variable.
+ * Immediately disconnect from the server; normally the garbage collector
+ * will disconnect automatically when a connection is no longer needed.
+ * Explicitly closing this will free up server resources sooner than waiting
+ * for the garbage collector.
  *
- * @see http://dev.mysql.com/doc/en/communication-errors.html
- * @return [void]
+ * @return [nil]
  */
 static VALUE rb_mysql_client_close(VALUE self) {
   GET_CLIENT(self);
@@ -1082,6 +1082,39 @@ static VALUE rb_mysql_client_encoding(VALUE self) {
 #endif
 
 /* call-seq:
+ *    client.automatic_close?
+ *
+ * @return [Boolean]
+ */
+static VALUE get_automatic_close(VALUE self) {
+  GET_CLIENT(self);
+  return wrapper->automatic_close ? Qtrue : Qfalse;
+}
+
+/* call-seq:
+ *    client.automatic_close = false
+ *
+ * Set this to +false+ to leave the connection open after it is garbage
+ * collected. To avoid "Aborted connection" errors on the server, explicitly
+ * call +close+ when the connection is no longer needed.
+ *
+ * @see http://dev.mysql.com/doc/en/communication-errors.html
+ */
+static VALUE set_automatic_close(VALUE self, VALUE value) {
+  GET_CLIENT(self);
+  if (RTEST(value)) {
+    wrapper->automatic_close = 1;
+  } else {
+#ifndef _WIN32
+    wrapper->automatic_close = 0;
+#else
+    rb_warn("Connections are always closed by garbage collector on Windows");
+#endif
+  }
+  return value;
+}
+
+/* call-seq:
  *    client.reconnect = true
  *
  * Enable or disable the automatic reconnect behavior of libmysql.
@@ -1264,6 +1297,8 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "more_results?", rb_mysql_client_more_results, 0);
   rb_define_method(cMysql2Client, "next_result", rb_mysql_client_next_result, 0);
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
+  rb_define_method(cMysql2Client, "automatic_close?", get_automatic_close, 0);
+  rb_define_method(cMysql2Client, "automatic_close=", set_automatic_close, 1);
   rb_define_method(cMysql2Client, "reconnect=", set_reconnect, 1);
   rb_define_method(cMysql2Client, "warning_count", rb_mysql_client_warning_count, 0);
   rb_define_method(cMysql2Client, "query_info_string", rb_mysql_info, 0);

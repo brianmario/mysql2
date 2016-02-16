@@ -43,6 +43,7 @@ typedef struct {
   int reconnect_enabled;
   unsigned int connect_timeout;
   int active;
+  int automatic_close;
   int connected;
   int initialized;
   int refcount;

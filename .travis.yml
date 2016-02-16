@@ -1,7 +1,9 @@
 sudo: required
 language: ruby
 bundler_args: --without benchmarks development
+# Temporary workaround for broken Rubygems on Travis
 before_install:
+  - gem update --system 2.4.8
   - gem --version
   - bash .travis_setup.sh
 os:
@@ -10,11 +12,12 @@ addons:
   hosts:
     - mysql2gem.example.com
 rvm:
-  - 1.8.7
-  - 1.9.3
-  - 2.0.0
-  - 2.1
+  - 2.3.0
   - 2.2
+  - 2.1
+  - 2.0.0
+  - 1.9.3
+  - 1.8.7
   - ree
   - rbx-2
   - ruby-head

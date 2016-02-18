@@ -178,7 +178,7 @@ static void *nogvl_execute(void *ptr) {
 }
 
 static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length_buffer, VALUE string) {
-  int length;
+  unsigned long length;
 
   bind_buffer->buffer_type = MYSQL_TYPE_STRING;
   bind_buffer->buffer = RSTRING_PTR(string);

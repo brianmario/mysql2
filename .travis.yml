@@ -6,8 +6,6 @@ before_install:
   - gem update --system 2.4.8
   - gem --version
   - bash .travis_setup.sh
-os:
-  - linux
 addons:
   hosts:
     - mysql2gem.example.com

@@ -146,16 +146,12 @@ RSpec.describe Mysql2::Client do
       # rubocop:enable Style/TrailingComma
     }.not_to raise_error
 
-    results = ssl_client.query("SHOW STATUS WHERE Variable_name = \"Ssl_version\" OR Variable_name = \"Ssl_cipher\"").to_a
-    expect(results[0]['Variable_name']).to eql('Ssl_cipher')
-    expect(results[0]['Value']).not_to be_nil
-    expect(results[0]['Value']).to be_an_instance_of(String)
-    expect(results[0]['Value']).not_to be_empty
+    results = Hash[ssl_client.query('SHOW STATUS WHERE Variable_name LIKE "Ssl_%"').map { |x| x.values_at('Variable_name', 'Value') }]
+    expect(results['Ssl_cipher']).not_to be_empty
+    expect(results['Ssl_version']).not_to be_empty
 
-    expect(results[1]['Variable_name']).to eql('Ssl_version')
-    expect(results[1]['Value']).not_to be_nil
-    expect(results[1]['Value']).to be_an_instance_of(String)
-    expect(results[1]['Value']).not_to be_empty
+    expect(ssl_client.ssl_cipher).not_to be_empty
+    expect(results['Ssl_cipher']).to eql(ssl_client.ssl_cipher)
 
     ssl_client.close
   end

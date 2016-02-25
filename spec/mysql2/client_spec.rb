@@ -382,24 +382,24 @@ RSpec.describe Mysql2::Client do
 
   it "should expect connect_timeout to be a positive integer" do
     expect {
-      Mysql2::Client.new(:connect_timeout => -1)
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:connect_timeout => -1))
     }.to raise_error(Mysql2::Error)
   end
 
   it "should expect read_timeout to be a positive integer" do
     expect {
-      Mysql2::Client.new(:read_timeout => -1)
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => -1))
     }.to raise_error(Mysql2::Error)
   end
 
   it "should expect write_timeout to be a positive integer" do
     expect {
-      Mysql2::Client.new(:write_timeout => -1)
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:write_timeout => -1))
     }.to raise_error(Mysql2::Error)
   end
 
   it "should allow nil read_timeout" do
-    client = Mysql2::Client.new(:read_timeout => nil)
+    client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => nil))
 
     expect(client.read_timeout).to be_nil
   end

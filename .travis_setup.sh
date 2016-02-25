@@ -20,7 +20,8 @@ if ! [[ x$OSTYPE =~ ^xdarwin ]]; then
   sudo service mysql restart
 fi
 
-sudo mysql -e "CREATE USER '$USER'@'localhost'" || true
+sudo mysql -u root -e "CREATE USER '$USER'@'localhost'" || true
+sudo mysql -u root -e "GRANT ALL ON test.* TO '$USER'@'localhost'" || true
 
 # Print the MySQL version and create the test DB
 if [[ x$OSTYPE =~ ^xdarwin ]]; then

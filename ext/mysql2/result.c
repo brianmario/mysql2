@@ -886,6 +886,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (wrapper->stmt_wrapper && !cacheRows && !wrapper->is_streaming) {
     rb_warn(":cache_rows is forced for prepared statements (if not streaming)");
+    cacheRows = 1;
   }
 
   if (wrapper->stmt_wrapper && !cast) {

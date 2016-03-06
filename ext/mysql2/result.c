@@ -346,14 +346,14 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   conn_enc = rb_to_encoding(wrapper->encoding);
 #endif
 
+  if (wrapper->fields == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
+  }
   if (args->asArray) {
     rowVal = rb_ary_new2(wrapper->numberOfFields);
   } else {
     rowVal = rb_hash_new();
-  }
-  if (wrapper->fields == Qnil) {
-    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
-    wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
 
   if (wrapper->result_buffers == NULL) {
@@ -541,16 +541,16 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
     return Qnil;
   }
 
+  if (wrapper->fields == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
+  }
   if (args->asArray) {
     rowVal = rb_ary_new2(wrapper->numberOfFields);
   } else {
     rowVal = rb_hash_new();
   }
   fieldLengths = mysql_fetch_lengths(wrapper->result);
-  if (wrapper->fields == Qnil) {
-    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
-    wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
-  }
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
     VALUE field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
@@ -915,11 +915,6 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (wrapper->rows == Qnil && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt_wrapper ? mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt) : mysql_num_rows(wrapper->result);
-    if (wrapper->numberOfRows == 0) {
-      rb_mysql_result_free_result(wrapper);
-      wrapper->rows = rb_ary_new();
-      return wrapper->rows;
-    }
     wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
   }
 

@@ -913,7 +913,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     app_timezone = Qnil;
   }
 
-  if (wrapper->lastRowProcessed == 0 && !wrapper->is_streaming) {
+  if (wrapper->rows == Qnil && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt_wrapper ? mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt) : mysql_num_rows(wrapper->result);
     if (wrapper->numberOfRows == 0) {
       rb_mysql_result_free_result(wrapper);

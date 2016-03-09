@@ -77,11 +77,6 @@ RSpec.describe Mysql2::Result do
       expect(@result.first.object_id).to eql(@result.first.object_id)
     end
 
-    it "should not cache previously yielded results if cache_rows is disabled" do
-      result = @client.query "SELECT 1", :cache_rows => false
-      expect(result.first.object_id).not_to eql(result.first.object_id)
-    end
-
     it "should yield different value for #first if streaming" do
       result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
       expect(result.first).not_to eql(result.first)
@@ -94,6 +89,15 @@ RSpec.describe Mysql2::Result do
 
     it "should throw an exception if we try to iterate twice when streaming is enabled" do
       result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
+
+      expect {
+        result.each.to_a
+        result.each.to_a
+      }.to raise_exception(Mysql2::Error)
+    end
+
+    it "should throw an exception if we try to iterate twice when cache_rows is disabled" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :cache_rows => false
 
       expect {
         result.each.to_a

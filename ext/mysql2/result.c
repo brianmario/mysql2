@@ -815,6 +815,8 @@ static VALUE rb_mysql_result_each_(VALUE self,
       for (i = 0; i < wrapper->numberOfRows; i++) {
         rb_yield(rb_ary_entry(wrapper->rows, i));
       }
+    } else if (!args->cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
+      rb_raise(cMysql2Error, "You have already fetched all the rows for this query and cache_rows is false. (to reiterate you must requery).");
     } else {
       unsigned long rowsProcessed = 0;
       rowsProcessed = RARRAY_LEN(wrapper->rows);

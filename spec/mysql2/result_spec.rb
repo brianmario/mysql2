@@ -100,6 +100,15 @@ RSpec.describe Mysql2::Result do
         result.each.to_a
       }.to raise_exception(Mysql2::Error)
     end
+
+    it "should throw an exception if we try to iterate twice when cache_rows is disabled" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :cache_rows => false
+
+      expect {
+        result.each.to_a
+        result.each.to_a
+      }.to raise_exception(Mysql2::Error)
+    end
   end
 
   context "#fields" do

@@ -834,7 +834,9 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
         if (row == Qnil) {
           /* we don't need the mysql C dataset around anymore, peace it */
-          rb_mysql_result_free_result(wrapper);
+          if (args->cacheRows) {
+            rb_mysql_result_free_result(wrapper);
+          }
           return Qnil;
         }
 
@@ -842,7 +844,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
           rb_yield(row);
         }
       }
-      if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
+      if (wrapper->lastRowProcessed == wrapper->numberOfRows && args->cacheRows) {
         /* we don't need the mysql C dataset around anymore, peace it */
         rb_mysql_result_free_result(wrapper);
       }
@@ -916,6 +918,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (wrapper->rows == Qnil && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt_wrapper ? mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt) : mysql_num_rows(wrapper->result);
+    wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+  } else if (wrapper->rows && !cacheRows) {
+    mysql_data_seek(wrapper->result, 0);
+    wrapper->lastRowProcessed = 0;
     wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
   }
 

@@ -78,6 +78,11 @@ describe Mysql2::Result do
       result.first.object_id.should_not eql(result.first.object_id)
     end
 
+    it "should be able to iterate a second time even if cache_rows is disabled" do
+      result = @client.query "SELECT 1 UNION SELECT 2", :cache_rows => false
+      result.to_a.should eql(result.to_a)
+    end
+
     it "should yield different value for #first if streaming" do
       result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
       result.first.should_not eql(result.first)

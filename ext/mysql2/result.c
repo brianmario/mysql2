@@ -531,6 +531,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
         return wrapper->rows;
       }
       wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+    } else if (!cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
+      mysql_data_seek(wrapper->result, 0);
+      wrapper->lastRowProcessed = 0;
+      wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
     }
 
     if (cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
@@ -558,7 +562,9 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
         if (row == Qnil) {
           /* we don't need the mysql C dataset around anymore, peace it */
-          rb_mysql_result_free_result(wrapper);
+          if (cacheRows) {
+            rb_mysql_result_free_result(wrapper);
+          }
           return Qnil;
         }
 
@@ -566,7 +572,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
           rb_yield(row);
         }
       }
-      if (wrapper->lastRowProcessed == wrapper->numberOfRows) {
+      if (wrapper->lastRowProcessed == wrapper->numberOfRows && cacheRows) {
         /* we don't need the mysql C dataset around anymore, peace it */
         rb_mysql_result_free_result(wrapper);
       }

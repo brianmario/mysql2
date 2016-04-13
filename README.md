@@ -484,9 +484,9 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 This gem is tested with the following Ruby versions on Linux and Mac OS X:
 
- * Ruby MRI 1.8.7, 1.9.3, 2.0.0, 2.1.x, 2.2.x
+ * Ruby MRI 1.8.7, 1.9.3, 2.0.0, 2.1.x, 2.2.x, 2.3.x
  * Ruby Enterprise Edition (based on MRI 1.8.7)
- * Rubinius 2.x
+ * Rubinius 2.x, 3.x
 
 This gem is tested with the following MySQL and MariaDB versions:
 
@@ -494,11 +494,11 @@ This gem is tested with the following MySQL and MariaDB versions:
  * MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
  * MariaDB 5.5, 10.0, 10.1
 
-### Rails / Active Record
+### Ruby on Rails / Active Record
 
- * mysql2 0.4.x works with Active Record 4.2.5 and higher.
- * mysql2 0.3.x works with Active Record 3.1 and higher (the AR adapter is now included in AR proper).
- * mysql2 0.2.x includes an Active Record adapter compatible with AR 2.3 and 3.0, and should not be used with AR 3.1 or higher.
+ * mysql2 0.4.x works with Rails / Active Record 4.2.5 - 5.0 and higher.
+ * mysql2 0.3.x works with Rails / Active Record 3.1, 3.2, 4.x, 5.0.
+ * mysql2 0.2.x works with Rails / Active Record 2.3 - 3.0.
 
 ### Asynchronous Active Record
 

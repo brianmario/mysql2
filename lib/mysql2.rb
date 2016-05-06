@@ -61,4 +61,21 @@ module Mysql2::Util
     Hash[hash.map { |k,v| [k.to_sym, v] }]
   end
 
+  #
+  # In Mysql2::Client#query and Mysql2::Statement#execute,
+  # Thread#handle_interrupt is used to prevent Timeout#timeout
+  # from interrupting query execution.
+  #
+  # Timeout::ExitException was removed in Ruby 2.3.0, 2.2.3, and 2.1.8,
+  # but is present in earlier 2.1.x and 2.2.x, so we provide a shim.
+  #
+  if Thread.respond_to?(:handle_interrupt)
+    require 'timeout'
+    # rubocop:disable Style/ConstantName
+    TimeoutError = if defined?(::Timeout::ExitException)
+      ::Timeout::ExitException
+    else
+      ::Timeout::Error
+    end
+  end
 end

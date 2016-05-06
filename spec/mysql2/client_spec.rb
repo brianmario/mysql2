@@ -462,59 +462,40 @@ describe Mysql2::Client do
         }.should raise_error(Mysql2::Error)
       end
 
-      it "should close the connection when an exception is raised" do
-        begin
-          Timeout.timeout(1, Timeout::Error) do
-            @client.query("SELECT sleep(2)")
-          end
-        rescue Timeout::Error
-        end
 
-        lambda {
-          @client.query("SELECT 1")
-        }.should raise_error(Mysql2::Error, 'closed MySQL connection')
+      it 'should be impervious to connection-corrupting timeouts ' do
+        pending('`Thread.handle_interrupt` is not defined') unless Thread.respond_to?(:handle_interrupt)
+        # attempt to break the connection
+        expect { Timeout.timeout(0.1) { @client.query('SELECT SLEEP(1)') } }.to raise_error(Timeout::Error)
+
+        # expect the connection to not be broken
+        expect { @client.query('SELECT 1') }.to_not raise_error
       end
 
-      it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
-        begin
-          Timeout.timeout(1, Timeout::Error) do
-            client.query("SELECT sleep(2)")
-          end
-        rescue Timeout::Error
+      context 'when a non-standard exception class is raised' do
+        it "should close the connection when an exception is raised" do
+          expect { Timeout.timeout(0.1, ArgumentError) { @client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
+          expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, 'closed MySQL connection')
         end
 
-        lambda {
-          client.query("SELECT 1")
-        }.should_not raise_error(Mysql2::Error)
-      end
+        it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
+          client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
 
-      it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction true" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'])
-        begin
-          Timeout.timeout(1, Timeout::Error) do
-            client.query("SELECT sleep(2)")
-          end
-        rescue Timeout::Error
+          expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
+          expect { client.query('SELECT 1') }.to_not raise_error
         end
 
-        lambda {
-          client.query("SELECT 1")
-        }.should raise_error(Mysql2::Error)
+        it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction true" do
+          client = Mysql2::Client.new(DatabaseCredentials['root'])
 
-        client.reconnect = true
+          expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
+          expect { client.query('SELECT 1') }.to raise_error(Mysql2::Error)
 
-        begin
-          Timeout.timeout(1, Timeout::Error) do
-            client.query("SELECT sleep(2)")
-          end
-        rescue Timeout::Error
+          client.reconnect = true
+
+          expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
+          expect { client.query('SELECT 1') }.to_not raise_error
         end
-
-        lambda {
-          client.query("SELECT 1")
-        }.should_not raise_error(Mysql2::Error)
-
       end
 
       it "threaded queries should be supported" do

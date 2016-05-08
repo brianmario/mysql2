@@ -642,40 +642,27 @@ static VALUE rb_mysql_client_abandon_results(VALUE self) {
  * Query the database with +sql+, with optional +options+.  For the possible
  * options, see @@default_query_options on the Mysql2::Client class.
  */
-static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
+static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
 #ifndef _WIN32
   struct async_query_args async_args;
 #endif
   struct nogvl_send_query_args args;
-  int async = 0;
-  VALUE opts, current;
   VALUE thread_current = rb_thread_current();
-#ifdef HAVE_RUBY_ENCODING_H
-  rb_encoding *conn_enc;
-#endif
   GET_CLIENT(self);
 
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
 
-  current = rb_hash_dup(rb_iv_get(self, "@query_options"));
   RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   rb_iv_set(self, "@current_query_options", current);
 
-  if (rb_scan_args(argc, argv, "11", &args.sql, &opts) == 2) {
-    rb_funcall(current, intern_merge_bang, 1, opts);
-
-    if (rb_hash_aref(current, sym_async) == Qtrue) {
-      async = 1;
-    }
-  }
-
-  Check_Type(args.sql, T_STRING);
+  Check_Type(sql, T_STRING);
 #ifdef HAVE_RUBY_ENCODING_H
-  conn_enc = rb_to_encoding(wrapper->encoding);
   /* ensure the string is in the encoding the connection is expecting */
-  args.sql = rb_str_export_to_enc(args.sql, conn_enc);
+  args.sql = rb_str_export_to_enc(sql, rb_to_encoding(wrapper->encoding));
+#else
+  args.sql = sql;
 #endif
   args.sql_ptr = RSTRING_PTR(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
@@ -699,15 +686,15 @@ static VALUE rb_mysql_client_query(int argc, VALUE * argv, VALUE self) {
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
-  if (!async) {
+  if (rb_hash_aref(current, sym_async) == Qtrue) {
+    return Qnil;
+  } else {
     async_args.fd = wrapper->client->net.fd;
     async_args.self = self;
 
     rb_rescue2(do_query, (VALUE)&async_args, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
     return rb_mysql_client_async_result(self);
-  } else {
-    return Qnil;
   }
 #else
   do_send_query(&args);
@@ -1259,7 +1246,6 @@ void init_mysql2_client() {
   rb_define_singleton_method(cMysql2Client, "info", rb_mysql_client_info, 0);
 
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
-  rb_define_method(cMysql2Client, "query", rb_mysql_client_query, -1);
   rb_define_method(cMysql2Client, "abandon_results!", rb_mysql_client_abandon_results, 0);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_real_escape, 1);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);
@@ -1292,6 +1278,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
+  rb_define_private_method(cMysql2Client, "_query", rb_query, 2);
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));

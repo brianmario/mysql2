@@ -434,6 +434,8 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);
 
+  rb_mysql_set_server_query_flags(wrapper->client, resultObj);
+
   if (!is_streaming) {
     // cache all result
     rb_funcall(resultObj, intern_each, 0);

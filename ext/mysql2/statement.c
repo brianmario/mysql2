@@ -352,6 +352,8 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 
   FREE_BINDS;
 
+  rb_iv_set(self, "@server_status", INT2NUM(wrapper->client->server_status));
+
   metadata = mysql_stmt_result_metadata(stmt);
   if (metadata == NULL) {
     if (mysql_stmt_errno(stmt) != 0) {

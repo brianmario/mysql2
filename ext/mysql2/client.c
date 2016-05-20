@@ -525,6 +525,8 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
 
+  rb_iv_set(self, "@server_status", INT2NUM(wrapper->client->server_status));
+
   return resultObj;
 }
 
@@ -1463,5 +1465,20 @@ void init_mysql2_client() {
 #ifdef CLIENT_BASIC_FLAGS
   rb_const_set(cMysql2Client, rb_intern("BASIC_FLAGS"),
       LONG2NUM(CLIENT_BASIC_FLAGS));
+#endif
+
+#ifdef SERVER_QUERY_NO_GOOD_INDEX_USED
+  rb_const_set(cMysql2Client, rb_intern("NO_GOOD_INDEX_USED"),
+      LONG2NUM(SERVER_QUERY_NO_GOOD_INDEX_USED));
+#endif
+
+#ifdef SERVER_QUERY_NO_INDEX_USED
+  rb_const_set(cMysql2Client, rb_intern("NO_INDEX_USED"),
+      LONG2NUM(SERVER_QUERY_NO_INDEX_USED));
+#endif
+
+#ifdef SERVER_QUERY_WAS_SLOW
+  rb_const_set(cMysql2Client, rb_intern("QUERY_WAS_SLOW"),
+      LONG2NUM(SERVER_QUERY_WAS_SLOW));
 #endif
 }

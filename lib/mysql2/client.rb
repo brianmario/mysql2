@@ -1,6 +1,6 @@
 module Mysql2
   class Client
-    attr_reader :query_options, :read_timeout
+    attr_reader :query_options, :read_timeout, :server_status
 
     def self.default_query_options
       @default_query_options ||= {

@@ -352,8 +352,6 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 
   FREE_BINDS;
 
-  rb_iv_set(self, "@server_status", INT2NUM(wrapper->client->server_status));
-
   metadata = mysql_stmt_result_metadata(stmt);
   if (metadata == NULL) {
     if (mysql_stmt_errno(stmt) != 0) {
@@ -380,6 +378,8 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   }
 
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);
+
+  rb_mysql_set_server_query_flags(wrapper->client, resultObj);
 
   if (!is_streaming) {
     // cache all result

@@ -525,7 +525,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
 
-  rb_iv_set(self, "@server_status", INT2NUM(wrapper->client->server_status));
+  rb_mysql_set_server_query_flags(wrapper->client, resultObj);
 
   return resultObj;
 }
@@ -1466,19 +1466,31 @@ void init_mysql2_client() {
   rb_const_set(cMysql2Client, rb_intern("BASIC_FLAGS"),
       LONG2NUM(CLIENT_BASIC_FLAGS));
 #endif
+}
+
+#define flag_to_bool(f) ((client->server_status & f) ? Qtrue : Qfalse)
+
+void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result) {
+  VALUE server_flags = rb_hash_new();
 
 #ifdef SERVER_QUERY_NO_GOOD_INDEX_USED
-  rb_const_set(cMysql2Client, rb_intern("NO_GOOD_INDEX_USED"),
-      LONG2NUM(SERVER_QUERY_NO_GOOD_INDEX_USED));
+  rb_hash_aset(server_flags, ID2SYM(rb_intern("no_good_index_used")), flag_to_bool(SERVER_QUERY_NO_GOOD_INDEX_USED));
+#else
+  rb_hash_aset(server_flags, ID2SYM(rb_intern("no_good_index_used")), Qnil);
 #endif
 
 #ifdef SERVER_QUERY_NO_INDEX_USED
-  rb_const_set(cMysql2Client, rb_intern("NO_INDEX_USED"),
-      LONG2NUM(SERVER_QUERY_NO_INDEX_USED));
+  rb_hash_aset(server_flags, ID2SYM(rb_intern("no_index_used")), flag_to_bool(SERVER_QUERY_NO_INDEX_USED));
+#else
+  rb_hash_aset(server_flags, ID2SYM(rb_intern("no_index_used")), Qnil);
 #endif
 
 #ifdef SERVER_QUERY_WAS_SLOW
-  rb_const_set(cMysql2Client, rb_intern("QUERY_WAS_SLOW"),
-      LONG2NUM(SERVER_QUERY_WAS_SLOW));
+  rb_hash_aset(server_flags, ID2SYM(rb_intern("query_was_slow")), flag_to_bool(SERVER_QUERY_WAS_SLOW));
+#else
+  rb_hash_aset(server_flags, ID2SYM(rb_intern("query_was_slow")), Qnil;)
 #endif
+
+  rb_iv_set(result, "@server_flags", server_flags);
 }
+

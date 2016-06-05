@@ -1,5 +1,6 @@
 sudo: required
 dist: trusty
+cache: bundler
 language: ruby
 bundler_args: --without benchmarks development
 # Temporary workaround for broken Rubygems on Travis

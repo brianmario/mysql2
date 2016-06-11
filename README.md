@@ -200,6 +200,7 @@ Mysql2::Client.new(
   :read_timeout = seconds,
   :write_timeout = seconds,
   :connect_timeout = seconds,
+  :connect_attrs = {:program_name => $0, ...},
   :reconnect = true/false,
   :local_infile = true/false,
   :secure_auth = true/false,

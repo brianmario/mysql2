@@ -92,6 +92,8 @@ end
   asplode h unless have_header header
 end
 
+have_func('mysql_options4')
+
 # This is our wishlist. We use whichever flags work on the host.
 # -Wall and -Wextra are included by default.
 wishlist = [

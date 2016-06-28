@@ -764,7 +764,9 @@ RSpec.describe Mysql2::Statement do
   context 'close' do
     it 'should free server resources' do
       stmt = @client.prepare 'SELECT 1'
+      GC.disable
       expect { stmt.close }.to change(&method(:stmt_count)).by(-1)
+      GC.enable
     end
 
     it 'should raise an error on subsequent execution' do

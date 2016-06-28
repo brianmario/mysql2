@@ -34,7 +34,7 @@ RSpec.describe Mysql2::Error do
       end
     end
 
-    let(:invalid_utf8) { "\xE5\xC6\x7D\x1F" }
+    let(:invalid_utf8) { ["e5c67d1f"].pack('H*').force_encoding(Encoding::UTF_8) }
     let(:bad_err) do
       begin
         client.query(invalid_utf8)

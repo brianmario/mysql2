@@ -22,6 +22,10 @@ def add_ssl_defines(header)
   $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if has_no_support
 end
 
+# 2.1+
+have_func('rb_absint_size')
+have_func('rb_absint_singlebit_p')
+
 # 2.0-only
 have_header('ruby/thread.h') && have_func('rb_thread_call_without_gvl', 'ruby/thread.h')
 
@@ -30,6 +34,7 @@ have_func('rb_thread_blocking_region')
 have_func('rb_wait_for_single_fd')
 have_func('rb_hash_dup')
 have_func('rb_intern3')
+have_func('rb_big_cmp')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb

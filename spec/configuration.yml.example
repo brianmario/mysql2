@@ -3,15 +3,3 @@ root:
   username: root
   password:
   database: test
-
-user:
-  host: localhost
-  username: LOCALUSERNAME
-  password:
-  database: mysql2_test
-
-numericuser:
-  host: localhost
-  username: LOCALUSERNAME
-  password:
-  database: 12345

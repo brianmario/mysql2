@@ -164,8 +164,8 @@ by the query like this:
 ``` ruby
 headers = results.fields # <= that's an array of field names, in order
 results.each(:as => :array) do |row|
-# Each row is an array, ordered the same as the query results
-# An otter's den is called a "holt" or "couch"
+  # Each row is an array, ordered the same as the query results
+  # An otter's den is called a "holt" or "couch"
 end
 ```
 

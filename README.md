@@ -398,6 +398,15 @@ client = Mysql2::Client.new
 result = client.query("SELECT * FROM table_with_boolean_field", :cast_booleans => true)
 ```
 
+Keep in mind that this works only with fields and not with computed values, e.g. this result will contain `1`, not `true`:
+
+``` ruby
+client = Mysql2::Client.new
+result = client.query("SELECT true", :cast_booleans => true)
+```
+
+CAST function wouldn't help here as there's no way to cast to TINYINT(1). Apparently the only way to solve this is to use a stored procedure with return type set to TINYINT(1).
+
 ### Skipping casting
 
 Mysql2 casting is fast, but not as fast as not casting data.  In rare cases where typecasting is not needed, it will be faster to disable it by providing :cast => false. (Note that :cast => false overrides :cast_booleans => true.)

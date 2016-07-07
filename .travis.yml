@@ -2,9 +2,9 @@ sudo: required
 dist: trusty
 language: ruby
 bundler_args: --without benchmarks development
-# Temporary workaround for broken Rubygems on Travis
+# Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
 before_install:
-  - gem update --system 2.4.8
+  - gem update --system 2.6.4
   - gem --version
   - bash .travis_setup.sh
 addons:
@@ -16,7 +16,8 @@ addons:
     - mysql-client-core-5.5
     - mysql-client-5.5
 rvm:
-  - 2.3.0
+  - 2.4.0-preview1
+  - 2.3.1
   - 2.2
   - 2.1
   - 2.0.0

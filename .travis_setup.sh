@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -eux
 
 # Install MySQL 5.7 if DB=mysql57
 if [[ -n ${DB-} && x$DB =~ ^xmysql57 ]]; then
@@ -20,15 +20,12 @@ if ! [[ x$OSTYPE =~ ^xdarwin ]]; then
   sudo service mysql restart
 fi
 
-sudo mysql -u root -e "CREATE USER '$USER'@'localhost'" || true
-sudo mysql -u root -e "GRANT ALL ON test.* TO '$USER'@'localhost'" || true
-
 # Print the MySQL version and create the test DB
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
   $(brew --prefix "$DB")/bin/mysqld --version
-  $(brew --prefix "$DB")/bin/mysql -u $USER -e "CREATE DATABASE IF NOT EXISTS test"
+  $(brew --prefix "$DB")/bin/mysql -u root -e 'CREATE DATABASE IF NOT EXISTS test'
 else
   mysqld --version
   # IF NOT EXISTS is mariadb-10+ only - https://mariadb.com/kb/en/mariadb/comment-syntax/
-  mysql -u $USER -e "CREATE DATABASE /*M!50701 IF NOT EXISTS */ test"
+  mysql -u root -e 'CREATE DATABASE /*M!50701 IF NOT EXISTS */ test'
 fi

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -eux
 
 # Make sure there is an /etc/mysql
 mkdir -p /etc/mysql

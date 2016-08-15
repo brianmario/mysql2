@@ -180,7 +180,6 @@ static void *nogvl_execute(void *ptr) {
 static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length_buffer, VALUE string) {
   unsigned long length;
 
-  bind_buffer->buffer_type = MYSQL_TYPE_STRING;
   bind_buffer->buffer = RSTRING_PTR(string);
 
   length = RSTRING_LEN(string);
@@ -275,13 +274,13 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           *(double*)(bind_buffers[i].buffer) = NUM2DBL(argv[i]);
           break;
         case T_STRING:
-          {
-            params_enc[i] = argv[i];
+          bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
+
+          params_enc[i] = argv[i];
 #ifdef HAVE_RUBY_ENCODING_H
-            params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
+          params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
 #endif
-            set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
-          }
+          set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
           break;
         default:
           // TODO: what Ruby type should support MYSQL_TYPE_TIME

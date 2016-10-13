@@ -83,6 +83,11 @@ struct nogvl_select_db_args {
   char *db;
 };
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE str) {
+  if( mysql_get_client_version() < 50700 ) {
+    rb_warn( "Your mysql client library does not support setting ssl_mode" );
+    return Qnil;
+  }
+
   GET_CLIENT(self); 
   if( NIL_P( str ) ) {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED< VERIFY_CA, VERIFY_IDENTITY, you passed nil" );

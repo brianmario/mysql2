@@ -90,7 +90,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE str) {
 
   GET_CLIENT(self); 
   if( NIL_P( str ) ) {
-    rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED< VERIFY_CA, VERIFY_IDENTITY, you passed nil" );
+    rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed nil" );
   }
   char *val = StringValueCStr( str );
   unsigned int setting;
@@ -105,7 +105,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE str) {
   } else if( strncasecmp( val, "VERIFY_IDENTIFY", 16 ) == 0 ) {
     setting = SSL_MODE_VERIFY_IDENTITY;
   } else {
-    rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED< VERIFY_CA, VERIFY_IDENTITY, you passed: %s", val );
+    rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed: %s", val );
   }
   int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_MODE, &setting );
 

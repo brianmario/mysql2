@@ -82,7 +82,8 @@ struct nogvl_select_db_args {
   MYSQL *mysql;
   char *db;
 };
-static VALUE rb_set_ssl_mode_option(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
+static VALUE rb_set_ssl_mode_option(VALUE self, VALUE str) {
+  GET_CLIENT(self); 
   if( NIL_P( str ) ) {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED< VERIFY_CA, VERIFY_IDENTITY, you passed nil" );
   }
@@ -97,11 +98,11 @@ static VALUE rb_set_ssl_mode_option(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
   } else if( strncasecmp( val, "VERIFY_CA", 10 ) == 0 ) {
     setting = SSL_MODE_VERIFY_CA;
   } else if( strncasecmp( val, "VERIFY_IDENTIFY", 16 ) == 0 ) {
-    setting = SSL_MODE_VERIFY_IDENTIFY;
+    setting = SSL_MODE_VERIFY_IDENTITY;
   } else {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED< VERIFY_CA, VERIFY_IDENTITY, you passed: %s", val );
   }
-  result = mysql_options( wrapper->client, MYSQL_OPT_SSL_MODE, &setting );
+  int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_MODE, &setting );
 
   return INT2NUM(result);
 }
@@ -1323,7 +1324,7 @@ void init_mysql2_client() {
 
   rb_define_singleton_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
   rb_define_singleton_method(cMysql2Client, "info", rb_mysql_client_info, 0);
-  rb_define_singleton_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
+  rb_define_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
 
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "abandon_results!", rb_mysql_client_abandon_results, 0);

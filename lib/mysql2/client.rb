@@ -47,6 +47,8 @@ module Mysql2
 
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any?
+      self.ssl_mode=( opts[:ssl_mode] ) if opts[:ssl_mode]
+
 
       case opts[:flags]
       when Array

@@ -92,18 +92,13 @@ module Mysql2
       connect user, pass, host, port, database, socket, flags
     end
 
-    def parse_ssl_mode( m )
-      return nil if m.nil?
-      if m.is_a?( String ) || m.is_a?( Symbol )
-        m.to_s.upcase!
-        if m.start_with?( 'SSL_MODE_' )
-          return Mysql2::Client.const_get( m ) if Mysql2::Client.const_defined?( m ) 
-        else
-          x = 'SSL_MODE_' + m
-          return Mysql2::Client.const_get( x ) if Mysql2::Client.const_defined?( x ) 
-        end
-      elsif [SSL_MODE_DISABLED, SSL_MODE_PREFERRED, SSL_MODE_REQUIRED, SSL_MODE_VERIFY_CA, SSL_MODE_VERIFY_IDENTITY].include?( m.to_i )
-        return m
+    def parse_ssl_mode( mode )
+      m = mode.to_s.upcase
+      if m.start_with?( 'SSL_MODE_' )
+        return Mysql2::Client.const_get( m ) if Mysql2::Client.const_defined?( m ) 
+      else
+        x = 'SSL_MODE_' + m
+        return Mysql2::Client.const_get( x ) if Mysql2::Client.const_defined?( x ) 
       end
       warn "ssl_mode must be one of SSL_MODE_DISABLED, SSL_MODE_PREFERRED, SSL_MODE_REQUIRED, SSL_MODE_VERIFY_CA, SSL_MODE_VERIFY_IDENTITY"
       return nil

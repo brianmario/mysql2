@@ -122,6 +122,33 @@ RSpec.describe Mysql2::Client do
     expect(Mysql2::Client).to respond_to(:default_query_options)
   end
 
+  it "should be able to connect via SSL defaults" do
+    ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"
+    ssl_uncompiled = ssl.any? {|x| x['Value'] == 'OFF'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not compiled into your MySQL daemon.") if ssl_uncompiled
+    ssl_disabled = ssl.any? {|x| x['Value'] == 'DISABLED'}
+    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
+
+    ssl_client = nil
+    expect {
+      ssl_client = Mysql2::Client.new(
+        DatabaseCredentials['root'].merge(
+          'ssl'  => true,
+          'host' => 'mysql2gem.example.com'
+        )
+      )
+    }.not_to raise_error
+
+    results = Hash[ ssl_client.query('SHOW STATUS WHERE Variable_name LIKE "Ssl_%"').map{ |x| x.values_at('Variable_name', 'Value') } ]
+    expect(results['Ssl_cipher']).not_to be_empty
+    expect(results['Ssl_version']).not_to be_empty
+
+    expect(ssl_client.ssl_cipher).not_to be_empty
+    expect(results['Ssl_cipher']).to eql(ssl_client.ssl_cipher)
+
+    ssl_client.close
+  end
+
   it "should be able to connect via SSL options" do
     ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"
     ssl_uncompiled = ssl.any? { |x| x['Value'] == 'OFF' }

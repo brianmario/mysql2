@@ -1337,7 +1337,6 @@ void init_mysql2_client() {
 
   rb_define_singleton_method(cMysql2Client, "escape", rb_mysql_client_escape, 1);
   rb_define_singleton_method(cMysql2Client, "info", rb_mysql_client_info, 0);
-  rb_define_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
 
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "abandon_results!", rb_mysql_client_abandon_results, 0);
@@ -1374,6 +1373,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "default_group=", set_read_default_group, 1);
   rb_define_private_method(cMysql2Client, "init_command=", set_init_command, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
+  rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
   rb_define_private_method(cMysql2Client, "_query", rb_query, 2);

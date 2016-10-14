@@ -62,6 +62,14 @@ elsif (mc = (with_config('mysql-config') || Dir[GLOB].first))
   abort "-----\nCannot execute mysql_config at #{mc}\n-----" unless File.executable?(mc)
   warn "-----\nUsing mysql_config at #{mc}\n-----"
   ver = `#{mc} --version`.chomp.to_f
+  major, minor, inc = `#{mc} --version`.chomp.split('.').map( &:to_i )
+  if major > 5 || major == 5 && minor == 7 && inc >= 11
+    $CFLAGS << ' -D SSL_MODE_SUPPORT'
+  elsif major == 5 && minor == 7 && inc >= 3 && inc < 11
+    $CFLAGS << ' -D SSL_TOGGLE_SUPPORT'
+  else
+    $CFLAGS << ' -D NO_SSL_MODE_SUPPORT'
+  end
   includes = `#{mc} --include`.chomp
   abort unless $CHILD_STATUS.success?
   libs = `#{mc} --libs_r`.chomp

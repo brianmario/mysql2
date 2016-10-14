@@ -18,21 +18,6 @@ VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
-#ifndef SSL_MODE_DISABLED
-#define SSL_MODE_DISABLED 0
-#endif
-#ifndef SSL_MODE_PREFERRED
-#define SSL_MODE_PREFERRED 1
-#endif
-#ifndef SSL_MODE_REQUIRED
-#define SSL_MODE_REQUIRED 2
-#endif
-#ifndef SSL_MODE_VERIFY_CA
-#define SSL_MODE_VERIFY_CA 3
-#endif
-#ifndef SSL_MODE_VERIFY_IDENTITY
-#define SSL_MODE_VERIFY_IDENTITY 4
-#endif
 
 #ifndef HAVE_RB_HASH_DUP
 VALUE rb_hash_dup(VALUE other) {
@@ -61,6 +46,7 @@ VALUE rb_hash_dup(VALUE other) {
 #else
   #define MYSQL_LINK_VERSION MYSQL_SERVER_VERSION
 #endif
+
 
 /*
  * used to pass all arguments to mysql_real_connect while inside
@@ -101,7 +87,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
 
   if( version < 50703 ) {
-    rb_warn( "Your mysql client library does not support setting ssl_mode" );
+    rb_warn( "Your mysql client library does not support setting ssl_mode; full support comes with 5.7.11." );
     return Qnil;
   }
   GET_CLIENT(self); 
@@ -110,7 +96,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed nil" );
   }
   int val = NUM2INT( setting );
-#ifdef MYSQL_OPT_SSL_ENFORCE
+#ifdef SSL_TOGGLE_SUPPORT
   if( version >= 50703 && version < 50711 ) {
     if( val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED ) {
       bool b = ( val == SSL_MODE_REQUIRED );
@@ -123,7 +109,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
     }
   }
 #endif
-#ifdef MYSQL_OPT_SSL_MODE
+#ifdef SSL_MODE_SUPPORT
 
   if( val != SSL_MODE_DISABLED && val != SSL_MODE_PREFERRED && val != SSL_MODE_REQUIRED && val != SSL_MODE_VERIFY_CA && val != SSL_MODE_VERIFY_IDENTITY ) {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed: %d", val );
@@ -1515,9 +1501,17 @@ void init_mysql2_client() {
   rb_const_set(cMysql2Client, rb_intern("BASIC_FLAGS"),
       LONG2NUM(CLIENT_BASIC_FLAGS));
 #endif
+#ifdef SSL_MODE_SUPPORT
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"),INT2NUM( SSL_MODE_DISABLED ) );
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_PREFERRED"),INT2NUM( SSL_MODE_PREFERRED ) );
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"),INT2NUM( SSL_MODE_REQUIRED ) );
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_CA"),INT2NUM( SSL_MODE_VERIFY_CA ) );
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_IDENTITY"),INT2NUM( SSL_MODE_VERIFY_IDENTITY ) );
+#endif
+#ifdef SSL_TOGGLE_SUPPORT
+  #define SSL_MODE_DISABLED 1
+  #define SSL_MODE_REQUIRED 3
+  rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"),INT2NUM( SSL_MODE_DISABLED ) );
+  rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"),INT2NUM( SSL_MODE_REQUIRED ) );
+#endif
 }

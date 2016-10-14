@@ -22,16 +22,16 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
 #define SSL_MODE_DISABLED 0
 #endif
 #ifndef SSL_MODE_PREFERRED
-#define SSL_MODE_PREFERRED 0
+#define SSL_MODE_PREFERRED 1
 #endif
 #ifndef SSL_MODE_REQUIRED
-#define SSL_MODE_REQUIRED 0
+#define SSL_MODE_REQUIRED 2
 #endif
 #ifndef SSL_MODE_VERIFY_CA
-#define SSL_MODE_VERIFY_CA 0
+#define SSL_MODE_VERIFY_CA 3
 #endif
 #ifndef SSL_MODE_VERIFY_IDENTITY
-#define SSL_MODE_VERIFY_IDENTITY 0
+#define SSL_MODE_VERIFY_IDENTITY 4
 #endif
 
 #ifndef HAVE_RB_HASH_DUP
@@ -98,23 +98,40 @@ struct nogvl_select_db_args {
   char *db;
 };
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
-  if( mysql_get_client_version() < 50711 ) {
+  int version = mysql_get_client_version()
+
+  if( version < 50703 ) {
     rb_warn( "Your mysql client library does not support setting ssl_mode" );
     return Qnil;
   }
-
   GET_CLIENT(self); 
   Check_Type( setting, T_FIXNUM);
   if( NIL_P( setting ) ) {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed nil" );
   }
   int val = NUM2INT( setting );
+#ifdef MYSQL_OPT_SSL_ENFORCE
+  if( version >= 50703 && version < 50711 ) {
+    if( val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED ) {
+      bool b = ( val == SSL_MODE_REQUIRED );
+      int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_ENFORCE, &b );
+      return INT2NUM(result);
+      
+    } else {
+      rb_warn( "Mysql client libraries between 5.7.3 and 5.7.10 do not support other values for ssl_mode" );
+      return Qnil;
+    }
+  }
+#endif
+#ifdef MYSQL_OPT_SSL_MODE
+
   if( val != SSL_MODE_DISABLED && val != SSL_MODE_PREFERRED && val != SSL_MODE_REQUIRED && val != SSL_MODE_VERIFY_CA && val != SSL_MODE_VERIFY_IDENTITY ) {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed: %d", val );
   }
   int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_MODE, &val );
 
   return INT2NUM(result);
+#endif
 }
 /*
  * non-blocking mysql_*() functions that we won't be wrapping since

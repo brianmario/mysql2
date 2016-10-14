@@ -1511,6 +1511,9 @@ void init_mysql2_client() {
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
   #define SSL_MODE_DISABLED 1
   #define SSL_MODE_REQUIRED 3
+  #define HAVE_CONST_SSL_MODE_DISABLED
+  #define HAVE_CONST_SSL_MODE_REQUIRED
+
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"),INT2NUM( SSL_MODE_DISABLED ) );
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"),INT2NUM( SSL_MODE_REQUIRED ) );
 #endif

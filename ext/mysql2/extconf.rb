@@ -12,6 +12,18 @@ def asplode(lib)
   end
 end
 
+def add_ssl_defines( header )
+  all_modes_found = %w( SSL_MODE_DISABLED SSL_MODE_PREFERRED SSL_MODE_REQUIRED SSL_MODE_VERIFY_CA SSL_MODE_VERIFY_IDENTITY).inject( true ) do |m, ssl_mode|
+    m && have_const( ssl_mode, header )
+  end
+  $CFLAGS << ' -DFULL_SSL_MODE_SUPPORT' if all_modes_found
+  unless all_modes_found
+    # if we only have ssl toggle (--ssl,--disable-ssl) from 5.7.3 to 5.7.10
+    have_const( 'MYSQL_OPT_SSL_ENFORCE', header )
+  end
+
+end
+
 # 2.0-only
 have_header('ruby/thread.h') && have_func('rb_thread_call_without_gvl', 'ruby/thread.h')
 
@@ -62,14 +74,6 @@ elsif (mc = (with_config('mysql-config') || Dir[GLOB].first))
   abort "-----\nCannot execute mysql_config at #{mc}\n-----" unless File.executable?(mc)
   warn "-----\nUsing mysql_config at #{mc}\n-----"
   ver = `#{mc} --version`.chomp.to_f
-  major, minor, inc = `#{mc} --version`.chomp.split('.').map( &:to_i )
-  if major > 5 || major == 5 && minor == 7 && inc >= 11
-    $CFLAGS << ' -D SSL_MODE_SUPPORT'
-  elsif major == 5 && minor == 7 && inc >= 3 && inc < 11
-    $CFLAGS << ' -D SSL_TOGGLE_SUPPORT'
-  else
-    $CFLAGS << ' -D NO_SSL_MODE_SUPPORT'
-  end
   includes = `#{mc} --include`.chomp
   abort unless $CHILD_STATUS.success?
   libs = `#{mc} --libs_r`.chomp
@@ -89,8 +93,10 @@ end
 
 if have_header('mysql.h')
   prefix = nil
+  add_ssl_defines( 'mysql.h' )
 elsif have_header('mysql/mysql.h')
   prefix = 'mysql'
+  add_ssl_defines( 'mysql/mysql.h' )
 else
   asplode 'mysql.h'
 end

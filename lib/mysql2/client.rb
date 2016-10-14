@@ -47,7 +47,10 @@ module Mysql2
 
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any?
-      self.ssl_mode=( opts[:ssl_mode] ) if opts[:ssl_mode]
+      if opts[:ssl_mode]
+        m = parse_ssl_mode( opts[:ssl_mode] )
+        self.ssl_mode = m if m
+      end
 
 
       case opts[:flags]
@@ -87,6 +90,22 @@ module Mysql2
       socket = socket.to_s unless socket.nil?
 
       connect user, pass, host, port, database, socket, flags
+    end
+
+    def parse_ssl_mode( m )
+      return nil if m.nil?
+      if m.is_a?( String )
+        m.upcase!
+        if m.start_with?( 'SSL_MODE_' )
+          return Mysql2::Client.const_get( m ) if Mysql2::Client.const_defined?( m ) 
+        else
+          x = 'SSL_MODE_' + m
+          return Mysql2::Client.const_get( x ) if Mysql2::Client.const_defined?( x ) 
+        end
+      elsif [SSL_MODE_DISABLED, SSL_MODE_PREFERRED, SSL_MODE_REQUIRED, SSL_MODE_VERIFY_CA, SSL_MODE_VERIFY_IDENTITY].include?( m.to_i )
+        return m
+      end
+      raise "ssl_mode must be one of SSL_MODE_DISABLED, SSL_MODE_PREFERRED, SSL_MODE_REQUIRED, SSL_MODE_VERIFY_CA, SSL_MODE_VERIFY_IDENTITY"
     end
 
     def parse_flags_array(flags, initial = 0)

@@ -1514,4 +1514,19 @@ void init_mysql2_client() {
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"),INT2NUM( SSL_MODE_DISABLED ) );
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"),INT2NUM( SSL_MODE_REQUIRED ) );
 #endif
+#ifndef HAVE_CONST_SSL_MODE_DISABLED
+  rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"),INT2NUM( 0 ) );
+#endif
+#ifndef HAVE_CONST_SSL_MODE_PREFERRED
+  rb_const_set(cMysql2Client, rb_intern("SSL_MODE_PREFERRED"),INT2NUM( 0 ) );
+#endif
+#ifndef HAVE_CONST_SSL_MODE_REQUIRED
+  rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"),INT2NUM( 0 ) );
+#endif
+#ifndef HAVE_CONST_SSL_MODE_VERIFY_CA
+  rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_CA"),INT2NUM( 0 ) );
+#endif
+#ifndef HAVE_CONST_SSL_MODE_VERIFY_IDENTITY
+  rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_IDENTITY"),INT2NUM( 0 ) );
+#endif
 }

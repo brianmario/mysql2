@@ -90,10 +90,6 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
     rb_warn( "Your mysql client library does not support setting ssl_mode; full support comes with 5.7.11." );
     return Qnil;
   }
-  Check_Type( setting, T_FIXNUM);
-  if( NIL_P( setting ) ) {
-    rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed nil" );
-  }
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
   GET_CLIENT(self); 
   int val = NUM2INT( setting );
@@ -104,7 +100,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
       return INT2NUM(result);
       
     } else {
-      rb_warn( "Mysql client libraries between 5.7.3 and 5.7.10 do not support other values for ssl_mode" );
+      rb_warn( "MySQL client libraries between 5.7.3 and 5.7.10 only support SSL_MODE_DISABLED and SSL_MODE_REQUIRED"" );
       return Qnil;
     }
   }

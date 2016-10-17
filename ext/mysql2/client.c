@@ -86,21 +86,21 @@ struct nogvl_select_db_args {
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
 
-  if( version < 50703 ) {
+  if (version < 50703) {
     rb_warn( "Your mysql client library does not support setting ssl_mode; full support comes with 5.7.11." );
     return Qnil;
   }
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
   GET_CLIENT(self); 
   int val = NUM2INT( setting );
-  if( version >= 50703 && version < 50711 ) {
-    if( val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED ) {
+  if (version >= 50703 && version < 50711) {
+    if (val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED) {
       bool b = ( val == SSL_MODE_REQUIRED );
       int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_ENFORCE, &b );
       return INT2NUM(result);
       
     } else {
-      rb_warn( "MySQL client libraries between 5.7.3 and 5.7.10 only support SSL_MODE_DISABLED and SSL_MODE_REQUIRED"" );
+      rb_warn( "MySQL client libraries between 5.7.3 and 5.7.10 only support SSL_MODE_DISABLED and SSL_MODE_REQUIRED" );
       return Qnil;
     }
   }
@@ -109,7 +109,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   GET_CLIENT(self); 
   int val = NUM2INT( setting );
 
-  if( val != SSL_MODE_DISABLED && val != SSL_MODE_PREFERRED && val != SSL_MODE_REQUIRED && val != SSL_MODE_VERIFY_CA && val != SSL_MODE_VERIFY_IDENTITY ) {
+  if (val != SSL_MODE_DISABLED && val != SSL_MODE_PREFERRED && val != SSL_MODE_REQUIRED && val != SSL_MODE_VERIFY_CA && val != SSL_MODE_VERIFY_IDENTITY) {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed: %d", val );
   }
   int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_MODE, &val );

@@ -111,6 +111,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
 #endif
 #ifdef FULL_SSL_MODE_SUPPORT
   GET_CLIENT(self); 
+  int val = NUM2INT( setting );
 
   if( val != SSL_MODE_DISABLED && val != SSL_MODE_PREFERRED && val != SSL_MODE_REQUIRED && val != SSL_MODE_VERIFY_CA && val != SSL_MODE_VERIFY_IDENTITY ) {
     rb_raise(cMysql2Error, "ssl_mode= takes DISABLED, PREFERRED, REQUIRED, VERIFY_CA, VERIFY_IDENTITY, you passed: %d", val );

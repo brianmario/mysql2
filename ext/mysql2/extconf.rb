@@ -13,13 +13,13 @@ def asplode(lib)
 end
 
 def add_ssl_defines(header)
-  all_modes_found = %w( SSL_MODE_DISABLED SSL_MODE_PREFERRED SSL_MODE_REQUIRED SSL_MODE_VERIFY_CA SSL_MODE_VERIFY_IDENTITY).inject( true ) do |m, ssl_mode|
+  all_modes_found = %w(SSL_MODE_DISABLED SSL_MODE_PREFERRED SSL_MODE_REQUIRED SSL_MODE_VERIFY_CA SSL_MODE_VERIFY_IDENTITY).inject(true) do |m, ssl_mode|
     m && have_const(ssl_mode, header)
   end
   $CFLAGS << ' -DFULL_SSL_MODE_SUPPORT' if all_modes_found
-  
-    # if we only have ssl toggle (--ssl,--disable-ssl) from 5.7.3 to 5.7.10
-  have_const('MYSQL_OPT_SSL_ENFORCE', header) unless all_modes_found
+  # if we only have ssl toggle (--ssl,--disable-ssl) from 5.7.3 to 5.7.10
+  has_no_support = all_modes_found ? false : !have_const('MYSQL_OPT_SSL_ENFORCE', header)
+  $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if has_no_support
 end
 
 # 2.0-only

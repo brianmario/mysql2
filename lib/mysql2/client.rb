@@ -47,9 +47,7 @@ module Mysql2
 
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any?
-      if opts[:ssl_mode]
-        self.ssl_mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
-      end
+      self.ssl_mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
 
       case opts[:flags]
       when Array
@@ -96,7 +94,7 @@ module Mysql2
         return Mysql2::Client.const_get(m) if Mysql2::Client.const_defined?(m)
       else
         x = 'SSL_MODE_' + m
-        return Mysql2::Client.const_get(x) if Mysql2::Client.const_defined?(x) 
+        return Mysql2::Client.const_get(x) if Mysql2::Client.const_defined?(x)
       end
       warn "ssl_mode must be one of SSL_MODE_DISABLED, SSL_MODE_PREFERRED, SSL_MODE_REQUIRED, SSL_MODE_VERIFY_CA, SSL_MODE_VERIFY_IDENTITY"
       return nil

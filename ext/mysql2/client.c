@@ -120,6 +120,9 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
 
   return INT2NUM(result);
 #endif
+#ifdef NO_SSL_MODE_SUPPORT
+  return Qnil;
+#endif
 }
 /*
  * non-blocking mysql_*() functions that we won't be wrapping since

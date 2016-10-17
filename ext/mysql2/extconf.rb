@@ -91,13 +91,13 @@ end
 
 if have_header('mysql.h')
   prefix = nil
-  add_ssl_defines('mysql.h')
 elsif have_header('mysql/mysql.h')
   prefix = 'mysql'
-  add_ssl_defines('mysql/mysql.h')
 else
   asplode 'mysql.h'
 end
+
+add_ssl_defines([prefix, 'mysql.h'].compact.join('/'))
 
 %w(errmsg.h mysqld_error.h).each do |h|
   header = [prefix, h].compact.join '/'

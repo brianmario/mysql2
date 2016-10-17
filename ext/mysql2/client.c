@@ -47,7 +47,6 @@ VALUE rb_hash_dup(VALUE other) {
   #define MYSQL_LINK_VERSION MYSQL_SERVER_VERSION
 #endif
 
-
 /*
  * used to pass all arguments to mysql_real_connect while inside
  * rb_thread_call_without_gvl
@@ -83,6 +82,7 @@ struct nogvl_select_db_args {
   MYSQL *mysql;
   char *db;
 };
+
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
 

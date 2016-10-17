@@ -96,8 +96,7 @@ module Mysql2
         x = 'SSL_MODE_' + m
         return Mysql2::Client.const_get(x) if Mysql2::Client.const_defined?(x)
       end
-      warn "ssl_mode must be one of SSL_MODE_DISABLED, SSL_MODE_PREFERRED, SSL_MODE_REQUIRED, SSL_MODE_VERIFY_CA, SSL_MODE_VERIFY_IDENTITY"
-      return nil
+      warn "Unknown MySQL ssl_mode flag: #{mode}"
     end
 
     def parse_flags_array(flags, initial = 0)

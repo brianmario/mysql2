@@ -203,7 +203,7 @@ Mysql2::Client.new(
   :reconnect = true/false,
   :local_infile = true/false,
   :secure_auth = true/false,
-  :ssl_mode = SSL_MODE_DISABLED / SSL_MODE_PREFERRED / REQUIRED / VERIFY_CA / VERIFY_IDENTITY,
+  :ssl_mode = :disabled / :preferred / :required / :verify_ca / :verify_identity,
   :default_file = '/path/to/my.cfg',
   :default_group = 'my.cfg section',
   :init_command => sql

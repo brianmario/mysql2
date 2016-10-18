@@ -18,9 +18,6 @@ module Mysql2
       }
     end
 
-    # rubocop:disable Metrics/AbcSize
-    # rubocop:disable Metrics/CyclomaticComplexity
-    # rubocop:disable Metrics/MethodLength
     def initialize(opts = {})
       opts = Mysql2::Util.key_hash_as_symbols(opts)
       @read_timeout = nil

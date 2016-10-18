@@ -47,6 +47,7 @@ module Mysql2
 
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any?
+      self.ssl_mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
 
       case opts[:flags]
       when Array
@@ -85,6 +86,17 @@ module Mysql2
       socket = socket.to_s unless socket.nil?
 
       connect user, pass, host, port, database, socket, flags
+    end
+
+    def parse_ssl_mode(mode)
+      m = mode.to_s.upcase
+      if m.start_with?('SSL_MODE_')
+        return Mysql2::Client.const_get(m) if Mysql2::Client.const_defined?(m)
+      else
+        x = 'SSL_MODE_' + m
+        return Mysql2::Client.const_get(x) if Mysql2::Client.const_defined?(x)
+      end
+      warn "Unknown MySQL ssl_mode flag: #{mode}"
     end
 
     def parse_flags_array(flags, initial = 0)

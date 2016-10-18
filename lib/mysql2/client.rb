@@ -19,6 +19,7 @@ module Mysql2
     end
 
     def initialize(opts = {})
+      fail Mysql2::Error, "Options parameter must be a Hash" unless opts.is_a? Hash
       opts = Mysql2::Util.key_hash_as_symbols(opts)
       @read_timeout = nil
       @query_options = self.class.default_query_options.dup

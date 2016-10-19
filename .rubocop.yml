@@ -22,15 +22,6 @@ Style/TrailingComma:
 Style/TrivialAccessors:
   AllowPredicates: true
 
-Metrics/AbcSize:
-  Max: 82
-
-Metrics/CyclomaticComplexity:
-  Max: 28
-
-Metrics/MethodLength:
-  Max: 55
-
 # TODO: remove when we end support for < 1.9.3
 
 Style/HashSyntax:

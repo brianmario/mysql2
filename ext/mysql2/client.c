@@ -1235,6 +1235,7 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
 #endif
   GET_CLIENT(self);
 
+  Check_Type(value, T_STRING);
   charset_name = RSTRING_PTR(value);
 
 #ifdef HAVE_RUBY_ENCODING_H

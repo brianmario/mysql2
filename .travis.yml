@@ -16,7 +16,7 @@ addons:
     - mysql-client-core-5.5
     - mysql-client-5.5
 rvm:
-  - 2.4.0-preview1
+  - 2.4.0-preview2
   - 2.3.1
   - 2.2
   - 2.1

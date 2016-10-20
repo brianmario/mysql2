@@ -34,6 +34,12 @@ RSpec.describe Mysql2::Client do
     }.to raise_error(Mysql2::Error)
   end
 
+  it "should raise an exception on non-string encodings" do
+    expect {
+      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => :fake))
+    }.to raise_error(TypeError)
+  end
+
   it "should not raise an exception on create for a valid encoding" do
     expect {
       Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))

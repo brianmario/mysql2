@@ -51,12 +51,6 @@ typedef struct {
   MYSQL *client;
 } mysql_client_wrapper;
 
-#define REQUIRE_CONNECTED(wrapper) \
-  REQUIRE_INITIALIZED(wrapper) \
-  if (!wrapper->connected && !wrapper->reconnect_enabled) { \
-    rb_raise(cMysql2Error, "closed MySQL connection"); \
-  }
-
 void rb_mysql_client_set_active_thread(VALUE self);
 
 #define GET_CLIENT(self) \

@@ -30,6 +30,12 @@ VALUE rb_hash_dup(VALUE other) {
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
 
+#define REQUIRE_CONNECTED(wrapper) \
+  REQUIRE_INITIALIZED(wrapper) \
+  if (!wrapper->connected && !wrapper->reconnect_enabled) { \
+    rb_raise(cMysql2Error, "MySQL client is not connected"); \
+  }
+
 #define REQUIRE_NOT_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \
   if (wrapper->connected) { \

@@ -560,7 +560,7 @@ RSpec.describe Mysql2::Client do
       context 'when a non-standard exception class is raised' do
         it "should close the connection when an exception is raised" do
           expect { Timeout.timeout(0.1, ArgumentError) { @client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
-          expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, 'closed MySQL connection')
+          expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is true" do

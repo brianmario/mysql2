@@ -130,6 +130,27 @@ RSpec.describe Mysql2::Statement do
     expect(result.first.first[1]).to be_an_instance_of(Time)
   end
 
+  it "should prepare Date values" do
+    now = Date.today
+    statement = @client.prepare('SELECT ? AS a')
+    result = statement.execute(now)
+    expect(result.first['a'].to_s).to eql(now.strftime('%F'))
+  end
+
+  it "should prepare Time values" do
+    now = Time.now
+    statement = @client.prepare('SELECT ? AS a')
+    result = statement.execute(now)
+    expect(result.first['a'].strftime('%F %T.%9N %z')).to eql(now.strftime('%F %T.%9N %z'))
+  end
+
+  it "should prepare DateTime values" do
+    now = DateTime.now
+    statement = @client.prepare('SELECT ? AS a')
+    result = statement.execute(now)
+    expect(result.first['a'].strftime('%F %T.%9N %z')).to eql(now.strftime('%F %T.%9N %z'))
+  end
+
   it "should tell us about the fields" do
     statement = @client.prepare 'SELECT 1 as foo, 2'
     statement.execute

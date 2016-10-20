@@ -2,8 +2,8 @@
 
 VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
-static VALUE sym_stream, intern_new_with_args, intern_each;
-static VALUE intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year, intern_to_s;
+static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s;
+static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year;
 #ifndef HAVE_RB_BIG_CMP
 static ID id_cmp;
 #endif
@@ -354,7 +354,13 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 
             memset(&t, 0, sizeof(MYSQL_TIME));
             t.neg = 0;
-            t.second_part = FIX2INT(rb_funcall(rb_time, intern_usec, 0));
+
+            if (CLASS_OF(argv[i]) == rb_cTime) {
+              t.second_part = FIX2INT(rb_funcall(rb_time, intern_usec, 0));
+            } else if (CLASS_OF(argv[i]) == cDateTime) {
+              t.second_part = NUM2DBL(rb_funcall(rb_time, intern_sec_fraction, 0)) * 1000000;
+            }
+
             t.second = FIX2INT(rb_funcall(rb_time, intern_sec, 0));
             t.minute = FIX2INT(rb_funcall(rb_time, intern_min, 0));
             t.hour = FIX2INT(rb_funcall(rb_time, intern_hour, 0));
@@ -552,6 +558,7 @@ void init_mysql2_statement() {
   intern_new_with_args = rb_intern("new_with_args");
   intern_each = rb_intern("each");
 
+  intern_sec_fraction = rb_intern("sec_fraction");
   intern_usec = rb_intern("usec");
   intern_sec = rb_intern("sec");
   intern_min = rb_intern("min");

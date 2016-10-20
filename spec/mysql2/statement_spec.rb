@@ -137,18 +137,18 @@ RSpec.describe Mysql2::Statement do
     expect(result.first['a'].to_s).to eql(now.strftime('%F'))
   end
 
-  it "should prepare Time values" do
+  it "should prepare Time values with microseconds" do
     now = Time.now
     statement = @client.prepare('SELECT ? AS a')
     result = statement.execute(now)
-    expect(result.first['a'].strftime('%F %T.%9N %z')).to eql(now.strftime('%F %T.%9N %z'))
+    expect(result.first['a'].strftime('%F %T.%6N %z')).to eql(now.strftime('%F %T.%6N %z'))
   end
 
-  it "should prepare DateTime values" do
+  it "should prepare DateTime values with microseconds" do
     now = DateTime.now
     statement = @client.prepare('SELECT ? AS a')
     result = statement.execute(now)
-    expect(result.first['a'].strftime('%F %T.%9N %z')).to eql(now.strftime('%F %T.%9N %z'))
+    expect(result.first['a'].strftime('%F %T.%6N %z')).to eql(now.strftime('%F %T.%6N %z'))
   end
 
   it "should tell us about the fields" do

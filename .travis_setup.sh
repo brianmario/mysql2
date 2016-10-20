@@ -7,6 +7,11 @@ if [[ -n ${DB-} && x$DB =~ ^xmysql57 ]]; then
   sudo bash .travis_mysql57.sh
 fi
 
+# Install MySQL 8.0 if DB=mysql80
+if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
+  sudo bash .travis_mysql80.sh
+fi
+
 # Install MySQL if OS=darwin
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
   brew update

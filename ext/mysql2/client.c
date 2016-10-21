@@ -54,6 +54,16 @@ VALUE rb_hash_dup(VALUE other) {
 #endif
 
 /*
+ * compatibility with mysql-connector-c 6.1.x, and with MySQL 5.7.3 - 5.7.10.
+ */
+#ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
+  #define SSL_MODE_DISABLED 1
+  #define SSL_MODE_REQUIRED 3
+  #define HAVE_CONST_SSL_MODE_DISABLED
+  #define HAVE_CONST_SSL_MODE_REQUIRED
+#endif
+
+/*
  * used to pass all arguments to mysql_real_connect while inside
  * rb_thread_call_without_gvl
  */
@@ -101,7 +111,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   int val = NUM2INT( setting );
   if (version >= 50703 && version < 50711) {
     if (val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED) {
-      bool b = ( val == SSL_MODE_REQUIRED );
+      my_bool b = ( val == SSL_MODE_REQUIRED );
       int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_ENFORCE, &b );
       return INT2NUM(result);
       
@@ -1509,22 +1519,18 @@ void init_mysql2_client() {
   rb_const_set(cMysql2Client, rb_intern("BASIC_FLAGS"),
       LONG2NUM(CLIENT_BASIC_FLAGS));
 #endif
-#ifdef FULL_SSL_MODE_SUPPORT
+
+#if defined(FULL_SSL_MODE_SUPPORT) // MySQL 5.7.11 and above
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"), INT2NUM(SSL_MODE_DISABLED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_PREFERRED"), INT2NUM(SSL_MODE_PREFERRED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"), INT2NUM(SSL_MODE_REQUIRED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_CA"), INT2NUM(SSL_MODE_VERIFY_CA));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_IDENTITY"), INT2NUM(SSL_MODE_VERIFY_IDENTITY));
-#endif
-#ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
-  #define SSL_MODE_DISABLED 1
-  #define SSL_MODE_REQUIRED 3
-  #define HAVE_CONST_SSL_MODE_DISABLED
-  #define HAVE_CONST_SSL_MODE_REQUIRED
-
+#elif defined(HAVE_CONST_MYSQL_OPT_SSL_ENFORCE) // MySQL 5.7.3 - 5.7.10
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"), INT2NUM(SSL_MODE_DISABLED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"), INT2NUM(SSL_MODE_REQUIRED));
 #endif
+
 #ifndef HAVE_CONST_SSL_MODE_DISABLED
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"), INT2NUM(0));
 #endif

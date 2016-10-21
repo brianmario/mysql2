@@ -494,13 +494,13 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 This gem is tested with the following Ruby versions on Linux and Mac OS X:
 
- * Ruby MRI 1.8.7, 1.9.3, 2.0.0, 2.1.x, 2.2.x, 2.3.x
+ * Ruby MRI 1.8.7, 1.9.3, 2.0.0, 2.1.x, 2.2.x, 2.3.x, 2.4.x
  * Ruby Enterprise Edition (based on MRI 1.8.7)
- * Rubinius 2.x, 3.x
+ * Rubinius 2.x and 3.x do work but may fail under some workloads
 
 This gem is tested with the following MySQL and MariaDB versions:
 
- * MySQL 5.5, 5.6, 5.7
+ * MySQL 5.5, 5.6, 5.7, 8.0
  * MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
  * MariaDB 5.5, 10.0, 10.1
 

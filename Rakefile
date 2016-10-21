@@ -15,11 +15,11 @@ has_rubocop = if defined?(RUBY_ENGINE) && RUBY_ENGINE == 'ruby' && defined?(Enco
     require 'rubocop/rake_task'
     RuboCop::RakeTask.new
     task :default => [:spec, :rubocop]
-  rescue LoadError
+  rescue LoadError # rubocop:disable Lint/HandleExceptions
   end
 end
 
-if !has_rubocop
+unless has_rubocop
   warn 'RuboCop is not available'
   task :default => :spec
 end

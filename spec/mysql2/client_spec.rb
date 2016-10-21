@@ -1,6 +1,5 @@
 # encoding: UTF-8
 require 'spec_helper'
-require 'stringio'
 
 RSpec.describe Mysql2::Client do
   context "using defaults file" do
@@ -206,22 +205,21 @@ RSpec.describe Mysql2::Client do
 
     if RUBY_PLATFORM =~ /mingw|mswin/
       it "cannot be disabled" do
-        stderr, $stderr = $stderr, StringIO.new
+        expect do
+          client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
+          expect(client.automatic_close?).to be(true)
+        end.to output(/always closed by garbage collector/).to_stderr
 
-        begin
-          Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
-          expect($stderr.string).to include('always closed by garbage collector')
-          $stderr.reopen
+        expect do
+          client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true))
+          expect(client.automatic_close?).to be(true)
+        end.to_not output(/always closed by garbage collector/).to_stderr
 
-          client = Mysql2::Client.new(DatabaseCredentials['root'])
+        expect do
+          client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true))
           client.automatic_close = false
-          expect($stderr.string).to include('always closed by garbage collector')
-          $stderr.reopen
-
-          expect { client.automatic_close = true }.to_not change { $stderr.string }
-        ensure
-          $stderr = stderr
-        end
+          expect(client.automatic_close?).to be(true)
+        end.to output(/always closed by garbage collector/).to_stderr
       end
     else
       it "can be configured" do

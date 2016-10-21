@@ -10,11 +10,16 @@ load 'tasks/benchmarks.rake'
 
 # TODO: remove engine check when rubinius stops crashing on RuboCop
 # TODO: remove defined?(Encoding) when we end support for < 1.9.3
-if defined?(RUBY_ENGINE) && RUBY_ENGINE == 'ruby' && defined?(Encoding)
-  require 'rubocop/rake_task'
-  RuboCop::RakeTask.new
-  task :default => [:spec, :rubocop]
-else
+has_rubocop = if defined?(RUBY_ENGINE) && RUBY_ENGINE == 'ruby' && defined?(Encoding)
+  begin
+    require 'rubocop/rake_task'
+    RuboCop::RakeTask.new
+    task :default => [:spec, :rubocop]
+  rescue LoadError
+  end
+end
+
+if !has_rubocop
   warn 'RuboCop is not available'
   task :default => :spec
 end

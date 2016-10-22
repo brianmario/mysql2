@@ -52,6 +52,9 @@ dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w(
   /usr/local/opt/mysql5*
 ).map { |dir| dir << '/bin' }
 
+# For those without HOMEBREW_ROOT in PATH
+dirs << "#{ENV['HOMEBREW_ROOT']}/bin" if ENV['HOMEBREW_ROOT']
+
 GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5,mariadb_config}"
 
 # If the user has provided a --with-mysql-dir argument, we must respect it or fail.

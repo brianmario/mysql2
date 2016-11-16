@@ -631,12 +631,31 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   rb_exc_raise(error);
 }
 
+static void wait_for_fd(int fd, struct timeval *tvp) {
+  int retval;
+
+  for(;;) {
+    retval = rb_wait_for_single_fd(fd, RB_WAITFD_IN, tvp);
+
+    if (retval == 0) {
+      rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %ld seconds)", tvp->tv_sec);
+    }
+
+    if (retval < 0) {
+      rb_sys_fail(0);
+    }
+
+    if (retval > 0) {
+      break;
+    }
+  }
+}
+
 static VALUE do_query(void *args) {
   struct async_query_args *async_args = args;
   struct timeval tv;
   struct timeval *tvp;
   long int sec;
-  int retval;
   VALUE read_timeout;
 
   read_timeout = rb_iv_get(async_args->self, "@read_timeout");
@@ -656,21 +675,7 @@ static VALUE do_query(void *args) {
     tvp->tv_usec = 0;
   }
 
-  for(;;) {
-    retval = rb_wait_for_single_fd(async_args->fd, RB_WAITFD_IN, tvp);
-
-    if (retval == 0) {
-      rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
-    }
-
-    if (retval < 0) {
-      rb_sys_fail(0);
-    }
-
-    if (retval > 0) {
-      break;
-    }
-  }
+  wait_for_fd(async_args->fd, tvp);
 
   return Qnil;
 }
@@ -1129,6 +1134,12 @@ static VALUE rb_mysql_client_more_results(VALUE self)
     return Qtrue;
 }
 
+static void *nogvl_next_result(void *ptr) {
+  mysql_client_wrapper *wrapper = ptr;
+
+  return (void *)INT2NUM(mysql_next_result(wrapper->client));
+}
+
 /* call-seq:
  *    client.next_result
  *
@@ -1139,7 +1150,11 @@ static VALUE rb_mysql_client_next_result(VALUE self)
 {
     int ret;
     GET_CLIENT(self);
-    ret = mysql_next_result(wrapper->client);
+
+    wait_for_fd(wrapper->client->net.fd, NULL);
+    VALUE v = (VALUE)rb_thread_call_without_gvl(nogvl_next_result, wrapper, RUBY_UBF_IO, 0);
+    ret = NUM2INT(v);
+
     if (ret > 0) {
       rb_raise_mysql2_error(wrapper);
       return Qfalse;

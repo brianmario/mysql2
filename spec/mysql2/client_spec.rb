@@ -604,7 +604,7 @@ describe Mysql2::Client do
             @multi_client.next_result
           }
         }.to raise_error(ArgumentError)
-        expect(Time.now.to_f - time_top).to be <= 0.5
+        (Time.now.to_f - time_top).should be <= 0.5
 
       end
 

@@ -1,4 +1,5 @@
 #include <mysql2_ext.h>
+#include <violite.h>
 
 #include <time.h>
 #include <errno.h>
@@ -559,20 +560,15 @@ static void wait_for_fd(int fd, struct timeval *tvp) {
   }
 }
 
-static VALUE do_query(void *args) {
-  struct async_query_args *async_args;
-  struct timeval tv;
-  struct timeval* tvp;
+static struct timeval *get_read_timeout(VALUE self, struct timeval *tvp)
+{
   long int sec;
   VALUE read_timeout;
 
-  async_args = (struct async_query_args *)args;
-  read_timeout = rb_iv_get(async_args->self, "@read_timeout");
+  read_timeout = rb_iv_get(self, "@read_timeout");
 
-  tvp = NULL;
   if (!NIL_P(read_timeout)) {
     Check_Type(read_timeout, T_FIXNUM);
-    tvp = &tv;
     sec = FIX2INT(read_timeout);
     /* TODO: support partial seconds?
        also, this check is here for sanity, we also check up in Ruby */
@@ -582,8 +578,19 @@ static VALUE do_query(void *args) {
       rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %ld", sec);
     }
     tvp->tv_usec = 0;
+    return tvp;
+  } else {
+    return NULL;
   }
+}
 
+
+static VALUE do_query(void *args) {
+  struct async_query_args *async_args;
+  struct timeval tv, *tvp;
+
+  async_args = (struct async_query_args *)args;
+  tvp = get_read_timeout(async_args->self, &tv);
   wait_for_fd(async_args->fd, tvp);
 
   return Qnil;
@@ -1042,9 +1049,21 @@ static void *nogvl_next_result(void *ptr) {
 static VALUE rb_mysql_client_next_result(VALUE self)
 {
     int ret;
+    struct timeval tv, *tvp;
     GET_CLIENT(self);
 
-    wait_for_fd(wrapper->client->net.fd, NULL);
+    if (mysql_more_results(wrapper->client) == 0)
+      return Qfalse;
+
+    /* if both queries were ready by the time we finished the first query,
+     * the underlying mysql client library will have read both results into the buffer,
+     * defeating our attempt to poll() until ready.  detect that case by peeking at the "vio" buffer.
+     */
+    if ( !wrapper->client->net.vio->has_data(wrapper->client->net.vio) ) {
+      tvp = get_read_timeout(self, &tv);
+      wait_for_fd(wrapper->client->net.fd, tvp);
+    }
+
     VALUE v = (VALUE)rb_thread_call_without_gvl(nogvl_next_result, wrapper, RUBY_UBF_IO, 0);
     ret = NUM2INT(v);
 

@@ -596,9 +596,11 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   /* Invalidate the MySQL socket to prevent further communication.
    * The GC will come along later and call mysql_close to free it.
    */
-  if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
-    fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
-    close(wrapper->client->net.fd);
+  if (wrapper->client) {
+    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+      fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
+      close(wrapper->client->net.fd);
+    }
   }
 
   rb_exc_raise(error);

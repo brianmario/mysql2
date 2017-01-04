@@ -69,6 +69,7 @@ matrix:
           - mysql2gem.example.com
     - rvm: 2.0.0
       env: DB=mysql55
+      dist: precise
       addons:
         hosts:
           - mysql2gem.example.com

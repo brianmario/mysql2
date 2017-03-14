@@ -85,6 +85,9 @@ You may use MacPorts, Homebrew, or a native MySQL installer package. The most
 common paths will be automatically searched. If you want to select a specific
 MySQL directory, use the `--with-mysql-dir` or `--with-mysql-config` options above.
 
+If you have not done so already, you will need to install the XCode select tools by running
+`xcode-select --install`.
+
 ### Windows
 Make sure that you have Ruby and the DevKit compilers installed. We recommend
 the [Ruby Installer](http://rubyinstaller.org) distribution.

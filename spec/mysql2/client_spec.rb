@@ -705,6 +705,17 @@ RSpec.describe Mysql2::Client do
 
         expect(@multi_client.more_results?).to be false
       end
+
+      it "checks if there are more results" do
+        @multi_client.query( "select 1 as 'set_1'; select 2 as 'set_2'")
+        @multi_client.more_results?.should == true
+
+        @multi_client.next_result
+        @multi_client.store_result
+
+        @multi_client.more_results?.should == false
+
+      end
     end
   end
 

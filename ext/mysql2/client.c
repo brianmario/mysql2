@@ -649,26 +649,26 @@ static VALUE do_query(void *args) {
 
   return Qnil;
 }
-#else
-static VALUE finish_and_mark_inactive(void *args) {
-  VALUE self = args;
-  MYSQL_RES *result;
+#endif
 
+static VALUE disconnect_and_mark_inactive(VALUE self) {
   GET_CLIENT(self);
 
+  /* Check if execution terminated while result was still being read. */
   if (!NIL_P(wrapper->active_thread)) {
-    /* if we got here, the result hasn't been read off the wire yet
-       so lets do that and then throw it away because we have no way
-       of getting it back up to the caller from here */
-    result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
-    mysql_free_result(result);
-
+    /* Invalidate the MySQL socket to prevent further communication. */
+    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+      rb_warn("mysql2 failed to invalidate FD safely, closing unsafely\n");
+      close(wrapper->client->net.fd);
+    }
+    /* Skip mysql client check performed before command execution. */
+    wrapper->client->status = MYSQL_STATUS_READY;
     wrapper->active_thread = Qnil;
+    wrapper->connected = 0;
   }
 
   return Qnil;
 }
-#endif
 
 void rb_mysql_client_set_active_thread(VALUE self) {
   VALUE thread_current = rb_thread_current();
@@ -762,13 +762,13 @@ static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
 
     rb_rescue2(do_query, (VALUE)&async_args, disconnect_and_raise, self, rb_eException, (VALUE)0);
 
-    return rb_mysql_client_async_result(self);
+    return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
   }
 #else
   do_send_query(&args);
 
   /* this will just block until the result is ready */
-  return rb_ensure(rb_mysql_client_async_result, self, finish_and_mark_inactive, self);
+  return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
 #endif
 }
 

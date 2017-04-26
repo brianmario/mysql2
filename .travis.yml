@@ -49,25 +49,25 @@ matrix:
           - mysql-server-5.5
           - mysql-client-core-5.5
           - mysql-client-5.5
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mariadb55
       addons:
         mariadb: 5.5
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mariadb10.0
       addons:
         mariadb: 10.0
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mariadb10.1
       addons:
         mariadb: 10.1
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mysql55
       dist: precise
       addons:
@@ -78,17 +78,17 @@ matrix:
           - mysql-server-5.5
           - mysql-client-core-5.5
           - mysql-client-5.5
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mysql57
       addons:
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mysql80
       addons:
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mysql56
       os: osx
       addons:
@@ -97,6 +97,6 @@ matrix:
   fast_finish: true
   allow_failures:
     - rvm: ruby-head
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mysql56
       os: osx

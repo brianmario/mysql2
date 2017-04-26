@@ -262,8 +262,8 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
   if (wrapper->result_buffers != NULL) return;
 
   wrapper->result_buffers = xcalloc(wrapper->numberOfFields, sizeof(MYSQL_BIND));
-  wrapper->is_null = xcalloc(wrapper->numberOfFields, sizeof(my_bool));
-  wrapper->error = xcalloc(wrapper->numberOfFields, sizeof(my_bool));
+  wrapper->is_null = xcalloc(wrapper->numberOfFields, sizeof(bool));
+  wrapper->error = xcalloc(wrapper->numberOfFields, sizeof(bool));
   wrapper->length = xcalloc(wrapper->numberOfFields, sizeof(unsigned long));
 
   for (i = 0; i < wrapper->numberOfFields; i++) {

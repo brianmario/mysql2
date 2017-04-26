@@ -111,7 +111,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   int val = NUM2INT( setting );
   if (version >= 50703 && version < 50711) {
     if (val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED) {
-      my_bool b = ( val == SSL_MODE_REQUIRED );
+      bool b = ( val == SSL_MODE_REQUIRED );
       int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_ENFORCE, &b );
       return INT2NUM(result);
       
@@ -504,7 +504,7 @@ static VALUE do_send_query(void *args) {
  */
 static void *nogvl_read_query_result(void *ptr) {
   MYSQL * client = ptr;
-  my_bool res = mysql_read_query_result(client);
+  bool res = mysql_read_query_result(client);
 
   return (void *)(res == 0 ? Qtrue : Qfalse);
 }
@@ -827,7 +827,7 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   const void *retval = NULL;
   unsigned int intval = 0;
   const char * charval = NULL;
-  my_bool boolval;
+  bool boolval;
 
   GET_CLIENT(self);
 

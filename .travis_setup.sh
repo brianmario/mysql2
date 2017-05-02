@@ -15,7 +15,7 @@ fi
 # Install MySQL if OS=darwin
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
   brew update
-  brew install "$DB"
+  brew install "$DB" mariadb-connector-c
   $(brew --prefix "$DB")/bin/mysql.server start
 fi
 

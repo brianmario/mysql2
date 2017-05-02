@@ -5,7 +5,7 @@ bundler_args: --without benchmarks development
 # Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
 before_install:
   - gem --version
-  - gem update --system 2.6.7
+  - gem update --system 2.6.12
   - gem update bundler
   - gem --version
   - bash .travis_setup.sh
@@ -50,12 +50,6 @@ matrix:
           - mysql-client-core-5.5
           - mysql-client-5.5
     - rvm: 2.4
-      env: DB=mariadb55
-      addons:
-        mariadb: 5.5
-        hosts:
-          - mysql2gem.example.com
-    - rvm: 2.4
       env: DB=mariadb10.0
       addons:
         mariadb: 10.0
@@ -68,6 +62,12 @@ matrix:
         hosts:
           - mysql2gem.example.com
     - rvm: 2.4
+      env: DB=mariadb10.2
+      addons:
+        mariadb: 10.2
+        hosts:
+          - mysql2gem.example.com
+    - rvm: 2.0.0
       env: DB=mysql55
       dist: precise
       addons:
@@ -88,15 +88,20 @@ matrix:
       addons:
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.4
+    - os: osx
+      rvm: system
       env: DB=mysql56
-      os: osx
       addons:
         hosts:
           - mysql2gem.example.com
+      before_install:
+        # Use the system RubyGem with the system Ruby
+        - gem --version
+        - sudo gem install bundler
+        - bash .travis_setup.sh
   fast_finish: true
   allow_failures:
     - rvm: ruby-head
-    - rvm: 2.4
+    - os: osx
+      rvm: system
       env: DB=mysql56
-      os: osx

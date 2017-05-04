@@ -657,10 +657,14 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
   /* Check if execution terminated while result was still being read. */
   if (!NIL_P(wrapper->active_thread)) {
     /* Invalidate the MySQL socket to prevent further communication. */
+#ifndef _WIN32
     if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
       rb_warn("mysql2 failed to invalidate FD safely, closing unsafely\n");
       close(wrapper->client->net.fd);
     }
+#else
+    close(wrapper->client->net.fd);
+#endif
     /* Skip mysql client check performed before command execution. */
     wrapper->client->status = MYSQL_STATUS_READY;
     wrapper->active_thread = Qnil;

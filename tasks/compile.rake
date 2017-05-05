@@ -48,6 +48,7 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
     end
   end
 end
+task :spec unless Rake::Task.task_defined?(:spec)
 Rake::Task[:spec].prerequisites << :compile
 
 file 'vendor/README' do

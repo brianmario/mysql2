@@ -6,6 +6,8 @@ require 'mysql2'
 module Mysql2
   module EM
     class Client < ::Mysql2::Client
+      attr_accessor :watch
+
       module Watcher
         def initialize(client, deferable)
           @client = client
@@ -15,6 +17,8 @@ module Mysql2
 
         def notify_readable
           detach
+          @client.watch = nil
+
           begin
             result = @client.async_result
           rescue => e

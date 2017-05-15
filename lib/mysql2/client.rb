@@ -31,10 +31,10 @@ module Mysql2
       opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
 
       # TODO: stricter validation rather than silent massaging
-      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command, :automatic_close].each do |key|
+      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command, :automatic_close, :enable_cleartext_plugin].each do |key|
         next unless opts.key?(key)
         case key
-        when :reconnect, :local_infile, :secure_auth, :automatic_close
+        when :reconnect, :local_infile, :secure_auth, :automatic_close, :enable_cleartext_plugin
           send(:"#{key}=", !!opts[key]) # rubocop:disable Style/DoubleNegation
         when :connect_timeout, :read_timeout, :write_timeout
           send(:"#{key}=", Integer(opts[key])) unless opts[key].nil?

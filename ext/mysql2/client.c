@@ -886,6 +886,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval  = charval;
       break;
 
+    case MYSQL_ENABLE_CLEARTEXT_PLUGIN:
+      boolval = (value == Qfalse ? 0 : 1);
+      retval = &boolval;
+      break;
+
     default:
       return Qfalse;
   }
@@ -1303,6 +1308,10 @@ static VALUE set_init_command(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_INIT_COMMAND, value);
 }
 
+static VALUE set_enable_cleartext_plugin(VALUE self, VALUE value) {
+  return _mysql_client_options(self, MYSQL_ENABLE_CLEARTEXT_PLUGIN, value);
+}
+
 static VALUE initialize_ext(VALUE self) {
   GET_CLIENT(self);
 
@@ -1398,6 +1407,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "init_command=", set_init_command, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
+  rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
   rb_define_private_method(cMysql2Client, "_query", rb_query, 2);

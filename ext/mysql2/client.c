@@ -405,11 +405,10 @@ static VALUE rb_mysql_get_ssl_cipher(VALUE self)
   return rb_str;
 }
 
-static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags, VALUE enable_cleartext_plugin) {
+static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
   struct nogvl_connect_args args;
   time_t start_time, end_time, elapsed_time, connect_timeout;
   VALUE rv;
-  my_bool enable_cleartext_plugin_val;
   GET_CLIENT(self);
 
   args.host        = NIL_P(host)     ? NULL : StringValueCStr(host);
@@ -420,16 +419,9 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.db          = NIL_P(database) ? NULL : StringValueCStr(database);
   args.mysql       = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
-  enable_cleartext_plugin_val = NUM2ULONG(enable_cleartext_plugin);
 
   if (wrapper->connect_timeout)
     time(&start_time);
-  if (enable_cleartext_plugin_val) {
-    rv = mysql_options(wrapper->client, MYSQL_ENABLE_CLEARTEXT_PLUGIN, &enable_cleartext_plugin_val);
-    if (rv) {
-      return rb_raise_mysql2_error(wrapper);
-    }
-  }
   rv = (VALUE) rb_thread_call_without_gvl(nogvl_connect, &args, RUBY_UBF_IO, 0);
   if (rv == Qfalse) {
     while (rv == Qfalse && errno == EINTR) {
@@ -894,6 +886,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval  = charval;
       break;
 
+    case MYSQL_ENABLE_CLEARTEXT_PLUGIN:
+      boolval = (value == Qfalse ? 0 : 1);
+      retval = &boolval;
+      break;
+
     default:
       return Qfalse;
   }
@@ -1311,6 +1308,10 @@ static VALUE set_init_command(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_INIT_COMMAND, value);
 }
 
+static VALUE set_enable_cleartext_plugin(VALUE self, VALUE value) {
+  return _mysql_client_options(self, MYSQL_ENABLE_CLEARTEXT_PLUGIN, value);
+}
+
 static VALUE initialize_ext(VALUE self) {
   GET_CLIENT(self);
 
@@ -1406,8 +1407,9 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "init_command=", set_init_command, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
+  rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
-  rb_define_private_method(cMysql2Client, "connect", rb_connect, 8);
+  rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
   rb_define_private_method(cMysql2Client, "_query", rb_query, 2);
 
   sym_id              = ID2SYM(rb_intern("id"));

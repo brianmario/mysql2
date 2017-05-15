@@ -31,10 +31,10 @@ module Mysql2
       opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
 
       # TODO: stricter validation rather than silent massaging
-      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command, :automatic_close].each do |key|
+      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command, :automatic_close, :enable_cleartext_plugin].each do |key|
         next unless opts.key?(key)
         case key
-        when :reconnect, :local_infile, :secure_auth, :automatic_close
+        when :reconnect, :local_infile, :secure_auth, :automatic_close, :enable_cleartext_plugin
           send(:"#{key}=", !!opts[key]) # rubocop:disable Style/DoubleNegation
         when :connect_timeout, :read_timeout, :write_timeout
           send(:"#{key}=", Integer(opts[key])) unless opts[key].nil?
@@ -77,7 +77,6 @@ module Mysql2
       port     = opts[:port]
       database = opts[:database] || opts[:dbname] || opts[:db]
       socket   = opts[:socket] || opts[:sock]
-      enable_cleartext_plugin = opts[:enable_cleartext_plugin]
 
       # Correct the data types before passing these values down to the C level
       user = user.to_s unless user.nil?
@@ -87,7 +86,7 @@ module Mysql2
       database = database.to_s unless database.nil?
       socket = socket.to_s unless socket.nil?
 
-      connect user, pass, host, port, database, socket, flags, (enable_cleartext_plugin ? 1 : 0)
+      connect user, pass, host, port, database, socket, flags
     end
 
     def parse_ssl_mode(mode)

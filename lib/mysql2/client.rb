@@ -77,6 +77,7 @@ module Mysql2
       port     = opts[:port]
       database = opts[:database] || opts[:dbname] || opts[:db]
       socket   = opts[:socket] || opts[:sock]
+      enable_cleartext_plugin = opts[:enable_cleartext_plugin]
 
       # Correct the data types before passing these values down to the C level
       user = user.to_s unless user.nil?
@@ -86,7 +87,7 @@ module Mysql2
       database = database.to_s unless database.nil?
       socket = socket.to_s unless socket.nil?
 
-      connect user, pass, host, port, database, socket, flags
+      connect user, pass, host, port, database, socket, flags, (enable_cleartext_plugin ? 1 : 0)
     end
 
     def parse_ssl_mode(mode)

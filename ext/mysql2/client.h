@@ -44,7 +44,6 @@ typedef struct {
   unsigned int connect_timeout;
   int active;
   int automatic_close;
-  int connected;
   int initialized;
   int refcount;
   int freed;

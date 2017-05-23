@@ -32,14 +32,21 @@ VALUE rb_hash_dup(VALUE other) {
 
 #define CONNECTED(wrapper) (wrapper->client && wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
 
+#define REQUIRE_CLIENT(wrapper) \
+  if (!wrapper->client) { \
+    rb_raise(cMysql2Error, "MySQL client is closed"); \
+  }
+
 #define REQUIRE_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \
+  REQUIRE_CLIENT(wrapper) \
   if (!CONNECTED(wrapper) && !wrapper->reconnect_enabled) { \
     rb_raise(cMysql2Error, "MySQL client is not connected"); \
   }
 
 #define REQUIRE_NOT_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \
+  REQUIRE_CLIENT(wrapper) \
   if (CONNECTED(wrapper)) { \
     rb_raise(cMysql2Error, "MySQL connection is already open"); \
   }
@@ -288,7 +295,7 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
 
   if (wrapper->refcount == 0) {
 #ifndef _WIN32
-    if (CONNECTED(wrapper) && !wrapper->automatic_close) {
+    if (wrapper->client && CONNECTED(wrapper) && !wrapper->automatic_close) {
       /* The client is being garbage collected while connected. Prevent
        * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
        * the socket by invalidating it. invalidate_fd() will drop this
@@ -362,6 +369,7 @@ static VALUE rb_mysql_client_warning_count(VALUE self) {
   unsigned int warning_count;
   GET_CLIENT(self);
 
+  REQUIRE_CLIENT(wrapper);
   warning_count = mysql_warning_count(wrapper->client);
 
   return UINT2NUM(warning_count);
@@ -372,6 +380,7 @@ static VALUE rb_mysql_info(VALUE self) {
   VALUE rb_str;
   GET_CLIENT(self);
 
+  REQUIRE_CLIENT(wrapper);
   info = mysql_info(wrapper->client);
 
   if (info == NULL) {
@@ -392,6 +401,7 @@ static VALUE rb_mysql_get_ssl_cipher(VALUE self)
   VALUE rb_str;
   GET_CLIENT(self);
 
+  REQUIRE_CLIENT(wrapper);
   cipher = mysql_get_ssl_cipher(wrapper->client);
 
   if (cipher == NULL) {
@@ -717,6 +727,7 @@ static VALUE rb_mysql_client_abandon_results(VALUE self) {
   int ret;
 
   GET_CLIENT(self);
+  REQUIRE_CLIENT(wrapper);
 
   while (mysql_more_results(wrapper->client) == 1) {
     ret = mysql_next_result(wrapper->client);
@@ -1092,7 +1103,7 @@ static void *nogvl_ping(void *ptr) {
 static VALUE rb_mysql_client_ping(VALUE self) {
   GET_CLIENT(self);
 
-  if (!CONNECTED(wrapper)) {
+  if (!wrapper->client || !CONNECTED(wrapper)) {
     return Qfalse;
   } else {
     return (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
@@ -1107,6 +1118,7 @@ static VALUE rb_mysql_client_ping(VALUE self) {
 static VALUE rb_mysql_client_more_results(VALUE self)
 {
   GET_CLIENT(self);
+  REQUIRE_CLIENT(wrapper);
   if (mysql_more_results(wrapper->client) == 0)
     return Qfalse;
   else
@@ -1123,6 +1135,7 @@ static VALUE rb_mysql_client_next_result(VALUE self)
 {
     int ret;
     GET_CLIENT(self);
+    REQUIRE_CLIENT(wrapper);
     ret = mysql_next_result(wrapper->client);
     if (ret > 0) {
       rb_raise_mysql2_error(wrapper);
@@ -1147,6 +1160,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   VALUE current;
   GET_CLIENT(self);
 
+  REQUIRE_CLIENT(wrapper);
   result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
 
   if (result == NULL) {

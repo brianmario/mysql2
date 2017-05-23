@@ -306,6 +306,14 @@ RSpec.describe Mysql2::Client do
     end
   end
 
+  it "should not try to query closed mysql connection" do
+    client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
+    expect(client.close).to be_nil
+    expect {
+      client.query "SELECT 1"
+    }.to raise_error(Mysql2::Error)
+  end
+
   it "should respond to #query" do
     expect(@client).to respond_to(:query)
   end

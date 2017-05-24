@@ -153,18 +153,16 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should raise an exception if streaming ended due to a timeout" do
-      # Create an extra client instance, since we're going to time it out
-      client = Mysql2::Client.new DatabaseCredentials['root']
-      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
+      @client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
 
       # Insert enough records to force the result set into multiple reads
       # (the BINARY type is used simply because it forces full width results)
       10000.times do |i|
-        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+        @client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
       end
 
-      client.query "SET net_write_timeout = 1"
-      res = client.query "SELECT * FROM streamingTest", :stream => true, :cache_rows => false
+      @client.query "SET net_write_timeout = 1"
+      res = @client.query "SELECT * FROM streamingTest", :stream => true, :cache_rows => false
 
       expect {
         res.each_with_index do |_, i|
@@ -367,10 +365,9 @@ RSpec.describe Mysql2::Result do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+          client2 = new_client(:encoding => 'ascii')
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['enum_test'].encoding).to eql(Encoding::ASCII)
-          client2.close
         end
       end
 
@@ -400,10 +397,9 @@ RSpec.describe Mysql2::Result do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['set_test'].encoding).to eql(Encoding::UTF_8)
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+          client2 = new_client(:encoding => 'ascii')
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['set_test'].encoding).to eql(Encoding::ASCII)
-          client2.close
         end
       end
 
@@ -494,10 +490,9 @@ RSpec.describe Mysql2::Result do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               expect(result[field].encoding).to eql(Encoding::UTF_8)
 
-              client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+              client2 = new_client(:encoding => 'ascii')
               result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               expect(result[field].encoding).to eql(Encoding::ASCII)
-              client2.close
             end
           end
 

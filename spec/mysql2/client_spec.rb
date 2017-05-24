@@ -6,17 +6,14 @@ RSpec.describe Mysql2::Client do
     let(:cnf_file) { File.expand_path('../../my.cnf', __FILE__) }
 
     it "should not raise an exception for valid defaults group" do
-      @client.close
       expect {
-        opts = DatabaseCredentials['root'].merge(:default_file => cnf_file, :default_group => "test")
-        @client = Mysql2::Client.new(opts)
+        new_client(:default_file => cnf_file, :default_group => "test")
       }.not_to raise_error
     end
 
     it "should not raise an exception without default group" do
-      @client.close
       expect {
-        @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:default_file => cnf_file))
+        new_client(:default_file => cnf_file)
       }.not_to raise_error
     end
   end
@@ -25,29 +22,29 @@ RSpec.describe Mysql2::Client do
     expect {
       # The odd local host IP address forces the mysql client library to
       # use a TCP socket rather than a domain socket.
-      Mysql2::Client.new DatabaseCredentials['root'].merge('host' => '127.0.0.2', 'port' => 999999)
+      new_client('host' => '127.0.0.2', 'port' => 999999)
     }.to raise_error(Mysql2::Error)
   end
 
   it "should raise an exception on create for invalid encodings" do
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "fake"))
+      new_client(:encoding => "fake")
     }.to raise_error(Mysql2::Error)
   end
 
   it "should raise an exception on non-string encodings" do
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => :fake))
+      new_client(:encoding => :fake)
     }.to raise_error(TypeError)
   end
 
   it "should not raise an exception on create for a valid encoding" do
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
+      new_client(:encoding => "utf8")
     }.not_to raise_error
 
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "big5"))
+      new_client(DatabaseCredentials['root'].merge(:encoding => "big5"))
     }.not_to raise_error
   end
 
@@ -90,17 +87,16 @@ RSpec.describe Mysql2::Client do
   it "should execute init command" do
     options = DatabaseCredentials['root'].dup
     options[:init_command] = "SET @something = 'setting_value';"
-    client = Mysql2::Client.new(options)
+    client = new_client(options)
     result = client.query("SELECT @something;")
     expect(result.first['@something']).to eq('setting_value')
-    client.close
   end
 
   it "should send init_command after reconnect" do
     options = DatabaseCredentials['root'].dup
     options[:init_command] = "SET @something = 'setting_value';"
     options[:reconnect] = true
-    client = Mysql2::Client.new(options)
+    client = new_client(options)
 
     result = client.query("SELECT @something;")
     expect(result.first['@something']).to eq('setting_value')
@@ -124,7 +120,6 @@ RSpec.describe Mysql2::Client do
     # At last, check that the init command executed
     result = client.query("SELECT @something;")
     expect(result.first['@something']).to eq('setting_value')
-    client.close
   end
 
   it "should have a global default_query_options hash" do
@@ -142,15 +137,13 @@ RSpec.describe Mysql2::Client do
     ssl_client = nil
     expect {
       # rubocop:disable Style/TrailingComma
-      ssl_client = Mysql2::Client.new(
-        DatabaseCredentials['root'].merge(
-          'host'     => 'mysql2gem.example.com', # must match the certificates
-          :sslkey    => '/etc/mysql/client-key.pem',
-          :sslcert   => '/etc/mysql/client-cert.pem',
-          :sslca     => '/etc/mysql/ca-cert.pem',
-          :sslcipher => 'DHE-RSA-AES256-SHA',
-          :sslverify => true
-        )
+      ssl_client = new_client(
+        'host'     => 'mysql2gem.example.com', # must match the certificates
+        :sslkey    => '/etc/mysql/client-key.pem',
+        :sslcert   => '/etc/mysql/client-cert.pem',
+        :sslca     => '/etc/mysql/ca-cert.pem',
+        :sslcipher => 'DHE-RSA-AES256-SHA',
+        :sslverify => true
       )
       # rubocop:enable Style/TrailingComma
     }.not_to raise_error
@@ -161,8 +154,6 @@ RSpec.describe Mysql2::Client do
 
     expect(ssl_client.ssl_cipher).not_to be_empty
     expect(results['Ssl_cipher']).to eql(ssl_client.ssl_cipher)
-
-    ssl_client.close
   end
 
   def run_gc
@@ -214,42 +205,35 @@ RSpec.describe Mysql2::Client do
 
   context "#automatic_close" do
     it "is enabled by default" do
-      client = Mysql2::Client.new(DatabaseCredentials['root'])
-      expect(client.automatic_close?).to be(true)
-      client.close
+      expect(new_client.automatic_close?).to be(true)
     end
 
     if RUBY_PLATFORM =~ /mingw|mswin/
       it "cannot be disabled" do
-        client = nil
         expect do
-          client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
+          client = new_client(:automatic_close => false)
           expect(client.automatic_close?).to be(true)
         end.to output(/always closed by garbage collector/).to_stderr
-        client.close
 
         expect do
-          client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true))
+          client = new_client(:automatic_close => true)
           expect(client.automatic_close?).to be(true)
         end.to_not output(/always closed by garbage collector/).to_stderr
-        client.close
 
         expect do
-          client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true))
+          client = new_client(:automatic_close => true)
           client.automatic_close = false
           expect(client.automatic_close?).to be(true)
         end.to output(/always closed by garbage collector/).to_stderr
-        client.close
       end
     else
       it "can be configured" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
+        client = new_client(:automatic_close => false)
         expect(client.automatic_close?).to be(false)
-        client.close
       end
 
       it "can be assigned" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        client = new_client
         client.automatic_close = false
         expect(client.automatic_close?).to be(false)
 
@@ -261,7 +245,6 @@ RSpec.describe Mysql2::Client do
 
         client.automatic_close = 9
         expect(client.automatic_close?).to be(true)
-        client.close
       end
 
       it "should not close connections when running in a child process" do
@@ -290,7 +273,7 @@ RSpec.describe Mysql2::Client do
     @client.query "CREATE DATABASE IF NOT EXISTS `#{database}`"
 
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root'].merge('database' => database))
+      new_client('database' => database)
     }.not_to raise_error
 
     @client.query "DROP DATABASE IF EXISTS `#{database}`"
@@ -319,7 +302,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should not try to query closed mysql connection" do
-    client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
+    client = new_client(:reconnect => true)
     expect(client.close).to be_nil
     expect {
       client.query "SELECT 1"
@@ -382,72 +365,74 @@ RSpec.describe Mysql2::Client do
 
   context ":local_infile" do
     before(:all) do
-      @client_i = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => true)
-      local = @client_i.query "SHOW VARIABLES LIKE 'local_infile'"
-      local_enabled = local.any? { |x| x['Value'] == 'ON' }
-      pending("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
+      new_client(:local_infile => true) do |client|
+        local = client.query "SHOW VARIABLES LIKE 'local_infile'"
+        local_enabled = local.any? { |x| x['Value'] == 'ON' }
+        pending("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
 
-      @client_i.query %[
-        CREATE TABLE IF NOT EXISTS infileTest (
-          id MEDIUMINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          foo VARCHAR(10),
-          bar MEDIUMTEXT
-        )
-      ]
+        client.query %[
+          CREATE TABLE IF NOT EXISTS infileTest (
+            id MEDIUMINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            foo VARCHAR(10),
+            bar MEDIUMTEXT
+          )
+        ]
+      end
     end
 
     after(:all) do
-      @client_i.query "DROP TABLE infileTest"
-      @client_i.close
+      new_client do |client|
+        client.query "DROP TABLE infileTest"
+      end
     end
 
     it "should raise an error when local_infile is disabled" do
-      client = Mysql2::Client.new DatabaseCredentials['root'].merge(:local_infile => false)
+      client = new_client(:local_infile => false)
       expect {
         client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
       }.to raise_error(Mysql2::Error, /command is not allowed/)
-      client.close
     end
 
     it "should raise an error when a non-existent file is loaded" do
+      client = new_client(:local_infile => true)
       expect {
-        @client_i.query "LOAD DATA LOCAL INFILE 'this/file/is/not/here' INTO TABLE infileTest"
+        client.query "LOAD DATA LOCAL INFILE 'this/file/is/not/here' INTO TABLE infileTest"
       }.to raise_error(Mysql2::Error, 'No such file or directory: this/file/is/not/here')
     end
 
     it "should LOAD DATA LOCAL INFILE" do
-      @client_i.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
-      info = @client_i.query_info
+      client = new_client(:local_infile => true)
+      client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
+      info = client.query_info
       expect(info).to eql(:records => 1, :deleted => 0, :skipped => 0, :warnings => 0)
 
-      result = @client_i.query "SELECT * FROM infileTest"
+      result = client.query "SELECT * FROM infileTest"
       expect(result.first).to eql('id' => 1, 'foo' => 'Hello', 'bar' => 'World')
     end
   end
 
   it "should expect connect_timeout to be a positive integer" do
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root'].merge(:connect_timeout => -1))
+      new_client(:connect_timeout => -1)
     }.to raise_error(Mysql2::Error)
   end
 
   it "should expect read_timeout to be a positive integer" do
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => -1))
+      new_client(:read_timeout => -1)
     }.to raise_error(Mysql2::Error)
   end
 
   it "should expect write_timeout to be a positive integer" do
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root'].merge(:write_timeout => -1))
+      new_client(:write_timeout => -1)
     }.to raise_error(Mysql2::Error)
   end
 
   it "should allow nil read_timeout" do
-    client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => nil))
+    client = new_client(:read_timeout => nil)
 
     expect(client.read_timeout).to be_nil
-    client.close
   end
 
   context "#query" do
@@ -545,7 +530,7 @@ RSpec.describe Mysql2::Client do
       end
 
       it "should timeout if we wait longer than :read_timeout" do
-        client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => 0))
+        client = new_client(:read_timeout => 0)
         expect {
           client.query('SELECT SLEEP(0.1)')
         }.to raise_error(Mysql2::Error)
@@ -618,11 +603,10 @@ RSpec.describe Mysql2::Client do
             pending('libmysqlclient 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 
-          client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:reconnect => true))
+          client = new_client(:reconnect => true)
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
-          client.close
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction" do
@@ -630,7 +614,7 @@ RSpec.describe Mysql2::Client do
             pending('libmysqlclient 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 
-          client = Mysql2::Client.new(DatabaseCredentials['root'])
+          client = new_client
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to raise_error(Mysql2::Error)
@@ -639,7 +623,6 @@ RSpec.describe Mysql2::Client do
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
-          client.close
         end
       end
 
@@ -649,9 +632,9 @@ RSpec.describe Mysql2::Client do
         # Note that each thread opens its own database connection
         threads = 5.times.map do
           Thread.new do
-            client = Mysql2::Client.new(DatabaseCredentials.fetch('root'))
-            client.query("SELECT SLEEP(#{sleep_time})")
-            client.close
+            new_client do |client|
+              client.query("SELECT SLEEP(#{sleep_time})")
+            end
             Thread.current.object_id
           end
         end
@@ -688,11 +671,7 @@ RSpec.describe Mysql2::Client do
 
     context "Multiple results sets" do
       before(:each) do
-        @multi_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:flags => Mysql2::Client::MULTI_STATEMENTS))
-      end
-
-      after(:each) do
-        @multi_client.close
+        @multi_client = new_client(:flags => Mysql2::Client::MULTI_STATEMENTS)
       end
 
       it "should raise an exception when one of multiple statements fails" do
@@ -849,7 +828,7 @@ RSpec.describe Mysql2::Client do
     context 'when mysql encoding is not utf8' do
       before { pending('Encoding is undefined') unless defined?(Encoding) }
 
-      let(:client) { Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "ujis")) }
+      let(:client) { new_client(:encoding => "ujis") }
 
       it 'should return a internal encoding string if Encoding.default_internal is set' do
         with_internal_encoding Encoding::UTF_8 do
@@ -918,7 +897,7 @@ RSpec.describe Mysql2::Client do
       with_internal_encoding nil do
         expect(@client.server_info[:version].encoding).to eql(Encoding::UTF_8)
 
-        client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+        client2 = new_client(:encoding => 'ascii')
         expect(client2.server_info[:version].encoding).to eql(Encoding::ASCII)
       end
     end
@@ -936,11 +915,11 @@ RSpec.describe Mysql2::Client do
 
   it "should raise a Mysql2::Error exception upon connection failure" do
     expect {
-      Mysql2::Client.new :host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42'
+      new_client(:host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42')
     }.to raise_error(Mysql2::Error)
 
     expect {
-      Mysql2::Client.new DatabaseCredentials['root']
+      new_client(DatabaseCredentials['root'])
     }.not_to raise_error
   end
 

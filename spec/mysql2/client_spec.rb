@@ -178,13 +178,15 @@ RSpec.describe Mysql2::Client do
 
       # mysql_close sends a quit command without waiting for a response
       # so give the server some time to handle the detect the closed connection
+      closed = false
       10.times do
-        break unless @client.query("SHOW PROCESSLIST").detect { |row| row['Id'] == connection_id }
+        closed = @client.query("SHOW PROCESSLIST").none? { |row| row['Id'] == connection_id }
+        break if closed
         sleep(0.1)
       end
+      expect(closed).to eq(true)
     }.to_not change {
-      @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
-        @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
+      @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a
     }
   end
 

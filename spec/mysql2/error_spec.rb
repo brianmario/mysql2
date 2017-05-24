@@ -15,6 +15,8 @@ RSpec.describe Mysql2::Error do
     error
   end
 
+  after(:each) { client.close }
+
   it "responds to error_number and sql_state, with aliases" do
     expect(error).to respond_to(:error_number)
     expect(error).to respond_to(:sql_state)

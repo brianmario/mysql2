@@ -3,6 +3,7 @@ require './spec/spec_helper.rb'
 
 RSpec.describe Mysql2::Statement do
   before :each do
+    @client.close
     @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
   end
 

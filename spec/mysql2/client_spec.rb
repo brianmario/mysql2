@@ -6,6 +6,7 @@ RSpec.describe Mysql2::Client do
     let(:cnf_file) { File.expand_path('../../my.cnf', __FILE__) }
 
     it "should not raise an exception for valid defaults group" do
+      @client.close
       expect {
         opts = DatabaseCredentials['root'].merge(:default_file => cnf_file, :default_group => "test")
         @client = Mysql2::Client.new(opts)
@@ -13,6 +14,7 @@ RSpec.describe Mysql2::Client do
     end
 
     it "should not raise an exception without default group" do
+      @client.close
       expect {
         @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:default_file => cnf_file))
       }.not_to raise_error
@@ -91,6 +93,7 @@ RSpec.describe Mysql2::Client do
     client = Mysql2::Client.new(options)
     result = client.query("SELECT @something;")
     expect(result.first['@something']).to eq('setting_value')
+    client.close
   end
 
   it "should send init_command after reconnect" do
@@ -121,6 +124,7 @@ RSpec.describe Mysql2::Client do
     # At last, check that the init command executed
     result = client.query("SELECT @something;")
     expect(result.first['@something']).to eq('setting_value')
+    client.close
   end
 
   it "should have a global default_query_options hash" do
@@ -212,30 +216,36 @@ RSpec.describe Mysql2::Client do
     it "is enabled by default" do
       client = Mysql2::Client.new(DatabaseCredentials['root'])
       expect(client.automatic_close?).to be(true)
+      client.close
     end
 
     if RUBY_PLATFORM =~ /mingw|mswin/
       it "cannot be disabled" do
+        client = nil
         expect do
           client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
           expect(client.automatic_close?).to be(true)
         end.to output(/always closed by garbage collector/).to_stderr
+        client.close
 
         expect do
           client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true))
           expect(client.automatic_close?).to be(true)
         end.to_not output(/always closed by garbage collector/).to_stderr
+        client.close
 
         expect do
           client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => true))
           client.automatic_close = false
           expect(client.automatic_close?).to be(true)
         end.to output(/always closed by garbage collector/).to_stderr
+        client.close
       end
     else
       it "can be configured" do
         client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:automatic_close => false))
         expect(client.automatic_close?).to be(false)
+        client.close
       end
 
       it "can be assigned" do
@@ -251,6 +261,7 @@ RSpec.describe Mysql2::Client do
 
         client.automatic_close = 9
         expect(client.automatic_close?).to be(true)
+        client.close
       end
 
       it "should not close connections when running in a child process" do
@@ -269,6 +280,7 @@ RSpec.describe Mysql2::Client do
         # this will throw an error if the underlying socket was shutdown by the
         # child's GC
         expect { client.query('SELECT 1') }.to_not raise_exception
+        client.close
       end
     end
   end
@@ -386,6 +398,7 @@ RSpec.describe Mysql2::Client do
 
     after(:all) do
       @client_i.query "DROP TABLE infileTest"
+      @client_i.close
     end
 
     it "should raise an error when local_infile is disabled" do
@@ -393,6 +406,7 @@ RSpec.describe Mysql2::Client do
       expect {
         client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
       }.to raise_error(Mysql2::Error, /command is not allowed/)
+      client.close
     end
 
     it "should raise an error when a non-existent file is loaded" do
@@ -433,6 +447,7 @@ RSpec.describe Mysql2::Client do
     client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:read_timeout => nil))
 
     expect(client.read_timeout).to be_nil
+    client.close
   end
 
   context "#query" do
@@ -607,6 +622,7 @@ RSpec.describe Mysql2::Client do
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
+          client.close
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction" do
@@ -623,6 +639,7 @@ RSpec.describe Mysql2::Client do
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
+          client.close
         end
       end
 
@@ -634,6 +651,7 @@ RSpec.describe Mysql2::Client do
           Thread.new do
             client = Mysql2::Client.new(DatabaseCredentials.fetch('root'))
             client.query("SELECT SLEEP(#{sleep_time})")
+            client.close
             Thread.current.object_id
           end
         end
@@ -671,6 +689,10 @@ RSpec.describe Mysql2::Client do
     context "Multiple results sets" do
       before(:each) do
         @multi_client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:flags => Mysql2::Client::MULTI_STATEMENTS))
+      end
+
+      after(:each) do
+        @multi_client.close
       end
 
       it "should raise an exception when one of multiple statements fails" do

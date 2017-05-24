@@ -247,17 +247,13 @@ RSpec.describe Mysql2::Client do
         client = Mysql2::Client.new(DatabaseCredentials['root'])
         client.automatic_close = false
 
-        # this empty `fork` call fixes this tests on RBX; without it, the next
-        # `fork` call hangs forever. WTF?
-        fork {}
-
-        fork do
+        child = fork do
           client.query('SELECT 1')
           client = nil
           run_gc
         end
 
-        Process.wait
+        Process.wait(child)
 
         # this will throw an error if the underlying socket was shutdown by the
         # child's GC

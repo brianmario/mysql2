@@ -638,10 +638,11 @@ RSpec.describe Mysql2::Client do
       end
 
       it "evented async queries should be supported" do
+        skip("ruby 1.8 doesn't support IO.for_fd options") if RUBY_VERSION.start_with?("1.8.")
         # should immediately return nil
         expect(@client.query("SELECT sleep(0.1)", :async => true)).to eql(nil)
 
-        io_wrapper = IO.for_fd(@client.socket)
+        io_wrapper = IO.for_fd(@client.socket, :autoclose => false)
         loops = 0
         loop do
           if IO.select([io_wrapper], nil, nil, 0.05)

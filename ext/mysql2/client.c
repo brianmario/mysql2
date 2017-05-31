@@ -266,9 +266,12 @@ static VALUE invalidate_fd(int clientfd)
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
-  mysql_close(wrapper->client);
-  wrapper->reconnect_enabled = 0;
-  wrapper->active_thread = Qnil;
+  if (!wrapper->closed) {
+    mysql_close(wrapper->client);
+    wrapper->closed = 1;
+    wrapper->reconnect_enabled = 0;
+    wrapper->active_thread = Qnil;
+  }
 
   return NULL;
 }
@@ -319,6 +322,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->connect_timeout = 0;
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
   wrapper->refcount = 1;
+  wrapper->closed = 0;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
 
   return obj;

@@ -46,7 +46,7 @@ typedef struct {
   int automatic_close;
   int initialized;
   int refcount;
-  int freed;
+  int closed;
   MYSQL *client;
 } mysql_client_wrapper;
 

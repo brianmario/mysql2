@@ -295,6 +295,17 @@ RSpec.describe Mysql2::Client do
     }.to raise_error(Mysql2::Error)
   end
 
+  context "#closed?" do
+    it "should return false when connected" do
+      expect(@client.closed?).to eql(false)
+    end
+
+    it "should return true after close" do
+      @client.close
+      expect(@client.closed?).to eql(true)
+    end
+  end
+
   it "should respond to #query" do
     expect(@client).to respond_to(:query)
   end

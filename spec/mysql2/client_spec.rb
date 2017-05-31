@@ -474,6 +474,20 @@ RSpec.describe Mysql2::Client do
       }.to raise_error(Mysql2::Error)
     end
 
+    it "should detect closed connection on query read error" do
+      connection_id = @client.thread_id
+      Thread.new do
+        sleep(0.1)
+        Mysql2::Client.new(DatabaseCredentials['root']).tap do |supervisor|
+          supervisor.query("KILL #{connection_id}")
+        end.close
+      end
+      expect {
+        @client.query("SELECT SLEEP(1)")
+      }.to raise_error(Mysql2::Error, /Lost connection to MySQL server/)
+      expect { @client.socket }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+    end
+
     if RUBY_PLATFORM !~ /mingw|mswin/
       it "should not allow another query to be sent without fetching a result first" do
         @client.query("SELECT 1", :async => true)

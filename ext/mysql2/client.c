@@ -30,15 +30,17 @@ VALUE rb_hash_dup(VALUE other) {
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
 
+#define CONNECTED(wrapper) (wrapper->client && wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
+
 #define REQUIRE_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \
-  if (!wrapper->connected && !wrapper->reconnect_enabled) { \
+  if (!CONNECTED(wrapper) && !wrapper->reconnect_enabled) { \
     rb_raise(cMysql2Error, "MySQL client is not connected"); \
   }
 
 #define REQUIRE_NOT_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \
-  if (wrapper->connected) { \
+  if (CONNECTED(wrapper)) { \
     rb_raise(cMysql2Error, "MySQL connection is already open"); \
   }
 
@@ -268,7 +270,6 @@ static void *nogvl_close(void *ptr) {
     mysql_close(wrapper->client);
     xfree(wrapper->client);
     wrapper->client = NULL;
-    wrapper->connected = 0;
     wrapper->active_thread = Qnil;
   }
 
@@ -287,7 +288,7 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
 
   if (wrapper->refcount == 0) {
 #ifndef _WIN32
-    if (wrapper->connected && !wrapper->automatic_close) {
+    if (CONNECTED(wrapper) && !wrapper->automatic_close) {
       /* The client is being garbage collected while connected. Prevent
        * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
        * the socket by invalidating it. invalidate_fd() will drop this
@@ -299,6 +300,7 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
         fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely\n");
         close(wrapper->client->net.fd);
       }
+      wrapper->client->net.fd = -1;
     }
 #endif
 
@@ -317,7 +319,6 @@ static VALUE allocate(VALUE klass) {
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
   wrapper->connect_timeout = 0;
-  wrapper->connected = 0; /* means that a database connection is open */
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
   wrapper->refcount = 1;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
@@ -450,7 +451,6 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   }
 
   wrapper->server_version = mysql_get_server_version(wrapper->client);
-  wrapper->connected = 1;
   return self;
 }
 
@@ -465,7 +465,7 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
 static VALUE rb_mysql_client_close(VALUE self) {
   GET_CLIENT(self);
 
-  if (wrapper->connected) {
+  if (wrapper->client) {
     rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
   }
 
@@ -591,16 +591,16 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   GET_CLIENT(self);
 
   wrapper->active_thread = Qnil;
-  wrapper->connected = 0;
 
   /* Invalidate the MySQL socket to prevent further communication.
    * The GC will come along later and call mysql_close to free it.
    */
-  if (wrapper->client) {
+  if (wrapper->client && CONNECTED(wrapper)) {
     if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
       fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
       close(wrapper->client->net.fd);
     }
+    wrapper->client->net.fd = -1;
   }
 
   rb_exc_raise(error);
@@ -656,19 +656,21 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
 
   /* Check if execution terminated while result was still being read. */
   if (!NIL_P(wrapper->active_thread)) {
-    /* Invalidate the MySQL socket to prevent further communication. */
+    if (CONNECTED(wrapper)) {
+      /* Invalidate the MySQL socket to prevent further communication. */
 #ifndef _WIN32
-    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
-      rb_warn("mysql2 failed to invalidate FD safely, closing unsafely\n");
-      close(wrapper->client->net.fd);
-    }
+      if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+        rb_warn("mysql2 failed to invalidate FD safely, closing unsafely\n");
+        close(wrapper->client->net.fd);
+      }
 #else
-    close(wrapper->client->net.fd);
+      close(wrapper->client->net.fd);
 #endif
+      wrapper->client->net.fd = -1;
+    }
     /* Skip mysql client check performed before command execution. */
     wrapper->client->status = MYSQL_STATUS_READY;
     wrapper->active_thread = Qnil;
-    wrapper->connected = 0;
   }
 
   return Qnil;
@@ -1080,7 +1082,7 @@ static void *nogvl_ping(void *ptr) {
 static VALUE rb_mysql_client_ping(VALUE self) {
   GET_CLIENT(self);
 
-  if (!wrapper->connected) {
+  if (!CONNECTED(wrapper)) {
     return Qfalse;
   } else {
     return (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);

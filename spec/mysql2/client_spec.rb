@@ -172,10 +172,21 @@ RSpec.describe Mysql2::Client do
 
   it "should terminate connections when calling close" do
     expect {
-      Mysql2::Client.new(DatabaseCredentials['root']).close
+      client = Mysql2::Client.new(DatabaseCredentials['root'])
+      connection_id = client.thread_id
+      client.close
+
+      # mysql_close sends a quit command without waiting for a response
+      # so give the server some time to handle the detect the closed connection
+      closed = false
+      10.times do
+        closed = @client.query("SHOW PROCESSLIST").none? { |row| row['Id'] == connection_id }
+        break if closed
+        sleep(0.1)
+      end
+      expect(closed).to eq(true)
     }.to_not change {
-      @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
-        @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
+      @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a
     }
   end
 

@@ -30,7 +30,7 @@ VALUE rb_hash_dup(VALUE other) {
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
 
-#define CONNECTED(wrapper) (wrapper->client && wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
+#define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
 
 #define REQUIRE_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \
@@ -266,10 +266,10 @@ static VALUE invalidate_fd(int clientfd)
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
-  if (wrapper->client) {
+  if (!wrapper->closed) {
     mysql_close(wrapper->client);
-    xfree(wrapper->client);
-    wrapper->client = NULL;
+    wrapper->closed = 1;
+    wrapper->reconnect_enabled = 0;
     wrapper->active_thread = Qnil;
   }
 
@@ -305,6 +305,7 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
 #endif
 
     nogvl_close(wrapper);
+    xfree(wrapper->client);
     xfree(wrapper);
   }
 }
@@ -321,6 +322,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->connect_timeout = 0;
   wrapper->initialized = 0; /* means that that the wrapper is initialized */
   wrapper->refcount = 1;
+  wrapper->closed = 0;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
 
   return obj;
@@ -605,7 +607,7 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   /* Invalidate the MySQL socket to prevent further communication.
    * The GC will come along later and call mysql_close to free it.
    */
-  if (wrapper->client && CONNECTED(wrapper)) {
+  if (CONNECTED(wrapper)) {
     if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
       fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
       close(wrapper->client->net.fd);

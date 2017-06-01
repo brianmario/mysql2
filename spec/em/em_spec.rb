@@ -70,6 +70,7 @@ begin
       let(:client) { Mysql2::EM::Client.new DatabaseCredentials['root'] }
       let(:error) { StandardError.new('some error') }
       before { allow(client).to receive(:async_result).and_raise(error) }
+      after { client.close }
 
       it "should swallow exceptions raised in by the client" do
         errors = []

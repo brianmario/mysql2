@@ -3,7 +3,7 @@ require './spec/spec_helper.rb'
 
 RSpec.describe Mysql2::Statement do
   before :each do
-    @client = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => "utf8"))
+    @client = new_client(:encoding => "utf8")
   end
 
   def stmt_count
@@ -524,10 +524,9 @@ RSpec.describe Mysql2::Statement do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+          client2 = new_client(:encoding => 'ascii')
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['enum_test'].encoding).to eql(Encoding::US_ASCII)
-          client2.close
         end
       end
 
@@ -557,10 +556,9 @@ RSpec.describe Mysql2::Statement do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['set_test'].encoding).to eql(Encoding::UTF_8)
 
-          client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+          client2 = new_client(:encoding => 'ascii')
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['set_test'].encoding).to eql(Encoding::US_ASCII)
-          client2.close
         end
       end
 
@@ -651,10 +649,9 @@ RSpec.describe Mysql2::Statement do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               expect(result[field].encoding).to eql(Encoding::UTF_8)
 
-              client2 = Mysql2::Client.new(DatabaseCredentials['root'].merge(:encoding => 'ascii'))
+              client2 = new_client(:encoding => 'ascii')
               result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               expect(result[field].encoding).to eql(Encoding::US_ASCII)
-              client2.close
             end
           end
 

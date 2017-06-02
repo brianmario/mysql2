@@ -511,7 +511,12 @@ RSpec.describe Mysql2::Client do
       expect {
         @client.query("SELECT SLEEP(1)")
       }.to raise_error(Mysql2::Error, /Lost connection to MySQL server/)
-      expect { @client.socket }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+
+      if RUBY_PLATFORM !~ /mingw|mswin/
+        expect {
+          @client.socket
+        }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+      end
     end
 
     if RUBY_PLATFORM !~ /mingw|mswin/
@@ -749,7 +754,7 @@ RSpec.describe Mysql2::Client do
     it "#socket should raise as it's not supported" do
       expect {
         @client.socket
-      }.to raise_error(Mysql2::Error)
+      }.to raise_error(Mysql2::Error, /Raw access to the mysql file descriptor isn't supported on Windows/)
     end
   end
 

@@ -66,7 +66,7 @@ module Mysql2
 
       if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @query_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="
-        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock will be deprecated at some point in the future."
+        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."
         warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
         warn "============= END WARNING FROM mysql2 ========="
       end

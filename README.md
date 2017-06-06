@@ -112,7 +112,7 @@ Connect to a database:
 ``` ruby
 # this takes a hash of options, almost all of which map directly
 # to the familiar database.yml in rails
-# See http://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/MysqlAdapter.html
+# See http://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/Mysql2Adapter.html
 client = Mysql2::Client.new(:host => "localhost", :username => "root")
 ```
 

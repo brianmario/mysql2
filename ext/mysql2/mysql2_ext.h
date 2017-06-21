@@ -20,6 +20,9 @@ void Init_mysql2(void);
 #include <mysql/errmsg.h>
 #include <mysql/mysqld_error.h>
 #endif
+#ifdef HAVE_MYSQL_MYSQL_VERSION_H
+#include <mysql/mysql_version.h>
+#endif
 
 #ifdef HAVE_RUBY_ENCODING_H
 #include <ruby/encoding.h>

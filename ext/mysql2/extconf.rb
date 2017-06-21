@@ -25,7 +25,6 @@ end
 # MariaDB 10.2+ Needs mysql/mysql_version.h loaded to get the constants we need
 have_header('mysql/mysql_version.h')
 
-
 # 2.1+
 have_func('rb_absint_size')
 have_func('rb_absint_singlebit_p')

@@ -14,13 +14,12 @@ void Init_mysql2(void);
 #include <mysql_com.h>
 #include <errmsg.h>
 #include <mysqld_error.h>
+#include <mysql_version.h>
 #else
 #include <mysql/mysql.h>
 #include <mysql/mysql_com.h>
 #include <mysql/errmsg.h>
 #include <mysql/mysqld_error.h>
-#endif
-#ifdef HAVE_MYSQL_MYSQL_VERSION_H
 #include <mysql/mysql_version.h>
 #endif
 

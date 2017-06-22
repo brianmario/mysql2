@@ -112,7 +112,7 @@ RSpec.describe Mysql2::Result do
       @test_result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1")
     end
 
-    it "method should exist" do
+    it "should exist" do
       expect(@test_result).to respond_to(:fields)
     end
 

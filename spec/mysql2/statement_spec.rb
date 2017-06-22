@@ -329,6 +329,7 @@ RSpec.describe Mysql2::Statement do
     before(:each) do
       @client.query "USE test"
       @test_result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute
+      @client.query 'CREATE TABLE IF NOT EXISTS fieldsTest (blah varchar(10))'
     end
 
     it "method should exist" do
@@ -338,6 +339,11 @@ RSpec.describe Mysql2::Statement do
     it "should return an array of field names in proper order" do
       result = @client.prepare("SELECT 'a', 'b', 'c'").execute
       expect(result.fields).to eql(%w(a b c))
+    end
+
+    it "should return an empty array for some statements that are not SELECT" do
+      result = @client.prepare("INSERT INTO fieldsTest (blah) VALUES (?)")
+      expect(result.fields).to eql([])
     end
   end
 

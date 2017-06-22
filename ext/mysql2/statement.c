@@ -479,7 +479,7 @@ static VALUE fields(VALUE self) {
 #endif
 
   metadata = mysql_stmt_result_metadata(stmt);
-  if (metadata == NULL) {
+  if (!metadata) {
     return rb_ary_new();
   }
   fields      = mysql_fetch_fields(metadata);

@@ -478,7 +478,10 @@ static VALUE fields(VALUE self) {
   }
 #endif
 
-  metadata    = mysql_stmt_result_metadata(stmt);
+  metadata = mysql_stmt_result_metadata(stmt);
+  if (!metadata) {
+    return rb_ary_new();
+  }
   fields      = mysql_fetch_fields(metadata);
   field_count = mysql_stmt_field_count(stmt);
   field_list  = rb_ary_new2((long)field_count);

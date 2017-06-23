@@ -339,6 +339,11 @@ RSpec.describe Mysql2::Statement do
       result = @client.prepare("SELECT 'a', 'b', 'c'").execute
       expect(result.fields).to eql(%w(a b c))
     end
+
+    it "should return an empty array for some statements that are not SELECT" do
+      result = @client.prepare("INSERT INTO mysql2_test (id) VALUES (?)")
+      expect(result.fields).to eql([])
+    end
   end
 
   context "row data type mapping" do

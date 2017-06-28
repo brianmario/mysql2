@@ -105,12 +105,15 @@ else
   asplode 'mysql.h'
 end
 
-add_ssl_defines([prefix, 'mysql.h'].compact.join('/'))
-
 %w(errmsg.h mysqld_error.h).each do |h|
   header = [prefix, h].compact.join '/'
   asplode h unless have_header header
 end
+
+mysql_h = [prefix, 'mysql.h'].compact.join('/')
+add_ssl_defines(mysql_h)
+have_struct_member('MYSQL', 'net.vio', mysql_h)
+have_struct_member('MYSQL', 'net.pvio', mysql_h)
 
 # This is our wishlist. We use whichever flags work on the host.
 # -Wall and -Wextra are included by default.

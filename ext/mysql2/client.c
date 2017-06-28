@@ -30,7 +30,11 @@ VALUE rb_hash_dup(VALUE other) {
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
 
-#define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
+#if defined(HAVE_MYSQL_NET_VIO) || defined(HAVE_ST_NET_VIO)
+  #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
+#elif defined(HAVE_MYSQL_NET_PVIO) || defined(HAVE_ST_NET_PVIO)
+  #define CONNECTED(wrapper) (wrapper->client->net.pvio != NULL && wrapper->client->net.fd != -1)
+#endif
 
 #define REQUIRE_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \

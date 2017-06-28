@@ -408,7 +408,22 @@ static VALUE rb_mysql_get_ssl_cipher(VALUE self)
   return rb_str;
 }
 
-static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags) {
+#if HAVE_MYSQL_OPTIONS4
+static int opt_connect_attr_add_i(VALUE key, VALUE value, VALUE arg)
+{
+  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)arg;
+#ifdef HAVE_RUBY_ENCODING_H
+  rb_encoding *enc = rb_to_encoding(wrapper->encoding);
+  key = rb_str_export_to_enc(key, enc);
+  value = rb_str_export_to_enc(value, enc);
+#endif
+
+  mysql_options4(wrapper->client, MYSQL_OPT_CONNECT_ATTR_ADD, StringValueCStr(key), StringValueCStr(value));
+  return ST_CONTINUE;
+}
+#endif
+
+static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags, VALUE conn_attrs) {
   struct nogvl_connect_args args;
   time_t start_time, end_time, elapsed_time, connect_timeout;
   VALUE rv;
@@ -422,6 +437,11 @@ static VALUE rb_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE po
   args.db          = NIL_P(database) ? NULL : StringValueCStr(database);
   args.mysql       = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
+
+#if HAVE_MYSQL_OPTIONS4
+  mysql_options(wrapper->client, MYSQL_OPT_CONNECT_ATTR_RESET, 0);
+  rb_hash_foreach(conn_attrs, opt_connect_attr_add_i, (VALUE)wrapper);
+#endif
 
   if (wrapper->connect_timeout)
     time(&start_time);
@@ -1424,7 +1444,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
   rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
-  rb_define_private_method(cMysql2Client, "connect", rb_connect, 7);
+  rb_define_private_method(cMysql2Client, "connect", rb_connect, 8);
   rb_define_private_method(cMysql2Client, "_query", rb_query, 2);
 
   sym_id              = ID2SYM(rb_intern("id"));

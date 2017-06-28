@@ -435,6 +435,26 @@ RSpec.describe Mysql2::Client do
     expect(client.read_timeout).to be_nil
   end
 
+  it "should set default program_name in connect_attrs" do
+    client = Mysql2::Client.new
+    if Mysql2::Client.info[:version] < '5.6' or client.info[:version] < '5.6'
+      pending('Both client and server versions must be MySQL 5.6 or later.')
+    end
+    result = client.query("SELECT attr_value FROM performance_schema.session_account_connect_attrs where processlist_id = connection_id() and attr_name = 'program_name'")
+    expect(result.first['attr_value']).to eq($0)
+  end
+
+  it "should set custom connect_attrs" do
+    client = Mysql2::Client.new(:connect_attrs => {:program_name => 'my_program_name', :foo => 'fooval', :bar => 'barval'})
+    if Mysql2::Client.info[:version] < '5.6' or client.info[:version] < '5.6'
+      pending('Both client and server versions must be MySQL 5.6 or later.')
+    end
+    results = Hash[client.query("SELECT * FROM performance_schema.session_account_connect_attrs where processlist_id = connection_id()").map { |x| x.values_at('ATTR_NAME', 'ATTR_VALUE') }]
+    expect(results['program_name']).to eq('my_program_name')
+    expect(results['foo']).to eq('fooval')
+    expect(results['bar']).to eq('barval')
+  end
+
   context "#query" do
     it "should let you query again if iterating is finished when streaming" do
       @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).each.to_a

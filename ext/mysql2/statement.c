@@ -468,6 +468,7 @@ static VALUE fields(VALUE self) {
   rb_encoding *default_internal_enc, *conn_enc;
 #endif
   GET_STATEMENT(self);
+  GET_CLIENT(stmt_wrapper->client);
   stmt = stmt_wrapper->stmt;
 
 #ifdef HAVE_RUBY_ENCODING_H
@@ -478,12 +479,22 @@ static VALUE fields(VALUE self) {
   }
 #endif
 
-  metadata    = mysql_stmt_result_metadata(stmt);
+  metadata = mysql_stmt_result_metadata(stmt);
+  if (metadata == NULL) {
+    if (mysql_stmt_errno(stmt) != 0) {
+      // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
+      wrapper->active_thread = Qnil;
+      rb_raise_mysql2_stmt_error(stmt_wrapper);
+    }
+    // no data and no error, so query was not a SELECT
+    return Qnil;
+  }
+
   fields      = mysql_fetch_fields(metadata);
   field_count = mysql_stmt_field_count(stmt);
   field_list  = rb_ary_new2((long)field_count);
 
-  for(i = 0; i < field_count; i++) {
+  for (i = 0; i < field_count; i++) {
     VALUE rb_field;
 
     rb_field = rb_str_new(fields[i].name, fields[i].name_length);

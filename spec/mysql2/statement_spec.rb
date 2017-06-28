@@ -326,18 +326,19 @@ RSpec.describe Mysql2::Statement do
   end
 
   context "#fields" do
-    before(:each) do
-      @client.query "USE test"
-      @test_result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute
-    end
-
     it "method should exist" do
-      expect(@test_result).to respond_to(:fields)
+      stmt = @client.prepare("SELECT 1")
+      expect(stmt).to respond_to(:fields)
     end
 
     it "should return an array of field names in proper order" do
-      result = @client.prepare("SELECT 'a', 'b', 'c'").execute
-      expect(result.fields).to eql(%w(a b c))
+      stmt = @client.prepare("SELECT 'a', 'b', 'c'")
+      expect(stmt.fields).to eql(%w(a b c))
+    end
+
+    it "should return nil for statement with no result fields" do
+      stmt = @client.prepare("INSERT INTO mysql2_test () VALUES ()")
+      expect(stmt.fields).to eql(nil)
     end
   end
 

@@ -113,14 +113,13 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
     return Qnil;
   }
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
-  GET_CLIENT(self); 
+  GET_CLIENT(self);
   int val = NUM2INT( setting );
   if (version >= 50703 && version < 50711) {
     if (val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED) {
       bool b = ( val == SSL_MODE_REQUIRED );
       int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_ENFORCE, &b );
       return INT2NUM(result);
-      
     } else {
       rb_warn( "MySQL client libraries between 5.7.3 and 5.7.10 only support SSL_MODE_DISABLED and SSL_MODE_REQUIRED" );
       return Qnil;
@@ -128,7 +127,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   }
 #endif
 #ifdef FULL_SSL_MODE_SUPPORT
-  GET_CLIENT(self); 
+  GET_CLIENT(self);
   int val = NUM2INT( setting );
 
   if (val != SSL_MODE_DISABLED && val != SSL_MODE_PREFERRED && val != SSL_MODE_REQUIRED && val != SSL_MODE_VERIFY_CA && val != SSL_MODE_VERIFY_IDENTITY) {

@@ -12,6 +12,12 @@ if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
   sudo bash .travis_mysql80.sh
 fi
 
+# Install MariaDB 10.2 if DB=mariadb10.2
+# NOTE this is a workaround until Travis CI merges a fix to its mariadb addon.
+if [[ -n ${DB-} && x$DB =~ ^xmariadb10.2 ]]; then
+  sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.2 libmariadbclient18
+fi
+
 # Install MySQL if OS=darwin
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
   brew update

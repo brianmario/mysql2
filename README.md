@@ -250,47 +250,6 @@ Mysql2::Client.new(
   )
 ```
 
-### Multiple result sets
-
-You can also retrieve multiple result sets. For this to work you need to
-connect with flags `Mysql2::Client::MULTI_STATEMENTS`. Multiple result sets can
-be used with stored procedures that return more than one result set, and for
-bundling several SQL statements into a single call to `client.query`.
-
-``` ruby
-client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS)
-result = client.query('CALL sp_customer_list( 25, 10 )')
-# result now contains the first result set
-while client.next_result
-  result = client.store_result
-  # result now contains the next result set
-end
-```
-
-Repeated calls to `client.next_result` will return true, false, or raise an
-exception if the respective query erred. When `client.next_result` returns true,
-call `client.store_result` to retrieve a result object. Exceptions are not
-raised until `client.next_result` is called to find the status of the respective
-query. Subsequent queries are not executed if an earlier query raised an
-exception. Subsequent calls to `client.next_result` will return false.
-
-``` ruby
-result = client.query('SELECT 1; SELECT 2; SELECT A; SELECT 3')
-p result.first
-
-while client.next_result
-  result = client.store_result
-  p result.first
-end
-```
-
-Yields:
-```
-{"1"=>1}
-{"2"=>2}
-next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
-```
-
 ### Secure auth
 
 Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
@@ -345,6 +304,47 @@ It is useful if you want to provide session options which survive reconnection.
 
 ``` ruby
 Mysql2::Client.new(:init_command => "SET @@SESSION.sql_mode = 'STRICT_ALL_TABLES'")
+```
+
+### Multiple result sets
+
+You can also retrieve multiple result sets. For this to work you need to
+connect with flags `Mysql2::Client::MULTI_STATEMENTS`. Multiple result sets can
+be used with stored procedures that return more than one result set, and for
+bundling several SQL statements into a single call to `client.query`.
+
+``` ruby
+client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS)
+result = client.query('CALL sp_customer_list( 25, 10 )')
+# result now contains the first result set
+while client.next_result
+  result = client.store_result
+  # result now contains the next result set
+end
+```
+
+Repeated calls to `client.next_result` will return true, false, or raise an
+exception if the respective query erred. When `client.next_result` returns true,
+call `client.store_result` to retrieve a result object. Exceptions are not
+raised until `client.next_result` is called to find the status of the respective
+query. Subsequent queries are not executed if an earlier query raised an
+exception. Subsequent calls to `client.next_result` will return false.
+
+``` ruby
+result = client.query('SELECT 1; SELECT 2; SELECT A; SELECT 3')
+p result.first
+
+while client.next_result
+  result = client.store_result
+  p result.first
+end
+```
+
+Yields:
+```
+{"1"=>1}
+{"2"=>2}
+next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
 ```
 
 ## Cascading config

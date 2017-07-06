@@ -903,10 +903,12 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval  = charval;
       break;
 
+#ifdef MYSQL_ENABLE_CLEARTEXT_PLUGIN
     case MYSQL_ENABLE_CLEARTEXT_PLUGIN:
       boolval = (value == Qfalse ? 0 : 1);
       retval = &boolval;
       break;
+#endif
 
     default:
       return Qfalse;
@@ -1326,7 +1328,11 @@ static VALUE set_init_command(VALUE self, VALUE value) {
 }
 
 static VALUE set_enable_cleartext_plugin(VALUE self, VALUE value) {
+#ifdef MYSQL_ENABLE_CLEARTEXT_PLUGIN
   return _mysql_client_options(self, MYSQL_ENABLE_CLEARTEXT_PLUGIN, value);
+#else
+  rb_raise(cMysql2Error, "enable-cleartext-plugin is not available, you may need a newer MySQL client library");
+#endif
 }
 
 static VALUE initialize_ext(VALUE self) {

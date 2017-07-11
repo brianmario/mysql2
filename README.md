@@ -213,21 +213,18 @@ Mysql2::Client.new(
   )
 ```
 
-### Connecting to localhost
+### Connecting to MySQL on localhost and elsewhere
 
-The underlying MySQL client library has a special interpretation of the "localhost" default connection host name:
+The underlying MySQL client library uses the `:host` parameter to determine the
+type of connection to make, with special interpretation you should be aware of:
 
-  1. Attempt to connect via local socket (as specified in your distribution's my.cnf or `default_file` config file).
-  2. But if the socket is not available, look up "localhost" to find an IP address...
-     * The file "/etc/hosts" is generally the source of truth for "localhost", and can override its value.
-     * Systems with IPv4 use "127.0.0.1"
-     * Systems with IPv6 use "::1"
-     * Systems with both IPv4 and IPv6 can be configured to prefer one or the other.
-  3. If an address is found for "localhost", connect to it over TCP/IP.
-
-You can be explicit about using either a local socket or a TCP/IP connection,
-and whether to use IPv4 or IPv6, by specifying a value other than "localhost"
-for the `host` or `socket` connection options.
+* An empty value or `"localhost"` will attempt a local connection:
+  * On Unix, connect to the default local socket path. (To set a custom socket
+    path, use the `:socket` parameter).
+  * On Windows, connect using a shared-memory connection, if enabled, or TCP.
+* A value of `"."` on Windows specifies a named-pipe connection.
+* An IPv4 or IPv6 address will result in a TCP connection.
+* Any other value will be looked up as a hostname for a TCP connection.
 
 ### SSL options
 

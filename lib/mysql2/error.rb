@@ -8,6 +8,13 @@ module Mysql2
       :replace => '?'.freeze,
     }.freeze
 
+    BaseConnectionError = Class.new(Error)
+
+    CODES = {
+      1045 => AccessDenied = Class.new(BaseConnectionError),
+      2005 => UnknownHost = Class.new(BaseConnectionError),
+    }
+
     attr_reader :error_number, :sql_state
 
     # Mysql gem compatibility
@@ -23,7 +30,8 @@ module Mysql2
     end
 
     def self.new_with_args(msg, server_version, error_number, sql_state)
-      new(msg, server_version, error_number, sql_state)
+      error_class = CODES.fetch(error_number, self)
+      error_class.new(msg, server_version, error_number, sql_state)
     end
 
     private

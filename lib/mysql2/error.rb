@@ -14,19 +14,16 @@ module Mysql2
     alias_method :errno, :error_number
     alias_method :error, :message
 
-    def initialize(msg)
-      @server_version ||= nil
+    def initialize(msg, server_version = nil, error_number = nil, sql_state = nil)
+      @server_version = server_version
+      @error_number = error_number
+      @sql_state = sql_state.respond_to?(:encode) ? sql_state.encode(ENCODE_OPTS) : sql_state
 
       super(clean_message(msg))
     end
 
     def self.new_with_args(msg, server_version, error_number, sql_state)
-      err = allocate
-      err.instance_variable_set('@server_version', server_version)
-      err.instance_variable_set('@error_number', error_number)
-      err.instance_variable_set('@sql_state', sql_state.respond_to?(:encode) ? sql_state.encode(ENCODE_OPTS) : sql_state)
-      err.send(:initialize, msg)
-      err
+      new(msg, server_version, error_number, sql_state)
     end
 
     private

@@ -343,6 +343,16 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
 #endif
           set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
           break;
+        case T_TRUE:
+          bind_buffers[i].buffer_type = MYSQL_TYPE_TINY;
+          bind_buffers[i].buffer = xmalloc(sizeof(signed char));
+          *(signed char*)(bind_buffers[i].buffer) = 1;
+          break;
+        case T_FALSE:
+          bind_buffers[i].buffer_type = MYSQL_TYPE_TINY;
+          bind_buffers[i].buffer = xmalloc(sizeof(signed char));
+          *(signed char*)(bind_buffers[i].buffer) = 0;
+          break;
         default:
           // TODO: what Ruby type should support MYSQL_TYPE_TIME
           if (CLASS_OF(argv[i]) == rb_cTime || CLASS_OF(argv[i]) == cDateTime) {

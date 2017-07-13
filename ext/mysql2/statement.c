@@ -1,7 +1,7 @@
 #include <mysql2_ext.h>
 
 VALUE cMysql2Statement;
-extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
+extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year;
 

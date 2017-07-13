@@ -17,12 +17,12 @@ RSpec.describe Mysql2::Client do
     end
   end
 
-  it "should raise a Mysql::Error::UnknownHost upon connection failure" do
+  it "should raise a Mysql::Error::ConnectionError upon connection failure" do
     expect do
       # The odd local host IP address forces the mysql client library to
       # use a TCP socket rather than a domain socket.
       new_client('host' => '127.0.0.2', 'port' => 999999)
-    end.to raise_error(Mysql2::Error::UnknownHost)
+    end.to raise_error(Mysql2::Error::ConnectionError)
   end
 
   it "should raise an exception on create for invalid encodings" do
@@ -559,7 +559,7 @@ RSpec.describe Mysql2::Client do
         client = new_client(read_timeout: 0)
         expect do
           client.query('SELECT SLEEP(0.1)')
-        end.to raise_error(Mysql2::Error)
+        end.to raise_error(Mysql2::Error::TimeoutError)
       end
 
       # XXX this test is not deterministic (because Unix signal handling is not)
@@ -918,10 +918,10 @@ RSpec.describe Mysql2::Client do
     end
   end
 
-  it "should raise a Mysql2::Error::AccessDenied exception upon connection failure due to invalid credentials" do
-    expect {
-      new_client(:host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42')
-    }.to raise_error(Mysql2::Error::AccessDenied)
+  it "should raise a Mysql2::Error::ConnectionError exception upon connection failure due to invalid credentials" do
+    expect do
+      new_client(host: 'localhost', username: 'asdfasdf8d2h', password: 'asdfasdfw42')
+    end.to raise_error(Mysql2::Error::ConnectionError)
 
     expect do
       new_client(DatabaseCredentials['root'])

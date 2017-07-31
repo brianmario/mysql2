@@ -3,7 +3,7 @@ source 'https://rubygems.org'
 gemspec
 
 gem 'rake', '~> 10.4.2'
-gem 'rake-compiler', '~> 0.9.5'
+gem 'rake-compiler', '~> 1.0'
 
 group :test do
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
@@ -22,7 +22,7 @@ end
 
 group :development do
   gem 'pry'
-  gem 'rake-compiler-dock', '~> 0.5.1'
+  gem 'rake-compiler-dock', '~> 0.6.0'
 end
 
 platforms :rbx do

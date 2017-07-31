@@ -92,7 +92,7 @@ elsif (mc = (with_config('mysql-config') || Dir[GLOB].first))
 else
   _, usr_local_lib = dir_config('mysql', '/usr/local')
 
-  asplode("mysql client") unless find_library('mysqlclient', 'mysql_query', usr_local_lib, "#{usr_local_lib}/mysql")
+  asplode("mysql client") unless find_library('mysqlclient', nil, usr_local_lib, "#{usr_local_lib}/mysql")
 
   rpath_dir = usr_local_lib
 end
@@ -177,7 +177,7 @@ unless enabled_sanitizers.empty?
   $CFLAGS << ' -g -fno-omit-frame-pointer'
 end
 
-if RUBY_PLATFORM =~ /mswin|mingw/
+if RUBY_PLATFORM =~ /mswin|mingw/ && !defined?(RubyInstaller)
   # Build libmysql.a interface link library
   require 'rake'
 

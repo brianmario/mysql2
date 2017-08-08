@@ -114,6 +114,7 @@ mysql_h = [prefix, 'mysql.h'].compact.join('/')
 add_ssl_defines(mysql_h)
 have_struct_member('MYSQL', 'net.vio', mysql_h)
 have_struct_member('MYSQL', 'net.pvio', mysql_h)
+have_const('MYSQL_ENABLE_CLEARTEXT_PLUGIN', mysql_h)
 
 # This is our wishlist. We use whichever flags work on the host.
 # -Wall and -Wextra are included by default.

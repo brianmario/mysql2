@@ -1026,6 +1026,11 @@ RSpec.describe Mysql2::Client do
     expect(@client.ping).to eql(false)
   end
 
+  it "should be able to connect using plaintext password" do
+    client = new_client(:enable_cleartext_plugin => true)
+    client.query('SELECT 1')
+  end
+
   unless RUBY_VERSION =~ /1.8/
     it "should respond to #encoding" do
       expect(@client).to respond_to(:encoding)

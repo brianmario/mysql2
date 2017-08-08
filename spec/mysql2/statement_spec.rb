@@ -61,6 +61,12 @@ RSpec.describe Mysql2::Statement do
     expect(rows).to eq([{ "1" => 1 }])
   end
 
+  it "should handle booleans" do
+    stmt = @client.prepare('SELECT ? AS `true`, ? AS `false`')
+    result = stmt.execute(true, false)
+    expect(result.to_a).to eq(['true' => 1, 'false' => 0])
+  end
+
   it "should handle bignum but in int64_t" do
     stmt = @client.prepare('SELECT ? AS max, ? AS min')
     int64_max = (1 << 63) - 1

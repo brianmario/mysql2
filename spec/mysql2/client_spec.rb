@@ -368,7 +368,7 @@ RSpec.describe Mysql2::Client do
       new_client(:local_infile => true) do |client|
         local = client.query "SHOW VARIABLES LIKE 'local_infile'"
         local_enabled = local.any? { |x| x['Value'] == 'ON' }
-        pending("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
+        skip("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
 
         client.query %[
           CREATE TABLE IF NOT EXISTS infileTest (
@@ -382,7 +382,7 @@ RSpec.describe Mysql2::Client do
 
     after(:all) do
       new_client do |client|
-        client.query "DROP TABLE infileTest"
+        client.query "DROP TABLE IF EXISTS infileTest"
       end
     end
 

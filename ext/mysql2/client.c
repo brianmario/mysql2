@@ -1430,9 +1430,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "write_timeout=", set_write_timeout, 1);
   rb_define_private_method(cMysql2Client, "local_infile=", set_local_infile, 1);
   rb_define_private_method(cMysql2Client, "charset_name=", set_charset_name, 1);
-#if defined(MYSQL_SECURE_AUTH)
   rb_define_private_method(cMysql2Client, "secure_auth=", set_secure_auth, 1);
-#endif
   rb_define_private_method(cMysql2Client, "default_file=", set_read_default_file, 1);
   rb_define_private_method(cMysql2Client, "default_group=", set_read_default_group, 1);
   rb_define_private_method(cMysql2Client, "init_command=", set_init_command, 1);

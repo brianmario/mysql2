@@ -53,7 +53,9 @@ VALUE rb_hash_dup(VALUE other) {
  * variable to use, but MYSQL_SERVER_VERSION gives the correct numbers when
  * linking against the server itself
  */
-#ifdef LIBMYSQL_VERSION
+#if defined(MARIADB_CLIENT_VERSION_STR)
+  #define MYSQL_LINK_VERSION MARIADB_CLIENT_VERSION_STR
+#elif defined(LIBMYSQL_VERSION)
   #define MYSQL_LINK_VERSION LIBMYSQL_VERSION
 #else
   #define MYSQL_LINK_VERSION MYSQL_SERVER_VERSION

@@ -9,7 +9,13 @@ void Init_mysql2(void);
 #define RSTRING_NOT_MODIFIED
 #include <ruby.h>
 
-#ifdef HAVE_MYSQL_H
+#ifdef HAVE_SERVER_MYSQL_H
+#include <mysql.h>
+#include <server/mysql_com.h>
+#include <errmsg.h>
+#include <mysqld_error.h>
+#include <server/mysql_version.h>
+#elif HAVE_MYSQL_H
 #include <mysql.h>
 #include <mysql_com.h>
 #include <errmsg.h>

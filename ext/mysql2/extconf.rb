@@ -97,7 +97,9 @@ else
   rpath_dir = usr_local_lib
 end
 
-if have_header('mysql.h')
+if have_header('server/mysql.h')
+  prefix = nil
+elsif have_header('mysql.h')
   prefix = nil
 elsif have_header('mysql/mysql.h')
   prefix = 'mysql'

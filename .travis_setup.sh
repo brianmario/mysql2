@@ -17,6 +17,16 @@ if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
   sudo bash .travis_mysql80.sh
 fi
 
+# Install MariaDB client headers after Travis CI fix for MariaDB 10.2 broke earlier 10.x
+if [[ -n ${DB-} && x$DB =~ ^xmariadb10.0 ]]; then
+  sudo apt-get install -y -o Dpkg::Options::='--force-confnew' libmariadbclient-dev
+fi
+
+# Install MariaDB client headers after Travis CI fix for MariaDB 10.2 broke earlier 10.x
+if [[ -n ${DB-} && x$DB =~ ^xmariadb10.1 ]]; then
+  sudo apt-get install -y -o Dpkg::Options::='--force-confnew' libmariadbclient-dev
+fi
+
 # Install MariaDB 10.2 if DB=mariadb10.2
 # NOTE this is a workaround until Travis CI merges a fix to its mariadb addon.
 if [[ -n ${DB-} && x$DB =~ ^xmariadb10.2 ]]; then

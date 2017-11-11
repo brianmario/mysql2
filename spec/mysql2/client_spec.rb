@@ -327,8 +327,8 @@ RSpec.describe Mysql2::Client do
     context "when has a warnings" do
       it "should > 0" do
         # "the statement produces extra information that can be viewed by issuing a SHOW WARNINGS"
-        # http://dev.mysql.com/doc/refman/5.0/en/explain-extended.html
-        @client.query("explain extended select 1")
+        # https://dev.mysql.com/doc/refman/5.7/en/show-warnings.html
+        @client.query('DROP TABLE IF EXISTS test.no_such_table')
         expect(@client.warning_count).to be > 0
       end
     end

@@ -1317,6 +1317,8 @@ static VALUE set_secure_auth(VALUE self, VALUE value) {
 /* This option was deprecated in MySQL 5.x and removed in MySQL 8.0 */
 #if defined(MYSQL_SECURE_AUTH)
   return _mysql_client_options(self, MYSQL_SECURE_AUTH, value);
+#else
+  return Qfalse;
 #endif
 }
 

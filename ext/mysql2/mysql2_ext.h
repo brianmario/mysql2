@@ -11,12 +11,10 @@ void Init_mysql2(void);
 
 #ifdef HAVE_MYSQL_H
 #include <mysql.h>
-#include <mysql_com.h>
 #include <errmsg.h>
 #include <mysqld_error.h>
 #else
 #include <mysql/mysql.h>
-#include <mysql/mysql_com.h>
 #include <mysql/errmsg.h>
 #include <mysql/mysqld_error.h>
 #endif

@@ -105,8 +105,8 @@ else
   asplode 'mysql.h'
 end
 
-%w(errmsg.h mysqld_error.h).each do |h|
-  header = [prefix, h].compact.join '/'
+%w(errmsg.h).each do |h|
+  header = [prefix, h].compact.join('/')
   asplode h unless have_header header
 end
 

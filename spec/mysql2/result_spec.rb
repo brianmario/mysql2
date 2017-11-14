@@ -292,6 +292,30 @@ RSpec.describe Mysql2::Result do
       expect(@test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
+    it "should return Time values with microseconds" do
+      now = Time.now
+      if RUBY_VERSION =~ /1.8/ || @client.server_info[:id] / 100 < 506
+        result = @client.query("SELECT CAST('#{now.strftime('%F %T %z')}' AS DATETIME) AS a")
+        expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
+      else
+        result = @client.query("SELECT CAST('#{now.strftime('%F %T.%6N %z')}' AS DATETIME(6)) AS a")
+        # microseconds is 6 digits after the decimal, but only test on 5 significant figures
+        expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
+      end
+    end
+
+    it "should return DateTime values with microseconds" do
+      now = DateTime.now
+      if RUBY_VERSION =~ /1.8/ || @client.server_info[:id] / 100 < 506
+        result = @client.query("SELECT CAST('#{now.strftime('%F %T %z')}' AS DATETIME)  AS a")
+        expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
+      else
+        result = @client.query("SELECT CAST('#{now.strftime('%F %T.%6N %z')}' AS DATETIME(6)) AS a")
+        # microseconds is 6 digits after the decimal, but only test on 5 significant figures
+        expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
+      end
+    end
+
     if 1.size == 4 # 32bit
       klass = if RUBY_VERSION =~ /1.8/
         DateTime

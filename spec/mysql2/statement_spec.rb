@@ -150,7 +150,8 @@ RSpec.describe Mysql2::Statement do
     if RUBY_VERSION =~ /1.8/
       expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
     else
-      expect(result.first['a'].strftime('%F %T.%6N %z')).to eql(now.strftime('%F %T.%6N %z'))
+      # microseconds is six digits after the decimal, but only test on 5 significant figures
+      expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
     end
   end
 
@@ -161,7 +162,8 @@ RSpec.describe Mysql2::Statement do
     if RUBY_VERSION =~ /1.8/
       expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
     else
-      expect(result.first['a'].strftime('%F %T.%6N %z')).to eql(now.strftime('%F %T.%6N %z'))
+      # microseconds is six digits after the decimal, but only test on 5 significant figures
+      expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
     end
   end
 

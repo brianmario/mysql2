@@ -150,7 +150,8 @@ RSpec.describe Mysql2::Statement do
     if RUBY_VERSION =~ /1.8/
       expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
     else
-      expect(result.first['a'].strftime('%F %T.%6N %z')).to eql(now.strftime('%F %T.%6N %z'))
+      # microseconds is six digits after the decimal, but only test on 5 significant figures
+      expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
     end
   end
 
@@ -161,7 +162,8 @@ RSpec.describe Mysql2::Statement do
     if RUBY_VERSION =~ /1.8/
       expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
     else
-      expect(result.first['a'].strftime('%F %T.%6N %z')).to eql(now.strftime('%F %T.%6N %z'))
+      # microseconds is six digits after the decimal, but only test on 5 significant figures
+      expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
     end
   end
 
@@ -374,7 +376,7 @@ RSpec.describe Mysql2::Statement do
       expect(@test_result['tiny_int_test']).to eql(1)
     end
 
-    context "cast booleans for TINYINY if :cast_booleans is enabled" do
+    context "cast booleans for TINYINT if :cast_booleans is enabled" do
       # rubocop:disable Style/Semicolon
       let(:client) { new_client(:cast_booleans => true) }
       let(:id1) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; client.last_id }

@@ -208,36 +208,43 @@ RSpec.describe Mysql2::Result do
       expect(@test_result['tiny_int_test']).to eql(1)
     end
 
-    it "should return TrueClass or FalseClass for a TINYINT value if :cast_booleans is enabled" do
-      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (1)'
-      id1 = @client.last_id
-      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (0)'
-      id2 = @client.last_id
-      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'
-      id3 = @client.last_id
+    context "cast booleans for TINYINT if :cast_booleans is enabled" do
+      # rubocop:disable Style/Semicolon
+      let(:id1) { @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; @client.last_id }
+      let(:id2) { @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 0)'; @client.last_id }
+      let(:id3) { @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'; @client.last_id }
+      # rubocop:enable Style/Semicolon
 
-      result1 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast_booleans => true
-      result2 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 0 LIMIT 1', :cast_booleans => true
-      result3 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = -1 LIMIT 1', :cast_booleans => true
-      expect(result1.first['bool_cast_test']).to be true
-      expect(result2.first['bool_cast_test']).to be false
-      expect(result3.first['bool_cast_test']).to be true
+      after do
+        @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
+      end
 
-      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
+      it "should return TrueClass or FalseClass for a TINYINT value if :cast_booleans is enabled" do
+        result1 = @client.query "SELECT bool_cast_test FROM mysql2_test WHERE id = #{id1} LIMIT 1", :cast_booleans => true
+        result2 = @client.query "SELECT bool_cast_test FROM mysql2_test WHERE id = #{id2} LIMIT 1", :cast_booleans => true
+        result3 = @client.query "SELECT bool_cast_test FROM mysql2_test WHERE id = #{id3} LIMIT 1", :cast_booleans => true
+        expect(result1.first['bool_cast_test']).to be true
+        expect(result2.first['bool_cast_test']).to be false
+        expect(result3.first['bool_cast_test']).to be true
+      end
     end
 
-    it "should return TrueClass or FalseClass for a BIT(1) value if :cast_booleans is enabled" do
-      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'
-      id1 = @client.last_id
-      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'
-      id2 = @client.last_id
+    context "cast booleans for BIT(1) if :cast_booleans is enabled" do
+      # rubocop:disable Style/Semicolon
+      let(:id1) { @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'; @client.last_id }
+      let(:id2) { @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'; @client.last_id }
+      # rubocop:enable Style/Semicolon
 
-      result1 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id1}", :cast_booleans => true
-      result2 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id2}", :cast_booleans => true
-      expect(result1.first['single_bit_test']).to be true
-      expect(result2.first['single_bit_test']).to be false
+      after do
+        @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
+      end
 
-      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
+      it "should return TrueClass or FalseClass for a BIT(1) value if :cast_booleans is enabled" do
+        result1 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id1}", :cast_booleans => true
+        result2 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id2}", :cast_booleans => true
+        expect(result1.first['single_bit_test']).to be true
+        expect(result2.first['single_bit_test']).to be false
+      end
     end
 
     it "should return Fixnum for a SMALLINT value" do
@@ -283,6 +290,30 @@ RSpec.describe Mysql2::Result do
     it "should return Time for a DATETIME value when within the supported range" do
       expect(@test_result['date_time_test']).to be_an_instance_of(Time)
       expect(@test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
+    end
+
+    it "should return Time values with microseconds" do
+      now = Time.now
+      if RUBY_VERSION =~ /1.8/ || @client.server_info[:id] / 100 < 506
+        result = @client.query("SELECT CAST('#{now.strftime('%F %T %z')}' AS DATETIME) AS a")
+        expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
+      else
+        result = @client.query("SELECT CAST('#{now.strftime('%F %T.%6N %z')}' AS DATETIME(6)) AS a")
+        # microseconds is 6 digits after the decimal, but only test on 5 significant figures
+        expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
+      end
+    end
+
+    it "should return DateTime values with microseconds" do
+      now = DateTime.now
+      if RUBY_VERSION =~ /1.8/ || @client.server_info[:id] / 100 < 506
+        result = @client.query("SELECT CAST('#{now.strftime('%F %T %z')}' AS DATETIME)  AS a")
+        expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
+      else
+        result = @client.query("SELECT CAST('#{now.strftime('%F %T.%6N %z')}' AS DATETIME(6)) AS a")
+        # microseconds is 6 digits after the decimal, but only test on 5 significant figures
+        expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
+      end
     end
 
     if 1.size == 4 # 32bit

@@ -405,6 +405,13 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
             val = INT2NUM(*((signed char*)result_buffer->buffer));
           }
           break;
+        case MYSQL_TYPE_BIT:        /* BIT field (MySQL 5.0.3 and up) */
+          if (args->castBool && fields[i].length == 1) {
+            val = (*((unsigned char*)result_buffer->buffer) != 0) ? Qtrue : Qfalse;
+          }else{
+            val = rb_str_new(result_buffer->buffer, *(result_buffer->length));
+          }
+          break;
         case MYSQL_TYPE_SHORT:        // short int
           if (result_buffer->is_unsigned) {
             val = UINT2NUM(*((unsigned short int*)result_buffer->buffer));
@@ -494,7 +501,6 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         case MYSQL_TYPE_BLOB:         // char[]
         case MYSQL_TYPE_MEDIUM_BLOB:  // char[]
         case MYSQL_TYPE_LONG_BLOB:    // char[]
-        case MYSQL_TYPE_BIT:          // char[]
         case MYSQL_TYPE_SET:          // char[]
         case MYSQL_TYPE_ENUM:         // char[]
         case MYSQL_TYPE_GEOMETRY:     // char[]

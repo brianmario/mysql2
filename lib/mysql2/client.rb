@@ -47,7 +47,7 @@ module Mysql2
       self.charset_name = opts[:encoding] || 'utf8'
 
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
-      ssl_set(*ssl_options) if ssl_options.any?
+      ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
       self.ssl_mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
 
       case opts[:flags]
@@ -62,7 +62,7 @@ module Mysql2
       end
 
       # SSL verify is a connection flag rather than a mysql_ssl_set option
-      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify] && ssl_options.any?
+      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify]
 
       if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @query_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="

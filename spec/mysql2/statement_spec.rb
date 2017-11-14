@@ -374,36 +374,43 @@ RSpec.describe Mysql2::Statement do
       expect(@test_result['tiny_int_test']).to eql(1)
     end
 
-    it "should return TrueClass or FalseClass for a TINYINT value if :cast_booleans is enabled" do
-      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (1)'
-      id1 = @client.last_id
-      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (0)'
-      id2 = @client.last_id
-      @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'
-      id3 = @client.last_id
+    context "cast booleans for TINYINY if :cast_booleans is enabled" do
+      let(:client) { new_client(:cast_booleans => true) }
+      let (:id1) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; client.last_id }
+      let (:id2) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 0)'; client.last_id }
+      let (:id3) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'; client.last_id }
 
-      result1 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 1 LIMIT 1', :cast_booleans => true
-      result2 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = 0 LIMIT 1', :cast_booleans => true
-      result3 = @client.query 'SELECT bool_cast_test FROM mysql2_test WHERE bool_cast_test = -1 LIMIT 1', :cast_booleans => true
-      expect(result1.first['bool_cast_test']).to be true
-      expect(result2.first['bool_cast_test']).to be false
-      expect(result3.first['bool_cast_test']).to be true
+      after do
+        client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
+      end
 
-      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
+      it "should return TrueClass or FalseClass for a TINYINT value if :cast_booleans is enabled" do
+        query = client.prepare 'SELECT bool_cast_test FROM mysql2_test WHERE id = ?'
+        result1 = query.execute id1
+        result2 = query.execute id2
+        result3 = query.execute id3
+        expect(result1.first['bool_cast_test']).to be true
+        expect(result2.first['bool_cast_test']).to be false
+        expect(result3.first['bool_cast_test']).to be true
+      end
     end
 
-    it "should return TrueClass or FalseClass for a BIT(1) value if :cast_booleans is enabled" do
-      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'
-      id1 = @client.last_id
-      @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'
-      id2 = @client.last_id
+    context "cast booleans for BIT(1) if :cast_booleans is enabled" do
+      let(:client) { new_client(:cast_booleans => true) }
+      let (:id1) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'; client.last_id }
+      let (:id2) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'; client.last_id }
 
-      result1 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id1}", :cast_booleans => true
-      result2 = @client.query "SELECT single_bit_test FROM mysql2_test WHERE id = #{id2}", :cast_booleans => true
-      expect(result1.first['single_bit_test']).to be true
-      expect(result2.first['single_bit_test']).to be false
+      after do
+        client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
+      end
 
-      @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
+      it "should return TrueClass or FalseClass for a BIT(1) value if :cast_booleans is enabled" do
+        query = client.prepare 'SELECT single_bit_test FROM mysql2_test WHERE id = ?'
+        result1 = query.execute id1
+        result2 = query.execute id2
+        expect(result1.first['single_bit_test']).to be true
+        expect(result2.first['single_bit_test']).to be false
+      end
     end
 
     it "should return Fixnum for a SMALLINT value" do

@@ -375,10 +375,12 @@ RSpec.describe Mysql2::Statement do
     end
 
     context "cast booleans for TINYINY if :cast_booleans is enabled" do
+      # rubocop:disable Style/Semicolon
       let(:client) { new_client(:cast_booleans => true) }
-      let (:id1) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; client.last_id }
-      let (:id2) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 0)'; client.last_id }
-      let (:id3) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'; client.last_id }
+      let(:id1) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; client.last_id }
+      let(:id2) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 0)'; client.last_id }
+      let(:id3) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'; client.last_id }
+      # rubocop:enable Style/Semicolon
 
       after do
         client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
@@ -396,9 +398,11 @@ RSpec.describe Mysql2::Statement do
     end
 
     context "cast booleans for BIT(1) if :cast_booleans is enabled" do
+      # rubocop:disable Style/Semicolon
       let(:client) { new_client(:cast_booleans => true) }
-      let (:id1) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'; client.last_id }
-      let (:id2) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'; client.last_id }
+      let(:id1) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'; client.last_id }
+      let(:id2) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'; client.last_id }
+      # rubocop:enable Style/Semicolon
 
       after do
         client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"

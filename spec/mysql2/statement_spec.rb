@@ -374,7 +374,7 @@ RSpec.describe Mysql2::Statement do
       expect(@test_result['tiny_int_test']).to eql(1)
     end
 
-    context "cast booleans for TINYINY if :cast_booleans is enabled" do
+    context "cast booleans for TINYINT if :cast_booleans is enabled" do
       # rubocop:disable Style/Semicolon
       let(:client) { new_client(:cast_booleans => true) }
       let(:id1) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; client.last_id }

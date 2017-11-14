@@ -604,7 +604,7 @@ RSpec.describe Mysql2::Client do
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
-          if RUBY_PLATFORM.include?('darwin') && Mysql2::Client.server_info.fetch(:version).start_with?('5.5')
+          if RUBY_PLATFORM.include?('darwin') && @client.server_info.fetch(:version).start_with?('5.5')
             pending('MySQL 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 
@@ -615,7 +615,7 @@ RSpec.describe Mysql2::Client do
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is set to true after construction" do
-          if RUBY_PLATFORM.include?('darwin') && Mysql2::Client.server_info.fetch(:version).start_with?('5.5')
+          if RUBY_PLATFORM.include?('darwin') && @client.server_info.fetch(:version).start_with?('5.5')
             pending('MySQL 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 

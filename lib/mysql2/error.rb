@@ -8,25 +8,64 @@ module Mysql2
       :replace => '?'.freeze,
     }.freeze
 
+    ConnectionError = Class.new(Error)
+    TimeoutError = Class.new(Error)
+
+    CODES = {
+      1205 => TimeoutError, # ER_LOCK_WAIT_TIMEOUT
+    }
+
+    [
+      1044, # ER_DBACCESS_DENIED_ERROR
+      1045, # ER_ACCESS_DENIED_ERROR
+      1152, # ER_ABORTING_CONNECTION
+      1153, # ER_NET_PACKET_TOO_LARGE
+      1154, # ER_NET_READ_ERROR_FROM_PIPE
+      1155, # ER_NET_FCNTL_ERROR
+      1156, # ER_NET_PACKETS_OUT_OF_ORDER
+      1157, # ER_NET_UNCOMPRESS_ERROR
+      1158, # ER_NET_READ_ERROR
+      1159, # ER_NET_READ_INTERRUPTED
+      1160, # ER_NET_ERROR_ON_WRITE
+      1161, # ER_NET_WRITE_INTERRUPTED
+
+      2001, # CR_SOCKET_CREATE_ERROR
+      2002, # CR_CONNECTION_ERROR
+      2003, # CR_CONN_HOST_ERROR
+      2004, # CR_IPSOCK_ERROR
+      2005, # CR_UNKNOWN_HOST
+      2006, # CR_SERVER_GONE_ERROR
+      2007, # CR_VERSION_ERROR
+      2009, # CR_WRONG_HOST_INFO
+      2012, # CR_SERVER_HANDSHAKE_ERR
+      2013, # CR_SERVER_LOST
+      2020, # CR_NET_PACKET_TOO_LARGE
+      2026, # CR_SSL_CONNECTION_ERROR
+      2027, # CR_MALFORMED_PACKET
+      2047, # CR_CONN_UNKNOW_PROTOCOL
+      2048, # CR_INVALID_CONN_HANDLE
+      2049, # CR_UNUSED_1
+    ].each { |c| CODES[c] = ConnectionError }
+
+    CODES.freeze
+
     attr_reader :error_number, :sql_state
 
     # Mysql gem compatibility
     alias_method :errno, :error_number
     alias_method :error, :message
 
-    def initialize(msg)
-      @server_version ||= nil
+    def initialize(msg, server_version = nil, error_number = nil, sql_state = nil)
+      @server_version = server_version
+      @error_number = error_number
+      @sql_state = sql_state.respond_to?(:encode) ? sql_state.encode(ENCODE_OPTS) : sql_state
 
       super(clean_message(msg))
     end
 
     def self.new_with_args(msg, server_version, error_number, sql_state)
-      err = allocate
-      err.instance_variable_set('@server_version', server_version)
-      err.instance_variable_set('@error_number', error_number)
-      err.instance_variable_set('@sql_state', sql_state.respond_to?(:encode) ? sql_state.encode(ENCODE_OPTS) : sql_state)
-      err.send(:initialize, msg)
-      err
+      error_class = CODES.fetch(error_number, self)
+      error_class.new(msg, server_version, error_number, sql_state)
     end
 
     private

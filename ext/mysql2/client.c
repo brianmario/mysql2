@@ -15,7 +15,7 @@
 #include "mysql_enc_name_to_ruby.h"
 
 VALUE cMysql2Client;
-extern VALUE mMysql2, cMysql2Error;
+extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
 
@@ -652,7 +652,7 @@ static VALUE do_query(void *args) {
     retval = rb_wait_for_single_fd(async_args->fd, RB_WAITFD_IN, tvp);
 
     if (retval == 0) {
-      rb_raise(cMysql2Error, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
+      rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
     }
 
     if (retval < 0) {

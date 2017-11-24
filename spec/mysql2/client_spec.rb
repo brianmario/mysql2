@@ -572,7 +572,7 @@ RSpec.describe Mysql2::Client do
       end
 
       it "#socket should return a Fixnum (file descriptor from C)" do
-        expect(@client.socket).to be_an_instance_of(Fixnum)
+        expect(@client.socket).to be_an_instance_of(0.class)
         expect(@client.socket).not_to eql(0)
       end
 
@@ -852,7 +852,7 @@ RSpec.describe Mysql2::Client do
     info = @client.info
     expect(info).to be_an_instance_of(Hash)
     expect(info).to have_key(:id)
-    expect(info[:id]).to be_an_instance_of(Fixnum)
+    expect(info[:id]).to be_an_instance_of(0.class)
     expect(info).to have_key(:version)
     expect(info[:version]).to be_an_instance_of(String)
   end
@@ -883,7 +883,7 @@ RSpec.describe Mysql2::Client do
     server_info = @client.server_info
     expect(server_info).to be_an_instance_of(Hash)
     expect(server_info).to have_key(:id)
-    expect(server_info[:id]).to be_an_instance_of(Fixnum)
+    expect(server_info[:id]).to be_an_instance_of(0.class)
     expect(server_info).to have_key(:version)
     expect(server_info[:version]).to be_an_instance_of(String)
   end
@@ -974,7 +974,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "#thread_id should be a Fixnum" do
-    expect(@client.thread_id).to be_an_instance_of(Fixnum)
+    expect(@client.thread_id).to be_an_instance_of(0.class)
   end
 
   it "should respond to #ping" do

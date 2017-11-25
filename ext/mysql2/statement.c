@@ -202,6 +202,8 @@ static int my_big2ll(VALUE bignum, LONG_LONG *ptr)
 {
   unsigned LONG_LONG num;
   size_t len;
+// rb_absint_size was added in 2.1.0. See:
+// https://github.com/ruby/ruby/commit/9fea875
 #ifdef HAVE_RB_ABSINT_SIZE
   int nlz_bits = 0;
   len = rb_absint_size(bignum, &nlz_bits);
@@ -220,6 +222,8 @@ static int my_big2ll(VALUE bignum, LONG_LONG *ptr)
 #ifdef HAVE_RB_ABSINT_SIZE
         nlz_bits == 0 &&
 #endif
+// rb_absint_singlebit_p was added in 2.1.0. See:
+// https://github.com/ruby/ruby/commit/e5ff9d5
 #if defined(HAVE_RB_ABSINT_SIZE) && defined(HAVE_RB_ABSINT_SINGLEBIT_P)
         /* Optimized to avoid object allocation for Ruby 2.1+
          * only -0x8000000000000000 is safe if `len == 8 && nlz_bits == 0`

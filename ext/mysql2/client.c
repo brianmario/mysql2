@@ -19,12 +19,6 @@ extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
 
-#ifndef HAVE_RB_HASH_DUP
-VALUE rb_hash_dup(VALUE other) {
-  return rb_funcall(rb_cHash, intern_brackets, 1, other);
-}
-#endif
-
 #define REQUIRE_INITIALIZED(wrapper) \
   if (!wrapper->initialized) { \
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
@@ -178,10 +172,8 @@ static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   VALUE rb_sql_state = rb_tainted_str_new2(mysql_sqlstate(wrapper->client));
   VALUE e;
 
-#ifdef HAVE_RUBY_ENCODING_H
   rb_enc_associate(rb_error_msg, rb_utf8_encoding());
   rb_enc_associate(rb_sql_state, rb_usascii_encoding());
-#endif
 
   e = rb_funcall(cMysql2Error, intern_new_with_args, 4,
                  rb_error_msg,
@@ -357,9 +349,7 @@ static VALUE rb_mysql_client_escape(RB_MYSQL_UNUSED VALUE klass, VALUE str) {
     return str;
   } else {
     rb_str = rb_str_new((const char*)newStr, newLen);
-#ifdef HAVE_RUBY_ENCODING_H
     rb_enc_copy(rb_str, str);
-#endif
     xfree(newStr);
     return rb_str;
   }
@@ -386,9 +376,7 @@ static VALUE rb_mysql_info(VALUE self) {
   }
 
   rb_str = rb_str_new2(info);
-#ifdef HAVE_RUBY_ENCODING_H
   rb_enc_associate(rb_str, rb_utf8_encoding());
-#endif
 
   return rb_str;
 }
@@ -406,9 +394,7 @@ static VALUE rb_mysql_get_ssl_cipher(VALUE self)
   }
 
   rb_str = rb_str_new2(cipher);
-#ifdef HAVE_RUBY_ENCODING_H
   rb_enc_associate(rb_str, rb_utf8_encoding());
-#endif
 
   return rb_str;
 }
@@ -762,12 +748,8 @@ static VALUE rb_query(VALUE self, VALUE sql, VALUE current) {
   rb_iv_set(self, "@current_query_options", current);
 
   Check_Type(sql, T_STRING);
-#ifdef HAVE_RUBY_ENCODING_H
   /* ensure the string is in the encoding the connection is expecting */
   args.sql = rb_str_export_to_enc(sql, rb_to_encoding(wrapper->encoding));
-#else
-  args.sql = sql;
-#endif
   args.sql_ptr = RSTRING_PTR(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
   args.wrapper = wrapper;
@@ -804,20 +786,16 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
   unsigned char *newStr;
   VALUE rb_str;
   unsigned long newLen, oldLen;
-#ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc;
   rb_encoding *conn_enc;
-#endif
   GET_CLIENT(self);
 
   REQUIRE_CONNECTED(wrapper);
   Check_Type(str, T_STRING);
-#ifdef HAVE_RUBY_ENCODING_H
   default_internal_enc = rb_default_internal_encoding();
   conn_enc = rb_to_encoding(wrapper->encoding);
   /* ensure the string is in the encoding the connection is expecting */
   str = rb_str_export_to_enc(str, conn_enc);
-#endif
 
   oldLen = RSTRING_LEN(str);
   newStr = xmalloc(oldLen*2+1);
@@ -825,21 +803,17 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
   newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, RSTRING_PTR(str), oldLen);
   if (newLen == oldLen) {
     /* no need to return a new ruby string if nothing changed */
-#ifdef HAVE_RUBY_ENCODING_H
     if (default_internal_enc) {
       str = rb_str_export_to_enc(str, default_internal_enc);
     }
-#endif
     xfree(newStr);
     return str;
   } else {
     rb_str = rb_str_new((const char*)newStr, newLen);
-#ifdef HAVE_RUBY_ENCODING_H
     rb_enc_associate(rb_str, conn_enc);
     if (default_internal_enc) {
       rb_str = rb_str_export_to_enc(rb_str, default_internal_enc);
     }
-#endif
     xfree(newStr);
     return rb_str;
   }
@@ -950,10 +924,8 @@ static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE klass) {
   version = rb_str_new2(mysql_get_client_info());
   header_version = rb_str_new2(MYSQL_LINK_VERSION);
 
-#ifdef HAVE_RUBY_ENCODING_H
   rb_enc_associate(version, rb_usascii_encoding());
   rb_enc_associate(header_version, rb_usascii_encoding());
-#endif
 
   rb_hash_aset(version_info, sym_id, LONG2NUM(mysql_get_client_version()));
   rb_hash_aset(version_info, sym_version, version);
@@ -969,27 +941,21 @@ static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE klass) {
  */
 static VALUE rb_mysql_client_server_info(VALUE self) {
   VALUE version, server_info;
-#ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc;
   rb_encoding *conn_enc;
-#endif
   GET_CLIENT(self);
 
   REQUIRE_CONNECTED(wrapper);
-#ifdef HAVE_RUBY_ENCODING_H
   default_internal_enc = rb_default_internal_encoding();
   conn_enc = rb_to_encoding(wrapper->encoding);
-#endif
 
   version = rb_hash_new();
   rb_hash_aset(version, sym_id, LONG2FIX(mysql_get_server_version(wrapper->client)));
   server_info = rb_str_new2(mysql_get_server_info(wrapper->client));
-#ifdef HAVE_RUBY_ENCODING_H
   rb_enc_associate(server_info, conn_enc);
   if (default_internal_enc) {
     server_info = rb_str_export_to_enc(server_info, default_internal_enc);
   }
-#endif
   rb_hash_aset(version, sym_version, server_info);
   return version;
 }
@@ -1176,7 +1142,6 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   return resultObj;
 }
 
-#ifdef HAVE_RUBY_ENCODING_H
 /* call-seq:
  *    client.encoding
  *
@@ -1186,7 +1151,6 @@ static VALUE rb_mysql_client_encoding(VALUE self) {
   GET_CLIENT(self);
   return wrapper->encoding;
 }
-#endif
 
 /* call-seq:
  *    client.automatic_close?
@@ -1272,17 +1236,14 @@ static VALUE set_write_timeout(VALUE self, VALUE value) {
 
 static VALUE set_charset_name(VALUE self, VALUE value) {
   char *charset_name;
-#ifdef HAVE_RUBY_ENCODING_H
   const struct mysql2_mysql_enc_name_to_rb_map *mysql2rb;
   rb_encoding *enc;
   VALUE rb_enc;
-#endif
   GET_CLIENT(self);
 
   Check_Type(value, T_STRING);
   charset_name = RSTRING_PTR(value);
 
-#ifdef HAVE_RUBY_ENCODING_H
   mysql2rb = mysql2_mysql_enc_name_to_rb(charset_name, (unsigned int)RSTRING_LEN(value));
   if (mysql2rb == NULL || mysql2rb->rb_name == NULL) {
     VALUE inspect = rb_inspect(value);
@@ -1292,7 +1253,6 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
     rb_enc = rb_enc_from_encoding(enc);
     wrapper->encoding = rb_enc;
   }
-#endif
 
   if (mysql_options(wrapper->client, MYSQL_SET_CHARSET_NAME, charset_name)) {
     /* TODO: warning - unable to set charset */
@@ -1425,9 +1385,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "warning_count", rb_mysql_client_warning_count, 0);
   rb_define_method(cMysql2Client, "query_info_string", rb_mysql_info, 0);
   rb_define_method(cMysql2Client, "ssl_cipher", rb_mysql_get_ssl_cipher, 0);
-#ifdef HAVE_RUBY_ENCODING_H
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
-#endif
 
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
   rb_define_private_method(cMysql2Client, "read_timeout=", set_read_timeout, 1);

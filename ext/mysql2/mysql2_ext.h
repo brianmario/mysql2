@@ -17,9 +17,7 @@ void Init_mysql2(void);
 #include <mysql/errmsg.h>
 #endif
 
-#ifdef HAVE_RUBY_ENCODING_H
 #include <ruby/encoding.h>
-#endif
 #ifdef HAVE_RUBY_THREAD_H
 #include <ruby/thread.h>
 #endif

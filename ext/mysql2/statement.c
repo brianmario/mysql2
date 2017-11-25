@@ -50,7 +50,6 @@ void rb_raise_mysql2_stmt_error(mysql_stmt_wrapper *stmt_wrapper) {
   VALUE rb_error_msg = rb_str_new2(mysql_stmt_error(stmt_wrapper->stmt));
   VALUE rb_sql_state = rb_tainted_str_new2(mysql_stmt_sqlstate(stmt_wrapper->stmt));
 
-#ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
   conn_enc = rb_to_encoding(wrapper->encoding);
 
@@ -62,7 +61,6 @@ void rb_raise_mysql2_stmt_error(mysql_stmt_wrapper *stmt_wrapper) {
     rb_error_msg = rb_str_export_to_enc(rb_error_msg, default_internal_enc);
     rb_sql_state = rb_str_export_to_enc(rb_sql_state, default_internal_enc);
   }
-#endif
 
   e = rb_funcall(cMysql2Error, intern_new_with_args, 4,
                  rb_error_msg,
@@ -96,9 +94,7 @@ static void *nogvl_prepare_statement(void *ptr) {
 VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   mysql_stmt_wrapper *stmt_wrapper;
   VALUE rb_stmt;
-#ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
-#endif
 
   Check_Type(sql, T_STRING);
 
@@ -114,9 +110,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   {
     GET_CLIENT(rb_client);
     stmt_wrapper->stmt = mysql_stmt_init(wrapper->client);
-#ifdef HAVE_RUBY_ENCODING_H
     conn_enc = rb_to_encoding(wrapper->encoding);
-#endif
   }
   if (stmt_wrapper->stmt == NULL) {
     rb_raise(cMysql2Error, "Unable to initialize prepared statement: out of memory");
@@ -134,11 +128,8 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   {
     struct nogvl_prepare_statement_args args;
     args.stmt = stmt_wrapper->stmt;
-    args.sql = sql;
-#ifdef HAVE_RUBY_ENCODING_H
     // ensure the string is in the encoding the connection is expecting
-    args.sql = rb_str_export_to_enc(args.sql, conn_enc);
-#endif
+    args.sql = rb_str_export_to_enc(sql, conn_enc);
     args.sql_ptr = RSTRING_PTR(sql);
     args.sql_len = RSTRING_LEN(sql);
 
@@ -265,16 +256,12 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
   VALUE resultObj;
   VALUE *params_enc;
   int is_streaming;
-#ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *conn_enc;
-#endif
 
   GET_STATEMENT(self);
   GET_CLIENT(stmt_wrapper->client);
 
-#ifdef HAVE_RUBY_ENCODING_H
   conn_enc = rb_to_encoding(wrapper->encoding);
-#endif
 
   /* Scratch space for string encoding exports, allocate on the stack. */
   params_enc = alloca(sizeof(VALUE) * argc);
@@ -319,12 +306,8 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
               *(LONG_LONG*)(bind_buffers[i].buffer) = num;
             } else {
               /* The bignum was larger than we can fit in LONG_LONG, send it as a string */
-              VALUE rb_val_as_string = rb_big2str(argv[i], 10);
               bind_buffers[i].buffer_type = MYSQL_TYPE_NEWDECIMAL;
-              params_enc[i] = rb_val_as_string;
-#ifdef HAVE_RUBY_ENCODING_H
-              params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
-#endif
+              params_enc[i] = rb_str_export_to_enc(rb_big2str(argv[i], 10), conn_enc);
               set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
             }
           }
@@ -338,9 +321,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
           bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
 
           params_enc[i] = argv[i];
-#ifdef HAVE_RUBY_ENCODING_H
           params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
-#endif
           set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
           break;
         case T_TRUE:
@@ -405,9 +386,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
             VALUE rb_val_as_string = rb_funcall(argv[i], intern_to_s, 0);
 
             params_enc[i] = rb_val_as_string;
-#ifdef HAVE_RUBY_ENCODING_H
             params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
-#endif
             set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
           }
           break;
@@ -474,20 +453,16 @@ static VALUE fields(VALUE self) {
   unsigned int i;
   VALUE field_list;
   MYSQL_STMT* stmt;
-#ifdef HAVE_RUBY_ENCODING_H
   rb_encoding *default_internal_enc, *conn_enc;
-#endif
   GET_STATEMENT(self);
   GET_CLIENT(stmt_wrapper->client);
   stmt = stmt_wrapper->stmt;
 
-#ifdef HAVE_RUBY_ENCODING_H
   default_internal_enc = rb_default_internal_encoding();
   {
     GET_CLIENT(stmt_wrapper->client);
     conn_enc = rb_to_encoding(wrapper->encoding);
   }
-#endif
 
   metadata = mysql_stmt_result_metadata(stmt);
   if (metadata == NULL) {
@@ -508,12 +483,10 @@ static VALUE fields(VALUE self) {
     VALUE rb_field;
 
     rb_field = rb_str_new(fields[i].name, fields[i].name_length);
-#ifdef HAVE_RUBY_ENCODING_H
     rb_enc_associate(rb_field, conn_enc);
     if (default_internal_enc) {
      rb_field = rb_str_export_to_enc(rb_field, default_internal_enc);
    }
-#endif
 
     rb_ary_store(field_list, (long)i, rb_field);
   }

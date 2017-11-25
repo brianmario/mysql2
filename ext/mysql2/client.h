@@ -51,6 +51,7 @@ typedef struct {
 } mysql_client_wrapper;
 
 void rb_mysql_client_set_active_thread(VALUE self);
+void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result);
 
 #define GET_CLIENT(self) \
   mysql_client_wrapper *wrapper; \
@@ -64,3 +65,4 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper);
 #ifndef HAVE_RB_HASH_DUP
 VALUE rb_hash_dup(VALUE other);
 #endif
+

@@ -17,6 +17,7 @@
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
+static VALUE sym_no_good_index_used, sym_no_index_used, sym_query_was_slow;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
 
 #ifndef HAVE_RB_HASH_DUP
@@ -594,6 +595,8 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
+
+  rb_mysql_set_server_query_flags(wrapper->client, resultObj);
 
   return resultObj;
 }
@@ -1454,6 +1457,10 @@ void init_mysql2_client() {
   sym_array           = ID2SYM(rb_intern("array"));
   sym_stream          = ID2SYM(rb_intern("stream"));
 
+  sym_no_good_index_used = ID2SYM(rb_intern("no_good_index_used"));
+  sym_no_index_used      = ID2SYM(rb_intern("no_index_used"));
+  sym_query_was_slow     = ID2SYM(rb_intern("query_was_slow"));
+
   intern_brackets = rb_intern("[]");
   intern_merge = rb_intern("merge");
   intern_merge_bang = rb_intern("merge!");
@@ -1600,3 +1607,30 @@ void init_mysql2_client() {
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_IDENTITY"), INT2NUM(0));
 #endif
 }
+
+#define flag_to_bool(f) ((client->server_status & f) ? Qtrue : Qfalse)
+
+void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result) {
+  VALUE server_flags = rb_hash_new();
+
+#ifdef SERVER_QUERY_NO_GOOD_INDEX_USED
+  rb_hash_aset(server_flags, sym_no_good_index_used, flag_to_bool(SERVER_QUERY_NO_GOOD_INDEX_USED));
+#else
+  rb_hash_aset(server_flags, sym_no_good_index_used, Qnil);
+#endif
+
+#ifdef SERVER_QUERY_NO_INDEX_USED
+  rb_hash_aset(server_flags, sym_no_index_used, flag_to_bool(SERVER_QUERY_NO_INDEX_USED));
+#else
+  rb_hash_aset(server_flags, sym_no_index_used, Qnil);
+#endif
+
+#ifdef SERVER_QUERY_WAS_SLOW
+  rb_hash_aset(server_flags, sym_query_was_slow, flag_to_bool(SERVER_QUERY_WAS_SLOW));
+#else
+  rb_hash_aset(server_flags, sym_query_was_slow, Qnil);
+#endif
+
+  rb_iv_set(result, "@server_flags", server_flags);
+}
+

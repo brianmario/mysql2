@@ -36,6 +36,10 @@ RSpec.configure do |config|
     end
   end
 
+  def num_classes
+    0.class == Integer ? [Integer] : [Fixnum, Bignum]
+  end
+
   config.before :each do
     @client = new_client
   end

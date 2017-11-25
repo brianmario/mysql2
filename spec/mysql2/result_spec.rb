@@ -204,7 +204,7 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should return Fixnum for a TINYINT value" do
-      expect([Fixnum, Bignum]).to include(@test_result['tiny_int_test'].class)
+      expect(num_classes).to include(@test_result['tiny_int_test'].class)
       expect(@test_result['tiny_int_test']).to eql(1)
     end
 
@@ -248,27 +248,27 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should return Fixnum for a SMALLINT value" do
-      expect([Fixnum, Bignum]).to include(@test_result['small_int_test'].class)
+      expect(num_classes).to include(@test_result['small_int_test'].class)
       expect(@test_result['small_int_test']).to eql(10)
     end
 
     it "should return Fixnum for a MEDIUMINT value" do
-      expect([Fixnum, Bignum]).to include(@test_result['medium_int_test'].class)
+      expect(num_classes).to include(@test_result['medium_int_test'].class)
       expect(@test_result['medium_int_test']).to eql(10)
     end
 
     it "should return Fixnum for an INT value" do
-      expect([Fixnum, Bignum]).to include(@test_result['int_test'].class)
+      expect(num_classes).to include(@test_result['int_test'].class)
       expect(@test_result['int_test']).to eql(10)
     end
 
     it "should return Fixnum for a BIGINT value" do
-      expect([Fixnum, Bignum]).to include(@test_result['big_int_test'].class)
+      expect(num_classes).to include(@test_result['big_int_test'].class)
       expect(@test_result['big_int_test']).to eql(10)
     end
 
     it "should return Fixnum for a YEAR value" do
-      expect([Fixnum, Bignum]).to include(@test_result['year_test'].class)
+      expect(num_classes).to include(@test_result['year_test'].class)
       expect(@test_result['year_test']).to eql(2009)
     end
 

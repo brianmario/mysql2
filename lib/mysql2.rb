@@ -12,16 +12,20 @@ if RUBY_PLATFORM =~ /mswin|mingw/
     ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
   elsif File.exist?(File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)))
     # Use vendor/libmysql.dll if it exists, convert slashes for Win32 LoadLibrary
-    File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)).tr('/', '\\')
+    File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__))
+  elsif defined?(RubyInstaller)
+    # RubyInstaller-2.4+ native build doesn't need DLL preloading
   else
     # This will use default / system library paths
     'libmysql.dll'
   end
 
-  require 'Win32API'
-  LoadLibrary = Win32API.new('Kernel32', 'LoadLibrary', ['P'], 'I')
-  if 0 == LoadLibrary.call(dll_path)
-    abort "Failed to load libmysql.dll from #{dll_path}"
+  if dll_path
+    require 'Win32API'
+    LoadLibrary = Win32API.new('Kernel32', 'LoadLibrary', ['P'], 'I')
+    if 0 == LoadLibrary.call(dll_path)
+      abort "Failed to load libmysql.dll from #{dll_path}"
+    end
   end
 end
 

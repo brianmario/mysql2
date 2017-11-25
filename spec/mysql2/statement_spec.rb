@@ -686,7 +686,6 @@ RSpec.describe Mysql2::Statement do
 
     it 'should return number of rows affected by an insert' do
       stmt = @client.prepare 'INSERT INTO lastIdTest (blah) VALUES (?)'
-      expect(stmt.affected_rows).to eq 0
       stmt.execute 1
       expect(stmt.affected_rows).to eq 1
     end

@@ -9,7 +9,7 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
   # clean compiled extension
   CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
 
-  if RUBY_PLATFORM =~ /mswin|mingw/
+  if RUBY_PLATFORM =~ /mswin|mingw/ && !defined?(RubyInstaller)
     # Expand the path because the build dir is 3-4 levels deep in tmp/platform/version/
     connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir}", __FILE__)
     ext.config_options = ["--with-mysql-dir=#{connector_dir}"]
@@ -26,6 +26,10 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
       Rake::Task['lib/mysql2/mysql2.rb'].invoke
       # vendor/libmysql.dll is invoked from extconf.rb
       Rake::Task['vendor/README'].invoke
+
+      # only the source gem has a package dependency - the binary gem ships it's own DLL version
+      spec.metadata.delete('msys2_mingw_dependencies')
+
       spec.files << 'lib/mysql2/mysql2.rb'
       spec.files << 'vendor/libmysql.dll'
       spec.files << 'vendor/README'
@@ -77,7 +81,7 @@ task :devkit do
 end
 
 if RUBY_PLATFORM =~ /mingw|mswin/
-  Rake::Task['compile'].prerequisites.unshift 'vendor:mysql'
+  Rake::Task['compile'].prerequisites.unshift 'vendor:mysql' unless defined?(RubyInstaller)
   Rake::Task['compile'].prerequisites.unshift 'devkit'
 else
   if Rake::Task.tasks.map(&:name).include? 'cross'

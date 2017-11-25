@@ -110,7 +110,11 @@ mysql_h = [prefix, 'mysql.h'].compact.join('/')
 add_ssl_defines(mysql_h)
 have_struct_member('MYSQL', 'net.vio', mysql_h)
 have_struct_member('MYSQL', 'net.pvio', mysql_h)
+# These constants are actually enums, so they cannot be detected by #ifdef in C code.
 have_const('MYSQL_ENABLE_CLEARTEXT_PLUGIN', mysql_h)
+have_const('SERVER_QUERY_NO_GOOD_INDEX_USED', mysql_h)
+have_const('SERVER_QUERY_NO_INDEX_USED', mysql_h)
+have_const('SERVER_QUERY_WAS_SLOW', mysql_h)
 have_const('MYSQL_OPT_CONNECT_ATTR_ADD', mysql_h) # for mysql_options4
 
 # This is our wishlist. We use whichever flags work on the host.

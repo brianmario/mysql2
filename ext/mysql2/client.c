@@ -1589,19 +1589,19 @@ void init_mysql2_client() {
 void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result) {
   VALUE server_flags = rb_hash_new();
 
-#ifdef SERVER_QUERY_NO_GOOD_INDEX_USED
+#ifdef HAVE_CONST_SERVER_QUERY_NO_GOOD_INDEX_USED
   rb_hash_aset(server_flags, sym_no_good_index_used, flag_to_bool(SERVER_QUERY_NO_GOOD_INDEX_USED));
 #else
   rb_hash_aset(server_flags, sym_no_good_index_used, Qnil);
 #endif
 
-#ifdef SERVER_QUERY_NO_INDEX_USED
+#ifdef HAVE_CONST_SERVER_QUERY_NO_INDEX_USED
   rb_hash_aset(server_flags, sym_no_index_used, flag_to_bool(SERVER_QUERY_NO_INDEX_USED));
 #else
   rb_hash_aset(server_flags, sym_no_index_used, Qnil);
 #endif
 
-#ifdef SERVER_QUERY_WAS_SLOW
+#ifdef HAVE_CONST_SERVER_QUERY_WAS_SLOW
   rb_hash_aset(server_flags, sym_query_was_slow, flag_to_bool(SERVER_QUERY_WAS_SLOW));
 #else
   rb_hash_aset(server_flags, sym_query_was_slow, Qnil);

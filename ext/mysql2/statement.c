@@ -225,11 +225,8 @@ static int my_big2ll(VALUE bignum, LONG_LONG *ptr)
          * only -0x8000000000000000 is safe if `len == 8 && nlz_bits == 0`
          */
         !rb_absint_singlebit_p(bignum)
-#elif defined(HAVE_RB_BIG_CMP)
-        rb_big_cmp(bignum, LL2NUM(LLONG_MIN)) == INT2FIX(-1)
 #else
-        /* Ruby 1.8.7 and REE doesn't have rb_big_cmp */
-        rb_funcall(bignum, id_cmp, 1, LL2NUM(LLONG_MIN)) == INT2FIX(-1)
+        rb_big_cmp(bignum, LL2NUM(LLONG_MIN)) == INT2FIX(-1)
 #endif
        ) {
       goto overflow;

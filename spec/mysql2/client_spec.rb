@@ -435,16 +435,16 @@ RSpec.describe Mysql2::Client do
 
   it "should set default program_name in connect_attrs" do
     client = new_client
-    if Mysql2::Client.info[:version] < '5.6' or client.info[:version] < '5.6'
+    if Mysql2::Client.info[:version] < '5.6' || client.info[:version] < '5.6'
       pending('Both client and server versions must be MySQL 5.6 or later.')
     end
     result = client.query("SELECT attr_value FROM performance_schema.session_account_connect_attrs WHERE processlist_id = connection_id() AND attr_name = 'program_name'")
-    expect(result.first['attr_value']).to eq($0)
+    expect(result.first['attr_value']).to eq($PROGRAM_NAME)
   end
 
   it "should set custom connect_attrs" do
-    client = new_client(:connect_attrs => {:program_name => 'my_program_name', :foo => 'fooval', :bar => 'barval'})
-    if Mysql2::Client.info[:version] < '5.6' or client.info[:version] < '5.6'
+    client = new_client(:connect_attrs => { :program_name => 'my_program_name', :foo => 'fooval', :bar => 'barval' })
+    if Mysql2::Client.info[:version] < '5.6' || client.info[:version] < '5.6'
       pending('Both client and server versions must be MySQL 5.6 or later.')
     end
     results = Hash[client.query("SELECT * FROM performance_schema.session_account_connect_attrs WHERE processlist_id = connection_id()").map { |x| x.values_at('ATTR_NAME', 'ATTR_VALUE') }]
@@ -802,16 +802,16 @@ RSpec.describe Mysql2::Client do
       }.not_to raise_error
     end
 
-      it "should carry over the original string's encoding" do
-        str = "abc'def\"ghi\0jkl%mno"
-        escaped = Mysql2::Client.escape(str)
-        expect(escaped.encoding).to eql(str.encoding)
+    it "should carry over the original string's encoding" do
+      str = "abc'def\"ghi\0jkl%mno"
+      escaped = Mysql2::Client.escape(str)
+      expect(escaped.encoding).to eql(str.encoding)
 
-        str.encode!('us-ascii')
-        escaped = Mysql2::Client.escape(str)
-        expect(escaped.encoding).to eql(str.encoding)
-      end
+      str.encode!('us-ascii')
+      escaped = Mysql2::Client.escape(str)
+      expect(escaped.encoding).to eql(str.encoding)
     end
+  end
 
   it "should respond to #escape" do
     expect(@client).to respond_to(:escape)
@@ -1039,7 +1039,7 @@ RSpec.describe Mysql2::Client do
     client.query('SELECT 1')
   end
 
-    it "should respond to #encoding" do
-      expect(@client).to respond_to(:encoding)
-    end
+  it "should respond to #encoding" do
+    expect(@client).to respond_to(:encoding)
   end
+end

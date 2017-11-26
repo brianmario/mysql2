@@ -1,4 +1,5 @@
 # encoding: UTF-8
+
 require 'rake'
 
 # Load custom tasks (careful attention to define tasks before prerequisites)

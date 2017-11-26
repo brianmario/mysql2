@@ -1,4 +1,5 @@
 # encoding: UTF-8
+
 require 'spec_helper'
 begin
   require 'eventmachine'

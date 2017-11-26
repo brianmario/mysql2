@@ -6,26 +6,6 @@
 # Note that changes in the inspected code, or installation of new
 # versions of RuboCop, may require this file to be generated again.
 
-# Offense count: 15
-# Cop supports --auto-correct.
-Layout/EmptyLineAfterMagicComment:
-  Exclude:
-    - 'Rakefile'
-    - 'benchmark/active_record.rb'
-    - 'benchmark/active_record_threaded.rb'
-    - 'benchmark/allocations.rb'
-    - 'benchmark/escape.rb'
-    - 'benchmark/query_with_mysql_casting.rb'
-    - 'benchmark/query_without_mysql_casting.rb'
-    - 'benchmark/sequel.rb'
-    - 'benchmark/setup_db.rb'
-    - 'ext/mysql2/extconf.rb'
-    - 'lib/mysql2.rb'
-    - 'spec/em/em_spec.rb'
-    - 'spec/mysql2/client_spec.rb'
-    - 'spec/mysql2/result_spec.rb'
-    - 'spec/mysql2/statement_spec.rb'
-
 # Offense count: 2
 # Cop supports --auto-correct.
 Layout/SpaceInsidePercentLiteralDelimiters:

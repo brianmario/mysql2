@@ -26,15 +26,6 @@ Layout/EmptyLineAfterMagicComment:
     - 'spec/mysql2/result_spec.rb'
     - 'spec/mysql2/statement_spec.rb'
 
-# Offense count: 3
-# Cop supports --auto-correct.
-# Configuration parameters: EnforcedStyle, SupportedStyles.
-# SupportedStyles: auto_detection, squiggly, active_support, powerpack, unindent
-Layout/IndentHeredoc:
-  Exclude:
-    - 'support/ruby_enc_to_mysql.rb'
-    - 'tasks/compile.rake'
-
 # Offense count: 2
 # Cop supports --auto-correct.
 Layout/SpaceInsidePercentLiteralDelimiters:

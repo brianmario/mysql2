@@ -15,6 +15,9 @@ Layout/CaseIndentation:
 Layout/IndentHash:
   EnforcedStyle: consistent
 
+Layout/IndentHeredoc:
+  EnforcedStyle: powerpack
+
 Lint/EndAlignment:
   EnforcedStyleAlignWith: variable
 

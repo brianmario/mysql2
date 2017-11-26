@@ -40,14 +40,14 @@ mysql_to_rb = {
   "eucjpms"  => "eucJP-ms",
 }
 
-puts <<-header
-%readonly-tables
-%enum
-%define lookup-function-name mysql2_mysql_enc_name_to_rb
-%define hash-function-name mysql2_mysql_enc_name_to_rb_hash
-%struct-type
-struct mysql2_mysql_enc_name_to_rb_map { const char *name; const char *rb_name; }
-%%
+puts <<-header.strip_indent
+  %readonly-tables
+  %enum
+  %define lookup-function-name mysql2_mysql_enc_name_to_rb
+  %define hash-function-name mysql2_mysql_enc_name_to_rb_hash
+  %struct-type
+  struct mysql2_mysql_enc_name_to_rb_map { const char *name; const char *rb_name; }
+  %%
 header
 
 mysql_to_rb.each do |mysql, ruby|

@@ -21,6 +21,10 @@ Layout/IndentHeredoc:
 Lint/EndAlignment:
   EnforcedStyleAlignWith: variable
 
+Style/Encoding:
+  AutoCorrectEncodingComment: '# encoding: UTF-8'
+  EnforcedStyle: always
+
 Style/TrailingCommaInArguments:
   EnforcedStyleForMultiline: consistent_comma
 

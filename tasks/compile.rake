@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 require "rake/extensiontask"
 
 load File.expand_path('../../mysql2.gemspec', __FILE__) unless defined? Mysql2::GEMSPEC

@@ -66,13 +66,6 @@ Style/Documentation:
     - 'lib/mysql2/result.rb'
     - 'lib/mysql2/statement.rb'
 
-# Offense count: 21
-# Cop supports --auto-correct.
-# Configuration parameters: EnforcedStyle, SupportedStyles, AutoCorrectEncodingComment.
-# SupportedStyles: when_needed, always, never
-Style/Encoding:
-  Enabled: false
-
 # Offense count: 14
 # Configuration parameters: AllowedVariables.
 Style/GlobalVars:

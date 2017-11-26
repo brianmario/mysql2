@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 mysql_to_rb = {
   "big5"     => "Big5",
   "dec8"     => nil,

@@ -56,7 +56,7 @@ begin
           defer = client.query "SELECT sleep(0.1) as first_query"
           defer.callback do
             client.close
-            fail 'some error'
+            raise 'some error'
           end
           defer.errback do
             # This _shouldn't_ be run, but it needed to prevent the specs from

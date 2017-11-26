@@ -78,15 +78,6 @@ Style/GlobalVars:
 Style/NumericLiterals:
   MinDigits: 20
 
-# Offense count: 2
-# Cop supports --auto-correct.
-# Configuration parameters: EnforcedStyle, SupportedStyles.
-# SupportedStyles: only_raise, only_fail, semantic
-Style/SignalException:
-  Exclude:
-    - 'lib/mysql2/client.rb'
-    - 'spec/em/em_spec.rb'
-
 # Offense count: 726
 # Cop supports --auto-correct.
 # Configuration parameters: EnforcedStyle, SupportedStyles, ConsistentQuotesInMultiline.

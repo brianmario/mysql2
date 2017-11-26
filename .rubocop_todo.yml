@@ -53,14 +53,6 @@ Naming/HeredocDelimiterNaming:
 
 # Offense count: 2
 # Cop supports --auto-correct.
-# Configuration parameters: AutoCorrect.
-Performance/HashEachMethods:
-  Exclude:
-    - 'benchmark/active_record.rb'
-    - 'benchmark/allocations.rb'
-
-# Offense count: 2
-# Cop supports --auto-correct.
 # Configuration parameters: MaxKeyValuePairs.
 Performance/RedundantMerge:
   Exclude:

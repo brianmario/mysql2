@@ -23,7 +23,7 @@ Benchmark.ips do |x|
 
     x.report(adapter) do
       TestModel.limit(batch_size).to_a.each do |r|
-        r.attributes.keys.each do |k|
+        r.attributes.each_key do |k|
           r.send(k.to_sym)
         end
       end

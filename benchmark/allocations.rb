@@ -24,7 +24,7 @@ end
 
 bench_allocations('coercion') do |batch_size|
   TestModel.limit(batch_size).to_a.each do |r|
-    r.attributes.keys.each do |k|
+    r.attributes.each_key do |k|
       r.send(k.to_sym)
     end
   end

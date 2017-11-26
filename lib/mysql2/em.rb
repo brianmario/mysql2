@@ -17,7 +17,7 @@ module Mysql2
           detach
           begin
             result = @client.async_result
-          rescue => e
+          rescue StandardError => e
             @deferable.fail(e)
           else
             @deferable.succeed(result)

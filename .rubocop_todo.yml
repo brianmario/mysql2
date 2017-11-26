@@ -46,11 +46,6 @@ Lint/AmbiguousBlockAssociation:
   Exclude:
     - 'spec/mysql2/client_spec.rb'
 
-# Offense count: 1
-Lint/RescueWithoutErrorClass:
-  Exclude:
-    - 'lib/mysql2/em.rb'
-
 # Offense count: 2
 # Cop supports --auto-correct.
 Lint/UnifiedInteger:

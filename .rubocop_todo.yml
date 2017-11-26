@@ -72,12 +72,6 @@ Style/GlobalVars:
   Exclude:
     - 'ext/mysql2/extconf.rb'
 
-# Offense count: 1
-# Configuration parameters: MinBodyLength.
-Style/GuardClause:
-  Exclude:
-    - 'spec/mysql2/client_spec.rb'
-
 # Offense count: 175
 # Cop supports --auto-correct.
 # Configuration parameters: SupportedStyles, UseHashRocketsWithSymbolValues, PreferHashRocketsForNonAlnumEndingSymbols.

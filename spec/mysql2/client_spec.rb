@@ -681,13 +681,7 @@ RSpec.describe Mysql2::Client do
 
         io_wrapper = IO.for_fd(@client.socket, :autoclose => false)
         loops = 0
-        loop do
-          if IO.select([io_wrapper], nil, nil, 0.05)
-            break
-          else
-            loops += 1
-          end
-        end
+        loops += 1 until IO.select([io_wrapper], nil, nil, 0.05)
 
         # make sure we waited some period of time
         expect(loops >= 1).to be true

@@ -658,7 +658,7 @@ RSpec.describe Mysql2::Client do
         sleep_time = 0.5
 
         # Note that each thread opens its own database connection
-        threads = 5.times.map do
+        threads = Array.new(5) do
           Thread.new do
             new_client do |client|
               client.query("SELECT SLEEP(#{sleep_time})")

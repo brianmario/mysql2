@@ -14,7 +14,7 @@ Benchmark.ips do |x|
     ActiveRecord::Base.establish_connection(opts.merge(:adapter => adapter))
 
     x.report(adapter) do
-      number_of_threads.times.map do
+      Array.new(number_of_threads) do
         Thread.new { ActiveRecord::Base.connection.execute('SELECT SLEEP(1)') }
       end.each(&:join)
     end

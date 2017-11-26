@@ -51,15 +51,6 @@ Naming/HeredocDelimiterNaming:
   Exclude:
     - 'tasks/compile.rake'
 
-# Offense count: 3
-# Cop supports --auto-correct.
-# Configuration parameters: AutoCorrect.
-Performance/TimesMap:
-  Exclude:
-    - 'benchmark/active_record_threaded.rb'
-    - 'examples/threaded.rb'
-    - 'spec/mysql2/client_spec.rb'
-
 # Offense count: 2
 # Cop supports --auto-correct.
 # Configuration parameters: EnforcedStyle, SupportedStyles.

@@ -147,24 +147,16 @@ RSpec.describe Mysql2::Statement do
     now = Time.now
     statement = @client.prepare('SELECT ? AS a')
     result = statement.execute(now)
-    if RUBY_VERSION =~ /1.8/
-      expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
-    else
-      # microseconds is six digits after the decimal, but only test on 5 significant figures
-      expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
-    end
+    # microseconds is six digits after the decimal, but only test on 5 significant figures
+    expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
   end
 
   it "should prepare DateTime values with microseconds" do
     now = DateTime.now
     statement = @client.prepare('SELECT ? AS a')
     result = statement.execute(now)
-    if RUBY_VERSION =~ /1.8/
-      expect(result.first['a'].strftime('%F %T %z')).to eql(now.strftime('%F %T %z'))
-    else
-      # microseconds is six digits after the decimal, but only test on 5 significant figures
-      expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
-    end
+    # microseconds is six digits after the decimal, but only test on 5 significant figures
+    expect(result.first['a'].strftime('%F %T.%5N %z')).to eql(now.strftime('%F %T.%5N %z'))
   end
 
   it "should tell us about the fields" do

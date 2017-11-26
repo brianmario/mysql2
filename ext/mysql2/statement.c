@@ -21,7 +21,7 @@ static void rb_mysql_stmt_mark(void * ptr) {
   rb_gc_mark(stmt_wrapper->client);
 }
 
-static void *nogvl_stmt_close(void * ptr) {
+static void *nogvl_stmt_close(void *ptr) {
   mysql_stmt_wrapper *stmt_wrapper = ptr;
   if (stmt_wrapper->stmt) {
     mysql_stmt_close(stmt_wrapper->stmt);
@@ -30,7 +30,7 @@ static void *nogvl_stmt_close(void * ptr) {
   return NULL;
 }
 
-static void rb_mysql_stmt_free(void * ptr) {
+static void rb_mysql_stmt_free(void *ptr) {
   mysql_stmt_wrapper *stmt_wrapper = ptr;
   decr_mysql2_stmt(stmt_wrapper);
 }
@@ -145,7 +145,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
  *
  * Returns the number of parameters the prepared statement expects.
  */
-static VALUE param_count(VALUE self) {
+static VALUE rb_mysql_stmt_param_count(VALUE self) {
   GET_STATEMENT(self);
 
   return ULL2NUM(mysql_stmt_param_count(stmt_wrapper->stmt));
@@ -155,13 +155,13 @@ static VALUE param_count(VALUE self) {
  *
  * Returns the number of fields the prepared statement returns.
  */
-static VALUE field_count(VALUE self) {
+static VALUE rb_mysql_stmt_field_count(VALUE self) {
   GET_STATEMENT(self);
 
   return UINT2NUM(mysql_stmt_field_count(stmt_wrapper->stmt));
 }
 
-static void *nogvl_execute(void *ptr) {
+static void *nogvl_stmt_execute(void *ptr) {
   MYSQL_STMT *stmt = ptr;
 
   if (mysql_stmt_execute(stmt)) {
@@ -246,7 +246,7 @@ overflow:
  *
  * Executes the current prepared statement, returns +result+.
  */
-static VALUE execute(int argc, VALUE *argv, VALUE self) {
+static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   MYSQL_BIND *bind_buffers = NULL;
   unsigned long *length_buffers = NULL;
   unsigned long bind_count;
@@ -401,7 +401,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
     }
   }
 
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_execute, stmt, RUBY_UBF_IO, 0) == Qfalse) {
+  if ((VALUE)rb_thread_call_without_gvl(nogvl_stmt_execute, stmt, RUBY_UBF_IO, 0) == Qfalse) {
     FREE_BINDS;
     rb_raise_mysql2_stmt_error(stmt_wrapper);
   }
@@ -449,7 +449,7 @@ static VALUE execute(int argc, VALUE *argv, VALUE self) {
  *
  * Returns a list of fields that will be returned by this statement.
  */
-static VALUE fields(VALUE self) {
+static VALUE rb_mysql_stmt_fields(VALUE self) {
   MYSQL_FIELD *fields;
   MYSQL_RES *metadata;
   unsigned int field_count;
@@ -542,10 +542,10 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
 void init_mysql2_statement() {
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
 
-  rb_define_method(cMysql2Statement, "param_count", param_count, 0);
-  rb_define_method(cMysql2Statement, "field_count", field_count, 0);
-  rb_define_method(cMysql2Statement, "_execute", execute, -1);
-  rb_define_method(cMysql2Statement, "fields", fields, 0);
+  rb_define_method(cMysql2Statement, "param_count", rb_mysql_stmt_param_count, 0);
+  rb_define_method(cMysql2Statement, "field_count", rb_mysql_stmt_field_count, 0);
+  rb_define_method(cMysql2Statement, "_execute", rb_mysql_stmt_execute, -1);
+  rb_define_method(cMysql2Statement, "fields", rb_mysql_stmt_fields, 0);
   rb_define_method(cMysql2Statement, "last_id", rb_mysql_stmt_last_id, 0);
   rb_define_method(cMysql2Statement, "affected_rows", rb_mysql_stmt_affected_rows, 0);
   rb_define_method(cMysql2Statement, "close", rb_mysql_stmt_close, 0);

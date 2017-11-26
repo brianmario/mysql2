@@ -63,7 +63,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should parse flags array" do
-    client = Klient.new :flags => %w( FOUND_ROWS -PROTOCOL_41 )
+    client = Klient.new :flags => %w(FOUND_ROWS -PROTOCOL_41)
     expect(client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).to eql(Mysql2::Client::FOUND_ROWS)
     expect(client.connect_args.last[6] & Mysql2::Client::PROTOCOL_41).to eql(0)
   end

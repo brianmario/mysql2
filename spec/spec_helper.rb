@@ -37,7 +37,9 @@ RSpec.configure do |config|
   end
 
   def num_classes
+    # rubocop:disable Lint/UnifiedInteger
     0.class == Integer ? [Integer] : [Fixnum, Bignum]
+    # rubocop:enable Lint/UnifiedInteger
   end
 
   config.before :each do

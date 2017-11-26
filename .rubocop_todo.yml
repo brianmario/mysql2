@@ -7,12 +7,6 @@
 # versions of RuboCop, may require this file to be generated again.
 
 # Offense count: 2
-# Cop supports --auto-correct.
-Lint/UnifiedInteger:
-  Exclude:
-    - 'spec/spec_helper.rb'
-
-# Offense count: 2
 Metrics/AbcSize:
   Max: 90
 

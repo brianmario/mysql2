@@ -196,7 +196,7 @@ RSpec.describe Mysql2::Statement do
   end
 
   it "should warn but still work if cache_rows is set to false" do
-    @client.query_options.merge!(:cache_rows => false)
+    @client.query_options[:cache_rows] = false
     statement = @client.prepare 'SELECT 1'
     result = nil
     expect { result = statement.execute.to_a }.to output(/:cache_rows is forced for prepared statements/).to_stderr

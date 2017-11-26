@@ -493,7 +493,7 @@ RSpec.describe Mysql2::Client do
     end
 
     it "should allow changing query options for subsequent queries" do
-      @client.query_options.merge!(:something => :else)
+      @client.query_options[:something] = :else
       result = @client.query "SELECT 1"
       expect(@client.query_options[:something]).to eql(:else)
       expect(result.instance_variable_get('@query_options')[:something]).to eql(:else)

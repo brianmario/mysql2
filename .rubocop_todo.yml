@@ -51,14 +51,6 @@ Naming/HeredocDelimiterNaming:
   Exclude:
     - 'tasks/compile.rake'
 
-# Offense count: 2
-# Cop supports --auto-correct.
-# Configuration parameters: MaxKeyValuePairs.
-Performance/RedundantMerge:
-  Exclude:
-    - 'spec/mysql2/client_spec.rb'
-    - 'spec/mysql2/statement_spec.rb'
-
 # Offense count: 3
 # Cop supports --auto-correct.
 # Configuration parameters: AutoCorrect.

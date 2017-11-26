@@ -51,10 +51,10 @@ struct mysql2_mysql_enc_name_to_rb_map { const char *name; const char *rb_name; 
 header
 
 mysql_to_rb.each do |mysql, ruby|
-  if ruby.nil?
-    name = "NULL"
+  name = if ruby.nil?
+    "NULL"
   else
-    name = "\"#{ruby}\""
+    "\"#{ruby}\""
   end
 
   puts "#{mysql}, #{name}"

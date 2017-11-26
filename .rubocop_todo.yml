@@ -151,14 +151,6 @@ Style/BlockDelimiters:
     - 'spec/mysql2/result_spec.rb'
     - 'spec/mysql2/statement_spec.rb'
 
-# Offense count: 1
-# Cop supports --auto-correct.
-# Configuration parameters: EnforcedStyle, SupportedStyles, SingleLineConditionsOnly, IncludeTernaryExpressions.
-# SupportedStyles: assign_to_condition, assign_inside_condition
-Style/ConditionalAssignment:
-  Exclude:
-    - 'support/ruby_enc_to_mysql.rb'
-
 # Offense count: 10
 Style/Documentation:
   Exclude:

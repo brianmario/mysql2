@@ -50,15 +50,15 @@ module Mysql2
       ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
       self.ssl_mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
 
-      case opts[:flags]
+      flags = case opts[:flags]
       when Array
-        flags = parse_flags_array(opts[:flags], @query_options[:connect_flags])
+        parse_flags_array(opts[:flags], @query_options[:connect_flags])
       when String
-        flags = parse_flags_array(opts[:flags].split(' '), @query_options[:connect_flags])
+        parse_flags_array(opts[:flags].split(' '), @query_options[:connect_flags])
       when Integer
-        flags = @query_options[:connect_flags] | opts[:flags]
+        @query_options[:connect_flags] | opts[:flags]
       else
-        flags = @query_options[:connect_flags]
+        @query_options[:connect_flags]
       end
 
       # SSL verify is a connection flag rather than a mysql_ssl_set option

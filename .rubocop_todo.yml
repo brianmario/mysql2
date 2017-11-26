@@ -51,14 +51,6 @@ Naming/HeredocDelimiterNaming:
   Exclude:
     - 'tasks/compile.rake'
 
-# Offense count: 2
-# Cop supports --auto-correct.
-# Configuration parameters: EnforcedStyle, SupportedStyles.
-# SupportedStyles: prefer_alias, prefer_alias_method
-Style/Alias:
-  Exclude:
-    - 'lib/mysql2/error.rb'
-
 # Offense count: 48
 # Cop supports --auto-correct.
 # Configuration parameters: EnforcedStyle, SupportedStyles, ProceduralMethods, FunctionalMethods, IgnoredMethods.

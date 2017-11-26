@@ -8,13 +8,13 @@ RSpec.describe Mysql2::Client do
 
     it "should not raise an exception for valid defaults group" do
       expect do
-        new_client(:default_file => cnf_file, :default_group => "test")
+        new_client(default_file: cnf_file, default_group: "test")
       end.not_to raise_error
     end
 
     it "should not raise an exception without default group" do
       expect do
-        new_client(:default_file => cnf_file)
+        new_client(default_file: cnf_file)
       end.not_to raise_error
     end
   end
@@ -29,23 +29,23 @@ RSpec.describe Mysql2::Client do
 
   it "should raise an exception on create for invalid encodings" do
     expect do
-      new_client(:encoding => "fake")
+      new_client(encoding: "fake")
     end.to raise_error(Mysql2::Error)
   end
 
   it "should raise an exception on non-string encodings" do
     expect do
-      new_client(:encoding => :fake)
+      new_client(encoding: :fake)
     end.to raise_error(TypeError)
   end
 
   it "should not raise an exception on create for a valid encoding" do
     expect do
-      new_client(:encoding => "utf8")
+      new_client(encoding: "utf8")
     end.not_to raise_error
 
     expect do
-      new_client(DatabaseCredentials['root'].merge(:encoding => "big5"))
+      new_client(DatabaseCredentials['root'].merge(encoding: "big5"))
     end.not_to raise_error
   end
 
@@ -58,18 +58,18 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should accept connect flags and pass them to #connect" do
-    client = Klient.new :flags => Mysql2::Client::FOUND_ROWS
+    client = Klient.new flags: Mysql2::Client::FOUND_ROWS
     expect(client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).to be > 0
   end
 
   it "should parse flags array" do
-    client = Klient.new :flags => %w(FOUND_ROWS -PROTOCOL_41)
+    client = Klient.new flags: %w(FOUND_ROWS -PROTOCOL_41)
     expect(client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).to eql(Mysql2::Client::FOUND_ROWS)
     expect(client.connect_args.last[6] & Mysql2::Client::PROTOCOL_41).to eql(0)
   end
 
   it "should parse flags string" do
-    client = Klient.new :flags => "FOUND_ROWS -PROTOCOL_41"
+    client = Klient.new flags: "FOUND_ROWS -PROTOCOL_41"
     expect(client.connect_args.last[6] & Mysql2::Client::FOUND_ROWS).to eql(Mysql2::Client::FOUND_ROWS)
     expect(client.connect_args.last[6] & Mysql2::Client::PROTOCOL_41).to eql(0)
   end
@@ -214,24 +214,24 @@ RSpec.describe Mysql2::Client do
     if RUBY_PLATFORM =~ /mingw|mswin/
       it "cannot be disabled" do
         expect do
-          client = new_client(:automatic_close => false)
+          client = new_client(automatic_close: false)
           expect(client.automatic_close?).to be(true)
         end.to output(/always closed by garbage collector/).to_stderr
 
         expect do
-          client = new_client(:automatic_close => true)
+          client = new_client(automatic_close: true)
           expect(client.automatic_close?).to be(true)
         end.to_not output(/always closed by garbage collector/).to_stderr
 
         expect do
-          client = new_client(:automatic_close => true)
+          client = new_client(automatic_close: true)
           client.automatic_close = false
           expect(client.automatic_close?).to be(true)
         end.to output(/always closed by garbage collector/).to_stderr
       end
     else
       it "can be configured" do
-        client = new_client(:automatic_close => false)
+        client = new_client(automatic_close: false)
         expect(client.automatic_close?).to be(false)
       end
 
@@ -305,7 +305,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should not try to query closed mysql connection" do
-    client = new_client(:reconnect => true)
+    client = new_client(reconnect: true)
     expect(client.close).to be_nil
     expect do
       client.query "SELECT 1"
@@ -358,7 +358,7 @@ RSpec.describe Mysql2::Client do
         # # Note that mysql_info() returns a non-NULL value for INSERT ... VALUES only for the multiple-row form of the statement (that is, only if multiple value lists are specified).
         @client.query("INSERT INTO infoTest (blah) VALUES (1234),(4535)")
 
-        expect(@client.query_info).to eql(:records => 2, :duplicates => 0, :warnings => 0)
+        expect(@client.query_info).to eql(records: 2, duplicates: 0, warnings: 0)
         expect(@client.query_info_string).to eq('Records: 2  Duplicates: 0  Warnings: 0')
 
         @client.query "DROP TABLE infoTest"
@@ -368,7 +368,7 @@ RSpec.describe Mysql2::Client do
 
   context ":local_infile" do
     before(:all) do
-      new_client(:local_infile => true) do |client|
+      new_client(local_infile: true) do |client|
         local = client.query "SHOW VARIABLES LIKE 'local_infile'"
         local_enabled = local.any? { |x| x['Value'] == 'ON' }
         skip("DON'T WORRY, THIS TEST PASSES - but LOCAL INFILE is not enabled in your MySQL daemon.") unless local_enabled
@@ -390,24 +390,24 @@ RSpec.describe Mysql2::Client do
     end
 
     it "should raise an error when local_infile is disabled" do
-      client = new_client(:local_infile => false)
+      client = new_client(local_infile: false)
       expect do
         client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
       end.to raise_error(Mysql2::Error, /command is not allowed/)
     end
 
     it "should raise an error when a non-existent file is loaded" do
-      client = new_client(:local_infile => true)
+      client = new_client(local_infile: true)
       expect do
         client.query "LOAD DATA LOCAL INFILE 'this/file/is/not/here' INTO TABLE infileTest"
       end.to raise_error(Mysql2::Error, 'No such file or directory: this/file/is/not/here')
     end
 
     it "should LOAD DATA LOCAL INFILE" do
-      client = new_client(:local_infile => true)
+      client = new_client(local_infile: true)
       client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
       info = client.query_info
-      expect(info).to eql(:records => 1, :deleted => 0, :skipped => 0, :warnings => 0)
+      expect(info).to eql(records: 1, deleted: 0, skipped: 0, warnings: 0)
 
       result = client.query "SELECT * FROM infileTest"
       expect(result.first).to eql('id' => 1, 'foo' => 'Hello', 'bar' => 'World')
@@ -416,24 +416,24 @@ RSpec.describe Mysql2::Client do
 
   it "should expect connect_timeout to be a positive integer" do
     expect do
-      new_client(:connect_timeout => -1)
+      new_client(connect_timeout: -1)
     end.to raise_error(Mysql2::Error)
   end
 
   it "should expect read_timeout to be a positive integer" do
     expect do
-      new_client(:read_timeout => -1)
+      new_client(read_timeout: -1)
     end.to raise_error(Mysql2::Error)
   end
 
   it "should expect write_timeout to be a positive integer" do
     expect do
-      new_client(:write_timeout => -1)
+      new_client(write_timeout: -1)
     end.to raise_error(Mysql2::Error)
   end
 
   it "should allow nil read_timeout" do
-    client = new_client(:read_timeout => nil)
+    client = new_client(read_timeout: nil)
 
     expect(client.read_timeout).to be_nil
   end
@@ -448,7 +448,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should set custom connect_attrs" do
-    client = new_client(:connect_attrs => { :program_name => 'my_program_name', :foo => 'fooval', :bar => 'barval' })
+    client = new_client(connect_attrs: { program_name: 'my_program_name', foo: 'fooval', bar: 'barval' })
     if Mysql2::Client.info[:version] < '5.6' || client.info[:version] < '5.6'
       pending('Both client and server versions must be MySQL 5.6 or later.')
     end
@@ -460,18 +460,18 @@ RSpec.describe Mysql2::Client do
 
   context "#query" do
     it "should let you query again if iterating is finished when streaming" do
-      @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).each.to_a
+      @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false).each.to_a
 
       expect do
-        @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false)
+        @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false)
       end.to_not raise_error
     end
 
     it "should not let you query again if iterating is not finished when streaming" do
-      @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false).first
+      @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false).first
 
       expect do
-        @client.query("SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false)
+        @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false)
       end.to raise_exception(Mysql2::Error)
     end
 
@@ -482,10 +482,10 @@ RSpec.describe Mysql2::Client do
     end
 
     it "should not retain query options set on a query for subsequent queries, but should retain it in the result" do
-      result = @client.query "SELECT 1", :something => :else
+      result = @client.query "SELECT 1", something: :else
       expect(@client.query_options[:something]).to be_nil
-      expect(result.instance_variable_get('@query_options')).to eql(@client.query_options.merge(:something => :else))
-      expect(@client.instance_variable_get('@current_query_options')).to eql(@client.query_options.merge(:something => :else))
+      expect(result.instance_variable_get('@query_options')).to eql(@client.query_options.merge(something: :else))
+      expect(@client.instance_variable_get('@current_query_options')).to eql(@client.query_options.merge(something: :else))
 
       result = @client.query "SELECT 1"
       expect(result.instance_variable_get('@query_options')).to eql(@client.query_options)
@@ -508,12 +508,12 @@ RSpec.describe Mysql2::Client do
     end
 
     it "should be able to return results as an array" do
-      expect(@client.query("SELECT 1", :as => :array).first).to be_an_instance_of(Array)
-      @client.query("SELECT 1").each(:as => :array)
+      expect(@client.query("SELECT 1", as: :array).first).to be_an_instance_of(Array)
+      @client.query("SELECT 1").each(as: :array)
     end
 
     it "should be able to return results with symbolized keys" do
-      expect(@client.query("SELECT 1", :symbolize_keys => true).first.keys[0]).to be_an_instance_of(Symbol)
+      expect(@client.query("SELECT 1", symbolize_keys: true).first.keys[0]).to be_an_instance_of(Symbol)
     end
 
     it "should require an open connection" do
@@ -544,21 +544,21 @@ RSpec.describe Mysql2::Client do
 
     if RUBY_PLATFORM !~ /mingw|mswin/
       it "should not allow another query to be sent without fetching a result first" do
-        @client.query("SELECT 1", :async => true)
+        @client.query("SELECT 1", async: true)
         expect do
           @client.query("SELECT 1")
         end.to raise_error(Mysql2::Error)
       end
 
       it "should describe the thread holding the active query" do
-        thr = Thread.new { @client.query("SELECT 1", :async => true) }
+        thr = Thread.new { @client.query("SELECT 1", async: true) }
 
         thr.join
         expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(thr.inspect)))
       end
 
       it "should timeout if we wait longer than :read_timeout" do
-        client = new_client(:read_timeout => 0)
+        client = new_client(read_timeout: 0)
         expect do
           client.query('SELECT SLEEP(0.1)')
         end.to raise_error(Mysql2::Error)
@@ -631,7 +631,7 @@ RSpec.describe Mysql2::Client do
             pending('MySQL 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 
-          client = new_client(:reconnect => true)
+          client = new_client(reconnect: true)
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
@@ -677,9 +677,9 @@ RSpec.describe Mysql2::Client do
       it "evented async queries should be supported" do
         skip("ruby 1.8 doesn't support IO.for_fd options") if RUBY_VERSION.start_with?("1.8.")
         # should immediately return nil
-        expect(@client.query("SELECT sleep(0.1)", :async => true)).to eql(nil)
+        expect(@client.query("SELECT sleep(0.1)", async: true)).to eql(nil)
 
-        io_wrapper = IO.for_fd(@client.socket, :autoclose => false)
+        io_wrapper = IO.for_fd(@client.socket, autoclose: false)
         loops = 0
         loops += 1 until IO.select([io_wrapper], nil, nil, 0.05)
 
@@ -693,7 +693,7 @@ RSpec.describe Mysql2::Client do
 
     context "Multiple results sets" do
       before(:each) do
-        @multi_client = new_client(:flags => Mysql2::Client::MULTI_STATEMENTS)
+        @multi_client = new_client(flags: Mysql2::Client::MULTI_STATEMENTS)
       end
 
       it "should raise an exception when one of multiple statements fails" do
@@ -846,7 +846,7 @@ RSpec.describe Mysql2::Client do
     end
 
     context 'when mysql encoding is not utf8' do
-      let(:client) { new_client(:encoding => "ujis") }
+      let(:client) { new_client(encoding: "ujis") }
 
       it 'should return a internal encoding string if Encoding.default_internal is set' do
         with_internal_encoding Encoding::UTF_8 do
@@ -909,7 +909,7 @@ RSpec.describe Mysql2::Client do
       with_internal_encoding nil do
         expect(@client.server_info[:version].encoding).to eql(Encoding::UTF_8)
 
-        client2 = new_client(:encoding => 'ascii')
+        client2 = new_client(encoding: 'ascii')
         expect(client2.server_info[:version].encoding).to eql(Encoding::ASCII)
       end
     end
@@ -927,7 +927,7 @@ RSpec.describe Mysql2::Client do
 
   it "should raise a Mysql2::Error exception upon connection failure" do
     expect do
-      new_client(:host => "localhost", :username => 'asdfasdf8d2h', :password => 'asdfasdfw42')
+      new_client(host: "localhost", username: 'asdfasdf8d2h', password: 'asdfasdfw42')
     end.to raise_error(Mysql2::Error)
 
     expect do
@@ -1034,7 +1034,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should be able to connect using plaintext password" do
-    client = new_client(:enable_cleartext_plugin => true)
+    client = new_client(enable_cleartext_plugin: true)
     client.query('SELECT 1')
   end
 

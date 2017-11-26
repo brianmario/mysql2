@@ -3,9 +3,9 @@
 module Mysql2
   class Error < StandardError
     ENCODE_OPTS = {
-      :undef => :replace,
-      :invalid => :replace,
-      :replace => '?'.freeze,
+      undef: :replace,
+      invalid: :replace,
+      replace: '?'.freeze,
     }.freeze
 
     attr_reader :error_number, :sql_state

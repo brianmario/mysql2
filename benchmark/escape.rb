@@ -16,7 +16,7 @@ def run_escape_benchmarks(str)
       mysql.quote str
     end
 
-    mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
+    mysql2 = Mysql2::Client.new(host: "localhost", username: "root")
     x.report "Mysql2 #{str.inspect}" do
       mysql2.escape str
     end

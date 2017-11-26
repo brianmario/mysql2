@@ -4,7 +4,7 @@ require './spec/spec_helper.rb'
 
 RSpec.describe Mysql2::Statement do
   before :each do
-    @client = new_client(:encoding => "utf8")
+    @client = new_client(encoding: "utf8")
   end
 
   def stmt_count
@@ -249,7 +249,7 @@ RSpec.describe Mysql2::Statement do
       n = 1
       stmt = @client.prepare("SELECT 1 UNION SELECT 2")
 
-      @client.query_options.merge!(:stream => true, :cache_rows => false, :as => :array)
+      @client.query_options.merge!(stream: true, cache_rows: false, as: :array)
 
       stmt.execute.each do |r|
         case n
@@ -379,7 +379,7 @@ RSpec.describe Mysql2::Statement do
 
     context "cast booleans for TINYINT if :cast_booleans is enabled" do
       # rubocop:disable Style/Semicolon
-      let(:client) { new_client(:cast_booleans => true) }
+      let(:client) { new_client(cast_booleans: true) }
       let(:id1) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; client.last_id }
       let(:id2) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 0)'; client.last_id }
       let(:id3) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'; client.last_id }
@@ -402,7 +402,7 @@ RSpec.describe Mysql2::Statement do
 
     context "cast booleans for BIT(1) if :cast_booleans is enabled" do
       # rubocop:disable Style/Semicolon
-      let(:client) { new_client(:cast_booleans => true) }
+      let(:client) { new_client(cast_booleans: true) }
       let(:id1) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'; client.last_id }
       let(:id2) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'; client.last_id }
       # rubocop:enable Style/Semicolon
@@ -506,7 +506,7 @@ RSpec.describe Mysql2::Statement do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
 
-          client2 = new_client(:encoding => 'ascii')
+          client2 = new_client(encoding: 'ascii')
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['enum_test'].encoding).to eql(Encoding::US_ASCII)
         end
@@ -536,7 +536,7 @@ RSpec.describe Mysql2::Statement do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['set_test'].encoding).to eql(Encoding::UTF_8)
 
-          client2 = new_client(:encoding => 'ascii')
+          client2 = new_client(encoding: 'ascii')
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['set_test'].encoding).to eql(Encoding::US_ASCII)
         end
@@ -625,7 +625,7 @@ RSpec.describe Mysql2::Statement do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               expect(result[field].encoding).to eql(Encoding::UTF_8)
 
-              client2 = new_client(:encoding => 'ascii')
+              client2 = new_client(encoding: 'ascii')
               result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               expect(result[field].encoding).to eql(Encoding::US_ASCII)
             end

@@ -11,7 +11,7 @@ Timeout.timeout(3.5) do
       overhead = rand(3)
       puts ">> thread #{Thread.current.object_id} query, #{overhead} sec overhead"
       # 3 second overhead per query
-      Mysql2::Client.new(:host => "localhost", :username => "root").query("SELECT sleep(#{overhead}) as result")
+      Mysql2::Client.new(host: "localhost", username: "root").query("SELECT sleep(#{overhead}) as result")
       puts "<< thread #{Thread.current.object_id} result, #{overhead} sec overhead"
     end
   end.each(&:join)

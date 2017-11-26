@@ -7,11 +7,6 @@
 # versions of RuboCop, may require this file to be generated again.
 
 # Offense count: 2
-Lint/AmbiguousBlockAssociation:
-  Exclude:
-    - 'spec/mysql2/client_spec.rb'
-
-# Offense count: 2
 # Cop supports --auto-correct.
 Lint/UnifiedInteger:
   Exclude:

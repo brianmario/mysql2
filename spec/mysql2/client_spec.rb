@@ -165,6 +165,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should terminate connections when calling close" do
+    # rubocop:disable Lint/AmbiguousBlockAssociation
     expect {
       client = Mysql2::Client.new(DatabaseCredentials['root'])
       connection_id = client.thread_id
@@ -182,10 +183,12 @@ RSpec.describe Mysql2::Client do
     }.to_not change {
       @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a
     }
+    # rubocop:enable Lint/AmbiguousBlockAssociation
   end
 
   it "should not leave dangling connections after garbage collection" do
     run_gc
+    # rubocop:disable Lint/AmbiguousBlockAssociation
     expect {
       expect {
         10.times do
@@ -200,6 +203,7 @@ RSpec.describe Mysql2::Client do
       @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
         @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
     }
+    # rubocop:enable Lint/AmbiguousBlockAssociation
   end
 
   context "#automatic_close" do

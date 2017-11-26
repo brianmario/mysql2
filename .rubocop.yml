@@ -1,31 +1,28 @@
 inherit_from: .rubocop_todo.yml
 
 AllCops:
+  TargetRubyVersion: 1.9
+
   DisplayCopNames: true
   Exclude:
     - 'pkg/**/*'
     - 'tmp/**/*'
     - 'vendor/**/*'
 
-Lint/EndAlignment:
-  AlignWith: variable
+Layout/CaseIndentation:
+  EnforcedStyle: end
 
-Style/CaseIndentation:
-  IndentWhenRelativeTo: end
-
-Style/IndentHash:
+Layout/IndentHash:
   EnforcedStyle: consistent
 
-Style/TrailingComma:
+Lint/EndAlignment:
+  EnforcedStyleAlignWith: variable
+
+Style/TrailingCommaInArguments:
+  EnforcedStyleForMultiline: consistent_comma
+
+Style/TrailingCommaInLiteral:
   EnforcedStyleForMultiline: consistent_comma
 
 Style/TrivialAccessors:
   AllowPredicates: true
-
-# TODO: remove when we end support for < 1.9.3
-
-Style/HashSyntax:
-  EnforcedStyle: hash_rockets
-
-Style/Lambda:
-  Enabled: false

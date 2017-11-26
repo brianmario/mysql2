@@ -7,13 +7,13 @@ begin
   desc " Run all examples with Valgrind"
   namespace :spec do
     task :valgrind do
-      VALGRIND_OPTS = %w(
+      VALGRIND_OPTS = %w[
         --num-callers=50
         --error-limit=no
         --partial-loads-ok=yes
         --undef-value-errors=no
         --trace-children=yes
-      ).freeze
+      ].freeze
       cmdline = "valgrind #{VALGRIND_OPTS.join(' ')} bundle exec rake spec"
       puts cmdline
       system cmdline

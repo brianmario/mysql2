@@ -218,7 +218,7 @@ RSpec.describe Mysql2::Statement do
 
     it "should be able to retrieve utf8 field names correctly" do
       stmt = @client.prepare 'SELECT * FROM `テーブル`'
-      expect(stmt.fields).to eq(%w(整数 文字列))
+      expect(stmt.fields).to eq(%w[整数 文字列])
       result = stmt.execute
 
       expect(result.to_a).to eq([{ "整数" => 1, "文字列" => "イチ" }, { "整数" => 2, "文字列" => "弐" }, { "整数" => 3, "文字列" => "さん" }])
@@ -342,7 +342,7 @@ RSpec.describe Mysql2::Statement do
 
     it "should return an array of field names in proper order" do
       stmt = @client.prepare("SELECT 'a', 'b', 'c'")
-      expect(stmt.fields).to eql(%w(a b c))
+      expect(stmt.fields).to eql(%w[a b c])
     end
 
     it "should return nil for statement with no result fields" do
@@ -600,7 +600,7 @@ RSpec.describe Mysql2::Statement do
       end
 
       context "string encoding for #{type} values" do
-        if %w(VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB).include?(type)
+        if %w[VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB].include?(type)
           it "should default to binary if Encoding.default_internal is nil" do
             with_internal_encoding nil do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first

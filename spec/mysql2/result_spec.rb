@@ -119,7 +119,7 @@ RSpec.describe Mysql2::Result do
 
     it "should return an array of field names in proper order" do
       result = @client.query "SELECT 'a', 'b', 'c'"
-      expect(result.fields).to eql(%w(a b c))
+      expect(result.fields).to eql(%w[a b c])
     end
   end
 
@@ -428,7 +428,7 @@ RSpec.describe Mysql2::Result do
       end
 
       context "string encoding for #{type} values" do
-        if %w(VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB).include?(type)
+        if %w[VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB].include?(type)
           it "should default to binary if Encoding.default_internal is nil" do
             with_internal_encoding nil do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first

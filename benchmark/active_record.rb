@@ -18,7 +18,7 @@ end
 batch_size = 1000
 
 Benchmark.ips do |x|
-  %w(mysql mysql2).each do |adapter|
+  %w[mysql mysql2].each do |adapter|
     TestModel.establish_connection(opts.merge(adapter: adapter))
 
     x.report(adapter) do

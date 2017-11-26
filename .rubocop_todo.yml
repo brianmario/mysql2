@@ -78,20 +78,6 @@ Style/GlobalVars:
 Style/NumericLiterals:
   MinDigits: 20
 
-# Offense count: 15
-# Cop supports --auto-correct.
-# Configuration parameters: PreferredDelimiters.
-Style/PercentLiteralDelimiters:
-  Exclude:
-    - 'benchmark/active_record.rb'
-    - 'benchmark/active_record_threaded.rb'
-    - 'benchmark/setup_db.rb'
-    - 'ext/mysql2/extconf.rb'
-    - 'spec/mysql2/client_spec.rb'
-    - 'spec/mysql2/result_spec.rb'
-    - 'spec/mysql2/statement_spec.rb'
-    - 'tasks/rspec.rake'
-
 # Offense count: 2
 # Cop supports --auto-correct.
 # Configuration parameters: EnforcedStyle, SupportedStyles.

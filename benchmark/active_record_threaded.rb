@@ -10,7 +10,7 @@ number_of_threads = 25
 opts = { database: 'test', pool: number_of_threads }
 
 Benchmark.ips do |x|
-  %w(mysql mysql2).each do |adapter|
+  %w[mysql mysql2].each do |adapter|
     ActiveRecord::Base.establish_connection(opts.merge(adapter: adapter))
 
     x.report(adapter) do

@@ -109,8 +109,8 @@ num.times do |n|
     medium_text_test: twenty5_paragraphs,
     long_blob_test: twenty5_paragraphs,
     long_text_test: twenty5_paragraphs,
-    enum_test: %w(val1 val2).sample,
-    set_test: %w(val1 val2 val1,val2).sample,
+    enum_test: %w[val1 val2].sample,
+    set_test: %w[val1 val2 val1,val2].sample,
   )
   if (n % 100).zero?
     $stdout.putc '.'

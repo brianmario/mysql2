@@ -324,10 +324,10 @@ RSpec.describe Mysql2::Statement do
 
       result = @client.prepare("SELECT 1 UNION SELECT 2").execute
 
-      expect {
+      expect do
         result.each {}
         result.each {}
-      }.to raise_exception(Mysql2::Error)
+      end.to raise_exception(Mysql2::Error)
 
       @client.query_options[:stream] = false
       @client.query_options[:cache_rows] = true

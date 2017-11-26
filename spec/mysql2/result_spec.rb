@@ -28,13 +28,13 @@ RSpec.describe Mysql2::Result do
   end
 
   it "should raise a Mysql2::Error exception upon a bad query" do
-    expect {
+    expect do
       @client.query "bad sql"
-    }.to raise_error(Mysql2::Error)
+    end.to raise_error(Mysql2::Error)
 
-    expect {
+    expect do
       @client.query "SELECT 1"
-    }.not_to raise_error
+    end.not_to raise_error
   end
 
   it "should respond to #count, which is aliased as #size" do
@@ -101,10 +101,10 @@ RSpec.describe Mysql2::Result do
     it "should throw an exception if we try to iterate twice when streaming is enabled" do
       result = @client.query "SELECT 1 UNION SELECT 2", :stream => true, :cache_rows => false
 
-      expect {
+      expect do
         result.each.to_a
         result.each.to_a
-      }.to raise_exception(Mysql2::Error)
+      end.to raise_exception(Mysql2::Error)
     end
   end
 
@@ -165,12 +165,12 @@ RSpec.describe Mysql2::Result do
       @client.query "SET net_write_timeout = 1"
       res = @client.query "SELECT * FROM streamingTest", :stream => true, :cache_rows => false
 
-      expect {
+      expect do
         res.each_with_index do |_, i|
           # Exhaust the first result packet then trigger a timeout
           sleep 2 if i > 0 && i % 1000 == 0
         end
-      }.to raise_error(Mysql2::Error, /Lost connection/)
+      end.to raise_error(Mysql2::Error, /Lost connection/)
     end
   end
 

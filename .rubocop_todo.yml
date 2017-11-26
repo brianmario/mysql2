@@ -51,20 +51,6 @@ Naming/HeredocDelimiterNaming:
   Exclude:
     - 'tasks/compile.rake'
 
-# Offense count: 48
-# Cop supports --auto-correct.
-# Configuration parameters: EnforcedStyle, SupportedStyles, ProceduralMethods, FunctionalMethods, IgnoredMethods.
-# SupportedStyles: line_count_based, semantic, braces_for_chaining
-# ProceduralMethods: benchmark, bm, bmbm, create, each_with_object, measure, new, realtime, tap, with_object
-# FunctionalMethods: let, let!, subject, watch
-# IgnoredMethods: lambda, proc, it
-Style/BlockDelimiters:
-  Exclude:
-    - 'spec/em/em_spec.rb'
-    - 'spec/mysql2/client_spec.rb'
-    - 'spec/mysql2/result_spec.rb'
-    - 'spec/mysql2/statement_spec.rb'
-
 # Offense count: 10
 Style/Documentation:
   Exclude:

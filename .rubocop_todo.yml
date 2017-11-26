@@ -78,16 +78,6 @@ Style/GlobalVars:
 Style/NumericLiterals:
   MinDigits: 20
 
-# Offense count: 2
-# Cop supports --auto-correct.
-# Configuration parameters: AutoCorrect, EnforcedStyle, SupportedStyles.
-# SupportedStyles: predicate, comparison
-Style/NumericPredicate:
-  Exclude:
-    - 'spec/**/*'
-    - 'benchmark/setup_db.rb'
-    - 'lib/mysql2.rb'
-
 # Offense count: 15
 # Cop supports --auto-correct.
 # Configuration parameters: PreferredDelimiters.
@@ -117,11 +107,3 @@ Style/SignalException:
 # SupportedStyles: single_quotes, double_quotes
 Style/StringLiterals:
   Enabled: false
-
-# Offense count: 1
-# Cop supports --auto-correct.
-# Configuration parameters: EnforcedStyle, SupportedStyles.
-# SupportedStyles: all_comparison_operators, equality_operators_only
-Style/YodaCondition:
-  Exclude:
-    - 'lib/mysql2.rb'

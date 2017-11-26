@@ -24,7 +24,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
   if dll_path
     require 'Win32API'
     LoadLibrary = Win32API.new('Kernel32', 'LoadLibrary', ['P'], 'I')
-    if 0 == LoadLibrary.call(dll_path)
+    if LoadLibrary.call(dll_path).zero?
       abort "Failed to load libmysql.dll from #{dll_path}"
     end
   end

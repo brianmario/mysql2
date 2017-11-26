@@ -112,7 +112,7 @@ num.times do |n|
     enum_test: %w(val1 val2).sample,
     set_test: %w(val1 val2 val1,val2).sample,
   )
-  if n % 100 == 0
+  if (n % 100).zero?
     $stdout.putc '.'
     $stdout.flush
   end

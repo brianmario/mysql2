@@ -44,13 +44,6 @@ Metrics/MethodLength:
 Metrics/PerceivedComplexity:
   Max: 27
 
-# Offense count: 1
-# Configuration parameters: EnforcedStyle, SupportedStyles.
-# SupportedStyles: lowercase, uppercase
-Naming/HeredocDelimiterCase:
-  Exclude:
-    - 'support/ruby_enc_to_mysql.rb'
-
 # Offense count: 3
 # Configuration parameters: Blacklist.
 # Blacklist: END, (?-mix:EO[A-Z]{1})

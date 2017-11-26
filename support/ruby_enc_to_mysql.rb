@@ -40,7 +40,7 @@ mysql_to_rb = {
   "eucjpms"  => "eucJP-ms",
 }
 
-puts <<-header.strip_indent
+puts <<-HEADER.strip_indent
   %readonly-tables
   %enum
   %define lookup-function-name mysql2_mysql_enc_name_to_rb
@@ -48,7 +48,7 @@ puts <<-header.strip_indent
   %struct-type
   struct mysql2_mysql_enc_name_to_rb_map { const char *name; const char *rb_name; }
   %%
-header
+HEADER
 
 mysql_to_rb.each do |mysql, ruby|
   name = if ruby.nil?

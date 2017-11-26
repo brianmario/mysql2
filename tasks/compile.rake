@@ -85,10 +85,8 @@ end
 if RUBY_PLATFORM =~ /mingw|mswin/
   Rake::Task['compile'].prerequisites.unshift 'vendor:mysql' unless defined?(RubyInstaller)
   Rake::Task['compile'].prerequisites.unshift 'devkit'
-else
-  if Rake::Task.tasks.map(&:name).include? 'cross'
-    Rake::Task['cross'].prerequisites.unshift 'vendor:mysql:cross'
-  end
+elsif Rake::Task.tasks.map(&:name).include? 'cross'
+  Rake::Task['cross'].prerequisites.unshift 'vendor:mysql:cross'
 end
 
 desc "Build binary gems for Windows with rake-compiler-dock"

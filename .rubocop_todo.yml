@@ -72,11 +72,6 @@ Style/GlobalVars:
   Exclude:
     - 'ext/mysql2/extconf.rb'
 
-# Offense count: 1
-Style/IfInsideElse:
-  Exclude:
-    - 'tasks/compile.rake'
-
 # Offense count: 4
 # Cop supports --auto-correct.
 Style/MutableConstant:

@@ -13,7 +13,7 @@ begin
         --partial-loads-ok=yes
         --undef-value-errors=no
         --trace-children=yes
-      )
+      ).freeze
       cmdline = "valgrind #{VALGRIND_OPTS.join(' ')} bundle exec rake spec"
       puts cmdline
       system cmdline

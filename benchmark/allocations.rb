@@ -1,4 +1,5 @@
 # encoding: UTF-8
+
 $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'rubygems'
@@ -13,7 +14,7 @@ end
 
 def bench_allocations(feature, iterations = 10, batch_size = 1000)
   puts "GC overhead for #{feature}"
-  TestModel.establish_connection(:adapter => 'mysql2', :database => 'test')
+  TestModel.establish_connection(adapter: 'mysql2', database: 'test')
   GC::Profiler.clear
   GC::Profiler.enable
   iterations.times { yield batch_size }
@@ -23,7 +24,7 @@ end
 
 bench_allocations('coercion') do |batch_size|
   TestModel.limit(batch_size).to_a.each do |r|
-    r.attributes.keys.each do |k|
+    r.attributes.each_key do |k|
       r.send(k.to_sym)
     end
   end

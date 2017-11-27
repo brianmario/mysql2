@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 $LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
 require 'mysql2'
 
@@ -45,8 +47,8 @@ mysql_to_rb = {
   "eucjpms"  => "eucJP-ms",
 }
 
-client     = Mysql2::Client.new(:username => user, :password => pass, :host => host, :port => port.to_i)
-collations = client.query "SHOW COLLATION", :as => :array
+client     = Mysql2::Client.new(username: user, password: pass, host: host, port: port.to_i)
+collations = client.query "SHOW COLLATION", as: :array
 encodings  = Array.new(collations.to_a.last[2].to_i)
 encodings_with_nil = Array.new(encodings.size)
 

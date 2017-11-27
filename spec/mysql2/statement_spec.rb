@@ -1,9 +1,10 @@
 # encoding: UTF-8
+
 require './spec/spec_helper.rb'
 
 RSpec.describe Mysql2::Statement do
   before :each do
-    @client = new_client(:encoding => "utf8")
+    @client = new_client(encoding: "utf8")
   end
 
   def stmt_count
@@ -187,7 +188,7 @@ RSpec.describe Mysql2::Statement do
   end
 
   it "should warn but still work if cache_rows is set to false" do
-    @client.query_options.merge!(:cache_rows => false)
+    @client.query_options[:cache_rows] = false
     statement = @client.prepare 'SELECT 1'
     result = nil
     expect { result = statement.execute.to_a }.to output(/:cache_rows is forced for prepared statements/).to_stderr
@@ -209,7 +210,7 @@ RSpec.describe Mysql2::Statement do
 
     it "should be able to retrieve utf8 field names correctly" do
       stmt = @client.prepare 'SELECT * FROM `テーブル`'
-      expect(stmt.fields).to eq(%w(整数 文字列))
+      expect(stmt.fields).to eq(%w[整数 文字列])
       result = stmt.execute
 
       expect(result.to_a).to eq([{ "整数" => 1, "文字列" => "イチ" }, { "整数" => 2, "文字列" => "弐" }, { "整数" => 3, "文字列" => "さん" }])
@@ -240,7 +241,7 @@ RSpec.describe Mysql2::Statement do
       n = 1
       stmt = @client.prepare("SELECT 1 UNION SELECT 2")
 
-      @client.query_options.merge!(:stream => true, :cache_rows => false, :as => :array)
+      @client.query_options.merge!(stream: true, cache_rows: false, as: :array)
 
       stmt.execute.each do |r|
         case n
@@ -315,10 +316,10 @@ RSpec.describe Mysql2::Statement do
 
       result = @client.prepare("SELECT 1 UNION SELECT 2").execute
 
-      expect {
+      expect do
         result.each {}
         result.each {}
-      }.to raise_exception(Mysql2::Error)
+      end.to raise_exception(Mysql2::Error)
 
       @client.query_options[:stream] = false
       @client.query_options[:cache_rows] = true
@@ -333,7 +334,7 @@ RSpec.describe Mysql2::Statement do
 
     it "should return an array of field names in proper order" do
       stmt = @client.prepare("SELECT 'a', 'b', 'c'")
-      expect(stmt.fields).to eql(%w(a b c))
+      expect(stmt.fields).to eql(%w[a b c])
     end
 
     it "should return nil for statement with no result fields" do
@@ -370,7 +371,7 @@ RSpec.describe Mysql2::Statement do
 
     context "cast booleans for TINYINT if :cast_booleans is enabled" do
       # rubocop:disable Style/Semicolon
-      let(:client) { new_client(:cast_booleans => true) }
+      let(:client) { new_client(cast_booleans: true) }
       let(:id1) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; client.last_id }
       let(:id2) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 0)'; client.last_id }
       let(:id3) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'; client.last_id }
@@ -393,7 +394,7 @@ RSpec.describe Mysql2::Statement do
 
     context "cast booleans for BIT(1) if :cast_booleans is enabled" do
       # rubocop:disable Style/Semicolon
-      let(:client) { new_client(:cast_booleans => true) }
+      let(:client) { new_client(cast_booleans: true) }
       let(:id1) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'; client.last_id }
       let(:id2) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'; client.last_id }
       # rubocop:enable Style/Semicolon
@@ -497,7 +498,7 @@ RSpec.describe Mysql2::Statement do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
 
-          client2 = new_client(:encoding => 'ascii')
+          client2 = new_client(encoding: 'ascii')
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['enum_test'].encoding).to eql(Encoding::US_ASCII)
         end
@@ -527,7 +528,7 @@ RSpec.describe Mysql2::Statement do
           result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['set_test'].encoding).to eql(Encoding::UTF_8)
 
-          client2 = new_client(:encoding => 'ascii')
+          client2 = new_client(encoding: 'ascii')
           result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
           expect(result['set_test'].encoding).to eql(Encoding::US_ASCII)
         end
@@ -591,7 +592,7 @@ RSpec.describe Mysql2::Statement do
       end
 
       context "string encoding for #{type} values" do
-        if %w(VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB).include?(type)
+        if %w[VARBINARY TINYBLOB BLOB MEDIUMBLOB LONGBLOB].include?(type)
           it "should default to binary if Encoding.default_internal is nil" do
             with_internal_encoding nil do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
@@ -616,7 +617,7 @@ RSpec.describe Mysql2::Statement do
               result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               expect(result[field].encoding).to eql(Encoding::UTF_8)
 
-              client2 = new_client(:encoding => 'ascii')
+              client2 = new_client(encoding: 'ascii')
               result = client2.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first
               expect(result[field].encoding).to eql(Encoding::US_ASCII)
             end

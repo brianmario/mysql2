@@ -3,16 +3,16 @@
 module Mysql2
   class Error < StandardError
     ENCODE_OPTS = {
-      :undef => :replace,
-      :invalid => :replace,
-      :replace => '?'.freeze,
+      undef: :replace,
+      invalid: :replace,
+      replace: '?'.freeze,
     }.freeze
 
     attr_reader :error_number, :sql_state
 
     # Mysql gem compatibility
-    alias_method :errno, :error_number
-    alias_method :error, :message
+    alias errno error_number
+    alias error message
 
     def initialize(msg)
       @server_version ||= nil

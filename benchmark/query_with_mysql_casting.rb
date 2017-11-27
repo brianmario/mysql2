@@ -1,4 +1,5 @@
 # encoding: UTF-8
+
 $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'rubygems'
@@ -41,10 +42,10 @@ end
 debug = ENV['DEBUG']
 
 Benchmark.ips do |x|
-  mysql2 = Mysql2::Client.new(:host => "localhost", :username => "root")
+  mysql2 = Mysql2::Client.new(host: "localhost", username: "root")
   mysql2.query "USE #{database}"
   x.report "Mysql2" do
-    mysql2_result = mysql2.query sql, :symbolize_keys => true
+    mysql2_result = mysql2.query sql, symbolize_keys: true
     mysql2_result.each { |res| puts res.inspect if debug }
   end
 

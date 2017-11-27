@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 require "rake/extensiontask"
 
 load File.expand_path('../../mysql2.gemspec', __FILE__) unless defined? Mysql2::GEMSPEC
@@ -33,20 +35,20 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
       spec.files << 'lib/mysql2/mysql2.rb'
       spec.files << 'vendor/libmysql.dll'
       spec.files << 'vendor/README'
-      spec.post_install_message = <<-POST_INSTALL_MESSAGE
+      spec.post_install_message = <<-POST_INSTALL_MESSAGE.strip_indent
 
-======================================================================================================
+        ======================================================================================================
 
-  You've installed the binary version of #{spec.name}.
-  It was built using MySQL Connector/C version #{CONNECTOR_VERSION}.
-  It's recommended to use the exact same version to avoid potential issues.
+          You've installed the binary version of #{spec.name}.
+          It was built using MySQL Connector/C version #{CONNECTOR_VERSION}.
+          It's recommended to use the exact same version to avoid potential issues.
 
-  At the time of building this gem, the necessary DLL files were retrieved from:
-  #{vendor_mysql_url(spec.platform)}
+          At the time of building this gem, the necessary DLL files were retrieved from:
+          #{vendor_mysql_url(spec.platform)}
 
-  This gem *includes* vendor/libmysql.dll with redistribution notice in vendor/README.
+          This gem *includes* vendor/libmysql.dll with redistribution notice in vendor/README.
 
-======================================================================================================
+        ======================================================================================================
 
       POST_INSTALL_MESSAGE
     end
@@ -64,9 +66,9 @@ end
 file 'lib/mysql2/mysql2.rb' do |t|
   name = Mysql2::GEMSPEC.name
   File.open(t.name, 'wb') do |f|
-    f.write <<-END_OF_RUBY
-RUBY_VERSION =~ /(\\d+.\\d+)/
-require "#{name}/\#{$1}/#{name}"
+    f.write <<-END_OF_RUBY.strip_indent
+      RUBY_VERSION =~ /(\\d+.\\d+)/
+      require "#{name}/\#{$1}/#{name}"
     END_OF_RUBY
   end
 end
@@ -83,10 +85,8 @@ end
 if RUBY_PLATFORM =~ /mingw|mswin/
   Rake::Task['compile'].prerequisites.unshift 'vendor:mysql' unless defined?(RubyInstaller)
   Rake::Task['compile'].prerequisites.unshift 'devkit'
-else
-  if Rake::Task.tasks.map(&:name).include? 'cross'
-    Rake::Task['cross'].prerequisites.unshift 'vendor:mysql:cross'
-  end
+elsif Rake::Task.tasks.map(&:name).include? 'cross'
+  Rake::Task['cross'].prerequisites.unshift 'vendor:mysql:cross'
 end
 
 desc "Build binary gems for Windows with rake-compiler-dock"

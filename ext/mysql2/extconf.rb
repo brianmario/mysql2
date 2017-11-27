@@ -1,4 +1,5 @@
 # encoding: UTF-8
+
 require 'mkmf'
 require 'English'
 
@@ -13,7 +14,7 @@ def asplode(lib)
 end
 
 def add_ssl_defines(header)
-  all_modes_found = %w(SSL_MODE_DISABLED SSL_MODE_PREFERRED SSL_MODE_REQUIRED SSL_MODE_VERIFY_CA SSL_MODE_VERIFY_IDENTITY).inject(true) do |m, ssl_mode|
+  all_modes_found = %w[SSL_MODE_DISABLED SSL_MODE_PREFERRED SSL_MODE_REQUIRED SSL_MODE_VERIFY_CA SSL_MODE_VERIFY_IDENTITY].inject(true) do |m, ssl_mode|
     m && have_const(ssl_mode, header)
   end
   $CFLAGS << ' -DFULL_SSL_MODE_SUPPORT' if all_modes_found
@@ -34,7 +35,7 @@ have_func('rb_wait_for_single_fd')
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
-dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w(
+dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w[
   /opt
   /opt/local
   /opt/local/mysql
@@ -46,12 +47,12 @@ dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w(
   /usr/local/mysql-*
   /usr/local/lib/mysql5*
   /usr/local/opt/mysql5*
-).map { |dir| dir << '/bin' }
+].map { |dir| dir << '/bin' }
 
 # For those without HOMEBREW_ROOT in PATH
 dirs << "#{ENV['HOMEBREW_ROOT']}/bin" if ENV['HOMEBREW_ROOT']
 
-GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5,mariadb_config}"
+GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5,mariadb_config}".freeze
 
 # If the user has provided a --with-mysql-dir argument, we must respect it or fail.
 inc, lib = dir_config('mysql')
@@ -101,7 +102,7 @@ else
   asplode 'mysql.h'
 end
 
-%w(errmsg.h).each do |h|
+%w[errmsg.h].each do |h|
   header = [prefix, h].compact.join('/')
   asplode h unless have_header header
 end
@@ -151,7 +152,7 @@ sanitizers = with_config('sanitize')
 case sanitizers
 when true
   # Try them all, turn on whatever we can
-  enabled_sanitizers = %w(address cfi integer memory thread undefined).select do |s|
+  enabled_sanitizers = %w[address cfi integer memory thread undefined].select do |s|
     try_link('int main() {return 0;}',  "-Werror -fsanitize=#{s}")
   end
   abort "-----\nCould not enable any sanitizers!\n-----" if enabled_sanitizers.empty?

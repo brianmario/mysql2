@@ -17,7 +17,7 @@ module Mysql2
           detach
           begin
             result = @client.async_result
-          rescue => e
+          rescue StandardError => e
             @deferable.fail(e)
           else
             @deferable.succeed(result)
@@ -41,7 +41,7 @@ module Mysql2
 
       def query(sql, opts = {})
         if ::EM.reactor_running?
-          super(sql, opts.merge(:async => true))
+          super(sql, opts.merge(async: true))
           deferable = ::EM::DefaultDeferrable.new
           @watch = ::EM.watch(socket, Watcher, self, deferable)
           @watch.notify_readable = true

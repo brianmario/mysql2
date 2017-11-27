@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 require File.expand_path('../lib/mysql2/version', __FILE__)
 
 Mysql2::GEMSPEC = Gem::Specification.new do |s|

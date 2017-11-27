@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 module Mysql2
   class Statement
     include Enumerable

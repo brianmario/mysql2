@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 mysql_to_rb = {
   "big5"     => "Big5",
   "dec8"     => nil,
@@ -40,21 +42,21 @@ mysql_to_rb = {
   "eucjpms"  => "eucJP-ms",
 }
 
-puts <<-header
-%readonly-tables
-%enum
-%define lookup-function-name mysql2_mysql_enc_name_to_rb
-%define hash-function-name mysql2_mysql_enc_name_to_rb_hash
-%struct-type
-struct mysql2_mysql_enc_name_to_rb_map { const char *name; const char *rb_name; }
-%%
-header
+puts <<-HEADER.strip_indent
+  %readonly-tables
+  %enum
+  %define lookup-function-name mysql2_mysql_enc_name_to_rb
+  %define hash-function-name mysql2_mysql_enc_name_to_rb_hash
+  %struct-type
+  struct mysql2_mysql_enc_name_to_rb_map { const char *name; const char *rb_name; }
+  %%
+HEADER
 
 mysql_to_rb.each do |mysql, ruby|
-  if ruby.nil?
-    name = "NULL"
+  name = if ruby.nil?
+    "NULL"
   else
-    name = "\"#{ruby}\""
+    "\"#{ruby}\""
   end
 
   puts "#{mysql}, #{name}"

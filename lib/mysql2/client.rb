@@ -136,6 +136,10 @@ module Mysql2
       end
     end
 
+    def prepare(sql, options = {})
+      _prepare(sql, @query_options.merge(options))
+    end
+
     def query_info
       info = query_info_string
       return {} unless info

@@ -88,12 +88,13 @@ static void *nogvl_prepare_statement(void *ptr) {
   }
 }
 
-VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
+VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql, VALUE options) {
   mysql_stmt_wrapper *stmt_wrapper;
   VALUE rb_stmt;
   rb_encoding *conn_enc;
 
   Check_Type(sql, T_STRING);
+  Check_Type(options, T_HASH);
 
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
   {
@@ -102,6 +103,9 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     stmt_wrapper->closed = 0;
     stmt_wrapper->stmt = NULL;
   }
+
+  rb_obj_call_init(rb_stmt, 0, NULL);
+  rb_iv_set(rb_stmt, "@query_options", rb_hash_dup(options));
 
   // instantiate stmt
   {
@@ -416,7 +420,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     return Qnil;
   }
 
-  current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
+  current = rb_iv_get(self, "@query_options");
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
 

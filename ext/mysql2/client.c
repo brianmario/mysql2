@@ -1341,11 +1341,11 @@ static VALUE initialize_ext(VALUE self) {
  *
  * Create a new prepared statement.
  */
-static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
+static VALUE rb_mysql_prepare_statement(VALUE self, VALUE sql, VALUE options) {
   GET_CLIENT(self);
   REQUIRE_CONNECTED(wrapper);
 
-  return rb_mysql_stmt_new(self, sql);
+  return rb_mysql_stmt_new(self, sql, options);
 }
 
 void init_mysql2_client() {
@@ -1393,7 +1393,6 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
-  rb_define_method(cMysql2Client, "prepare", rb_mysql_client_prepare_statement, 1);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);
@@ -1423,6 +1422,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 8);
   rb_define_private_method(cMysql2Client, "_query", rb_mysql_query, 2);
+  rb_define_private_method(cMysql2Client, "_prepare", rb_mysql_prepare_statement, 2);
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));

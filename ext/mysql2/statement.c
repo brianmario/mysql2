@@ -4,9 +4,6 @@ VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s;
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year;
-#ifndef HAVE_RB_BIG_CMP
-static ID id_cmp;
-#endif
 
 #define GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
@@ -565,7 +562,4 @@ void init_mysql2_statement() {
   intern_year = rb_intern("year");
 
   intern_to_s = rb_intern("to_s");
-#ifndef HAVE_RB_BIG_CMP
-  id_cmp = rb_intern("<=>");
-#endif
 }

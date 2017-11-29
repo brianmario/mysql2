@@ -1,5 +1,3 @@
-# encoding: UTF-8
-
 require 'rake'
 
 # Load custom tasks (careful attention to define tasks before prerequisites)
@@ -12,7 +10,7 @@ load 'tasks/benchmarks.rake'
 begin
   require 'rubocop/rake_task'
   RuboCop::RakeTask.new
-  task default: [:spec, :rubocop]
+  task default: %i[spec rubocop]
 rescue LoadError
   warn 'RuboCop is not available'
   task default: :spec

@@ -1,5 +1,3 @@
-# encoding: UTF-8
-
 begin
   require 'rspec'
   require 'rspec/core/rake_task'

@@ -18,15 +18,7 @@ void Init_mysql2(void);
 #endif
 
 #include <ruby/encoding.h>
-// ruby/thread.h was added in 2.0.0. See:
-// https://github.com/ruby/ruby/commit/c51a826
-//
-// Rubinius doesn't define this, but it ships an empty thread.h (the symbols we
-// care about are in ruby.h); this is safe to remove when < 2.0.0 is no longer
-// supported.
-#ifdef HAVE_RUBY_THREAD_H
 #include <ruby/thread.h>
-#endif
 
 #if defined(__GNUC__) && (__GNUC__ >= 3)
 #define RB_MYSQL_NORETURN __attribute__ ((noreturn))

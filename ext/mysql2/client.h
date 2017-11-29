@@ -1,12 +1,6 @@
 #ifndef MYSQL2_CLIENT_H
 #define MYSQL2_CLIENT_H
 
-#ifndef HAVE_RB_THREAD_CALL_WITHOUT_GVL
-/* emulate rb_thread_call_without_gvl with rb_thread_blocking_region */
-#define rb_thread_call_without_gvl(func, data1, ubf, data2) \
-  rb_thread_blocking_region((rb_blocking_function_t *)func, data1, ubf, data2)
-#endif /* ! HAVE_RB_THREAD_CALL_WITHOUT_GVL */
-
 typedef struct {
   VALUE encoding;
   VALUE active_thread; /* rb_thread_current() or Qnil */

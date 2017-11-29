@@ -1,5 +1,3 @@
-# encoding: UTF-8
-
 require 'spec_helper'
 
 RSpec.describe Mysql2::Client do
@@ -607,10 +605,6 @@ RSpec.describe Mysql2::Client do
       end
 
       it 'should be impervious to connection-corrupting timeouts in #execute' do
-        # the statement handle gets corrupted and will segfault the tests if interrupted,
-        # so we can't even use pending on this test, really have to skip it on older Rubies.
-        skip('`Thread.handle_interrupt` is not defined') unless Thread.respond_to?(:handle_interrupt)
-
         # attempt to break the connection
         stmt = @client.prepare('SELECT SLEEP(?)')
         expect { Timeout.timeout(0.1) { stmt.execute(0.2) } }.to raise_error(Timeout::Error)

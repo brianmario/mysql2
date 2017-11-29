@@ -1,5 +1,3 @@
-# encoding: UTF-8
-
 BENCHMARKS = Dir["#{File.dirname(__FILE__)}/../benchmark/*.rb"].map do |path|
   File.basename(path, '.rb')
 end - ['setup_db']

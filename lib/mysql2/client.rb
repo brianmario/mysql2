@@ -1,5 +1,3 @@
-# encoding: UTF-8
-
 module Mysql2
   class Client
     attr_reader :query_options, :read_timeout
@@ -33,7 +31,7 @@ module Mysql2
       opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
 
       # TODO: stricter validation rather than silent massaging
-      [:reconnect, :connect_timeout, :local_infile, :read_timeout, :write_timeout, :default_file, :default_group, :secure_auth, :init_command, :automatic_close, :enable_cleartext_plugin].each do |key|
+      %i[reconnect connect_timeout local_infile read_timeout write_timeout default_file default_group secure_auth init_command automatic_close enable_cleartext_plugin].each do |key|
         next unless opts.key?(key)
         case key
         when :reconnect, :local_infile, :secure_auth, :automatic_close, :enable_cleartext_plugin
@@ -71,7 +69,7 @@ module Mysql2
       conn_attrs = opts[:connect_attrs] || {}
       conn_attrs[:program_name] = $PROGRAM_NAME unless conn_attrs.key?(:program_name)
 
-      if [:user, :pass, :hostname, :dbname, :db, :sock].any? { |k| @query_options.key?(k) }
+      if %i[user pass hostname dbname db sock].any? { |k| @query_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="
         warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."
         warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
@@ -124,14 +122,8 @@ module Mysql2
       end
     end
 
-    if Thread.respond_to?(:handle_interrupt)
-      def query(sql, options = {})
-        Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_CLASS => :never) do
-          _query(sql, @query_options.merge(options))
-        end
-      end
-    else
-      def query(sql, options = {})
+    def query(sql, options = {})
+      Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_CLASS => :never) do
         _query(sql, @query_options.merge(options))
       end
     end

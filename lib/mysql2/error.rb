@@ -1,5 +1,3 @@
-# encoding: UTF-8
-
 module Mysql2
   class Error < StandardError
     ENCODE_OPTS = {

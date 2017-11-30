@@ -523,7 +523,7 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 This gem is tested with the following Ruby versions on Linux and Mac OS X:
 
- * Ruby MRI 2.0.0, 2.1.x, 2.2.x, 2.3.x, 2.4.x
+ * Ruby MRI 2.0.0, 2.1.x, 2.2.x, 2.3.x, 2.4.x, 2.5.x
  * Rubinius 2.x and 3.x do work but may fail under some workloads
 
 This gem is tested with the following MySQL and MariaDB versions:

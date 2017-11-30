@@ -175,7 +175,8 @@ end
 Prepared statements are supported, as well. In a prepared statement, use a `?`
 in place of each value and then execute the statement to retrieve a result set.
 Pass your arguments to the execute method in the same number and order as the
-question marks in the statement.
+question marks in the statement. Query options can be passed as keyword arguments
+to the execute method.
 
 ``` ruby
 statement = @client.prepare("SELECT * FROM users WHERE login_count = ?")
@@ -184,6 +185,9 @@ result2 = statement.execute(2)
 
 statement = @client.prepare("SELECT * FROM users WHERE last_login >= ? AND location LIKE ?")
 result = statement.execute(1, "CA")
+
+statement = @client.prepare("SELECT * FROM users WHERE last_login >= ? AND location LIKE ?")
+result = statement.execute(1, "CA", :as => :array)
 ```
 
 ## Connection options
@@ -380,6 +384,15 @@ or
 # this will set the options for the Mysql2::Result instance returned from the #query method
 c = Mysql2::Client.new
 c.query(sql, :symbolize_keys => true)
+```
+
+or
+
+``` ruby
+# this will set the options for the Mysql2::Result instance returned from the #execute method
+c = Mysql2::Client.new
+s = c.prepare(sql)
+s.execute(arg1, args2, :symbolize_keys => true)
 ```
 
 ## Result types

@@ -6,7 +6,6 @@ install:
   - SET PATH=C:\Ruby%ruby_version%\bin;%PATH%
   - ruby --version
   - gem --version
-  - gem install bundler --quiet --no-ri --no-rdoc
   - bundler --version
   - bundle install --without benchmarks --path vendor/bundle
   - IF DEFINED MINGW_PACKAGE_PREFIX (ridk exec pacman -S --noconfirm --needed %MINGW_PACKAGE_PREFIX%-libmariadbclient)

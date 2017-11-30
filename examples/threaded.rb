@@ -1,5 +1,3 @@
-# encoding: utf-8
-
 $LOAD_PATH.unshift 'lib'
 require 'mysql2'
 require 'timeout'

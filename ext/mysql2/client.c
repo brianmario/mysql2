@@ -595,6 +595,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
   }
 
+  // Duplicate the options hash and put the copy in the Result object
   current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
@@ -1155,6 +1156,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
     return Qnil;
   }
 
+  // Duplicate the options hash and put the copy in the Result object
   current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);

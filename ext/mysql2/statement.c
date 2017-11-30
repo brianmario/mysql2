@@ -2,7 +2,7 @@
 
 VALUE cMysql2Statement;
 extern VALUE mMysql2, cMysql2Error, cBigDecimal, cDateTime, cDate;
-static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s;
+static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year;
 
 #define GET_STATEMENT(self) \
@@ -184,7 +184,7 @@ static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length
  * the buffer is a Ruby string pointer and not our memory to manage.
  */
 #define FREE_BINDS                                          \
-  for (i = 0; i < argc; i++) {                              \
+  for (i = 0; i < c; i++) {                                 \
     if (bind_buffers[i].buffer && NIL_P(params_enc[i])) {   \
       xfree(bind_buffers[i].buffer);                        \
     }                                                       \
@@ -248,8 +248,10 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   unsigned long *length_buffers = NULL;
   unsigned long bind_count;
   long i;
+  int c;
   MYSQL_STMT *stmt;
   MYSQL_RES *metadata;
+  VALUE opts;
   VALUE current;
   VALUE resultObj;
   VALUE *params_enc;
@@ -261,14 +263,17 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
   conn_enc = rb_to_encoding(wrapper->encoding);
 
-  /* Scratch space for string encoding exports, allocate on the stack. */
-  params_enc = alloca(sizeof(VALUE) * argc);
+  // Get count of ordinary arguments, and extract hash opts/keyword arguments
+  c = rb_scan_args(argc, argv, "*:", NULL, &opts);
+
+  // Scratch space for string encoding exports, allocate on the stack
+  params_enc = alloca(sizeof(VALUE) * c);
 
   stmt = stmt_wrapper->stmt;
 
   bind_count = mysql_stmt_param_count(stmt);
-  if (argc != (long)bind_count) {
-    rb_raise(cMysql2Error, "Bind parameter count (%ld) doesn't match number of arguments (%d)", bind_count, argc);
+  if (c != (long)bind_count) {
+    rb_raise(cMysql2Error, "Bind parameter count (%ld) doesn't match number of arguments (%d)", bind_count, c);
   }
 
   // setup any bind variables in the query
@@ -276,7 +281,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     bind_buffers = xcalloc(bind_count, sizeof(MYSQL_BIND));
     length_buffers = xcalloc(bind_count, sizeof(unsigned long));
 
-    for (i = 0; i < argc; i++) {
+    for (i = 0; i < c; i++) {
       bind_buffers[i].buffer = NULL;
       params_enc[i] = Qnil;
 
@@ -416,9 +421,15 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     return Qnil;
   }
 
+  // Duplicate the options hash, merge! extra opts, put the copy into the Result object
   current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
+
+  // Merge in hash opts/keyword arguments
+  if (!NIL_P(opts)) {
+    rb_funcall(current, intern_merge_bang, 1, opts);
+  }
 
   is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
   if (!is_streaming) {
@@ -562,4 +573,5 @@ void init_mysql2_statement() {
   intern_year = rb_intern("year");
 
   intern_to_s = rb_intern("to_s");
+  intern_merge_bang = rb_intern("merge!");
 }

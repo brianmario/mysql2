@@ -86,6 +86,20 @@ RSpec.describe Mysql2::Statement do
     expect(result.to_a).to eq(['max1' => int64_max1, 'max2' => int64_max2, 'max3' => int64_max3, 'min1' => int64_min1, 'min2' => int64_min2, 'min3' => int64_min3])
   end
 
+  it "should accept keyword arguments on statement execute" do
+    stmt = @client.prepare 'SELECT 1 AS a'
+
+    expect(stmt.execute(as: :hash).first).to eq("a" => 1)
+    expect(stmt.execute(as: :array).first).to eq([1])
+  end
+
+  it "should accept bind arguments and keyword arguments on statement execute" do
+    stmt = @client.prepare 'SELECT ? AS a'
+
+    expect(stmt.execute(1, as: :hash).first).to eq("a" => 1)
+    expect(stmt.execute(1, as: :array).first).to eq([1])
+  end
+
   it "should keep its result after other query" do
     @client.query 'USE test'
     @client.query 'CREATE TABLE IF NOT EXISTS mysql2_stmt_q(a int)'
@@ -186,10 +200,9 @@ RSpec.describe Mysql2::Statement do
   end
 
   it "should warn but still work if cache_rows is set to false" do
-    @client.query_options[:cache_rows] = false
     statement = @client.prepare 'SELECT 1'
     result = nil
-    expect { result = statement.execute.to_a }.to output(/:cache_rows is forced for prepared statements/).to_stderr
+    expect { result = statement.execute(cache_rows: false).to_a }.to output(/:cache_rows is forced for prepared statements/).to_stderr
     expect(result.length).to eq(1)
   end
 
@@ -238,10 +251,7 @@ RSpec.describe Mysql2::Statement do
     it "should be able to stream query result" do
       n = 1
       stmt = @client.prepare("SELECT 1 UNION SELECT 2")
-
-      @client.query_options.merge!(stream: true, cache_rows: false, as: :array)
-
-      stmt.execute.each do |r|
+      stmt.execute(stream: true, cache_rows: false, as: :array).each do |r|
         case n
         when 1
           expect(r).to eq([1])
@@ -267,23 +277,17 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
-      @client.query_options[:symbolize_keys] = true
-      @result = @client.prepare("SELECT 1").execute
+      @result = @client.prepare("SELECT 1").execute(symbolize_keys: true)
       @result.each do |row|
         expect(row.keys.first).to be_an_instance_of(Symbol)
       end
-      @client.query_options[:symbolize_keys] = false
     end
 
     it "should be able to return results as an array" do
-      @client.query_options[:as] = :array
-
-      @result = @client.prepare("SELECT 1").execute
+      @result = @client.prepare("SELECT 1").execute(as: :array)
       @result.each do |row|
         expect(row).to be_an_instance_of(Array)
       end
-
-      @client.query_options[:as] = :hash
     end
 
     it "should cache previously yielded results by default" do
@@ -292,35 +296,21 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should yield different value for #first if streaming" do
-      @client.query_options[:stream] = true
-      @client.query_options[:cache_rows] = false
-
-      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
+      result = @client.prepare("SELECT 1 UNION SELECT 2").execute(stream: true, cache_rows: true)
       expect(result.first).not_to eql(result.first)
-
-      @client.query_options[:stream] = false
-      @client.query_options[:cache_rows] = true
     end
 
     it "should yield the same value for #first if streaming is disabled" do
-      @client.query_options[:stream] = false
-      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
+      result = @client.prepare("SELECT 1 UNION SELECT 2").execute(stream: false)
       expect(result.first).to eql(result.first)
     end
 
     it "should throw an exception if we try to iterate twice when streaming is enabled" do
-      @client.query_options[:stream] = true
-      @client.query_options[:cache_rows] = false
-
-      result = @client.prepare("SELECT 1 UNION SELECT 2").execute
-
+      result = @client.prepare("SELECT 1 UNION SELECT 2").execute(stream: true, cache_rows: false)
       expect do
         result.each {}
         result.each {}
       end.to raise_exception(Mysql2::Error)
-
-      @client.query_options[:stream] = false
-      @client.query_options[:cache_rows] = true
     end
   end
 
@@ -369,21 +359,20 @@ RSpec.describe Mysql2::Statement do
 
     context "cast booleans for TINYINT if :cast_booleans is enabled" do
       # rubocop:disable Style/Semicolon
-      let(:client) { new_client(cast_booleans: true) }
-      let(:id1) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; client.last_id }
-      let(:id2) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 0)'; client.last_id }
-      let(:id3) { client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'; client.last_id }
+      let(:id1) { @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 1)'; @client.last_id }
+      let(:id2) { @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES ( 0)'; @client.last_id }
+      let(:id3) { @client.query 'INSERT INTO mysql2_test (bool_cast_test) VALUES (-1)'; @client.last_id }
       # rubocop:enable Style/Semicolon
 
       after do
-        client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
+        @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2},#{id3})"
       end
 
       it "should return TrueClass or FalseClass for a TINYINT value if :cast_booleans is enabled" do
-        query = client.prepare 'SELECT bool_cast_test FROM mysql2_test WHERE id = ?'
-        result1 = query.execute id1
-        result2 = query.execute id2
-        result3 = query.execute id3
+        query = @client.prepare 'SELECT bool_cast_test FROM mysql2_test WHERE id = ?'
+        result1 = query.execute id1, cast_booleans: true
+        result2 = query.execute id2, cast_booleans: true
+        result3 = query.execute id3, cast_booleans: true
         expect(result1.first['bool_cast_test']).to be true
         expect(result2.first['bool_cast_test']).to be false
         expect(result3.first['bool_cast_test']).to be true
@@ -392,19 +381,18 @@ RSpec.describe Mysql2::Statement do
 
     context "cast booleans for BIT(1) if :cast_booleans is enabled" do
       # rubocop:disable Style/Semicolon
-      let(:client) { new_client(cast_booleans: true) }
-      let(:id1) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'; client.last_id }
-      let(:id2) { client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'; client.last_id }
+      let(:id1) { @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (1)'; @client.last_id }
+      let(:id2) { @client.query 'INSERT INTO mysql2_test (single_bit_test) VALUES (0)'; @client.last_id }
       # rubocop:enable Style/Semicolon
 
       after do
-        client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
+        @client.query "DELETE from mysql2_test WHERE id IN(#{id1},#{id2})"
       end
 
       it "should return TrueClass or FalseClass for a BIT(1) value if :cast_booleans is enabled" do
-        query = client.prepare 'SELECT single_bit_test FROM mysql2_test WHERE id = ?'
-        result1 = query.execute id1
-        result2 = query.execute id2
+        query = @client.prepare 'SELECT single_bit_test FROM mysql2_test WHERE id = ?'
+        result1 = query.execute id1, cast_booleans: true
+        result2 = query.execute id2, cast_booleans: true
         expect(result1.first['single_bit_test']).to be true
         expect(result2.first['single_bit_test']).to be false
       end

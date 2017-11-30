@@ -103,7 +103,6 @@ have_const('MYSQL_ENABLE_CLEARTEXT_PLUGIN', mysql_h)
 have_const('SERVER_QUERY_NO_GOOD_INDEX_USED', mysql_h)
 have_const('SERVER_QUERY_NO_INDEX_USED', mysql_h)
 have_const('SERVER_QUERY_WAS_SLOW', mysql_h)
-have_const('MYSQL_OPT_CONNECT_ATTR_ADD', mysql_h) # for mysql_options4
 
 # This is our wishlist. We use whichever flags work on the host.
 # -Wall and -Wextra are included by default.

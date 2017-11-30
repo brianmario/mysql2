@@ -400,7 +400,7 @@ static VALUE rb_mysql_get_ssl_cipher(VALUE self)
   return rb_str;
 }
 
-#ifdef HAVE_CONST_MYSQL_OPT_CONNECT_ATTR_ADD
+#ifdef CLIENT_CONNECT_ATTRS
 static int opt_connect_attr_add_i(VALUE key, VALUE value, VALUE arg)
 {
   mysql_client_wrapper *wrapper = (mysql_client_wrapper *)arg;
@@ -428,7 +428,7 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
   args.mysql       = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
 
-#ifdef HAVE_CONST_MYSQL_OPT_CONNECT_ATTR_ADD
+#ifdef CLIENT_CONNECT_ATTRS
   mysql_options(wrapper->client, MYSQL_OPT_CONNECT_ATTR_RESET, 0);
   rb_hash_foreach(conn_attrs, opt_connect_attr_add_i, (VALUE)wrapper);
 #endif
@@ -1556,6 +1556,16 @@ void init_mysql2_client() {
 #ifdef CLIENT_BASIC_FLAGS
   rb_const_set(cMysql2Client, rb_intern("BASIC_FLAGS"),
       LONG2NUM(CLIENT_BASIC_FLAGS));
+#endif
+
+#ifdef CLIENT_CONNECT_ATTRS
+  rb_const_set(cMysql2Client, rb_intern("CONNECT_ATTRS"),
+      LONG2NUM(CLIENT_CONNECT_ATTRS));
+#else
+  /* HACK because MySQL 5.5 and earlier don't define this constant,
+   * but we're using it in our default connection flags. */
+  rb_const_set(cMysql2Client, rb_intern("CONNECT_ATTRS"),
+      INT2NUM(0));
 #endif
 
 #if defined(FULL_SSL_MODE_SUPPORT) // MySQL 5.7.11 and above

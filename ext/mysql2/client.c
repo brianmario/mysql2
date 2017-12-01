@@ -872,8 +872,8 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       break;
 
     case MYSQL_OPT_LOCAL_INFILE:
-      intval = (value == Qfalse ? 0 : 1);
-      retval = &intval;
+      boolval = (value == Qfalse ? 0 : 1);
+      retval = &boolval;
       break;
 
     case MYSQL_OPT_RECONNECT:

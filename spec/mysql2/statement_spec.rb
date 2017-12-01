@@ -165,7 +165,9 @@ RSpec.describe Mysql2::Statement do
   end
 
   it "should prepare DateTime values with microseconds" do
+    # rubocop:disable Style/DateTime
     now = DateTime.now
+    # rubocop.enable Style/DateTime
     statement = @client.prepare('SELECT ? AS a')
     result = statement.execute(now)
     # microseconds is six digits after the decimal, but only test on 5 significant figures

@@ -78,11 +78,6 @@ matrix:
       addons:
         hosts:
           - mysql2gem.example.com
-      before_install:
-        # Use the system RubyGem with the system Ruby
-        - gem --version
-        - sudo gem install bundler
-        - bash .travis_setup.sh
   fast_finish: true
   allow_failures:
     - rvm: ruby-head

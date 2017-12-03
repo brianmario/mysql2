@@ -332,29 +332,26 @@ RSpec.describe Mysql2::Statement do
   end
 
   context "row data type mapping" do
-    before(:each) do
-      @client.query "USE test"
-      @test_result = @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first
-    end
+    let(:test_result) { @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first }
 
     it "should return nil for a NULL value" do
-      expect(@test_result['null_test']).to be_an_instance_of(NilClass)
-      expect(@test_result['null_test']).to eql(nil)
+      expect(test_result['null_test']).to be_an_instance_of(NilClass)
+      expect(test_result['null_test']).to eql(nil)
     end
 
     it "should return String for a BIT(64) value" do
-      expect(@test_result['bit_test']).to be_an_instance_of(String)
-      expect(@test_result['bit_test']).to eql("\000\000\000\000\000\000\000\005")
+      expect(test_result['bit_test']).to be_an_instance_of(String)
+      expect(test_result['bit_test']).to eql("\000\000\000\000\000\000\000\005")
     end
 
     it "should return String for a BIT(1) value" do
-      expect(@test_result['single_bit_test']).to be_an_instance_of(String)
-      expect(@test_result['single_bit_test']).to eql("\001")
+      expect(test_result['single_bit_test']).to be_an_instance_of(String)
+      expect(test_result['single_bit_test']).to eql("\001")
     end
 
     it "should return Fixnum for a TINYINT value" do
-      expect(num_classes).to include(@test_result['tiny_int_test'].class)
-      expect(@test_result['tiny_int_test']).to eql(1)
+      expect(num_classes).to include(test_result['tiny_int_test'].class)
+      expect(test_result['tiny_int_test']).to eql(1)
     end
 
     context "cast booleans for TINYINT if :cast_booleans is enabled" do
@@ -399,48 +396,48 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should return Fixnum for a SMALLINT value" do
-      expect(num_classes).to include(@test_result['small_int_test'].class)
-      expect(@test_result['small_int_test']).to eql(10)
+      expect(num_classes).to include(test_result['small_int_test'].class)
+      expect(test_result['small_int_test']).to eql(10)
     end
 
     it "should return Fixnum for a MEDIUMINT value" do
-      expect(num_classes).to include(@test_result['medium_int_test'].class)
-      expect(@test_result['medium_int_test']).to eql(10)
+      expect(num_classes).to include(test_result['medium_int_test'].class)
+      expect(test_result['medium_int_test']).to eql(10)
     end
 
     it "should return Fixnum for an INT value" do
-      expect(num_classes).to include(@test_result['int_test'].class)
-      expect(@test_result['int_test']).to eql(10)
+      expect(num_classes).to include(test_result['int_test'].class)
+      expect(test_result['int_test']).to eql(10)
     end
 
     it "should return Fixnum for a BIGINT value" do
-      expect(num_classes).to include(@test_result['big_int_test'].class)
-      expect(@test_result['big_int_test']).to eql(10)
+      expect(num_classes).to include(test_result['big_int_test'].class)
+      expect(test_result['big_int_test']).to eql(10)
     end
 
     it "should return Fixnum for a YEAR value" do
-      expect(num_classes).to include(@test_result['year_test'].class)
-      expect(@test_result['year_test']).to eql(2009)
+      expect(num_classes).to include(test_result['year_test'].class)
+      expect(test_result['year_test']).to eql(2009)
     end
 
     it "should return BigDecimal for a DECIMAL value" do
-      expect(@test_result['decimal_test']).to be_an_instance_of(BigDecimal)
-      expect(@test_result['decimal_test']).to eql(10.3)
+      expect(test_result['decimal_test']).to be_an_instance_of(BigDecimal)
+      expect(test_result['decimal_test']).to eql(10.3)
     end
 
     it "should return Float for a FLOAT value" do
-      expect(@test_result['float_test']).to be_an_instance_of(Float)
-      expect(@test_result['float_test']).to be_within(1e-5).of(10.3)
+      expect(test_result['float_test']).to be_an_instance_of(Float)
+      expect(test_result['float_test']).to be_within(1e-5).of(10.3)
     end
 
     it "should return Float for a DOUBLE value" do
-      expect(@test_result['double_test']).to be_an_instance_of(Float)
-      expect(@test_result['double_test']).to eql(10.3)
+      expect(test_result['double_test']).to be_an_instance_of(Float)
+      expect(test_result['double_test']).to eql(10.3)
     end
 
     it "should return Time for a DATETIME value when within the supported range" do
-      expect(@test_result['date_time_test']).to be_an_instance_of(Time)
-      expect(@test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
+      expect(test_result['date_time_test']).to be_an_instance_of(Time)
+      expect(test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
     it "should return Time when timestamp is < 1901-12-13 20:45:52" do
@@ -454,23 +451,23 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should return Time for a TIMESTAMP value when within the supported range" do
-      expect(@test_result['timestamp_test']).to be_an_instance_of(Time)
-      expect(@test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
+      expect(test_result['timestamp_test']).to be_an_instance_of(Time)
+      expect(test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
     it "should return Time for a TIME value" do
-      expect(@test_result['time_test']).to be_an_instance_of(Time)
-      expect(@test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2000-01-01 11:44:00')
+      expect(test_result['time_test']).to be_an_instance_of(Time)
+      expect(test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2000-01-01 11:44:00')
     end
 
     it "should return Date for a DATE value" do
-      expect(@test_result['date_test']).to be_an_instance_of(Date)
-      expect(@test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')
+      expect(test_result['date_test']).to be_an_instance_of(Date)
+      expect(test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')
     end
 
     it "should return String for an ENUM value" do
-      expect(@test_result['enum_test']).to be_an_instance_of(String)
-      expect(@test_result['enum_test']).to eql('val1')
+      expect(test_result['enum_test']).to be_an_instance_of(String)
+      expect(test_result['enum_test']).to eql('val1')
     end
 
     it "should raise an error given an invalid DATETIME" do
@@ -504,8 +501,8 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should return String for a SET value" do
-      expect(@test_result['set_test']).to be_an_instance_of(String)
-      expect(@test_result['set_test']).to eql('val1,val2')
+      expect(test_result['set_test']).to be_an_instance_of(String)
+      expect(test_result['set_test']).to eql('val1,val2')
     end
 
     context "string encoding for SET values" do
@@ -534,8 +531,8 @@ RSpec.describe Mysql2::Statement do
     end
 
     it "should return String for a BINARY value" do
-      expect(@test_result['binary_test']).to be_an_instance_of(String)
-      expect(@test_result['binary_test']).to eql("test#{"\000" * 6}")
+      expect(test_result['binary_test']).to be_an_instance_of(String)
+      expect(test_result['binary_test']).to eql("test#{"\000" * 6}")
     end
 
     context "string encoding for BINARY values" do
@@ -573,8 +570,8 @@ RSpec.describe Mysql2::Statement do
       'long_text_test' => 'LONGTEXT',
     }.each do |field, type|
       it "should return a String for #{type}" do
-        expect(@test_result[field]).to be_an_instance_of(String)
-        expect(@test_result[field]).to eql("test")
+        expect(test_result[field]).to be_an_instance_of(String)
+        expect(test_result[field]).to eql("test")
       end
 
       context "string encoding for #{type} values" do

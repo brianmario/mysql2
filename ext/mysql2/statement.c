@@ -266,9 +266,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   // Get count of ordinary arguments, and extract hash opts/keyword arguments
   c = rb_scan_args(argc, argv, "*:", NULL, &opts);
 
-  // Scratch space for string encoding exports, allocate on the stack
-  params_enc = alloca(sizeof(VALUE) * c);
-
   stmt = stmt_wrapper->stmt;
 
   bind_count = mysql_stmt_param_count(stmt);
@@ -278,6 +275,8 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
   // setup any bind variables in the query
   if (bind_count > 0) {
+    // Scratch space for string encoding exports, allocate on the stack
+    params_enc = alloca(sizeof(VALUE) * c);
     bind_buffers = xcalloc(bind_count, sizeof(MYSQL_BIND));
     length_buffers = xcalloc(bind_count, sizeof(unsigned long));
 

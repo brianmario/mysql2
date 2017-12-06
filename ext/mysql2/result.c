@@ -234,12 +234,12 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
         wrapper->result_buffers[i].buffer_length = sizeof(signed char);
         break;
       case MYSQL_TYPE_SHORT:        // short int
+      case MYSQL_TYPE_YEAR:         // short int
         wrapper->result_buffers[i].buffer = xcalloc(1, sizeof(short int));
         wrapper->result_buffers[i].buffer_length = sizeof(short int);
         break;
       case MYSQL_TYPE_INT24:        // int
       case MYSQL_TYPE_LONG:         // int
-      case MYSQL_TYPE_YEAR:         // int
         wrapper->result_buffers[i].buffer = xcalloc(1, sizeof(int));
         wrapper->result_buffers[i].buffer_length = sizeof(int);
         break;
@@ -365,6 +365,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           }
           break;
         case MYSQL_TYPE_SHORT:        // short int
+        case MYSQL_TYPE_YEAR:         // short int
           if (result_buffer->is_unsigned) {
             val = UINT2NUM(*((unsigned short int*)result_buffer->buffer));
           } else  {
@@ -373,7 +374,6 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           break;
         case MYSQL_TYPE_INT24:        // int
         case MYSQL_TYPE_LONG:         // int
-        case MYSQL_TYPE_YEAR:         // int
           if (result_buffer->is_unsigned) {
             val = UINT2NUM(*((unsigned int*)result_buffer->buffer));
           } else {

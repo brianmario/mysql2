@@ -543,9 +543,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
         case MYSQL_TYPE_DECIMAL:    /* DECIMAL or NUMERIC field */
         case MYSQL_TYPE_NEWDECIMAL: /* Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up) */
-          if (fields[i].decimals == 0) {
-            val = rb_cstr2inum(row[i], 10);
-          } else if (strtod(row[i], NULL) == 0.000000){
+          if (strtod(row[i], NULL) == 0.000000){
             val = rb_funcall(cBigDecimal, intern_new, 1, opt_decimal_zero);
           }else{
             val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));

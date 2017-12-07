@@ -7,7 +7,7 @@ Mysql2::GEMSPEC = Gem::Specification.new do |s|
   s.license = "MIT"
   s.email = ['seniorlopez@gmail.com', 'aaron@serendipity.cx']
   s.extensions = ["ext/mysql2/extconf.rb"]
-  s.homepage = 'http://github.com/brianmario/mysql2'
+  s.homepage = 'https://github.com/brianmario/mysql2'
   s.rdoc_options = ["--charset=UTF-8"]
   s.summary = 'A simple, fast Mysql library for Ruby, binding to libmysql'
   s.required_ruby_version = '>= 2.0.0'

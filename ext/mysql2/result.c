@@ -32,14 +32,14 @@ typedef struct {
   VALUE block_given;
 } result_each_args;
 
-VALUE cBigDecimal, cDateTime, cDate;
-static VALUE cMysql2Result;
-static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
-static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
-static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
-          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream, sym_name;
-static ID intern_merge, intern_BigDecimal;
+static VALUE cMysql2Result, cDateTime, cDate;
+static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
+static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
+  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal;
+static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
+  sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
+  sym_cache_rows, sym_cast, sym_stream, sym_name;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
@@ -962,9 +962,6 @@ void init_mysql2_result() {
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
 
-  cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
-  intern_BigDecimal   = rb_intern("BigDecimal");
-
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
@@ -980,6 +977,7 @@ void init_mysql2_result() {
   intern_local_offset = rb_intern("local_offset");
   intern_civil        = rb_intern("civil");
   intern_new_offset   = rb_intern("new_offset");
+  intern_BigDecimal   = rb_intern("BigDecimal");
 
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));

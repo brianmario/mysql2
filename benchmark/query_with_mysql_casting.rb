@@ -21,7 +21,7 @@ def mysql_cast(type, value)
       Mysql::Field::TYPE_INT24, Mysql::Field::TYPE_LONGLONG, Mysql::Field::TYPE_YEAR
     value.to_i
   when Mysql::Field::TYPE_DECIMAL, Mysql::Field::TYPE_NEWDECIMAL
-    BigDecimal.new(value)
+    BigDecimal(value)
   when Mysql::Field::TYPE_DOUBLE, Mysql::Field::TYPE_FLOAT
     value.to_f
   when Mysql::Field::TYPE_DATE

@@ -45,17 +45,11 @@ matrix:
         mariadb: 10.2
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.0.0
+    - rvm: 2.4
       env: DB=mysql55
-      dist: precise
       addons:
         hosts:
           - mysql2gem.example.com
-        apt:
-          packages:
-          - mysql-server-5.5
-          - mysql-client-core-5.5
-          - mysql-client-5.5
     - rvm: 2.4
       env: DB=mysql57
       addons:
@@ -67,7 +61,7 @@ matrix:
         hosts:
           - mysql2gem.example.com
     - os: osx
-      rvm: 2.3
+      rvm: 2.4
       env: DB=mysql56
       addons:
         hosts:
@@ -76,5 +70,5 @@ matrix:
   allow_failures:
     - rvm: ruby-head
     - os: osx
-      rvm: 2.3
+      rvm: 2.4
       env: DB=mysql56

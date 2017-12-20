@@ -1,7 +1,7 @@
 #include <mysql2_ext.h>
 
-VALUE cMysql2Statement;
-extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError, cBigDecimal, cDateTime, cDate;
+extern VALUE mMysql2, cMysql2Error;
+static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year;
 
@@ -547,8 +547,11 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
 }
 
 void init_mysql2_statement() {
-  cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
+  cDate = rb_const_get(rb_cObject, rb_intern("Date"));
+  cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
+  cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
 
+  cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
   rb_define_method(cMysql2Statement, "param_count", rb_mysql_stmt_param_count, 0);
   rb_define_method(cMysql2Statement, "field_count", rb_mysql_stmt_field_count, 0);
   rb_define_method(cMysql2Statement, "_execute", rb_mysql_stmt_execute, -1);

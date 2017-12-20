@@ -32,14 +32,14 @@ typedef struct {
   VALUE block_given;
 } result_each_args;
 
-VALUE cBigDecimal, cDateTime, cDate;
-static VALUE cMysql2Result;
-static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
-static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset, intern_civil, intern_new_offset;
-static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone, sym_application_timezone,
-          sym_local, sym_utc, sym_cast_booleans, sym_cache_rows, sym_cast, sym_stream, sym_name;
-static ID intern_merge;
+static VALUE cMysql2Result, cDateTime, cDate;
+static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
+static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
+  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal;
+static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
+  sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
+  sym_cache_rows, sym_cast, sym_stream, sym_name;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
@@ -444,7 +444,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         }
         case MYSQL_TYPE_DECIMAL:      // char[]
         case MYSQL_TYPE_NEWDECIMAL:   // char[]
-          val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(result_buffer->buffer, *(result_buffer->length)));
+          val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, rb_str_new(result_buffer->buffer, *(result_buffer->length)));
           break;
         case MYSQL_TYPE_STRING:       // char[]
         case MYSQL_TYPE_VAR_STRING:   // char[]
@@ -546,9 +546,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           if (fields[i].decimals == 0) {
             val = rb_cstr2inum(row[i], 10);
           } else if (strtod(row[i], NULL) == 0.000000){
-            val = rb_funcall(cBigDecimal, intern_new, 1, opt_decimal_zero);
+            val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, opt_decimal_zero);
           }else{
-            val = rb_funcall(cBigDecimal, intern_new, 1, rb_str_new(row[i], fieldLengths[i]));
+            val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, rb_str_new(row[i], fieldLengths[i]));
           }
           break;
         case MYSQL_TYPE_FLOAT:      /* FLOAT field */
@@ -959,7 +959,6 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
 }
 
 void init_mysql2_result() {
-  cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
 
@@ -978,6 +977,7 @@ void init_mysql2_result() {
   intern_local_offset = rb_intern("local_offset");
   intern_civil        = rb_intern("civil");
   intern_new_offset   = rb_intern("new_offset");
+  intern_BigDecimal   = rb_intern("BigDecimal");
 
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));

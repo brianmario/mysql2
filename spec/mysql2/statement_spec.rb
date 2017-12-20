@@ -183,7 +183,7 @@ RSpec.describe Mysql2::Statement do
 
   it "should handle as a decimal binding a BigDecimal" do
     stmt = @client.prepare('SELECT ? AS decimal_test')
-    test_result = stmt.execute(BigDecimal.new("123.45")).first
+    test_result = stmt.execute(BigDecimal("123.45")).first
     expect(test_result['decimal_test']).to be_an_instance_of(BigDecimal)
     expect(test_result['decimal_test']).to eql(123.45)
   end
@@ -193,7 +193,7 @@ RSpec.describe Mysql2::Statement do
     @client.query 'DROP TABLE IF EXISTS mysql2_stmt_decimal_test'
     @client.query 'CREATE TABLE mysql2_stmt_decimal_test (decimal_test DECIMAL(10,3))'
 
-    @client.prepare("INSERT INTO mysql2_stmt_decimal_test VALUES (?)").execute(BigDecimal.new("123.45"))
+    @client.prepare("INSERT INTO mysql2_stmt_decimal_test VALUES (?)").execute(BigDecimal("123.45"))
 
     test_result = @client.query("SELECT * FROM mysql2_stmt_decimal_test").first
     expect(test_result['decimal_test']).to eql(123.45)

@@ -11,7 +11,7 @@ module Mysql2
         database_timezone: :local,   # timezone Mysql2 will assume datetime objects are stored in
         application_timezone: nil,   # timezone Mysql2 will convert to before handing the object back to the caller
         cache_rows: true,            # tells Mysql2 to use its internal row cache for results
-        connect_flags: REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION,
+        connect_flags: REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | CONNECT_ATTRS,
         cast: true,
         default_file: nil,
         default_group: nil,
@@ -64,11 +64,6 @@ module Mysql2
       # SSL verify is a connection flag rather than a mysql_ssl_set option
       flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify]
 
-      # Set default program_name in performance_schema.session_connect_attrs
-      # and performance_schema.session_account_connect_attrs
-      conn_attrs = opts[:connect_attrs] || {}
-      conn_attrs[:program_name] = $PROGRAM_NAME unless conn_attrs.key?(:program_name)
-
       if %i[user pass hostname dbname db sock].any? { |k| @query_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="
         warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."
@@ -90,9 +85,7 @@ module Mysql2
       port = port.to_i unless port.nil?
       database = database.to_s unless database.nil?
       socket = socket.to_s unless socket.nil?
-      conn_attrs = conn_attrs.each_with_object({}) do |(key, value), hash|
-        hash[key.to_s] = value.to_s
-      end
+      conn_attrs = parse_connect_attrs(opts[:connect_attrs])
 
       connect user, pass, host, port, database, socket, flags, conn_attrs
     end
@@ -119,6 +112,17 @@ module Mysql2
           warn "Unknown MySQL connection flag: '#{f}'"
           memo
         end
+      end
+    end
+
+    # Set default program_name in performance_schema.session_connect_attrs
+    # and performance_schema.session_account_connect_attrs
+    def parse_connect_attrs(conn_attrs)
+      return {} if Mysql2::Client::CONNECT_ATTRS.zero?
+      conn_attrs ||= {}
+      conn_attrs[:program_name] ||= $PROGRAM_NAME
+      conn_attrs.each_with_object({}) do |(key, value), hash|
+        hash[key.to_s] = value.to_s
       end
     end
 

@@ -52,6 +52,13 @@ GLOB = "{#{dirs.join(',')}}/{mysql_config,mysql_config5,mariadb_config}".freeze
 # If the user has provided a --with-mysql-dir argument, we must respect it or fail.
 inc, lib = dir_config('mysql')
 if inc && lib
+  # Ruby versions below 2.0 on Unix and below 2.1 on Windows
+  # do not properly search for lib directories, and must be corrected:
+  # https://bugs.ruby-lang.org/projects/ruby-trunk/repository/revisions/39717
+  unless lib && lib[-3, 3] == 'lib'
+    @libdir_basename = 'lib'
+    inc, lib = dir_config('mysql')
+  end
   abort "-----\nCannot find include dir(s) #{inc}\n-----" unless inc && inc.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
   abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
   warn "-----\nUsing --with-mysql-dir=#{File.dirname inc}\n-----"
@@ -103,7 +110,6 @@ have_const('MYSQL_ENABLE_CLEARTEXT_PLUGIN', mysql_h)
 have_const('SERVER_QUERY_NO_GOOD_INDEX_USED', mysql_h)
 have_const('SERVER_QUERY_NO_INDEX_USED', mysql_h)
 have_const('SERVER_QUERY_WAS_SLOW', mysql_h)
-have_const('MYSQL_OPT_CONNECT_ATTR_ADD', mysql_h) # for mysql_options4
 
 # This is our wishlist. We use whichever flags work on the host.
 # -Wall and -Wextra are included by default.

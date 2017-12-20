@@ -530,7 +530,7 @@ This gem is tested with the following MySQL and MariaDB versions:
 
  * MySQL 5.5, 5.6, 5.7, 8.0
  * MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
- * MariaDB 5.5, 10.0, 10.1
+ * MariaDB 5.5, 10.0, 10.1, 10.2
 
 ### Ruby on Rails / Active Record
 

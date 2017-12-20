@@ -46,12 +46,6 @@ matrix:
         hosts:
           - mysql2gem.example.com
     - rvm: 2.0.0
-      env: DB=mysql51
-      dist: precise
-      addons:
-        hosts:
-          - mysql2gem.example.com
-    - rvm: 2.0.0
       env: DB=mysql55
       dist: precise
       addons:
@@ -84,6 +78,3 @@ matrix:
     - os: osx
       rvm: 2.3
       env: DB=mysql56
-    - rvm: 2.0.0
-      env: DB=mysql51
-      dist: precise

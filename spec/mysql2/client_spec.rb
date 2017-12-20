@@ -79,7 +79,8 @@ RSpec.describe Mysql2::Client do
                    Mysql2::Client::LONG_FLAG |
                    Mysql2::Client::TRANSACTIONS |
                    Mysql2::Client::PROTOCOL_41 |
-                   Mysql2::Client::SECURE_CONNECTION
+                   Mysql2::Client::SECURE_CONNECTION |
+                   Mysql2::Client::CONNECT_ATTRS
     expect(client.connect_args.last[6]).to eql(client_flags)
   end
 
@@ -438,8 +439,8 @@ RSpec.describe Mysql2::Client do
 
   it "should set default program_name in connect_attrs" do
     client = new_client
-    if Mysql2::Client.info[:version] < '5.6' || client.info[:version] < '5.6'
-      pending('Both client and server versions must be MySQL 5.6 or later.')
+    if Mysql2::Client::CONNECT_ATTRS.zero? || client.server_info[:version].match(/10.[01].\d+-MariaDB/)
+      pending('Both client and server versions must be MySQL 5.6 or MariaDB 10.2 or later.')
     end
     result = client.query("SELECT attr_value FROM performance_schema.session_account_connect_attrs WHERE processlist_id = connection_id() AND attr_name = 'program_name'")
     expect(result.first['attr_value']).to eq($PROGRAM_NAME)
@@ -447,8 +448,8 @@ RSpec.describe Mysql2::Client do
 
   it "should set custom connect_attrs" do
     client = new_client(connect_attrs: { program_name: 'my_program_name', foo: 'fooval', bar: 'barval' })
-    if Mysql2::Client.info[:version] < '5.6' || client.info[:version] < '5.6'
-      pending('Both client and server versions must be MySQL 5.6 or later.')
+    if Mysql2::Client::CONNECT_ATTRS.zero? || client.server_info[:version].match(/10.[01].\d+-MariaDB/)
+      pending('Both client and server versions must be MySQL 5.6 or MariaDB 10.2 or later.')
     end
     results = Hash[client.query("SELECT * FROM performance_schema.session_account_connect_attrs WHERE processlist_id = connection_id()").map { |x| x.values_at('ATTR_NAME', 'ATTR_VALUE') }]
     expect(results['program_name']).to eq('my_program_name')

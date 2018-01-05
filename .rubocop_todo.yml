@@ -58,7 +58,6 @@ Style/Documentation:
     - 'test/**/*'
     - 'benchmark/active_record.rb'
     - 'benchmark/allocations.rb'
-    - 'benchmark/query_with_mysql_casting.rb'
     - 'lib/mysql2.rb'
     - 'lib/mysql2/client.rb'
     - 'lib/mysql2/em.rb'

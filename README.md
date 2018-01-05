@@ -446,13 +446,12 @@ client = Mysql2::Client.new
 result = client.query("SELECT * FROM table", :cast => false)
 ```
 
-Here are the results from the `query_without_mysql_casting.rb` script in the benchmarks folder:
+Here are the results from the `query.rb` script in the benchmarks folder:
 
 ``` sh
                            user     system      total        real
 Mysql2 (cast: true)    0.340000   0.000000   0.340000 (  0.405018)
 Mysql2 (cast: false)   0.160000   0.010000   0.170000 (  0.209937)
-Mysql                  0.080000   0.000000   0.080000 (  0.129355)
 do_mysql               0.520000   0.010000   0.530000 (  0.574619)
 ```
 
@@ -569,28 +568,6 @@ EM.run do
   end
 end
 ```
-
-## Benchmarks and Comparison
-
-The mysql2 gem converts MySQL field types to Ruby data types in C code, providing a serious speed benefit.
-
-The do_mysql gem also converts MySQL fields types, but has a considerably more complex API and is still ~2x slower than mysql2.
-
-The mysql gem returns only nil or string data types, leaving you to convert field values to Ruby types in Ruby-land, which is much slower than mysql2's C code.
-
-For a comparative benchmark, the script below performs a basic "SELECT * FROM"
-query on a table with 30k rows and fields of nearly every Ruby-representable
-data type, then iterating over every row using an #each like method yielding a
-block:
-
-``` sh
-         user       system     total       real
-Mysql2   0.750000   0.180000   0.930000   (1.821655)
-do_mysql 1.650000   0.200000   1.850000   (2.811357)
-Mysql    7.500000   0.210000   7.710000   (8.065871)
-```
-
-These results are from the `query_with_mysql_casting.rb` script in the benchmarks folder.
 
 ## Development
 

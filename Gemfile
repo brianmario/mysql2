@@ -17,7 +17,6 @@ group :benchmarks do
   gem 'benchmark-ips'
   gem 'do_mysql'
   gem 'faker'
-  gem 'mysql'
   gem 'sequel'
 end
 

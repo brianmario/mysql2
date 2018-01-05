@@ -2,7 +2,6 @@ $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'rubygems'
 require 'benchmark/ips'
-require 'mysql'
 require 'mysql2'
 require 'do_mysql'
 
@@ -32,7 +31,7 @@ Benchmark.ips do |x|
   end
 
   do_mysql = DataObjects::Connection.new("mysql://localhost/#{database}")
-  command = DataObjects::Mysql::Command.new do_mysql, sql
+  command = do_mysql.create_command sql
   x.report "do_mysql" do
     do_result = command.execute_reader
     do_result.each { |res| puts res.inspect if debug }

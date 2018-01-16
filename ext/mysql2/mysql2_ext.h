@@ -1,6 +1,14 @@
 #ifndef MYSQL2_EXT
 #define MYSQL2_EXT
 
+/* MySQL 8.0 replaces my_bool with C99 bool. Earlier versions of MySQL had
+ * a typedef to char. Gem users reported failures on big endian systems when
+ * using C99 bool types with older MySQLs due to mismatched behavior. */
+#ifndef HAVE_TYPE_MY_BOOL
+#include <stdbool.h>
+typedef bool my_bool;
+#endif
+
 /* tell rbx not to use it's caching compat layer
    by doing this we're making a promise to RBX that
    we'll never modify the pointers we get back from RSTRING_PTR */

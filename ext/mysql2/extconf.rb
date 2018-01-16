@@ -104,6 +104,12 @@ end
   asplode h unless have_header h
 end
 
+mysql_h = [prefix, 'mysql.h'].compact.join('/')
+
+# my_bool is replaced by C99 bool in MySQL 8.0, but we want
+# to retain compatibility with the typedef in earlier MySQLs.
+have_type('my_bool', mysql_h)
+
 # These gcc style flags are also supported by clang and xcode compilers,
 # so we'll use a does-it-work test instead of an is-it-gcc test.
 gcc_flags = ' -Wall -funroll-loops'

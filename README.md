@@ -138,7 +138,7 @@ results.each do |row|
   # conveniently, row is a hash
   # the keys are the fields, as you'd expect
   # the values are pre-built ruby primitives mapped from their corresponding field types in MySQL
-  puts row["id"] # row["id"].class == Fixnum
+  puts row["id"] # row["id"].is_a? Integer
   if row["dne"]  # non-existant hash entry is nil
     puts row["dne"]
   end

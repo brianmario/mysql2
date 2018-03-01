@@ -205,6 +205,40 @@ RSpec.describe Mysql2::Client do
     # rubocop:enable Lint/AmbiguousBlockAssociation
   end
 
+  context "#set_server_option" do
+    let(:client) do
+      new_client.tap do |client|
+        client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_ON)
+      end
+    end
+
+    it 'returns true when multi_statements is enable' do
+      expect(client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_ON)).to be true
+    end
+
+    it 'returns true when multi_statements is disable' do
+      expect(client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_OFF)).to be true
+    end
+
+    it 'returns false when multi_statements is neither OPTION_MULTI_STATEMENTS_OFF or OPTION_MULTI_STATEMENTS_ON' do
+      expect(client.set_server_option(344)).to be false
+    end
+
+    it 'enables multiple-statement' do
+      client.query("SELECT 1;SELECT 2;")
+
+      expect(client.next_result).to be true
+      expect(client.store_result.first).to eql('2' => 2)
+      expect(client.next_result).to be false
+    end
+
+    it 'disables multiple-statement' do
+      client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_OFF)
+
+      expect { client.query("SELECT 1;SELECT 2;") }.to raise_error(Mysql2::Error)
+    end
+  end
+
   context "#automatic_close" do
     it "is enabled by default" do
       expect(new_client.automatic_close?).to be(true)

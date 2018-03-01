@@ -1099,6 +1099,23 @@ static VALUE rb_mysql_client_ping(VALUE self) {
 }
 
 /* call-seq:
+ *    client.set_server_option(value)
+ *
+ * Enables or disables an option for the connection.
+ * Read https://dev.mysql.com/doc/refman/5.7/en/mysql-set-server-option.html
+ * for more information.
+ */
+static VALUE rb_mysql_client_set_server_option(VALUE self, VALUE value) {
+  GET_CLIENT(self);
+
+  if (mysql_set_server_option(wrapper->client, NUM2INT(value)) == 0) {
+    return Qtrue;
+  } else {
+    return Qfalse;
+  }
+}
+
+/* call-seq:
  *    client.more_results?
  *
  * Returns true or false if there are more results to process.
@@ -1399,6 +1416,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);
+  rb_define_method(cMysql2Client, "set_server_option", rb_mysql_client_set_server_option, 1);
   rb_define_method(cMysql2Client, "more_results?", rb_mysql_client_more_results, 0);
   rb_define_method(cMysql2Client, "next_result", rb_mysql_client_next_result, 0);
   rb_define_method(cMysql2Client, "store_result", rb_mysql_client_store_result, 0);
@@ -1526,6 +1544,13 @@ void init_mysql2_client() {
   /* HACK because MySQL5.7 no longer defines this constant,
    * but we're using it in our default connection flags. */
   rb_const_set(cMysql2Client, rb_intern("SECURE_CONNECTION"), LONG2NUM(0));
+#endif
+
+#if MYSQL_VERSION_ID >= 40101
+  rb_const_set(cMysql2Client, rb_intern("OPTION_MULTI_STATEMENTS_ON"),
+      LONG2NUM(MYSQL_OPTION_MULTI_STATEMENTS_ON));
+  rb_const_set(cMysql2Client, rb_intern("OPTION_MULTI_STATEMENTS_OFF"),
+      LONG2NUM(MYSQL_OPTION_MULTI_STATEMENTS_OFF));
 #endif
 
 #ifdef CLIENT_MULTI_STATEMENTS

@@ -111,6 +111,8 @@ have_const('MYSQL_ENABLE_CLEARTEXT_PLUGIN', mysql_h)
 have_const('SERVER_QUERY_NO_GOOD_INDEX_USED', mysql_h)
 have_const('SERVER_QUERY_NO_INDEX_USED', mysql_h)
 have_const('SERVER_QUERY_WAS_SLOW', mysql_h)
+have_const('MYSQL_OPTION_MULTI_STATEMENTS_ON', mysql_h)
+have_const('MYSQL_OPTION_MULTI_STATEMENTS_OFF', mysql_h)
 
 # my_bool is replaced by C99 bool in MySQL 8.0, but we want
 # to retain compatibility with the typedef in earlier MySQLs.

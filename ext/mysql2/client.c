@@ -1546,9 +1546,12 @@ void init_mysql2_client() {
   rb_const_set(cMysql2Client, rb_intern("SECURE_CONNECTION"), LONG2NUM(0));
 #endif
 
-#if MYSQL_VERSION_ID >= 40101
+#ifdef MYSQL_OPTION_MULTI_STATEMENTS_ON
   rb_const_set(cMysql2Client, rb_intern("OPTION_MULTI_STATEMENTS_ON"),
       LONG2NUM(MYSQL_OPTION_MULTI_STATEMENTS_ON));
+#endif
+
+#ifdef MYSQL_OPTION_MULTI_STATEMENTS_OFF
   rb_const_set(cMysql2Client, rb_intern("OPTION_MULTI_STATEMENTS_OFF"),
       LONG2NUM(MYSQL_OPTION_MULTI_STATEMENTS_OFF));
 #endif

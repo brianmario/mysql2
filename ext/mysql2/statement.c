@@ -184,7 +184,7 @@ static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length
  * the buffer is a Ruby string pointer and not our memory to manage.
  */
 #define FREE_BINDS                                          \
-  for (i = 0; i < c; i++) {                                 \
+  for (i = 0; i < bind_count; i++) {                        \
     if (bind_buffers[i].buffer && NIL_P(params_enc[i])) {   \
       xfree(bind_buffers[i].buffer);                        \
     }                                                       \
@@ -247,8 +247,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   MYSQL_BIND *bind_buffers = NULL;
   unsigned long *length_buffers = NULL;
   unsigned long bind_count;
-  long i;
-  int c;
+  unsigned long i;
   MYSQL_STMT *stmt;
   MYSQL_RES *metadata;
   VALUE opts;
@@ -263,24 +262,26 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
   conn_enc = rb_to_encoding(wrapper->encoding);
 
-  // Get count of ordinary arguments, and extract hash opts/keyword arguments
-  c = rb_scan_args(argc, argv, "*:", NULL, &opts);
-
   stmt = stmt_wrapper->stmt;
-
   bind_count = mysql_stmt_param_count(stmt);
-  if (c != (long)bind_count) {
-    rb_raise(cMysql2Error, "Bind parameter count (%ld) doesn't match number of arguments (%d)", bind_count, c);
+
+  // Get count of ordinary arguments, and extract hash opts/keyword arguments
+  // Use a local scope to avoid leaking the temporary count variable
+  {
+    int c = rb_scan_args(argc, argv, "*:", NULL, &opts);
+    if (c != (long)bind_count) {
+      rb_raise(cMysql2Error, "Bind parameter count (%ld) doesn't match number of arguments (%d)", bind_count, c);
+    }
   }
 
   // setup any bind variables in the query
   if (bind_count > 0) {
     // Scratch space for string encoding exports, allocate on the stack
-    params_enc = alloca(sizeof(VALUE) * c);
+    params_enc = alloca(sizeof(VALUE) * bind_count);
     bind_buffers = xcalloc(bind_count, sizeof(MYSQL_BIND));
     length_buffers = xcalloc(bind_count, sizeof(unsigned long));
 
-    for (i = 0; i < c; i++) {
+    for (i = 0; i < bind_count; i++) {
       bind_buffers[i].buffer = NULL;
       params_enc[i] = Qnil;
 

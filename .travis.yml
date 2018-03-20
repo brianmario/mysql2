@@ -5,7 +5,7 @@ bundler_args: --without benchmarks development
 # Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
 before_install:
   - gem --version
-  - gem update --system 2.7.3
+  - gem update --system 2.7.6 --quiet
   - gem update bundler
   - gem --version
   - bash .travis_setup.sh
@@ -18,6 +18,7 @@ addons:
     - mysql-client-core-5.6
     - mysql-client-5.6
 rvm:
+  - 2.6
   - 2.5
   - 2.4
   - 2.3

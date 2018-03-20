@@ -47,6 +47,12 @@ matrix:
         hosts:
           - mysql2gem.example.com
     - rvm: 2.4
+      env: DB=mariadb10.3
+      addons:
+        mariadb: 10.3
+        hosts:
+          - mysql2gem.example.com
+    - rvm: 2.4
       env: DB=mysql55
       addons:
         hosts:

@@ -253,7 +253,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   VALUE opts;
   VALUE current;
   VALUE resultObj;
-  VALUE *params_enc;
+  VALUE *params_enc = NULL;
   int is_streaming;
   rb_encoding *conn_enc;
 

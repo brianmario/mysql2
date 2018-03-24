@@ -63,6 +63,7 @@ if inc && lib
   abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
   warn "-----\nUsing --with-mysql-dir=#{File.dirname inc}\n-----"
   rpath_dir = lib
+  have_library('mysqlclient')
 elsif (mc = (with_config('mysql-config') || Dir[GLOB].first))
   # If the user has provided a --with-mysql-config argument, we must respect it or fail.
   # If the user gave --with-mysql-config with no argument means we should try to find it.

@@ -963,6 +963,20 @@ RSpec.describe Mysql2::Client do
     end.not_to raise_error
   end
 
+  context 'with query-level timeout' do
+    it "time outs on long queries" do
+      expect do
+        @client.query("select sleep(2)", read_timeout: 1)
+      end.to raise_error(Mysql2::Error::TimeoutError)
+    end
+
+    it "does not time out on queries under timeout" do
+      expect do
+        @client.query("select sleep(1)", read_timeout: 2)
+      end.not_to raise_error
+    end
+  end
+
   context 'write operations api' do
     before(:each) do
       @client.query "USE test"

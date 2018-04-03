@@ -26,3 +26,7 @@ Style/TrailingCommaInLiteral:
 
 Style/TrivialAccessors:
   AllowPredicates: true
+
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*.rb'

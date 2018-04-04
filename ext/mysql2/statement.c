@@ -426,12 +426,12 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
 
-  // Merge in hash opts/keyword arguments
-  if (!NIL_P(opts)) {
-    rb_funcall(current, intern_merge_bang, 1, opts);
+  is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
+
+  if (!is_streaming && !NIL_P(opts)) {
+    is_streaming = (Qtrue == rb_hash_aref(opts, sym_stream));
   }
 
-  is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
   if (!is_streaming) {
     // recieve the whole result set from the server
     if (mysql_stmt_store_result(stmt)) {
@@ -439,6 +439,11 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     wrapper->active_thread = Qnil;
+  }
+
+  // Merge in hash opts/keyword arguments
+  if (!NIL_P(opts)) {
+    rb_funcall(current, intern_merge_bang, 1, opts);
   }
 
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);

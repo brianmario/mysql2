@@ -431,6 +431,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   if (is_streaming) {
     unsigned long type = CURSOR_TYPE_READ_ONLY;
     if (mysql_stmt_attr_set(stmt, STMT_ATTR_CURSOR_TYPE, &type)) {
+      FREE_BINDS;
       rb_raise(cMysql2Error, "Unable to stream prepared statement, could not set CURSOR_TYPE_READ_ONLY");
     }
   }

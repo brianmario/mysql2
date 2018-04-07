@@ -403,6 +403,38 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     }
   }
 
+  // Duplicate the options hash, merge! extra opts, put the copy into the Result object
+  current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
+  (void)RB_GC_GUARD(current);
+  Check_Type(current, T_HASH);
+
+  // Merge in hash opts/keyword arguments
+  if (!NIL_P(opts)) {
+    rb_funcall(current, intern_merge_bang, 1, opts);
+  }
+
+  is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
+
+  // From stmt_execute to mysql_stmt_result_metadata to stmt_store_result, no
+  // Ruby API calls are allowed so that GC is not invoked. If the connection is
+  // in results-streaming-mode for Statement A, and in the middle Statement B
+  // gets garbage collected, a message will be sent to the server notifying it
+  // to release Statement B, resulting in the following error:
+  //   Commands out of sync; you can't run this command now
+  //
+  // In streaming mode, statement execute must return a cursor because we
+  // cannot prevent other Statement objects from being garbage collected
+  // between fetches of each row of the result set. The following error
+  // occurs if cursor mode is not set:
+  //   Row retrieval was canceled by mysql_stmt_close
+
+  if (is_streaming) {
+    unsigned long type = CURSOR_TYPE_READ_ONLY;
+    if (mysql_stmt_attr_set(stmt, STMT_ATTR_CURSOR_TYPE, &type)) {
+      rb_raise(cMysql2Error, "Unable to stream prepared statement, could not set CURSOR_TYPE_READ_ONLY");
+    }
+  }
+
   if ((VALUE)rb_thread_call_without_gvl(nogvl_stmt_execute, stmt, RUBY_UBF_IO, 0) == Qfalse) {
     FREE_BINDS;
     rb_raise_mysql2_stmt_error(stmt_wrapper);
@@ -421,17 +453,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     return Qnil;
   }
 
-  // Duplicate the options hash, merge! extra opts, put the copy into the Result object
-  current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
-  (void)RB_GC_GUARD(current);
-  Check_Type(current, T_HASH);
-
-  // Merge in hash opts/keyword arguments
-  if (!NIL_P(opts)) {
-    rb_funcall(current, intern_merge_bang, 1, opts);
-  }
-
-  is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
   if (!is_streaming) {
     // recieve the whole result set from the server
     if (mysql_stmt_store_result(stmt)) {

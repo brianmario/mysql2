@@ -178,6 +178,9 @@ Pass your arguments to the execute method in the same number and order as the
 question marks in the statement. Query options can be passed as keyword arguments
 to the execute method.
 
+Be sure to read about the known limitations of prepared statements at
+https://dev.mysql.com/doc/refman/5.6/en/c-api-prepared-statement-problems.html
+
 ``` ruby
 statement = @client.prepare("SELECT * FROM users WHERE login_count = ?")
 result1 = statement.execute(1)

@@ -537,6 +537,7 @@ This gem is tested with the following MySQL and MariaDB versions:
 
 ### Ruby on Rails / Active Record
 
+ * mysql2 0.5.x works with Rails / Active Record 5.0.7, 5.1.6, and higher.
  * mysql2 0.4.x works with Rails / Active Record 4.2.5 - 5.0 and higher.
  * mysql2 0.3.x works with Rails / Active Record 3.1, 3.2, 4.x, 5.0.
  * mysql2 0.2.x works with Rails / Active Record 2.3 - 3.0.

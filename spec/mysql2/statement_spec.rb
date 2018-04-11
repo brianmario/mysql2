@@ -6,6 +6,10 @@ RSpec.describe Mysql2::Statement do
   end
 
   def stmt_count
+    # Use the performance schema in MySQL 5.7 and above
+    @client.query("SELECT COUNT(1) AS count FROM performance_schema.prepared_statements_instances").first['count'].to_i
+  rescue Mysql2::Error
+    # Fall back to the global prepapred statement counter
     @client.query("SHOW STATUS LIKE 'Prepared_stmt_count'").first['Value'].to_i
   end
 

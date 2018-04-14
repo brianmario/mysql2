@@ -1,5 +1,4 @@
 #include <mysql2_ext.h>
-#include <violite.h>
 
 #include <time.h>
 #include <errno.h>
@@ -1146,13 +1145,21 @@ static void *nogvl_next_result(void *ptr) {
   return (void *)INT2NUM(mysql_next_result(wrapper->client));
 }
 
+/* Rather than including violite.h to be able to look into the net.vio structure
+ * to call its has_data function pointer, we borrow the definitions of just two
+ * functions that understand this structure.
+ *
+ * Definitions are from vio_priv.h
+ */
+my_bool vio_ssl_has_data (Vio *vio);
+my_bool vio_buff_has_data (Vio *vio);
+
 /* call-seq:
  *    client.next_result
  *
  * Fetch the next result set from the server.
  * Returns nothing.
  */
-
 static VALUE rb_mysql_client_next_result(VALUE self)
 {
   int ret;
@@ -1162,11 +1169,16 @@ static VALUE rb_mysql_client_next_result(VALUE self)
   if (mysql_more_results(wrapper->client) == 0)
     return Qfalse;
 
-  /* if both queries were ready by the time we finished the first query,
-   * the underlying mysql client library will have read both results into the buffer,
-   * defeating our attempt to poll() until ready.  detect that case by peeking at the "vio" buffer.
+  /* The underlying client library may have pre-read the results from the next
+   * query, so wait_for_fd would not be triggered. Instead we will ask whether
+   * the net.vio structure has additional data that hasn't been parsed.
+   *
+   * Hack: use knowledge of whether the connecti is SSL or not to call the
+   * appropriate has_data function and pass net.vio as an opaque structure.
    */
-  if ( !wrapper->client->net.vio->has_data(wrapper->client->net.vio) ) {
+  if ( mysql_get_ssl_cipher(wrapper->client)
+    ? !vio_ssl_has_data(wrapper->client->net.vio)
+    : !vio_buff_has_data(wrapper->client->net.vio) ) {
     tvp = get_read_timeout(self, &tv);
     wait_for_fd(wrapper->client->net.fd, tvp);
   }

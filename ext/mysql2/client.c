@@ -20,6 +20,15 @@ static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_k
 static VALUE sym_no_good_index_used, sym_no_index_used, sym_query_was_slow;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
 
+/* Rather than including violite.h to be able to look into the net.vio structure
+ * to call its has_data function pointer, we borrow the definitions of just two
+ * functions that understand this structure.
+ *
+ * Definitions are from vio_priv.h
+ */
+my_bool vio_ssl_has_data(void *);
+my_bool vio_buff_has_data(void *);
+
 #define REQUIRE_INITIALIZED(wrapper) \
   if (!wrapper->initialized) { \
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
@@ -27,8 +36,20 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
 
 #if defined(HAVE_MYSQL_NET_VIO) || defined(HAVE_ST_NET_VIO)
   #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
+
+  #define HAS_DATA(wrapper) \
+  mysql_get_ssl_cipher(wrapper->client) \
+    ? !vio_ssl_has_data(wrapper->client->net.vio) \
+    : !vio_buff_has_data(wrapper->client->net.vio)
+
 #elif defined(HAVE_MYSQL_NET_PVIO) || defined(HAVE_ST_NET_PVIO)
   #define CONNECTED(wrapper) (wrapper->client->net.pvio != NULL && wrapper->client->net.fd != -1)
+
+  #define HAS_DATA(wrapper) \
+  mysql_get_ssl_cipher(wrapper->client) \
+    ? !pvio_ssl_has_data(wrapper->client->net.pvio) \
+    : !pvio_buff_has_data(wrapper->client->net.pvio)
+
 #endif
 
 #define REQUIRE_CONNECTED(wrapper) \
@@ -1145,15 +1166,6 @@ static void *nogvl_next_result(void *ptr) {
   return (void *)INT2NUM(mysql_next_result(wrapper->client));
 }
 
-/* Rather than including violite.h to be able to look into the net.vio structure
- * to call its has_data function pointer, we borrow the definitions of just two
- * functions that understand this structure.
- *
- * Definitions are from vio_priv.h
- */
-my_bool vio_ssl_has_data (Vio *vio);
-my_bool vio_buff_has_data (Vio *vio);
-
 /* call-seq:
  *    client.next_result
  *
@@ -1176,9 +1188,7 @@ static VALUE rb_mysql_client_next_result(VALUE self)
    * Hack: use knowledge of whether the connecti is SSL or not to call the
    * appropriate has_data function and pass net.vio as an opaque structure.
    */
-  if ( mysql_get_ssl_cipher(wrapper->client)
-    ? !vio_ssl_has_data(wrapper->client->net.vio)
-    : !vio_buff_has_data(wrapper->client->net.vio) ) {
+  if (HAS_DATA(wrapper)) {
     tvp = get_read_timeout(self, &tv);
     wait_for_fd(wrapper->client->net.fd, tvp);
   }

@@ -74,10 +74,11 @@ To see line numbers in backtraces, declare these environment variables
 
 ### Linux and other Unixes
 
-You may need to install a package such as `libmysqlclient-dev` or `mysql-devel`;
-refer to your distribution's package guide to find the particular package.
-The most common issue we see is a user who has the library file `libmysqlclient.so` but is
-missing the header file `mysql.h` -- double check that you have the _-dev_ packages installed.
+You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`,
+or `default-libmysqlclient-dev`; refer to your distribution's package guide to
+find the particular package. The most common issue we see is a user who has
+the library file `libmysqlclient.so` but is missing the header file `mysql.h`
+-- double check that you have the _-dev_ packages installed.
 
 ### Mac OS X
 

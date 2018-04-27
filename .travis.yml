@@ -28,47 +28,47 @@ rvm:
   - ruby-head
 matrix:
   include:
-    - rvm: 2.4
+    - rvm: 2.5
       env: DB=mariadb10.0
       addons:
         mariadb: 10.0
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.4
+    - rvm: 2.5
       env: DB=mariadb10.1
       addons:
         mariadb: 10.1
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.4
+    - rvm: 2.5
       env: DB=mariadb10.2
       addons:
         mariadb: 10.2
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.4
+    - rvm: 2.5
       env: DB=mariadb10.3
       addons:
         mariadb: 10.3
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.4
+    - rvm: 2.5
       env: DB=mysql55
       addons:
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.4
+    - rvm: 2.5
       env: DB=mysql57
       addons:
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.4
+    - rvm: 2.5
       env: DB=mysql80
       addons:
         hosts:
           - mysql2gem.example.com
     - os: osx
-      rvm: 2.4
+      rvm: 2.5
       env: DB=mysql56
       addons:
         hosts:
@@ -77,5 +77,5 @@ matrix:
   allow_failures:
     - rvm: ruby-head
     - os: osx
-      rvm: 2.4
+      rvm: 2.5
       env: DB=mysql56

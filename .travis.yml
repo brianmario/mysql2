@@ -4,7 +4,6 @@ language: ruby
 bundler_args: --without benchmarks development
 # Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
 before_install:
-  - apt-get update
   - gem --version
   - gem update --system 2.7.6 --quiet
   - gem update bundler
@@ -14,6 +13,7 @@ addons:
   hosts:
     - mysql2gem.example.com
   apt:
+    update: true
     packages:
     - mysql-server-5.6
     - mysql-client-core-5.6

@@ -245,5 +245,15 @@ static const char *mysql2_mysql_enc_to_rb[] = {
   "UTF-8",
   "UTF-8",
   "UTF-8",
+  "UTF-8",
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
   "UTF-8"
 };
+
+#define CHARSETNR_SIZE (sizeof(mysql2_mysql_enc_to_rb)/sizeof(mysql2_mysql_enc_to_rb[0]))

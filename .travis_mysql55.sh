@@ -5,4 +5,5 @@ set -eux
 apt-get purge -qq '^mysql*' '^libmysql*'
 rm -fr /etc/mysql
 rm -fr /var/lib/mysql
-aptitude install -qq mysql-5.5
+apt-get update
+apt-get install -qq mysql-5.5 

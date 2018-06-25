@@ -164,7 +164,7 @@ RSpec.describe Mysql2::Result do
       expect do
         res.each_with_index do |_, i|
           # Exhaust the first result packet then trigger a timeout
-          sleep 2 if i > 0 && i % 1000 == 0
+          sleep 4 if i > 0 && i % 1000 == 0
         end
       end.to raise_error(Mysql2::Error, /Lost connection/)
     end

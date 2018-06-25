@@ -1,5 +1,6 @@
 sudo: required
 dist: trusty
+services: docker
 language: ruby
 bundler_args: --without benchmarks development
 # Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
@@ -73,6 +74,11 @@ matrix:
       addons:
         hosts:
           - mysql2gem.example.com
+    - rvm: 2.4
+      env: DOCKER=centos
+      before_install: true
+      install: docker build -t mysql2 -f .travis_Dockerfile_centos .
+      script: docker run --add-host=mysql2gem.example.com:127.0.0.1 -t mysql2
   fast_finish: true
   allow_failures:
     - rvm: ruby-head

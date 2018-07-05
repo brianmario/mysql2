@@ -66,18 +66,21 @@ begin
     end
 
     it "should timeout if we wait longer than :read_timeout" do
-      expect do
-        EM.run do
-          client = Mysql2::EM::Client.new DatabaseCredentials['root'].merge(read_timeout: 1)
-          defer = client.query "SELECT sleep(2)"
-          defer.callback do
-            # This _shouldn't_ be run, but it needed to prevent the specs from
-            # freezing if this test fails.
-            client.close
-            EM.stop_event_loop
-          end
+      errors = []
+      EM.run do
+        client = Mysql2::EM::Client.new DatabaseCredentials['root'].merge(read_timeout: 1)
+        defer = client.query "SELECT sleep(2)"
+        defer.callback do
+          # This _shouldn't_ be run, but it needed to prevent the specs from
+          # freezing if this test fails.
+          EM.stop_event_loop
         end
-      end.to raise_error(Mysql2::EM::ReadTimeout)
+        defer.errback do |err|
+          errors << err
+          EM.stop_event_loop
+        end
+      end
+      expect(errors).to eq([Mysql2::EM::ReadTimeout.new])
     end
 
     context 'when an exception is raised by the client' do

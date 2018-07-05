@@ -45,9 +45,6 @@ module Mysql2
           deferable = ::EM::DefaultDeferrable.new
           if @read_timeout
             deferable.timeout(@read_timeout, Mysql2::EM::ReadTimeout.new)
-            deferable.errback do |error|
-              raise error if error.is_a?(Mysql2::EM::ReadTimeout)
-            end
           end
           @watch = ::EM.watch(socket, Watcher, self, deferable)
           @watch.notify_readable = true

@@ -774,6 +774,17 @@ RSpec.describe Mysql2::Client do
         expect(@multi_client.more_results?).to be false
       end
 
+      it "should allow for interruption" do
+        time_top = Time.now.to_f
+        expect do
+          Timeout.timeout(0.2, ArgumentError) do
+            @multi_client.query('SELECT 1; SELECT SLEEP(2)')
+            @multi_client.next_result
+          end
+        end.to raise_error(ArgumentError)
+        expect(Time.now.to_f - time_top).to be <= 0.5
+      end
+
       it "#more_results? should work with stored procedures" do
         @multi_client.query("DROP PROCEDURE IF EXISTS test_proc")
         @multi_client.query("CREATE PROCEDURE test_proc() BEGIN SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'; END")

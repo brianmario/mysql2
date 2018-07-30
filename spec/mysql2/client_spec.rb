@@ -135,15 +135,22 @@ RSpec.describe Mysql2::Client do
 
     # You may need to adjust the lines below to match your SSL certificate paths
     ssl_client = nil
+    option_overrides = {
+      'host'     => 'mysql2gem.example.com', # must match the certificates
+      :sslkey    => '/etc/mysql/client-key.pem',
+      :sslcert   => '/etc/mysql/client-cert.pem',
+      :sslca     => '/etc/mysql/ca-cert.pem',
+      :sslcipher => 'DHE-RSA-AES256-SHA',
+      :sslverify => true,
+    }
+    %i[sslkey sslcert sslca].each do |item|
+      unless File.exist?(option_overrides[item])
+        pending("DON'T WORRY, THIS TEST PASSES - but #{option_overrides[item]} does not exist.")
+        break
+      end
+    end
     expect do
-      ssl_client = new_client(
-        'host'     => 'mysql2gem.example.com', # must match the certificates
-        :sslkey    => '/etc/mysql/client-key.pem',
-        :sslcert   => '/etc/mysql/client-cert.pem',
-        :sslca     => '/etc/mysql/ca-cert.pem',
-        :sslcipher => 'DHE-RSA-AES256-SHA',
-        :sslverify => true,
-      )
+      ssl_client = new_client(option_overrides)
     end.not_to raise_error
 
     results = Hash[ssl_client.query('SHOW STATUS WHERE Variable_name LIKE "Ssl_%"').map { |x| x.values_at('Variable_name', 'Value') }]

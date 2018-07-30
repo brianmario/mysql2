@@ -1,0 +1,23 @@
+FROM centos:7
+
+WORKDIR /build
+COPY . .
+
+RUN yum -y update
+RUN yum -y install epel-release
+# The options are to install faster.
+RUN yum -y install \
+  --setopt=deltarpm=0 \
+  --setopt=install_weak_deps=false \
+  --setopt=tsflags=nodocs \
+  mariadb-server \
+  mariadb-devel \
+  ruby-devel \
+  git \
+  gcc \
+  gcc-c++ \
+  make
+RUN gem update --system > /dev/null
+RUN gem install bundler
+
+CMD sh .travis_centos.sh

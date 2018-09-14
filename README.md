@@ -157,7 +157,7 @@ end
 How about with symbolized keys?
 
 ``` ruby
-client.query("SELECT * FROM users WHERE group='githubbers'", :symbolize_keys => true) do |row|
+client.query("SELECT * FROM users WHERE group='githubbers'", :symbolize_keys => true).each do |row|
   # do something with row, it's ready to rock
 end
 ```

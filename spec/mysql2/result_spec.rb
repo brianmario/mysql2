@@ -123,6 +123,11 @@ RSpec.describe Mysql2::Result do
       result = @client.query "SELECT 'a', 'b', 'c'"
       expect(result.fields).to eql(%w[a b c])
     end
+
+    it "should return an array of symbolized field names if :as was set to :struct" do
+      result = @client.query "SELECT 'a', 'b', 'c'", as: :struct
+      expect(result.fields.first).to be_an_instance_of(Symbol)
+    end
   end
 
   context "streaming" do

@@ -72,6 +72,12 @@ RSpec.describe Mysql2::Result do
       end
     end
 
+    it "should be able to return results as a struct" do
+      @result.each(as: :struct) do |row|
+        expect(row).to be_kind_of(Struct)
+      end
+    end
+
     it "should cache previously yielded results by default" do
       expect(@result.first.object_id).to eql(@result.first.object_id)
     end

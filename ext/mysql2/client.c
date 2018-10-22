@@ -656,7 +656,7 @@ static VALUE do_query(void *args) {
     tvp->tv_usec = 0;
   }
 
-  for(;;) {
+  for (;;) {
     retval = rb_wait_for_single_fd(async_args->fd, RB_WAITFD_IN, tvp);
 
     if (retval == 0) {

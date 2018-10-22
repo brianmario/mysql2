@@ -10,6 +10,7 @@ typedef struct {
   VALUE client;
   VALUE encoding;
   VALUE statement;
+  VALUE rowStruct;
   my_ulonglong numberOfFields;
   my_ulonglong numberOfRows;
   unsigned long lastRowProcessed;

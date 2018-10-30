@@ -215,9 +215,7 @@ static unsigned int msec_char_to_uint(char *msec_char, size_t len)
 
 static VALUE new_time(unsigned int year, unsigned int month, unsigned int day, unsigned int hour, unsigned int minute, unsigned int second, unsigned long second_part, const result_each_args *args)
 {
-  VALUE val;
-
-  val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(minute), UINT2NUM(second), ULONG2NUM(second_part));
+  VALUE val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(minute), UINT2NUM(second), ULONG2NUM(second_part));
   if (!NIL_P(args->app_timezone)) {
     if (args->app_timezone == intern_local) {
       val = rb_funcall(val, intern_localtime, 0);

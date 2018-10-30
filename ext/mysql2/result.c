@@ -48,7 +48,6 @@ static VALUE sym_struct;
 #define AS_ARRAY  1
 #define AS_STRUCT 2
 
-
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
@@ -296,6 +295,21 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
   }
 }
 
+static VALUE cast_row_as_struct(VALUE self, VALUE rowVal, mysql2_result_wrapper *wrapper)
+{
+  /* create struct from intermediate array */
+  if (wrapper->rowStruct == Qnil) {
+    unsigned int i;
+    VALUE *argv_fields = ALLOCA_N(VALUE, wrapper->numberOfFields);
+    for (i = 0; i < wrapper->numberOfFields; i++) {
+      argv_fields[i] = rb_mysql_result_fetch_field(self, i, 1);
+    }
+    wrapper->rowStruct = rb_funcallv(rb_cStruct, intern_new, (int) wrapper->numberOfFields, argv_fields);
+  }
+
+  return rb_struct_alloc(wrapper->rowStruct, rowVal); 
+}
+
 static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, const result_each_args *args)
 {
   VALUE rowVal;
@@ -481,17 +495,8 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     }
   }
 
-  /* create struct from intermediate array */
   if (args->rowsAs == AS_STRUCT) {
-    if (wrapper->rowStruct == Qnil) {
-      VALUE *argv_fields = ALLOCA_N(VALUE, wrapper->numberOfFields);
-      for (i = 0; i < wrapper->numberOfFields; i++) {
-        argv_fields[i] = rb_mysql_result_fetch_field(self, i, 1);
-      }
-      wrapper->rowStruct = rb_funcallv(rb_cStruct, intern_new, (int) wrapper->numberOfFields, argv_fields);
-    }
-
-    rowVal = rb_struct_alloc(wrapper->rowStruct, rowVal); 
+    rowVal = cast_row_as_struct(self, rowVal, wrapper);
   }
 
   return rowVal;
@@ -710,17 +715,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
     }
   }
 
-  /* create struct from intermediate array */
   if (args->rowsAs == AS_STRUCT) {
-    if (wrapper->rowStruct == Qnil) {
-      VALUE *argv_fields = ALLOCA_N(VALUE, wrapper->numberOfFields);
-      for (i = 0; i < wrapper->numberOfFields; i++) {
-        argv_fields[i] = rb_mysql_result_fetch_field(self, i, 1);
-      }
-      wrapper->rowStruct = rb_funcallv(rb_cStruct, intern_new, (int) wrapper->numberOfFields, argv_fields);
-    }
-
-    rowVal = rb_struct_alloc(wrapper->rowStruct, rowVal); 
+    rowVal = cast_row_as_struct(self, rowVal, wrapper);
   }
 
   return rowVal;

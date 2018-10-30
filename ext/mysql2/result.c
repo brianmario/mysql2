@@ -531,14 +531,14 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
         }
       } else {
-        switch (type) {
+        switch(type) {
         case MYSQL_TYPE_NULL:       /* NULL-type field */
           val = Qnil;
           break;
         case MYSQL_TYPE_BIT:        /* BIT field (MySQL 5.0.3 and up) */
           if (args->castBool && fields[i].length == 1) {
             val = *row[i] == 1 ? Qtrue : Qfalse;
-          } else {
+          }else{
             val = rb_str_new(row[i], fieldLengths[i]);
           }
           break;
@@ -558,9 +558,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_NEWDECIMAL: /* Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up) */
           if (fields[i].decimals == 0) {
             val = rb_cstr2inum(row[i], 10);
-          } else if (strtod(row[i], NULL) == 0.000000) {
+          } else if (strtod(row[i], NULL) == 0.000000){
             val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, opt_decimal_zero);
-          } else {
+          }else{
             val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, rb_str_new(row[i], fieldLengths[i]));
           }
           break;
@@ -570,7 +570,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           column_to_double = strtod(row[i], NULL);
           if (column_to_double == 0.000000){
             val = opt_float_zero;
-          } else {
+          }else{
             val = rb_float_new(column_to_double);
           }
           break;
@@ -1014,10 +1014,10 @@ void init_mysql2_result() {
   sym_cast_datetimes  = ID2SYM(rb_intern("cast_datetimes"));
   sym_database_timezone     = ID2SYM(rb_intern("database_timezone"));
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
-  sym_cache_rows      = ID2SYM(rb_intern("cache_rows"));
-  sym_cast            = ID2SYM(rb_intern("cast"));
-  sym_stream          = ID2SYM(rb_intern("stream"));
-  sym_name            = ID2SYM(rb_intern("name"));
+  sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
+  sym_cast           = ID2SYM(rb_intern("cast"));
+  sym_stream         = ID2SYM(rb_intern("stream"));
+  sym_name           = ID2SYM(rb_intern("name"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); /*never GC */

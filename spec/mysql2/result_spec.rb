@@ -312,15 +312,15 @@ RSpec.describe Mysql2::Result do
       expect(test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')
     end
 
-    it "should return Time for a DATE value when :cast_datetime is enabled" do
-      result1 = @client.query('SELECT date_test FROM mysql2_test', cast_datetimes: true).first
-      expect(result1['date_test']).to be_an_instance_of(Time)
-      expect(result1['date_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 00:00:00')
-    end
-
     it "should return String for an ENUM value" do
       expect(test_result['enum_test']).to be_an_instance_of(String)
       expect(test_result['enum_test']).to eql('val1')
+    end
+
+    it "should return Time for a DATE value when :cast_dates_as_times is enabled" do
+      result = @client.query('SELECT date_test FROM mysql2_test', cast_dates_as_times: true).first
+      expect(result['date_test']).to be_an_instance_of(Time)
+      expect(result['date_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 00:00:00')
     end
 
     it "should raise an error given an invalid DATETIME" do

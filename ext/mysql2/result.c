@@ -24,7 +24,7 @@ typedef struct {
   int symbolizeKeys;
   int asArray;
   int castBool;
-  int castDateTime;
+  int castDateAsTime;
   int cacheRows;
   int cast;
   int streaming;
@@ -39,7 +39,7 @@ static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, op
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
   intern_civil, intern_new_offset, intern_merge, intern_BigDecimal;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
-  sym_application_timezone, sym_local, sym_utc, sym_cast_booleans, sym_cast_datetimes,
+  sym_application_timezone, sym_local, sym_utc, sym_cast_booleans, sym_cast_dates_as_times,
   sym_cache_rows, sym_cast, sym_stream, sym_name;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
@@ -398,7 +398,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         case MYSQL_TYPE_DATE:         // MYSQL_TIME
         case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          if (args->castDateTime) {
+          if (args->castDateAsTime) {
             val = rb_funcall(rb_cTime, args->db_timezone, 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
             if (!NIL_P(args->app_timezone)) {
               if (args->app_timezone == intern_local) {
@@ -662,7 +662,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
               rb_raise(cMysql2Error, "Invalid date in field '%.*s': %s", fields[i].name_length, fields[i].name, row[i]);
               val = Qnil;
             } else {
-              if (args->castDateTime) {
+              if (args->castDateAsTime) {
                 val = rb_funcall(rb_cTime, args->db_timezone, 3, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day));
                 if (!NIL_P(args->app_timezone)) {
                   if (args->app_timezone == intern_local) {
@@ -832,7 +832,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
   VALUE defaults, opts, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone, dbTz, appTz;
-  int symbolizeKeys, asArray, castBool, castDateTime, cacheRows, cast;
+  int symbolizeKeys, asArray, castBool, castDateAsTime, cacheRows, cast;
 
   GET_RESULT(self);
 
@@ -851,7 +851,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
   asArray       = rb_hash_aref(opts, sym_as) == sym_array;
   castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
-  castDateTime  = RTEST(rb_hash_aref(opts, sym_cast_datetimes));
+  castDateAsTime = RTEST(rb_hash_aref(opts, sym_cast_dates_as_times));
   cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
   cast          = RTEST(rb_hash_aref(opts, sym_cast));
 
@@ -905,7 +905,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   args.symbolizeKeys = symbolizeKeys;
   args.asArray = asArray;
   args.castBool = castBool;
-  args.castDateTime = castDateTime;
+  args.castDateAsTime = castDateAsTime;
   args.cacheRows = cacheRows;
   args.cast = cast;
   args.db_timezone = db_timezone;
@@ -1011,7 +1011,7 @@ void init_mysql2_result() {
   sym_local           = ID2SYM(rb_intern("local"));
   sym_utc             = ID2SYM(rb_intern("utc"));
   sym_cast_booleans   = ID2SYM(rb_intern("cast_booleans"));
-  sym_cast_datetimes  = ID2SYM(rb_intern("cast_datetimes"));
+  sym_cast_dates_as_times   = ID2SYM(rb_intern("cast_dates_as_times"));
   sym_database_timezone     = ID2SYM(rb_intern("database_timezone"));
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));

@@ -722,7 +722,6 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   return rowVal;
 }
 
-
 static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   unsigned int i = 0;
   short int symbolizeKeys = 0;

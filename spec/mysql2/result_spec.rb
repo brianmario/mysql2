@@ -242,15 +242,6 @@ RSpec.describe Mysql2::Result do
       end
     end
 
-    context "cast datetimes to UTC when :cast_datetime is enabled" do
-      it "should return UTC Time for a DATETIME if :cast_datetime is enabled" do
-        result1 = @client.query('SELECT date_time_test FROM mysql2_test', database_timezone: :utc, application_timezone: :utc, cast_datetimes: true).first
-        result2 = @client.query('SELECT date_time_test FROM mysql2_test', cast_datetimes: false).first
-        expect(result1['date_time_test'].utc?).to be true
-        expect(result2['date_time_test'].utc?).to be false
-      end
-    end
-
     it "should return Fixnum for a SMALLINT value" do
       expect(num_classes).to include(test_result['small_int_test'].class)
       expect(test_result['small_int_test']).to eql(10)
@@ -319,6 +310,12 @@ RSpec.describe Mysql2::Result do
     it "should return Date for a DATE value" do
       expect(test_result['date_test']).to be_an_instance_of(Date)
       expect(test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')
+    end
+
+    it "should return Time for a DATE value when :cast_datetime is enabled" do
+      result1 = @client.query('SELECT date_test FROM mysql2_test', cast_datetimes: true).first
+      expect(result1['date_test']).to be_an_instance_of(Time)
+      expect(result1['date_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 00:00:00')
     end
 
     it "should return String for an ENUM value" do

@@ -124,7 +124,7 @@ RSpec.describe Mysql2::Result do
       expect(result.fields).to eql(%w[a b c])
     end
 
-    it "field names should be symbols if :as is set to :struct" do
+    it "should return field names as symbols if rows are structs" do
       result = @client.query "SELECT 'a', 'b', 'c'", as: :struct
       expect(result.fields.first).to be_an_instance_of(Symbol)
     end

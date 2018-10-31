@@ -39,8 +39,9 @@ static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, op
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
   intern_civil, intern_new_offset, intern_merge, intern_BigDecimal;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
-  sym_application_timezone, sym_local, sym_utc, sym_cast_booleans, sym_cast_dates_as_times,
+  sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
   sym_cache_rows, sym_cast, sym_stream, sym_name;
+static VALUE sym_cast_dates_as_times;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
@@ -817,7 +818,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
   VALUE defaults, opts, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone, dbTz, appTz;
-  int symbolizeKeys, asArray, castBool, castDateAsTime, cacheRows, cast;
+  int symbolizeKeys, asArray, castBool, cacheRows, cast;
+  int castDateAsTime;
 
   GET_RESULT(self);
 

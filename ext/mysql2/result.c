@@ -304,7 +304,7 @@ static VALUE cast_row_as_struct(VALUE self, VALUE rowVal, mysql2_result_wrapper 
     for (i = 0; i < wrapper->numberOfFields; i++) {
       argv_fields[i] = rb_mysql_result_fetch_field(self, i, 1);
     }
-    wrapper->rowStruct = rb_funcallv(rb_cStruct, intern_new, (int) wrapper->numberOfFields, argv_fields);
+    wrapper->rowStruct = rb_funcall2(rb_cStruct, intern_new, (int) wrapper->numberOfFields, argv_fields);
   }
 
   return rb_struct_alloc(wrapper->rowStruct, rowVal); 

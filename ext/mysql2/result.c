@@ -861,7 +861,6 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
-  rowsAs        = AS_HASH;
   castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
   cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
   cast          = RTEST(rb_hash_aref(opts, sym_cast));
@@ -872,6 +871,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   } else if (as_opt == sym_struct) {
     rowsAs = AS_STRUCT;
     symbolizeKeys = 1;  /* force */
+  } else {
+    rowsAs = AS_HASH;
   }
 
   if (wrapper->is_streaming && cacheRows) {

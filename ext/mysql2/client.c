@@ -54,7 +54,9 @@ static VALUE rb_hash_dup(VALUE other) {
  * variable to use, but MYSQL_SERVER_VERSION gives the correct numbers when
  * linking against the server itself
  */
-#ifdef LIBMYSQL_VERSION
+#if defined(MARIADB_CLIENT_VERSION_STR)
+  #define MYSQL_LINK_VERSION MARIADB_CLIENT_VERSION_STR
+#elif defined(LIBMYSQL_VERSION)
   #define MYSQL_LINK_VERSION LIBMYSQL_VERSION
 #else
   #define MYSQL_LINK_VERSION MYSQL_SERVER_VERSION
@@ -1297,6 +1299,10 @@ void init_mysql2_client() {
 #ifdef CLIENT_LONG_PASSWORD
   rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),
       LONG2NUM(CLIENT_LONG_PASSWORD));
+#else
+  /* HACK because MariaDB 10.2 no longer defines this constant,
+   * but we're using it in our default connection flags. */
+  rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"), INT2NUM(0));
 #endif
 
 #ifdef CLIENT_FOUND_ROWS

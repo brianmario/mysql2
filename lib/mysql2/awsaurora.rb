@@ -5,6 +5,7 @@ module Mysql2
     class Client < ::Mysql2::Client
 
       def initialize(opts = {})
+        opts = Mysql2::Util.key_hash_as_symbols(opts)
         @opts = opts
 
         @reconnect_attempts = opts[:reconnect_attempts] || 3
@@ -12,10 +13,10 @@ module Mysql2
         @max_retry_wait = opts[:max_retry_wait]
         @logger = opts[:logger]
 
-        aws_opts = @opts[:aws_opts]
+        aws_opts = Mysql2::Util.key_hash_as_symbols(@opts[:aws_opts])
 
         @rds_client = Aws::RDS::Client.new(
-            aws_opts[:credentials]
+            Mysql2::Util.key_hash_as_symbols(aws_opts[:credentials])
         )
 
         super(@opts)
@@ -30,14 +31,14 @@ module Mysql2
             if retries < @reconnect_attempts && @opts[:reconnect]
               wait = @initial_retry_wait * retries
               wait = [wait, @max_retry_wait].min if @max_retry_wait
-              logger.info {
+              @logger.info {
                 "Reconnect with readonly: #{e.message} " \
             "(retries: #{retries}/#{@reconnect_attempts}) (wait: #{wait}sec)"
-              } if logger
+              } if @logger
               sleep wait
               retries += 1
               reconnect
-              logger.debug { "Reconnect with readonly: disconnected and retry" } if logger
+              @logger.debug { "Reconnect with readonly: disconnected and retry" } if @logger
               retry
               # raise e
             else

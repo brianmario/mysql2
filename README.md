@@ -554,7 +554,11 @@ Use the prefix "mysql2://" in your connection specification.
 
 ### AWS Aurora Fast Failover
 
-The mysql2 supports AWS Aurora Fast Failover, so it can reconnect to active writer on failover. 
+Patch contributed by Percona to enable Aurora Fast Failover support in `mysql2`
+
+This implementation requires you to specifically invoke an Aurora enabled client, which utilizes the
+AWS API to find information about the current state of your Aurora cluster, thus enabling Fast Failover.
+
 Here's a simple example:
 
 ``` ruby
@@ -579,14 +583,17 @@ opts =
 )
 ```
 
-`Mysql2::AWSAurora::Client` supports all `Mysql2::Client` options and also have one extra option `aws_opts`.
+`Mysql2::AWSAurora::Client` supports all `Mysql2::Client` options and also has one extra required option `aws_opts`.
  To use AWS Aurora Fast Failover `reconnect` option should be `true`.
 
 `aws_opts` has two keys `credentials` and `db_cluster_identifier`.
 
-`credentials` is used in `aws-sdk-ruby` gem and supports all options supported there.
+`credentials` is used in `aws-sdk-ruby` gem and supports all options supported there to enable connection to the AWS API.
 
-`db_cluster_identifier` is used to find active writer in currently used cluster.
+`db_cluster_identifier` is used to find active writer in currently used Aurora cluster.
+
+When correctly invoked, this client extension provides full support for the Aurora Fast Failover feature and also resolves
+the behavior described in Issue #948 for those using Aurora.
 
 ### EventMachine
 

@@ -552,6 +552,42 @@ Please see the [em-synchrony](https://github.com/igrigorik/em-synchrony) project
 Sequel includes a mysql2 adapter in all releases since 3.15 (2010-09-01).
 Use the prefix "mysql2://" in your connection specification.
 
+### AWS Aurora Fast Failover
+
+The mysql2 supports AWS Aurora Fast Failover, so it can reconnect to active writer on failover. 
+Here's a simple example:
+
+``` ruby
+require 'mysql2/awsaurora'
+
+opts = 
+
+@mysql_client = Mysql2::AWSAurora::Client.new(
+    host: ENV['DB_HOST'],
+    username: ENV['DB_USERNAME'],
+    password: ENV['DB_PASS'],
+    database: ENV['DB_NAME'],
+    reconnect: true,
+    aws_opts: {
+        credentials: {
+            region: ENV['AWS_REGION'],
+            access_key_id: ENV['AWS_ACCESS_KEY_ID'],
+            secret_access_key: ENV['AWS_SECRET_ACCESS_KEY']
+        },
+        db_cluster_identifier: ENV['AWS_DB_CLUSTER_ID'],
+    }
+)
+```
+
+`Mysql2::AWSAurora::Client` supports all `Mysql2::Client` options and also have one extra option `aws_opts`.
+ To use AWS Aurora Fast Failover `reconnect` option should be `true`.
+
+`aws_opts` has two keys `credentials` and `db_cluster_identifier`.
+
+`credentials` is used in `aws-sdk-ruby` gem and supports all options supported there.
+
+`db_cluster_identifier` is used to find active writer in currently used cluster.
+
 ### EventMachine
 
 The mysql2 EventMachine deferrable api allows you to make async queries using EventMachine,

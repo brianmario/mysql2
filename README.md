@@ -218,6 +218,7 @@ Mysql2::Client.new(
   :ssl_mode = :disabled / :preferred / :required / :verify_ca / :verify_identity,
   :default_file = '/path/to/my.cfg',
   :default_group = 'my.cfg section',
+  :default_auth = 'authentication_windows_client'
   :init_command => sql
   )
 ```

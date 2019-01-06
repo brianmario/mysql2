@@ -903,6 +903,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval  = charval;
       break;
 
+    case MYSQL_DEFAULT_AUTH:
+      charval = (const char *)StringValueCStr(value);
+      retval  = charval;
+      break;
+
 #ifdef HAVE_CONST_MYSQL_ENABLE_CLEARTEXT_PLUGIN
     case MYSQL_ENABLE_CLEARTEXT_PLUGIN:
       boolval = (value == Qfalse ? 0 : 1);
@@ -1336,6 +1341,10 @@ static VALUE set_init_command(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_INIT_COMMAND, value);
 }
 
+static VALUE set_default_auth(VALUE self, VALUE value) {
+  return _mysql_client_options(self, MYSQL_DEFAULT_AUTH, value);
+}
+
 static VALUE set_enable_cleartext_plugin(VALUE self, VALUE value) {
 #ifdef HAVE_CONST_MYSQL_ENABLE_CLEARTEXT_PLUGIN
   return _mysql_client_options(self, MYSQL_ENABLE_CLEARTEXT_PLUGIN, value);
@@ -1437,6 +1446,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "default_file=", set_read_default_file, 1);
   rb_define_private_method(cMysql2Client, "default_group=", set_read_default_group, 1);
   rb_define_private_method(cMysql2Client, "init_command=", set_init_command, 1);
+  rb_define_private_method(cMysql2Client, "default_auth=", set_default_auth, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
   rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);

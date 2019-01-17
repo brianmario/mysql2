@@ -17,13 +17,16 @@ module Mysql2
         end
 
         @reconnect_attempts = @opts[:reconnect_attempts] || 3
-        @initial_retry_wait = @opts[:initial_retry_wait] || 1
+        @initial_retry_wait = @opts[:initial_retry_wait] || 0.5
         @max_retry_wait = @opts[:max_retry_wait]
         @logger = @opts[:logger]
         super(@opts)
+        @logger.debug "connected to #{@opts[:host]}" if @logger
 
         update_servers_list
-        @opts[:host] = @master_host_address
+        unless @master_host_address
+          @opts[:host] = find_master_host
+        end
       end
 
       def find_cluster_host_address(host)
@@ -55,13 +58,11 @@ module Mysql2
         host_addresses = []
         results.each do |row|
           host_addresses.push(row["server_id"] + "." + @cluster_dns_suffix)
-          if row["session_id"] == "MASTER_SESSION_ID"
-            @master_host_address = row["server_id"] + "." + @cluster_dns_suffix
-          end
         end
         if host_addresses
           @cluster_endpoints = host_addresses
         end
+        @logger.debug results.to_a if @logger
       end
 
       def reconnect_with_readonly(&block)
@@ -71,25 +72,26 @@ module Mysql2
         rescue Mysql2::Error => e
           if e.message =~ /read-only/ || e.is_a?(Mysql2::Error::ConnectionError)
             if retries < @reconnect_attempts && @opts[:reconnect]
+              retries += 1
               wait = @initial_retry_wait * retries
               wait = [wait, @max_retry_wait].min if @max_retry_wait
               @logger.info {
                 "Reconnect with readonly: #{e.message} " \
             "(retries: #{retries}/#{@reconnect_attempts}) (wait: #{wait}sec)"
               } if @logger
-              retries += 1
               current_host = @opts[:host]
+              sleep wait
               begin
-                sleep wait
                 @blacklist_endpoints.push(@opts[:host])
                 endpoint = next_available_host
                 reconnect(endpoint)
+                find_master_host
                 if @master_host_address != endpoint
                   reconnect(@master_host_address)
                 end
               rescue Mysql2::Error::ConnectionError => e
-                warn e
-                if current_host != @opts[:host]
+                @logger.warn e.message if @logger
+                if @opts[:host] != current_host
                   retry
                 end
               end
@@ -97,8 +99,8 @@ module Mysql2
               retry
               # raise e
             else
-              warn "Reconnect with readonly: Give up " \
-            "(retries: #{retries}/#{@reconnect_attempts})"
+              @logger.warn "Reconnect with readonly: Give up " \
+            "(retries: #{retries}/#{@reconnect_attempts})" if @logger
               raise e
             end
           else
@@ -124,6 +126,18 @@ module Mysql2
       end
 
       private
+
+      def find_master_host
+        results = query("select server_id from information_schema.replica_host_status " +
+        "where session_id = 'MASTER_SESSION_ID' " +
+        "and last_update_timestamp > now() - INTERVAL 3 MINUTE " +
+        "ORDER BY last_update_timestamp DESC LIMIT 1")
+
+        if results.count > 0
+          @master_host_address = results.first["server_id"] + "." + @cluster_dns_suffix
+        end
+        @master_host_address
+      end
 
       def reconnect(endpoint)
         @opts[:host] = endpoint

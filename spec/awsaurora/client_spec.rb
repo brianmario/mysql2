@@ -10,6 +10,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
     opts = DatabaseCredentials['aws']
     opts = Mysql2::Util.key_hash_as_symbols(opts)
     aws_opts = Mysql2::Util.key_hash_as_symbols(opts[:aws_opts])
+    opts[:logger] = Logger.new(STDOUT)
 
     before(:each) do
       begin
@@ -61,7 +62,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
           {
               db_cluster_identifier: aws_opts[:db_cluster_identifier],
           })
-      expect(@mysql_client.opts[:host]).to eql endpoint.address
+      expect(@mysql_client.master_host_address).to eql endpoint.address
 
       count = 1
       # wait until cluster writer change
@@ -78,7 +79,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
       results = @mysql_client.query("select * from users;")
 
       expect(results.count).to eql(count)
-      expect(@mysql_client.opts[:host]).to eql new_endpoint.address
+      expect(@mysql_client.master_host_address).to eql new_endpoint.address
     end
 
   end

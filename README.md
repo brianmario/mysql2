@@ -556,8 +556,9 @@ Use the prefix "mysql2://" in your connection specification.
 
 Patch contributed by Percona to enable Aurora Fast Failover support in `mysql2`
 
-This implementation requires you to specifically invoke an Aurora enabled client, which utilizes the
-AWS API to find information about the current state of your Aurora cluster, thus enabling Fast Failover.
+This implementation requires you to specifically invoke an Aurora enabled client, which utilizes the AWS Aurora MySQL information_schema.replica_host_status 
+table to find information about the current state of your Aurora cluster, thus enabling Fast Failover. Node endpoints can be used in your connection string, 
+However since the driver will automatically discover nodes in your cluster it is recommended that Aurora MySQL cluster endpoint is used for fast failover functionality.
 
 Here's a simple example:
 
@@ -576,9 +577,9 @@ require 'mysql2/awsaurora'
 ```
 
 `Mysql2::AWSAurora::Client` supports all `Mysql2::Client` options and also has a few extra options.
- To use AWS Aurora Fast Failover `reconnect` option should be `true`.
+To use AWS Aurora Fast Failover `reconnect` option should be `true`.
 
-You may set the following connection options in Mysql2::AWSAurora.new(...):
+You may set the following connection options in Mysql2::AWSAurora::Client.new(...):
 
 ``` ruby
 Mysql2::AWSAurora::Client.new(

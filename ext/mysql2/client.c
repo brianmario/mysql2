@@ -26,7 +26,8 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
   }
 
 #if defined(HAVE_MYSQL_NET_VIO) || defined(HAVE_ST_NET_VIO)
-  #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
+  my_bool vio_is_connected(Vio *vio);
+  #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1 && vio_is_connected(wrapper->client->net.vio))
 #elif defined(HAVE_MYSQL_NET_PVIO) || defined(HAVE_ST_NET_PVIO)
   #define CONNECTED(wrapper) (wrapper->client->net.pvio != NULL && wrapper->client->net.fd != -1)
 #endif

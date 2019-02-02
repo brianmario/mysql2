@@ -25,11 +25,17 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
 
+#if defined(HAVE_VIO_IS_CONNECTED)
+ my_bool vio_is_connected(Vio *vio);
+ #define IO_IS_CONNECTED(wrapper) vio_is_connected(wrapper->client->net.vio)
+#else
+ #define IO_IS_CONNECTED(wrapper) 1
+#endif
+
 #if defined(HAVE_MYSQL_NET_VIO) || defined(HAVE_ST_NET_VIO)
-  my_bool vio_is_connected(Vio *vio);
-  #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1 && vio_is_connected(wrapper->client->net.vio))
+  #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1 && IO_IS_CONNECTED(wrapper))
 #elif defined(HAVE_MYSQL_NET_PVIO) || defined(HAVE_ST_NET_PVIO)
-  #define CONNECTED(wrapper) (wrapper->client->net.pvio != NULL && wrapper->client->net.fd != -1)
+  #define CONNECTED(wrapper) (wrapper->client->net.pvio != NULL && wrapper->client->net.fd != -1 && IO_IS_CONNECTED(wrapper))
 #endif
 
 #define REQUIRE_CONNECTED(wrapper) \
@@ -1366,6 +1372,14 @@ static VALUE initialize_ext(VALUE self) {
   return self;
 }
 
+static VALUE rb_vio_is_connected(VALUE self) {
+#if defined(HAVE_VIO_IS_CONNECTED)
+  return Qtrue;
+#else
+  return Qfalse;
+#endif
+}
+
 /* call-seq: client.prepare # => Mysql2::Statement
  *
  * Create a new prepared statement.
@@ -1454,6 +1468,8 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 8);
   rb_define_private_method(cMysql2Client, "_query", rb_mysql_query, 2);
+
+  rb_define_private_method(cMysql2Client, "_has_vio_is_connected?", rb_vio_is_connected, 0);
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));

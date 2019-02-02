@@ -344,6 +344,7 @@ RSpec.describe Mysql2::Client do
     end
 
     it "should detect a closed connection" do
+      skip "libmysqlclient does not export vio_is_connected()" unless @client.send(:_has_vio_is_connected?)
       connection_id = @client.thread_id
       Thread.new do
         sleep(0.1)
@@ -586,26 +587,13 @@ RSpec.describe Mysql2::Client do
       end
       expect do
         @client.query("SELECT SLEEP(1)")
-      end.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+      end.to raise_error(Mysql2::Error)
 
       if RUBY_PLATFORM !~ /mingw|mswin/
         expect do
           @client.socket
         end.to raise_error(Mysql2::Error, 'MySQL client is not connected')
       end
-    end
-
-    it "should detect a closed connection" do
-      connection_id = @client.thread_id
-      Thread.new do
-        sleep(0.1)
-        Mysql2::Client.new(DatabaseCredentials['root']).tap do |supervisor|
-          supervisor.query("KILL #{connection_id}")
-        end.close
-      end
-      expect(@client.query("SELECT 1").first["1"]).to eql(1)
-      sleep(0.2)
-      expect(@client.closed?).to be true
     end
 
     if RUBY_PLATFORM !~ /mingw|mswin/

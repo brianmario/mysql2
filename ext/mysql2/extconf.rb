@@ -106,6 +106,7 @@ mysql_h = [prefix, 'mysql.h'].compact.join('/')
 add_ssl_defines(mysql_h)
 have_struct_member('MYSQL', 'net.vio', mysql_h)
 have_struct_member('MYSQL', 'net.pvio', mysql_h)
+have_func('vio_is_connected')
 
 # These constants are actually enums, so they cannot be detected by #ifdef in C code.
 have_const('MYSQL_ENABLE_CLEARTEXT_PLUGIN', mysql_h)

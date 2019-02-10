@@ -16,7 +16,7 @@
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
-static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
+static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream, sym_has_vio_is_connected;
 static VALUE sym_no_good_index_used, sym_no_index_used, sym_query_was_slow;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
 
@@ -953,6 +953,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
  */
 static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE klass) {
   VALUE version_info, version, header_version;
+#if defined(HAVE_VIO_IS_CONNECTED)
+  VALUE has_vio_is_connected = Qtrue;
+#else
+  VALUE has_vio_is_connected = Qfalse;
+#endif
   version_info = rb_hash_new();
 
   version = rb_str_new2(mysql_get_client_info());
@@ -964,6 +969,7 @@ static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE klass) {
   rb_hash_aset(version_info, sym_id, LONG2NUM(mysql_get_client_version()));
   rb_hash_aset(version_info, sym_version, version);
   rb_hash_aset(version_info, sym_header_version, header_version);
+  rb_hash_aset(version_info, sym_has_vio_is_connected, has_vio_is_connected);
 
   return version_info;
 }
@@ -1372,14 +1378,6 @@ static VALUE initialize_ext(VALUE self) {
   return self;
 }
 
-static VALUE rb_vio_is_connected(VALUE self) {
-#if defined(HAVE_VIO_IS_CONNECTED)
-  return Qtrue;
-#else
-  return Qfalse;
-#endif
-}
-
 /* call-seq: client.prepare # => Mysql2::Statement
  *
  * Create a new prepared statement.
@@ -1469,16 +1467,15 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 8);
   rb_define_private_method(cMysql2Client, "_query", rb_mysql_query, 2);
 
-  rb_define_private_method(cMysql2Client, "_has_vio_is_connected?", rb_vio_is_connected, 0);
-
-  sym_id              = ID2SYM(rb_intern("id"));
-  sym_version         = ID2SYM(rb_intern("version"));
-  sym_header_version  = ID2SYM(rb_intern("header_version"));
-  sym_async           = ID2SYM(rb_intern("async"));
-  sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
-  sym_as              = ID2SYM(rb_intern("as"));
-  sym_array           = ID2SYM(rb_intern("array"));
-  sym_stream          = ID2SYM(rb_intern("stream"));
+  sym_id                   = ID2SYM(rb_intern("id"));
+  sym_version              = ID2SYM(rb_intern("version"));
+  sym_header_version       = ID2SYM(rb_intern("header_version"));
+  sym_async                = ID2SYM(rb_intern("async"));
+  sym_symbolize_keys       = ID2SYM(rb_intern("symbolize_keys"));
+  sym_as                   = ID2SYM(rb_intern("as"));
+  sym_array                = ID2SYM(rb_intern("array"));
+  sym_stream               = ID2SYM(rb_intern("stream"));
+  sym_has_vio_is_connected = ID2SYM(rb_intern("has_vio_is_connected"));
 
   sym_no_good_index_used = ID2SYM(rb_intern("no_good_index_used"));
   sym_no_index_used      = ID2SYM(rb_intern("no_index_used"));

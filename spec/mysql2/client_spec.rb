@@ -344,7 +344,7 @@ RSpec.describe Mysql2::Client do
     end
 
     it "should detect a closed connection" do
-      skip "libmysqlclient does not export vio_is_connected()" unless @client.send(:_has_vio_is_connected?)
+      skip "libmysqlclient does not export vio_is_connected()" unless Mysql2::Client.info[:has_vio_is_connected]
       connection_id = @client.thread_id
       Thread.new do
         sleep(0.1)

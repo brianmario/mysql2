@@ -4,13 +4,13 @@ gemspec
 
 gem 'rake', '~> 10.4.2'
 gem 'rake-compiler', '~> 1.0'
-gem 'aws-sdk-rds'
 
 group :test do
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
   gem 'rspec', '~> 3.2'
   # https://github.com/bbatsov/rubocop/pull/4789
   gem 'rubocop', '~> 0.50.0'
+  gem 'aws-sdk-rds'
 end
 
 group :benchmarks do

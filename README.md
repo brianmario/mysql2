@@ -591,6 +591,7 @@ Mysql2::AWSAurora::Client.new(
   )
 ```
 
+
 When correctly invoked, this client extension provides full support for the Aurora Fast Failover feature and also resolves
 the behavior described in Issue #948 for those using Aurora.
 

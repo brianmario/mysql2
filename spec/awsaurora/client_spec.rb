@@ -1,6 +1,7 @@
 require 'mysql2/awsaurora'
 require 'aws-sdk-rds'
 require 'yaml'
+require 'awsaurora/bank'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.describe Mysql2::AWSAurora::Client do
@@ -16,7 +17,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
       begin
         @mysql_client = Mysql2::AWSAurora::Client.new(opts)
       rescue Mysql2::Error => e
-        warn("cannot connect to db: " + e.message )
+        warn("cannot connect to db: " + e.message)
       rescue Exception => e
         warn(e.message)
         warn(e.backtrace)
@@ -68,7 +69,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
       # wait until cluster writer change
       while true do
         @mysql_client.query("insert into users values('another text')")
-        count+=1
+        count += 1
         new_endpoint = current_writer_endpoint(aws_opts[:db_cluster_identifier])
         break if new_endpoint.address != endpoint.address
 
@@ -84,4 +85,37 @@ RSpec.describe Mysql2::AWSAurora::Client do
 
   end
 
+  context 'test transaction' do
+
+    before(:each) do
+      Bank.setup!
+    end
+
+    it 'with reconnect false' do
+      prev_balance = Bank.fetch_total_balance
+      expect(Bank.default_total_balance).to eql(prev_balance)
+
+      expect {
+        Bank.transfer_balance(client_options: {reconnect: false}) do |client1, client2|
+          client2.query("KILL CONNECTION #{client1.thread_id}")
+        end
+      }.to raise_error Mysql2::Error
+
+      expect(prev_balance).to eql(Bank.fetch_total_balance)
+    end
+
+    it 'with reconnect true' do
+      prev_balance = Bank.fetch_total_balance
+      expect(Bank.default_total_balance).to eql(prev_balance)
+
+
+      expect {
+        Bank.transfer_balance(client_options: {reconnect: true}) do |client1, client2|
+          client2.query("KILL CONNECTION #{client1.thread_id}")
+        end
+      }.to raise_error Mysql2::Error
+
+      expect(prev_balance).to eql(Bank.fetch_total_balance)
+    end
+  end
 end

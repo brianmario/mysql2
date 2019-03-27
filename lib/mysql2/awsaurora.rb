@@ -65,13 +65,14 @@ module Mysql2
         @logger.debug results.to_a if @logger
       end
 
-      def reconnect_with_readonly(&block)
+      def reconnect_with_readonly(skip_reconnect, &block)
         retries = 0
         begin
-          yield block
+          yield block if block_given?
         rescue Mysql2::Error => e
-          if e.message =~ /read-only/ || e.is_a?(Mysql2::Error::ConnectionError)
-            if retries < @reconnect_attempts && @opts[:reconnect]
+          if !skip_reconnect && @opts[:reconnect] && !@in_transaction &&
+              (e.message =~ /read-only/ || e.is_a?(Mysql2::Error::ConnectionError))
+            if retries < @reconnect_attempts
               retries += 1
               wait = @initial_retry_wait * retries
               wait = [wait, @max_retry_wait].min if @max_retry_wait
@@ -120,18 +121,23 @@ module Mysql2
       end
 
       def query(sql, options = {})
-        reconnect_with_readonly do
+        puts sql
+        result = reconnect_with_readonly(options[:skip_reconnect]) do
           super(sql, options)
         end
+        if @opts[:reconnect] && !options[:skip_reconnect]
+          @in_transaction = super("SELECT * FROM INFORMATION_SCHEMA.INNODB_TRX WHERE TRX_MYSQL_THREAD_ID = CONNECTION_ID();", options).count > 0
+        end
+        result
       end
 
       private
 
       def find_master_host
         results = query("select server_id from information_schema.replica_host_status " +
-        "where session_id = 'MASTER_SESSION_ID' " +
-        "and last_update_timestamp > now() - INTERVAL 3 MINUTE " +
-        "ORDER BY last_update_timestamp DESC LIMIT 1")
+                            "where session_id = 'MASTER_SESSION_ID' " +
+                            "and last_update_timestamp > now() - INTERVAL 3 MINUTE " +
+                            "ORDER BY last_update_timestamp DESC LIMIT 1", {skip_reconnect: true})
 
         if results.count > 0
           @master_host_address = results.first["server_id"] + "." + @cluster_dns_suffix

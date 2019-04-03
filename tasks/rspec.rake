@@ -38,14 +38,6 @@ file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
   File.open(dst_path, 'w') do |dst_file|
     File.open(src_path).each_line do |line|
       line.gsub!(/LOCALUSERNAME/, ENV['USER'])
-      line.gsub!(/AWS_REGION/, ENV['AWS_REGION'])
-      line.gsub!(/AWS_ACCESS_KEY_ID/, ENV['AWS_ACCESS_KEY_ID'])
-      line.gsub!(/AWS_SECRET_ACCESS_KEY/, ENV['AWS_SECRET_ACCESS_KEY'])
-      line.gsub!(/AWS_DB_CLUSTER_ID/, ENV['AWS_DB_CLUSTER_ID'])
-      line.gsub!(/AWS_DEFAULT_ENDPOINT/, ENV['AWS_DEFAULT_ENDPOINT'])
-      line.gsub!(/AWS_USERNAME/, ENV['AWS_USERNAME'])
-      line.gsub!(/AWS_PASSWORD/, ENV['AWS_PASSWORD'])
-      line.gsub!(/AWS_DATABASE/, ENV['AWS_DATABASE'])
       dst_file.write line
     end
   end

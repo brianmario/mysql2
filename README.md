@@ -592,7 +592,6 @@ Mysql2::AWSAurora::Client.new(
   :initial_retry_wait = seconds,
   :max_retry_wait = seconds,
   :cluster_endpoints = array of strings,
-  :logger = Logger.new,
   )
 ```
 

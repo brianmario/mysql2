@@ -6,7 +6,6 @@ require 'logger'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.describe Mysql2::AWSAurora::Client do
-
   AWSKlient = Class.new(Mysql2::AWSAurora::Client) do
     attr_reader :master_host_address
     def query(sql, opts = {})
@@ -20,24 +19,23 @@ RSpec.describe Mysql2::AWSAurora::Client do
   end
 
   context 'check reconnect on failover' do
-
     options = DatabaseCredentials['aws'].dup
     options[:logger] = Logger.new(STDOUT)
     options[:aws_reconnect] = true
 
     before(:each) do
       begin
-        servers = %w(mydbinstance mydbinstance-us-east-2b)
+        servers = %w[mydbinstance mydbinstance-us-east-2b]
         @rds_client = AWSAuroraMock.new("xd5i43ct4fbx.us-east-2.rds.amazonaws.com", servers, options)
       rescue Mysql2::Error => e
-        raise ("cannot connect to db: " + e.message)
-      rescue Exception => e
-        raise (e.backtrace)
+        raise "cannot connect to db: " + e.message
+      rescue StandardError => e
+        raise e.backtrace
       end
       begin
         @mysql_client = AWSKlient.new(options)
       rescue Mysql2::Error => e
-        raise ("cannot connect to db: " + e.message)
+        raise "cannot connect to db: " + e.message
       end
     end
 
@@ -55,7 +53,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
 
       count = 1
       # wait until cluster writer change
-      while true do
+      loop do
         count += 1
         @mysql_client.query("insert into users values('#{count}');")
         current_endpoint = @rds_client.current_writer
@@ -74,7 +72,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
       @rds_client.failover
 
       # wait until cluster writer change
-      while true do
+      loop do
         count += 1
         @mysql_client.query("insert into users values('#{count}');")
         current_endpoint = @rds_client.current_writer
@@ -89,9 +87,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
 
       expect(results.first["count"]).to eql(count)
       expect(@mysql_client.master_host_address).to eql current_endpoint
-
     end
-
   end
 
   context 'check servers list' do
@@ -101,17 +97,17 @@ RSpec.describe Mysql2::AWSAurora::Client do
       @opts[:logger] = Logger.new(STDOUT)
 
       begin
-        servers = %w(mydbinstance mydbinstance-us-east-2b mydbinstance-us-east2c)
+        servers = %w[mydbinstance mydbinstance-us-east-2b mydbinstance-us-east2c]
         @rds_client = AWSAuroraMock.new("xd5i43ct4fbx.us-east-2.rds.amazonaws.com", servers, @opts)
       rescue Mysql2::Error => e
-        raise ("cannot connect to db: " + e.message)
-      rescue Exception => e
-        raise (e.backtrace)
+        raise "cannot connect to db: " + e.message
+      rescue StandardError => e
+        raise e.backtrace
       end
     end
 
     it 'sets initial server list' do
-      endpoints = %w(mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com)
+      endpoints = %w[mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com]
       @opts[:cluster_endpoints] = endpoints
       @opts[:skip_update_servers] = true
       mysql_client = AWSKlient.new(@opts)
@@ -120,7 +116,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
     end
 
     it 'updates server list from db' do
-      endpoints = %w(mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com)
+      endpoints = %w[mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com]
       @opts[:skip_update_servers] = true
       mysql_client = AWSKlient.new(@opts)
 
@@ -129,17 +125,16 @@ RSpec.describe Mysql2::AWSAurora::Client do
   end
 
   context 'test transaction' do
-
     before(:each) do
       begin
         options = DatabaseCredentials['aws'].dup
         options[:logger] = Logger.new(STDOUT)
-        servers = %w(mydbinstance mydbinstance-us-east-2b)
+        servers = %w[mydbinstance mydbinstance-us-east-2b]
         @rds_client = AWSAuroraMock.new("xd5i43ct4fbx.us-east-2.rds.amazonaws.com", servers, options)
       rescue Mysql2::Error => e
-        raise ("cannot connect to db: " + e.message)
-      rescue Exception => e
-        raise (e.backtrace)
+        raise "cannot connect to db: " + e.message
+      rescue StandardError => e
+        raise e.backtrace
       end
       Bank.setup!
     end
@@ -148,11 +143,11 @@ RSpec.describe Mysql2::AWSAurora::Client do
       prev_balance = Bank.fetch_total_balance
       expect(Bank.default_total_balance).to eql(prev_balance)
 
-      expect {
-        Bank.transfer_balance(client_options: {reconnect: false}) do |client1, client2|
+      expect do
+        Bank.transfer_balance(client_options: { reconnect: false }) do |client1, client2|
           client2.query("KILL #{client1.thread_id}")
         end
-      }.to raise_error Mysql2::Error
+      end.to raise_error Mysql2::Error
 
       expect(prev_balance).to eql(Bank.fetch_total_balance)
     end
@@ -161,12 +156,11 @@ RSpec.describe Mysql2::AWSAurora::Client do
       prev_balance = Bank.fetch_total_balance
       expect(Bank.default_total_balance).to eql(prev_balance)
 
-
-      expect {
-        Bank.transfer_balance(client_options: {reconnect: true}) do |client1, client2|
+      expect do
+        Bank.transfer_balance(client_options: { reconnect: true }) do |client1, client2|
           client2.query("KILL #{client1.thread_id}")
         end
-      }.to raise_error Mysql2::Error
+      end.to raise_error Mysql2::Error
 
       expect(prev_balance).to eql(Bank.fetch_total_balance)
     end

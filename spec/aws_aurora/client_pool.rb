@@ -5,7 +5,7 @@ require 'mysql2/aws_aurora'
 require 'yaml'
 
 class ClientPool
-  YAML_PATH = 'spec/configuration.yml'
+  YAML_PATH = 'spec/configuration.yml'.freeze
 
   def self.client_class
     Class.new(Mysql2::AWSAurora::Client) do
@@ -38,6 +38,6 @@ class ClientPool
     clients = Array.new(block.arity) { self.class.client_class.new(@options) }
     yield(*clients)
   ensure
-    clients&.each(&:close)
+    clients.each(&:close) if clients
   end
 end

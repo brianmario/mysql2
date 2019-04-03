@@ -13,6 +13,10 @@ before_install:
 addons:
   hosts:
     - mysql2gem.example.com
+    - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+    - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+    - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+    - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
   apt:
     packages:
     - mysql-server-5.6
@@ -35,50 +39,82 @@ matrix:
         mariadb: 10.0
         hosts:
           - mysql2gem.example.com
+          - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
     - rvm: 2.4
       env: DB=mariadb10.1
       addons:
         mariadb: 10.1
         hosts:
           - mysql2gem.example.com
+          - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
     - rvm: 2.4
       env: DB=mariadb10.2
       addons:
         mariadb: 10.2
         hosts:
           - mysql2gem.example.com
+          - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
     - rvm: 2.4
       env: DB=mariadb10.3
       addons:
         mariadb: 10.3
         hosts:
           - mysql2gem.example.com
+          - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
     - rvm: 2.4
       env: DB=mysql55
       addons:
         hosts:
           - mysql2gem.example.com
+          - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
     - rvm: 2.4
       env: DB=mysql57
       addons:
         hosts:
           - mysql2gem.example.com
+          - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
     - rvm: 2.4
       env: DB=mysql80
       addons:
         hosts:
           - mysql2gem.example.com
+          - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
     - os: osx
       rvm: 2.4
       env: DB=mysql56
       addons:
         hosts:
           - mysql2gem.example.com
+          - mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+          - mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com
     - rvm: 2.4
       env: DOCKER=centos
       before_install: true
       install: docker build -t mysql2 -f .travis_Dockerfile_centos .
-      script: docker run --add-host=mysql2gem.example.com:127.0.0.1 -t mysql2
+      script: docker run --add-host=mysql2gem.example.com:127.0.0.1 --add-host=mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com:127.0.0.1 --add-host=mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com:127.0.0.1 --add-host=mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com:127.0.0.1 --add-host=mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com:127.0.0.1 -t mysql2
   fast_finish: true
   allow_failures:
     - rvm: ruby-head

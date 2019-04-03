@@ -1,14 +1,19 @@
 # frozen_string_literal: true
 
 require 'mysql2'
-require 'mysql2/awsaurora'
+require 'mysql2/aws_aurora'
 require 'yaml'
 
 class ClientPool
   YAML_PATH = 'spec/configuration.yml'
 
   def self.client_class
-    Mysql2::AWSAurora::Client
+    Class.new(Mysql2::AWSAurora::Client) do
+      def query(sql, opts = {})
+        result_sql = sql.sub("information_schema.replica_host_status", "information_schema_mock.replica_host_status")
+        super(result_sql, opts)
+      end
+    end
   end
 
   def self.setup!
@@ -20,7 +25,7 @@ class ClientPool
   end
 
   def self.default_options
-    @default_options ||= YAML.safe_load(File.read(YAML_PATH))['aws']
+    @default_options ||= YAML.safe_load(File.read(YAML_PATH))['aws'].dup
   end
 
   def initialize(options = {})

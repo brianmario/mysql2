@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'awsaurora/client_pool'
+require 'aws_aurora/client_pool'
 
 module Bank
   DEFAULT_BALANCE = { sender: 100_000_000_000, receiver: 0 }.freeze
@@ -17,7 +17,7 @@ module Bank
       #   INSERT INTO `bank_balances` VALUES (?, ?) ON DUPLICATE KEY UPDATE `balance` = `balance` + ?
       # SQL
       client1.query <<~SQL
-        INSERT INTO `bank_balances` VALUES ('#{client1.escape(to)}', #{transfer.to_i}) ON DUPLICATE KEY UPDATE `balance` = `balance` + #{transfer.to_i}
+        INSERT INTO `bank_balances` VALUES ('#{client1.escape(to)}', #{transfer.to_i}) ON DUPLICATE KEY UPDATE `balance` = `balance` + #{transfer.to_i};
       SQL
 
       # Do something if required
@@ -27,7 +27,7 @@ module Bank
       #   UPDATE `bank_balances` SET `balance` = `balance` - ? WHERE `name` = ?
       # SQL
       client1.query <<~SQL
-        UPDATE `bank_balances` SET `balance` = `balance` - #{transfer.to_i} WHERE `name` = '#{client1.escape(from)}'
+        UPDATE `bank_balances` SET `balance` = `balance` - #{transfer.to_i} WHERE `name` = '#{client1.escape(from)}';
       SQL
       client1.query 'COMMIT'
     end

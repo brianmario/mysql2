@@ -11,14 +11,7 @@ user:
   database: mysql2_test
 
 aws:
-  host: AWS_DEFAULT_ENDPOINT
-  username: AWS_USERNAME
-  password: AWS_PASSWORD
-  database: AWS_DATABASE
-  reconnect: true
-  aws_opts:
-      credentials:
-          region: AWS_REGION
-          access_key_id: AWS_ACCESS_KEY_ID
-          secret_access_key: AWS_SECRET_ACCESS_KEY
-      db_cluster_identifier: AWS_DB_CLUSTER_ID
+  host: mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+  username: root
+  password:
+  database: test

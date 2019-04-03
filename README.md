@@ -564,28 +564,29 @@ However since the driver will automatically discover nodes in your cluster it is
 Here's a simple example:
 
 ``` ruby
-require 'mysql2/awsaurora'
+require 'mysql2/aws_aurora'
 
 @mysql_client = Mysql2::AWSAurora::Client.new(
     host: ENV['DB_HOST'],
     username: ENV['DB_USERNAME'],
     password: ENV['DB_PASS'],
     database: ENV['DB_NAME'],
-    reconnect: true,
-    reconnect_attempts: 3,
+    aws_reconnect: true,
+    aws_reconnect_attempts: 3,
     initial_retry_wait: 0.5,
 )
 ```
 
 `Mysql2::AWSAurora::Client` supports all `Mysql2::Client` options and also has a few extra options.
-To use AWS Aurora Fast Failover `reconnect` option should be `true`.
+To use AWS Aurora Fast Failover `aws_reconnect` option should be `true`.
 
 You may set the following connection options in Mysql2::AWSAurora::Client.new(...):
 
 ``` ruby
 Mysql2::AWSAurora::Client.new(
   ...
-  :reconnect_attempts = seconds,
+  :aws_reconnect = true/false,
+  :aws_reconnect_attempts = seconds,
   :initial_retry_wait = seconds,
   :max_retry_wait = seconds,
   :logger = Logger.new,

@@ -1,13 +1,13 @@
 require 'mysql2/aws_aurora'
-require 'aws-sdk-rds'
 require 'yaml'
 require 'aws_aurora/bank'
 require 'aws_aurora/aws_aurora_mock'
+require 'logger'
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 RSpec.describe Mysql2::AWSAurora::Client do
 
-  Klient = Class.new(Mysql2::AWSAurora::Client) do
+  AWSKlient = Class.new(Mysql2::AWSAurora::Client) do
     attr_reader :master_host_address
     def query(sql, opts = {})
       result_sql = sql.sub("information_schema.replica_host_status", "information_schema_mock.replica_host_status")
@@ -35,7 +35,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
         raise (e.backtrace)
       end
       begin
-        @mysql_client = Klient.new(options)
+        @mysql_client = AWSKlient.new(options)
       rescue Mysql2::Error => e
         raise ("cannot connect to db: " + e.message)
       end
@@ -114,7 +114,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
       endpoints = %w(mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com)
       @opts[:cluster_endpoints] = endpoints
       @opts[:skip_update_servers] = true
-      mysql_client = Klient.new(@opts)
+      mysql_client = AWSKlient.new(@opts)
 
       expect(mysql_client.cluster_endpoints).to eql(endpoints)
     end
@@ -122,7 +122,7 @@ RSpec.describe Mysql2::AWSAurora::Client do
     it 'updates server list from db' do
       endpoints = %w(mydbinstance.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east-2b.xd5i43ct4fbx.us-east-2.rds.amazonaws.com mydbinstance-us-east2c.xd5i43ct4fbx.us-east-2.rds.amazonaws.com)
       @opts[:skip_update_servers] = true
-      mysql_client = Klient.new(@opts)
+      mysql_client = AWSKlient.new(@opts)
 
       expect(mysql_client.cluster_endpoints).to eql(endpoints)
     end

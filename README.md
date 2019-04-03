@@ -580,6 +580,8 @@ require 'mysql2/aws_aurora'
 `Mysql2::AWSAurora::Client` supports all `Mysql2::Client` options and also has a few extra options.
 To use AWS Aurora Fast Failover `aws_reconnect` option should be `true`.
 
+To preset cluster endpoints set `cluster_endpoints` option. It expects server endpoints without cluster suffix.
+
 You may set the following connection options in Mysql2::AWSAurora::Client.new(...):
 
 ``` ruby
@@ -589,6 +591,7 @@ Mysql2::AWSAurora::Client.new(
   :aws_reconnect_attempts = seconds,
   :initial_retry_wait = seconds,
   :max_retry_wait = seconds,
+  :cluster_endpoints = array of strings,
   :logger = Logger.new,
   )
 ```

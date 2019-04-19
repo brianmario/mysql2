@@ -27,9 +27,9 @@ gem install mysql2
 
 This gem links against MySQL's `libmysqlclient` library or `Connector/C`
 library, and compatible alternatives such as MariaDB.
-You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`,
-or other appropriate package for your system. See below for system-specific
-instructions.
+You may need to install a package such as `libmariadb-dev`, `libmysqlclient-dev`,
+`mysql-devel`, or other appropriate package for your system. See below for
+system-specific instructions.
 
 By default, the mysql2 gem will try to find a copy of MySQL in this order:
 
@@ -76,8 +76,8 @@ To see line numbers in backtraces, declare these environment variables
 
 ### Linux and other Unixes
 
-You may need to install a package such as `libmysqlclient-dev`, `mysql-devel`,
-or `default-libmysqlclient-dev`; refer to your distribution's package guide to
+You may need to install a package such as `libmariadb-dev`, `libmysqlclient-dev`,
+`mysql-devel`, or `default-libmysqlclient-dev`; refer to your distribution's package guide to
 find the particular package. The most common issue we see is a user who has
 the library file `libmysqlclient.so` but is missing the header file `mysql.h`
 -- double check that you have the _-dev_ packages installed.

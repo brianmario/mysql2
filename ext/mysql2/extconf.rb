@@ -7,7 +7,7 @@ def asplode(lib)
   elsif RUBY_PLATFORM =~ /darwin/
     abort "-----\n#{lib} is missing. You may need to 'brew install mysql' or 'port install mysql', and try again.\n-----"
   else
-    abort "-----\n#{lib} is missing. You may need to 'apt-get install libmysqlclient-dev' or 'yum install mysql-devel', and try again.\n-----"
+    abort "-----\n#{lib} is missing. You may need to 'sudo apt-get install libmariadb-dev', 'sudo apt-get install libmysqlclient-dev' or 'sudo yum install mysql-devel', and try again.\n-----"
   end
 end
 

@@ -134,7 +134,6 @@ describe Mysql2::Client do
         :sslkey    => '/etc/mysql/client-key.pem',
         :sslcert   => '/etc/mysql/client-cert.pem',
         :sslca     => '/etc/mysql/ca-cert.pem',
-        :sslcapath => '/etc/mysql/',
         :sslcipher => 'DHE-RSA-AES256-SHA'
       )
     }.should_not raise_error(Mysql2::Error)

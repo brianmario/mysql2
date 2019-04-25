@@ -45,7 +45,6 @@ rvm:
   - ree
 matrix:
   allow_failures:
-    - env: DB=mysql57
     - rvm: rbx-2
     - os: osx
   include:

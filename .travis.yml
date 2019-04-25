@@ -2,9 +2,7 @@ language: ruby
 bundler_args: --without benchmarks
 script:
   - bundle exec rake spec
-# Temporary workaround for broken Rubygems on Travis
 before_install:
-  - gem update --system 2.4.8
   - gem --version
   - |
     bash -c " # Install MySQL 5.7 if DB=mysql57

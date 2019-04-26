@@ -43,6 +43,8 @@ mysql_to_rb = {
   "geostd8"  => "NULL",
   "cp932"    => "Windows-31J",
   "eucjpms"  => "eucJP-ms",
+  "utf16le"  => "UTF-16LE",
+  "gb18030"  => "GB18030",
 }
 
 client     = Mysql2::Client.new(username: user, password: pass, host: host, port: port.to_i)

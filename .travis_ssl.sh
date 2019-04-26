@@ -37,7 +37,7 @@ commonName_default             = ca_name
 " >> ca.cnf
 
 echo "
-commonName_default             = cert_name
+commonName_default             = localhost
 " >> cert.cnf
 
 # Generate a set of certificates

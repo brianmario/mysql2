@@ -67,7 +67,9 @@ end
 encodings_with_nil = encodings_with_nil.map do |encoding|
   name = "NULL"
 
-  if !encoding.nil? && encoding[1] != "NULL"
+  if !encoding.nil? && encoding[1].nil?
+    $stderr.puts "WARNING: Missing mapping for MySQL collation with id #{encoding[0]}, assuming NULL"
+  elsif !encoding.nil? && encoding[1] != "NULL"
     name = "\"#{encoding[1]}\""
   end
 

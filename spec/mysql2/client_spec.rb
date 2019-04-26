@@ -131,6 +131,7 @@ describe Mysql2::Client do
     ssl_client = nil
     lambda {
       ssl_client = Mysql2::Client.new(
+        :host      => '127.0.0.1', # MySQL 5.7 skips SSL over Unix Sockets w/o ssl-mode=REQUIRED
         :sslkey    => '/etc/mysql/client-key.pem',
         :sslcert   => '/etc/mysql/client-cert.pem',
         :sslca     => '/etc/mysql/ca-cert.pem',

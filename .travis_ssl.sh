@@ -61,4 +61,4 @@ ssl-key=/etc/mysql/server-key.pem
 " >> my.cnf
 
 # Wait until the minute moves to ensure that the SSL cert is within its valid range
-ruby -e 'start = Time.now.min; while Time.now.min == start; sleep 2; end'
+# ruby -e 'start = Time.now.min; while Time.now.min == start; sleep 2; end'

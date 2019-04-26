@@ -37,16 +37,16 @@ commonName_default             = ca_name
 " >> ca.cnf
 
 echo "
-commonName_default             = cert_name
+commonName_default             = localhost
 " >> cert.cnf
 
 # Generate a set of certificates
 openssl genrsa -out ca-key.pem 2048
-openssl req -new -x509 -nodes -days 1000 -key ca-key.pem -out ca-cert.pem -batch -config ca.cnf
-openssl req -newkey rsa:2048 -days 1000 -nodes -keyout pkcs8-server-key.pem -out server-req.pem -batch -config cert.cnf
-openssl x509 -req -in server-req.pem -days 1000 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
-openssl req -newkey rsa:2048 -days 1000 -nodes -keyout pkcs8-client-key.pem -out client-req.pem -batch -config cert.cnf
-openssl x509 -req -in client-req.pem -days 1000 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out client-cert.pem
+openssl req -sha1 -new -x509 -nodes -days 1000 -key ca-key.pem -out ca-cert.pem -batch -config ca.cnf
+openssl req -sha1 -newkey rsa:2048 -days 1000 -nodes -keyout pkcs8-server-key.pem -out server-req.pem -batch -config cert.cnf
+openssl x509 -sha1 -req -in server-req.pem -days 1000 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
+openssl req -sha1 -newkey rsa:2048 -days 1000 -nodes -keyout pkcs8-client-key.pem -out client-req.pem -batch -config cert.cnf
+openssl x509 -sha1 -req -in client-req.pem -days 1000 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out client-cert.pem
 
 # Convert format from PKCS#8 to PKCS#1
 openssl rsa -in pkcs8-server-key.pem -out server-key.pem
@@ -61,4 +61,4 @@ ssl-key=/etc/mysql/server-key.pem
 " >> my.cnf
 
 # Wait until the minute moves to ensure that the SSL cert is within its valid range
-ruby -e 'start = Time.now.min; while Time.now.min == start; sleep 2; end'
+# ruby -e 'start = Time.now.min; while Time.now.min == start; sleep 2; end'

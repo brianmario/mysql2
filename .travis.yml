@@ -1,27 +1,31 @@
+sudo: required
 language: ruby
 bundler_args: --without benchmarks
+addons:
+  homebrew:
+    packages:
+      - mysql
 script:
   - bundle exec rake spec
-# Temporary workaround for broken Rubygems on Travis
 before_install:
-  - gem update --system 2.4.8
   - gem --version
   - |
-    bash -c " # Install MySQL 5.7 if DB=mysql57
-    if [[ x$DB =~ mysql57 ]]; then
-      sudo bash .travis_mysql57.sh
+    bash -c " # Install MySQL if DB=mysql*
+    if [[ x$DB =~ xmysql ]]; then
+      sudo bash .travis_mysql.sh '$DB'
     fi
     "
   - |
-    bash -c " # Install MariaDB if DB=mariadb
+    bash -c " # Install MariaDB if DB=mariadb*
     if [[ x$DB =~ xmariadb ]]; then
       sudo bash .travis_mariadb.sh '$DB'
     fi
     "
   - |
-    bash -c " # Install MySQL is OS=darwin
+    bash -c " # Install MySQL if OS=darwin
     if [[ x$OSTYPE =~ ^xdarwin ]]; then
-      brew install mysql
+      # Disable SSL due to missing certs
+      echo ssl = 0 >> /usr/local/etc/my.cnf
       mysql.server start
     fi
     "
@@ -35,29 +39,32 @@ before_install:
   - mysqld --version
   - mysql -u root -e "CREATE DATABASE IF NOT EXISTS test"
   - mysql -u root -e "CREATE USER '$USER'@'localhost'" || true
-os:
-  - linux
+os: linux
+dist: trusty
 rvm:
   - 1.8.7
   - 1.9.3
   - 2.0.0
   - 2.1
   - 2.2
-  - 2.3.1
+  - 2.3
   - ree
 matrix:
+  fast_finish: true
   allow_failures:
-    - env: DB=mysql57
-    - rvm: rbx-2
     - os: osx
+    - rvm: ree
   include:
     - rvm: 2.0.0
       env: DB=mariadb55
     - rvm: 2.0.0
       env: DB=mariadb10
     - rvm: 2.0.0
-      env: DB=mysql57
-    - rvm: rbx-2
-      env: RBXOPT=-Xgc.honor_start=true
+      env: DB=mysql55
     - rvm: 2.0.0
+      env: DB=mysql57
+    - rvm: 2.0.0
+      dist: xenial
+      env: DB=mysql8
+    - rvm: 2.3
       os: osx

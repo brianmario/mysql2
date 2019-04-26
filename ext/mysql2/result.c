@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "mysql_enc_to_ruby.h"
+#define MYSQL2_CHARSETNR_SIZE (sizeof(mysql2_mysql_enc_to_rb)/sizeof(mysql2_mysql_enc_to_rb[0]))
 
 #ifdef HAVE_RUBY_ENCODING_H
 static rb_encoding *binaryEncoding;
@@ -161,7 +162,7 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
     const char *enc_name;
     int enc_index;
 
-    enc_name = mysql2_mysql_enc_to_rb[field.charsetnr-1];
+    enc_name = (field.charsetnr-1 < MYSQL2_CHARSETNR_SIZE) ? mysql2_mysql_enc_to_rb[field.charsetnr-1] : NULL;
     if (enc_name != NULL) {
       /* use the field encoding we were able to match */
       enc_index = rb_enc_find_index(enc_name);

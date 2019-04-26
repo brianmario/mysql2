@@ -131,10 +131,10 @@ describe Mysql2::Client do
     ssl_client = nil
     lambda {
       ssl_client = Mysql2::Client.new(
+        :host      => '127.0.0.1', # MySQL 5.7 skips SSL over Unix Sockets w/o ssl-mode=REQUIRED
         :sslkey    => '/etc/mysql/client-key.pem',
         :sslcert   => '/etc/mysql/client-cert.pem',
         :sslca     => '/etc/mysql/ca-cert.pem',
-        :sslcapath => '/etc/mysql/',
         :sslcipher => 'DHE-RSA-AES256-SHA'
       )
     }.should_not raise_error(Mysql2::Error)
@@ -232,7 +232,15 @@ describe Mysql2::Client do
       it "should > 0" do
         # "the statement produces extra information that can be viewed by issuing a SHOW WARNINGS"
         # http://dev.mysql.com/doc/refman/5.0/en/explain-extended.html
-        @client.query("explain extended select 1")
+        begin
+          @client.query("explain extended select 1")
+        rescue Mysql2::Error
+          # EXTENDED keyword is deprecated in MySQL 8.0 and triggers a syntax error
+          # https://dev.mysql.com/doc/refman/5.7/en/explain-extended.html
+          # "extended output is now enabled by default, so the EXTENDED keyword is superfluous and
+          # deprecated ... and it will be removed from EXPLAIN syntax in a future MySQL release"
+          @client.query("explain select 1")
+        end
         @client.warning_count.should > 0
       end
     end

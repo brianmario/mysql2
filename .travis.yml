@@ -50,8 +50,10 @@ rvm:
   - 2.3
   - ree
 matrix:
+  fast_finish: true
   allow_failures:
     - os: osx
+    - rvm: ree
   include:
     - rvm: 2.0.0
       env: DB=mariadb55

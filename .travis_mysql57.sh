@@ -14,3 +14,6 @@ add-apt-repository 'deb http://repo.mysql.com/apt/ubuntu/ precise mysql-5.7'
 
 apt-get update
 apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -y install mysql-server libmysqlclient-dev
+
+# disable socket auth on mysql-community-server
+mysql -u root -e "USE mysql; UPDATE user SET plugin='mysql_native_password' WHERE User='root'; FLUSH PRIVILEGES;"

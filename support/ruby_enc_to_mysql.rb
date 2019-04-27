@@ -38,6 +38,8 @@ mysql_to_rb = {
   "geostd8"  => nil,
   "cp932"    => "Windows-31J",
   "eucjpms"  => "eucJP-ms",
+  "utf16le"  => "UTF-16LE",
+  "gb18030"  => "GB18030",
 }
 
 puts <<-HEADER

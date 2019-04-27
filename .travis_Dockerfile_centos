@@ -17,7 +17,7 @@ RUN yum -y install \
   gcc \
   gcc-c++ \
   make
-RUN gem update --system > /dev/null
-RUN gem install bundler
+RUN gem install --no-document "rubygems-update:~>2.7" && update_rubygems
+RUN gem install --no-document "bundler:~>1.17"
 
 CMD sh .travis_centos.sh

@@ -607,21 +607,21 @@ RSpec.describe Mysql2::Client do
       # XXX this test is not deterministic (because Unix signal handling is not)
       # and may fail on a loaded system
       it "should run signal handlers while waiting for a response" do
-        kill_time = 0.1
-        query_time = 2 * kill_time
+        kill_time = 0.25
+        query_time = 4 * kill_time
 
         mark = {}
 
         begin
-          trap(:USR1) { mark.store(:USR1, Time.now) }
+          trap(:USR1) { mark.store(:USR1, clock_time) }
           pid = fork do
             sleep kill_time # wait for client query to start
             Process.kill(:USR1, Process.ppid)
             sleep # wait for explicit kill to prevent GC disconnect
           end
-          mark.store(:QUERY_START, Time.now)
+          mark.store(:QUERY_START, clock_time)
           @client.query("SELECT SLEEP(#{query_time})")
-          mark.store(:QUERY_END, Time.now)
+          mark.store(:QUERY_END, clock_time)
         ensure
           Process.kill(:TERM, pid)
           Process.waitpid2(pid)
@@ -629,7 +629,7 @@ RSpec.describe Mysql2::Client do
         end
 
         # the query ran uninterrupted
-        expect(mark.fetch(:QUERY_END) - mark.fetch(:QUERY_START)).to be_within(0.02).of(query_time)
+        expect(mark.fetch(:QUERY_END) - mark.fetch(:QUERY_START)).to be_within(0.1).of(query_time)
         # signals fired while the query was running
         expect(mark.fetch(:USR1)).to be_between(mark.fetch(:QUERY_START), mark.fetch(:QUERY_END))
       end
@@ -694,6 +694,7 @@ RSpec.describe Mysql2::Client do
         sleep_time = 0.5
 
         # Note that each thread opens its own database connection
+        start = clock_time
         threads = Array.new(5) do
           Thread.new do
             new_client do |client|
@@ -702,10 +703,12 @@ RSpec.describe Mysql2::Client do
             Thread.current.object_id
           end
         end
+        values = threads.map(&:value)
+        stop = clock_time
 
-        # This timeout demonstrates that the threads are sleeping concurrently:
-        # In the serial case, the timeout would fire and the test would fail
-        values = Timeout.timeout(sleep_time * 1.1) { threads.map(&:value) }
+        # This check demonstrates that the threads are sleeping concurrently:
+        # In the serial case, the difference would be a multiple of sleep time
+        expect(stop - start).to be_within(0.1).of(sleep_time)
 
         expect(values).to match_array(threads.map(&:object_id))
       end

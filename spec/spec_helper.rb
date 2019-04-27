@@ -40,6 +40,17 @@ RSpec.configure do |config|
     # rubocop:enable Lint/UnifiedInteger
   end
 
+  # Use monotonic time if possible (ruby >= 2.1.0)
+  if defined?(Process::CLOCK_MONOTONIC)
+    def clock_time
+      Process.clock_gettime Process::CLOCK_MONOTONIC
+    end
+  else
+    def clock_time
+      Time.now.to_f
+    end
+  end
+
   config.before :each do
     @client = new_client
   end

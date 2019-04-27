@@ -65,6 +65,7 @@ matrix:
           - mysql2gem.example.com
     - rvm: 2.4
       env: DB=mysql80
+      dist: xenial
       addons:
         hosts:
           - mysql2gem.example.com

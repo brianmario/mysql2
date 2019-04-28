@@ -16,7 +16,7 @@
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
-static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
+static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream, sym_read_timeout;
 static VALUE sym_no_good_index_used, sym_no_index_used, sym_query_was_slow;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
 
@@ -639,7 +639,10 @@ static VALUE do_query(void *args) {
   int retval;
   VALUE read_timeout;
 
-  read_timeout = rb_iv_get(async_args->self, "@read_timeout");
+  read_timeout = rb_hash_aref(rb_iv_get(async_args->self, "@current_query_options"), sym_read_timeout);
+  if (NIL_P(read_timeout)) {
+    read_timeout = rb_iv_get(async_args->self, "@read_timeout");
+  }
 
   tvp = NULL;
   if (!NIL_P(read_timeout)) {
@@ -1462,6 +1465,7 @@ void init_mysql2_client() {
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
   sym_stream          = ID2SYM(rb_intern("stream"));
+  sym_read_timeout    = ID2SYM(rb_intern("read_timeout"));
 
   sym_no_good_index_used = ID2SYM(rb_intern("no_good_index_used"));
   sym_no_index_used      = ID2SYM(rb_intern("no_index_used"));

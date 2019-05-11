@@ -23,7 +23,7 @@ static rb_encoding *binaryEncoding;
 
 typedef struct {
   int symbolizeKeys;
-  int asArray;
+  int rowsAs;
   int castBool;
   int cacheRows;
   int cast;
@@ -42,6 +42,13 @@ static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
   sym_cache_rows, sym_cast, sym_stream, sym_name;
 
+static VALUE sym_struct;
+
+/* internal rowsAs constants */
+#define AS_HASH   0
+#define AS_ARRAY  1
+#define AS_STRUCT 2
+
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
@@ -49,6 +56,7 @@ static void rb_mysql_result_mark(void * wrapper) {
     rb_gc_mark(w->fields);
     rb_gc_mark(w->rows);
     rb_gc_mark(w->encoding);
+    rb_gc_mark(w->rowStruct);
     rb_gc_mark(w->client);
     rb_gc_mark(w->statement);
   }
@@ -288,6 +296,21 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
   }
 }
 
+static VALUE cast_row_as_struct(VALUE self, VALUE rowVal, mysql2_result_wrapper *wrapper)
+{
+  /* create struct from intermediate array */
+  if (wrapper->rowStruct == Qnil) {
+    unsigned int i;
+    VALUE *argv_fields = ALLOCA_N(VALUE, wrapper->numberOfFields);
+    for (i = 0; i < wrapper->numberOfFields; i++) {
+      argv_fields[i] = rb_mysql_result_fetch_field(self, i, 1);
+    }
+    wrapper->rowStruct = rb_funcall2(rb_cStruct, intern_new, (int) wrapper->numberOfFields, argv_fields);
+  }
+
+  return rb_struct_alloc(wrapper->rowStruct, rowVal); 
+}
+
 static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, const result_each_args *args)
 {
   VALUE rowVal;
@@ -303,11 +326,6 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   if (wrapper->fields == Qnil) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
-  }
-  if (args->asArray) {
-    rowVal = rb_ary_new2(wrapper->numberOfFields);
-  } else {
-    rowVal = rb_hash_new();
   }
 
   if (wrapper->result_buffers == NULL) {
@@ -335,6 +353,12 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
       case MYSQL_DATA_TRUNCATED:
         rb_raise(cMysql2Error, "IMPLBUG: caught MYSQL_DATA_TRUNCATED. should not come here as buffer_length is set to fields[i].max_length.");
     }
+  }
+
+  if (args->rowsAs == AS_HASH) {
+    rowVal = rb_hash_new();
+  } else /* array or struct */ {
+    rowVal = rb_ary_new2(wrapper->numberOfFields);
   }
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
@@ -465,11 +489,15 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
       }
     }
 
-    if (args->asArray) {
-      rb_ary_push(rowVal, val);
-    } else {
+    if (args->rowsAs == AS_HASH) {
       rb_hash_aset(rowVal, field, val);
+    } else /* array or struct */ {
+      rb_ary_push(rowVal, val);
     }
+  }
+
+  if (args->rowsAs == AS_STRUCT) {
+    rowVal = cast_row_as_struct(self, rowVal, wrapper);
   }
 
   return rowVal;
@@ -499,10 +527,12 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
-  if (args->asArray) {
-    rowVal = rb_ary_new2(wrapper->numberOfFields);
-  } else {
+  
+  if (args->rowsAs == AS_HASH) {
     rowVal = rb_hash_new();
+  } else /* array or struct */ {
+    /* struct uses array as an intermediary */
+    rowVal = rb_ary_new2(wrapper->numberOfFields);
   }
   fieldLengths = mysql_fetch_lengths(wrapper->result);
 
@@ -672,19 +702,24 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
         }
       }
-      if (args->asArray) {
-        rb_ary_push(rowVal, val);
-      } else {
+      if (args->rowsAs == AS_HASH) {
         rb_hash_aset(rowVal, field, val);
+      } else /* array or struct */ {
+        rb_ary_push(rowVal, val);
       }
     } else {
-      if (args->asArray) {
-        rb_ary_push(rowVal, Qnil);
-      } else {
+      if (args->rowsAs == AS_HASH) {
         rb_hash_aset(rowVal, field, Qnil);
+      } else /* array or struct */ {
+        rb_ary_push(rowVal, Qnil);
       }
     }
   }
+
+  if (args->rowsAs == AS_STRUCT) {
+    rowVal = cast_row_as_struct(self, rowVal, wrapper);
+  }
+
   return rowVal;
 }
 
@@ -697,7 +732,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
 
   defaults = rb_iv_get(self, "@query_options");
   Check_Type(defaults, T_HASH);
-  if (rb_hash_aref(defaults, sym_symbolize_keys) == Qtrue) {
+  if (rb_hash_aref(defaults, sym_symbolize_keys) == Qtrue || rb_hash_aref(defaults, sym_as) == sym_struct) {
     symbolizeKeys = 1;
   }
 
@@ -808,9 +843,9 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
-  VALUE defaults, opts, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+  VALUE defaults, opts, as_opt, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone, dbTz, appTz;
-  int symbolizeKeys, asArray, castBool, cacheRows, cast;
+  int symbolizeKeys, rowsAs, castBool, cacheRows, cast;
 
   GET_RESULT(self);
 
@@ -827,10 +862,19 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
-  asArray       = rb_hash_aref(opts, sym_as) == sym_array;
   castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
   cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
   cast          = RTEST(rb_hash_aref(opts, sym_cast));
+
+  as_opt = rb_hash_aref(opts, sym_as);
+  if (as_opt == sym_array) {
+    rowsAs = AS_ARRAY;
+  } else if (as_opt == sym_struct) {
+    rowsAs = AS_STRUCT;
+    symbolizeKeys = 1;  /* force */
+  } else {
+    rowsAs = AS_HASH;
+  }
 
   if (wrapper->is_streaming && cacheRows) {
     rb_warn(":cache_rows is ignored if :stream is true");
@@ -880,7 +924,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   // Backward compat
   args.symbolizeKeys = symbolizeKeys;
-  args.asArray = asArray;
+  args.rowsAs = rowsAs;
   args.castBool = castBool;
   args.cacheRows = cacheRows;
   args.cast = cast;
@@ -931,6 +975,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->result = r;
   wrapper->fields = Qnil;
   wrapper->rows = Qnil;
+  wrapper->rowStruct = Qnil;
   wrapper->encoding = encoding;
   wrapper->streamingComplete = 0;
   wrapper->client = client;
@@ -984,6 +1029,7 @@ void init_mysql2_result() {
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
+  sym_struct          = ID2SYM(rb_intern("struct"));
   sym_local           = ID2SYM(rb_intern("local"));
   sym_utc             = ID2SYM(rb_intern("utc"));
   sym_cast_booleans   = ID2SYM(rb_intern("cast_booleans"));

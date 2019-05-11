@@ -72,6 +72,12 @@ RSpec.describe Mysql2::Result do
       end
     end
 
+    it "should be able to return results as a struct" do
+      @result.each(as: :struct) do |row|
+        expect(row).to be_kind_of(Struct)
+      end
+    end
+
     it "should cache previously yielded results by default" do
       expect(@result.first.object_id).to eql(@result.first.object_id)
     end
@@ -116,6 +122,11 @@ RSpec.describe Mysql2::Result do
     it "should return an array of field names in proper order" do
       result = @client.query "SELECT 'a', 'b', 'c'"
       expect(result.fields).to eql(%w[a b c])
+    end
+
+    it "should return field names as symbols if rows are structs" do
+      result = @client.query "SELECT 'a', 'b', 'c'", as: :struct
+      expect(result.fields.first).to be_an_instance_of(Symbol)
     end
   end
 

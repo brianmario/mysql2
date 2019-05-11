@@ -294,6 +294,13 @@ RSpec.describe Mysql2::Statement do
       end
     end
 
+    it "should be able to return results as a struct" do
+      @result = @client.prepare("SELECT 1").execute(as: :struct)
+      @result.each do |row|
+        expect(row).to be_kind_of(Struct)
+      end
+    end
+
     it "should cache previously yielded results by default" do
       @result = @client.prepare("SELECT 1").execute
       expect(@result.first.object_id).to eql(@result.first.object_id)
@@ -327,6 +334,11 @@ RSpec.describe Mysql2::Statement do
     it "should return an array of field names in proper order" do
       stmt = @client.prepare("SELECT 'a', 'b', 'c'")
       expect(stmt.fields).to eql(%w[a b c])
+    end
+
+    it "should return field names as symbols if rows are structs" do
+      result = @client.prepare("SELECT 'a', 'b', 'c'").execute(as: :struct)
+      expect(result.fields.first).to be_an_instance_of(Symbol)
     end
 
     it "should return nil for statement with no result fields" do

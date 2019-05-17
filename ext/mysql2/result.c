@@ -30,7 +30,7 @@ typedef struct {
   int streaming;
   ID db_timezone;
   ID app_timezone;
-  VALUE block_given;
+  int block_given; /* boolean */
 } result_each_args;
 
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
@@ -741,7 +741,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
         row = fetch_row_func(self, fields, args);
         if (row != Qnil) {
           wrapper->numberOfRows++;
-          if (args->block_given != Qnil) {
+          if (args->block_given) {
             rb_yield(row);
           }
         }
@@ -791,7 +791,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
           return Qnil;
         }
 
-        if (args->block_given != Qnil) {
+        if (args->block_given) {
           rb_yield(row);
         }
       }
@@ -809,7 +809,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
-  VALUE defaults, opts, block, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+  VALUE defaults, opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone, dbTz, appTz;
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
 
@@ -821,7 +821,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   defaults = rb_ivar_get(self, intern_query_options);
   Check_Type(defaults, T_HASH);
-  if (rb_scan_args(argc, argv, "01&", &opts, &block) == 1) {
+
+  // A block can be passed to this method, but since we don't call the block directly from C,
+  // we don't need to capture it into a variable here with the "&" scan arg.
+  if (rb_scan_args(argc, argv, "01", &opts) == 1) {
     opts = rb_funcall(defaults, intern_merge, 1, opts);
   } else {
     opts = defaults;
@@ -887,7 +890,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   args.cast = cast;
   args.db_timezone = db_timezone;
   args.app_timezone = app_timezone;
-  args.block_given = block;
+  args.block_given = rb_block_given_p();
 
   if (wrapper->stmt_wrapper) {
     fetch_row_func = rb_mysql_result_fetch_row_stmt;

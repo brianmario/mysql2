@@ -18,7 +18,8 @@ VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static VALUE sym_no_good_index_used, sym_no_index_used, sym_query_was_slow;
-static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args;
+static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args,
+  intern_current_query_options, intern_read_timeout;
 
 #define REQUIRE_INITIALIZED(wrapper) \
   if (!wrapper->initialized) { \
@@ -579,7 +580,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     rb_raise_mysql2_error(wrapper);
   }
 
-  is_streaming = rb_hash_aref(rb_iv_get(self, "@current_query_options"), sym_stream);
+  is_streaming = rb_hash_aref(rb_ivar_get(self, intern_current_query_options), sym_stream);
   if (is_streaming == Qtrue) {
     result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
   } else {
@@ -596,7 +597,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   }
 
   // Duplicate the options hash and put the copy in the Result object
-  current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
+  current = rb_hash_dup(rb_ivar_get(self, intern_current_query_options));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
@@ -639,7 +640,7 @@ static VALUE do_query(void *args) {
   int retval;
   VALUE read_timeout;
 
-  read_timeout = rb_iv_get(async_args->self, "@read_timeout");
+  read_timeout = rb_ivar_get(async_args->self, intern_read_timeout);
 
   tvp = NULL;
   if (!NIL_P(read_timeout)) {
@@ -767,7 +768,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
-  rb_iv_set(self, "@current_query_options", current);
+  rb_ivar_set(self, intern_current_query_options, current);
 
   Check_Type(sql, T_STRING);
   /* ensure the string is in the encoding the connection is expecting */
@@ -1179,7 +1180,7 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   }
 
   // Duplicate the options hash and put the copy in the Result object
-  current = rb_hash_dup(rb_iv_get(self, "@current_query_options"));
+  current = rb_hash_dup(rb_ivar_get(self, intern_current_query_options));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
@@ -1265,7 +1266,7 @@ static VALUE set_read_timeout(VALUE self, VALUE value) {
   /* Set the instance variable here even though _mysql_client_options
      might not succeed, because the timeout is used in other ways
      elsewhere */
-  rb_iv_set(self, "@read_timeout", value);
+  rb_ivar_set(self, intern_read_timeout, value);
   return _mysql_client_options(self, MYSQL_OPT_READ_TIMEOUT, value);
 }
 
@@ -1471,6 +1472,8 @@ void init_mysql2_client() {
   intern_merge = rb_intern("merge");
   intern_merge_bang = rb_intern("merge!");
   intern_new_with_args = rb_intern("new_with_args");
+  intern_current_query_options = rb_intern("@current_query_options");
+  intern_read_timeout = rb_intern("@read_timeout");
 
 #ifdef CLIENT_LONG_PASSWORD
   rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),

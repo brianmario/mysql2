@@ -3,7 +3,8 @@
 extern VALUE mMysql2, cMysql2Error;
 static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
-static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year;
+static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year,
+  intern_query_options;
 
 #define GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
@@ -404,7 +405,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   }
 
   // Duplicate the options hash, merge! extra opts, put the copy into the Result object
-  current = rb_hash_dup(rb_iv_get(stmt_wrapper->client, "@query_options"));
+  current = rb_hash_dup(rb_ivar_get(stmt_wrapper->client, intern_query_options));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
 
@@ -599,4 +600,5 @@ void init_mysql2_statement() {
 
   intern_to_s = rb_intern("to_s");
   intern_merge_bang = rb_intern("merge!");
+  intern_query_options = rb_intern("@query_options");
 }

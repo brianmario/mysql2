@@ -278,8 +278,10 @@ The string form will be split on whitespace and parsed as with the array form:
 Plain flags are added to the default flags, while flags prefixed with `-`
 (minus) are removed from the default flags.
 
-This allows easier use with ActiveRecord's database.yml, avoiding the need for magic flag numbers.
-For example, to disable protocol compression, and enable multiple statements and result sets:
+### Using Active Record's database.yml
+
+Active Record typically reads its configuration from a file named `database.yml` or an environment variable `DATABASE_URL`.
+Use the value `mysql2` as the adapter name. For example:
 
 ``` yaml
 development:
@@ -295,6 +297,15 @@ development:
     - FOUND_ROWS
     - MULTI_STATEMENTS
   secure_auth: false
+```
+
+### Using Active Record's DATABASE_URL
+
+Active Record typically reads its configuration from a file named `database.yml` or an environment variable `DATABASE_URL`.
+Use the value `mysql2` as the protocol name. For example:
+
+``` shell
+DATABASE_URL=mysql2://sql_user:sql_pass@sql_host_name:port/sql_db_name?option1=value1&option2=value2
 ```
 
 ### Reading a MySQL config file

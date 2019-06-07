@@ -91,6 +91,17 @@ MySQL directory, use the `--with-mysql-dir` or `--with-mysql-config` options abo
 If you have not done so already, you will need to install the XCode select tools by running
 `xcode-select --install`.
 
+If you recieve the following error `ld: library not found for -lssl` when installing you can 
+do one of the following to fix the issue.
+
+* Add the path of the openssl lib dir to the `$LIBRARY_PATH` environement variable. You could do this by adding `export LIBRARY_PATH=$LIBRARY_PATH:/usr/local/opt/openssl/lib/` to your `.bash_profile`, `.zshrc`, etc. (If you used something other than homebrew to install openssl you'll need to replace `/usr/local/opt/openssl/` with the path to
+where openssl is installed on your machine)
+
+#### OR
+
+* You can specify the paths using [Bundler Build Options](https://bundler.io/man/bundle-config.1.html#BUILD-OPTIONS) like this: `bundle config build.mysql2 "-- --with-ldflags=-L/usr/local/opt/openssl/lib --with-cppflags=-I/usr/local/opt/openssl/include"`. (Again if you install openssl with something other than homebrew you'll need to replace 
+`/usr/local/opt/openssl/` with the path to where openssl is installed on your machine)
+
 ### Windows
 
 Make sure that you have Ruby and the DevKit compilers installed. We recommend

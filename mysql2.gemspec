@@ -13,7 +13,6 @@ Mysql2::GEMSPEC = Gem::Specification.new do |s|
   s.required_ruby_version = '>= 2.0.0'
 
   s.files = `git ls-files README.md CHANGELOG.md LICENSE ext lib support`.split
-  s.test_files = `git ls-files spec examples`.split
 
   s.metadata['msys2_mingw_dependencies'] = 'libmariadbclient'
 end

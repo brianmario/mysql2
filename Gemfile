@@ -23,7 +23,7 @@ end
 
 group :development do
   gem 'pry'
-  gem 'rake-compiler-dock', '~> 0.6.0'
+  gem 'rake-compiler-dock', '~> 0.7.0'
 end
 
 platforms :rbx do

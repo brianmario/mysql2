@@ -46,7 +46,7 @@ void rb_raise_mysql2_stmt_error(mysql_stmt_wrapper *stmt_wrapper) {
   VALUE e;
   GET_CLIENT(stmt_wrapper->client);
   VALUE rb_error_msg = rb_str_new2(mysql_stmt_error(stmt_wrapper->stmt));
-  VALUE rb_sql_state = rb_tainted_str_new2(mysql_stmt_sqlstate(stmt_wrapper->stmt));
+  VALUE rb_sql_state = rb_str_new2(mysql_stmt_sqlstate(stmt_wrapper->stmt));
 
   rb_encoding *conn_enc;
   conn_enc = rb_to_encoding(wrapper->encoding);

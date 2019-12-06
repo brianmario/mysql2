@@ -421,29 +421,27 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
           if (seconds == 0) {
             val = Qnil;
-          } else {
-            if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
-              VALUE offset = INT2NUM(0);
-              if (args->db_timezone == intern_local) {
+          } else if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
+            VALUE offset = INT2NUM(0);
+            if (args->db_timezone == intern_local) {
+              offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
+            }
+            val = rb_funcall(cDateTime, intern_civil, 7, UINT2NUM(ts->year), UINT2NUM(ts->month), UINT2NUM(ts->day), UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second), offset);
+            if (!NIL_P(args->app_timezone)) {
+              if (args->app_timezone == intern_local) {
                 offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
+                val = rb_funcall(val, intern_new_offset, 1, offset);
+              } else { // utc
+                val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
               }
-              val = rb_funcall(cDateTime, intern_civil, 7, UINT2NUM(ts->year), UINT2NUM(ts->month), UINT2NUM(ts->day), UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second), offset);
-              if (!NIL_P(args->app_timezone)) {
-                if (args->app_timezone == intern_local) {
-                  offset = rb_funcall(cMysql2Client, intern_local_offset, 0);
-                  val = rb_funcall(val, intern_new_offset, 1, offset);
-                } else { // utc
-                  val = rb_funcall(val, intern_new_offset, 1, opt_utc_offset);
-                }
-              }
-            } else {
-              val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(ts->year), UINT2NUM(ts->month), UINT2NUM(ts->day), UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second), ULONG2NUM(ts->second_part));
-              if (!NIL_P(args->app_timezone)) {
-                if (args->app_timezone == intern_local) {
-                  val = rb_funcall(val, intern_localtime, 0);
-                } else { // utc
-                  val = rb_funcall(val, intern_utc, 0);
-                }
+            }
+          } else {
+            val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(ts->year), UINT2NUM(ts->month), UINT2NUM(ts->day), UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second), ULONG2NUM(ts->second_part));
+            if (!NIL_P(args->app_timezone)) {
+              if (args->app_timezone == intern_local) {
+                val = rb_funcall(val, intern_localtime, 0);
+              } else { // utc
+                val = rb_funcall(val, intern_utc, 0);
               }
             }
           }

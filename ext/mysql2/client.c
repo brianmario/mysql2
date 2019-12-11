@@ -1022,6 +1022,32 @@ static VALUE rb_mysql_client_last_id(VALUE self) {
 }
 
 /* call-seq:
+ *    client.session_track
+ *
+ * Returns information about changes to the session state on the server.
+ */
+static VALUE rb_mysql_client_session_track(VALUE self, VALUE type) {
+  const char *data;
+  size_t length;
+  my_ulonglong retVal;
+  GET_CLIENT(self);
+
+  REQUIRE_CONNECTED(wrapper);
+  retVal = mysql_session_track_get_first(wrapper->client, NUM2INT(type), &data, &length);
+  if (retVal != 0) {
+    rb_raise_mysql2_error(wrapper);
+  }
+  VALUE rbAry = rb_ary_new();
+  VALUE rbFirst = rb_str_new(data, length);
+  rb_ary_push(rbAry, rbFirst);
+  while(mysql_session_track_get_next(wrapper->client, NUM2INT(type), &data, &length) == 0) {
+    VALUE rbNext = rb_str_new(data, length);
+    rb_ary_push(rbAry, rbNext);
+  }
+  return rbAry;
+}
+
+/* call-seq:
  *    client.affected_rows
  *
  * returns the number of rows changed, deleted, or inserted by the last statement
@@ -1425,6 +1451,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
+  rb_define_method(cMysql2Client, "session_track", rb_mysql_client_session_track, 1);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
   rb_define_method(cMysql2Client, "prepare", rb_mysql_client_prepare_statement, 1);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
@@ -1611,6 +1638,10 @@ void init_mysql2_client() {
    * but we're using it in our default connection flags. */
   rb_const_set(cMysql2Client, rb_intern("CONNECT_ATTRS"),
       INT2NUM(0));
+#endif
+
+#ifdef CLIENT_SESSION_TRACK
+  rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK"), INT2NUM(CLIENT_SESSION_TRACK));
 #endif
 
 #if defined(FULL_SSL_MODE_SUPPORT) // MySQL 5.7.11 and above

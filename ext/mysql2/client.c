@@ -290,24 +290,26 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
   wrapper->refcount--;
 
   if (wrapper->refcount == 0) {
+    if (wrapper->initialized) {
 #ifndef _WIN32
-    if (CONNECTED(wrapper) && !wrapper->automatic_close) {
-      /* The client is being garbage collected while connected. Prevent
-       * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
-       * the socket by invalidating it. invalidate_fd() will drop this
-       * process's reference to the socket only, while a QUIT or shutdown()
-       * would render the underlying connection unusable, interrupting other
-       * processes which share this object across a fork().
-       */
-      if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
-        fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely\n");
-        close(wrapper->client->net.fd);
+      if (CONNECTED(wrapper) && !wrapper->automatic_close) {
+	/* The client is being garbage collected while connected. Prevent
+	 * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
+	 * the socket by invalidating it. invalidate_fd() will drop this
+	 * process's reference to the socket only, while a QUIT or shutdown()
+	 * would render the underlying connection unusable, interrupting other
+	 * processes which share this object across a fork().
+	 */
+	if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+	  fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely\n");
+	  close(wrapper->client->net.fd);
+	}
+	wrapper->client->net.fd = -1;
       }
-      wrapper->client->net.fd = -1;
-    }
 #endif
 
-    nogvl_close(wrapper);
+      nogvl_close(wrapper);
+    }
     xfree(wrapper->client);
     xfree(wrapper);
   }

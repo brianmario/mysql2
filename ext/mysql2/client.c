@@ -513,10 +513,10 @@ static void *nogvl_send_query(void *ptr) {
   return (void*)(rv == 0 ? Qtrue : Qfalse);
 }
 
-static VALUE do_send_query(void *args) {
-  struct nogvl_send_query_args *query_args = args;
+static VALUE do_send_query(VALUE args) {
+  struct nogvl_send_query_args *query_args = (void *)args;
   mysql_client_wrapper *wrapper = query_args->wrapper;
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, args, RUBY_UBF_IO, 0) == Qfalse) {
+  if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, query_args, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, we're not active anymore */
     wrapper->active_thread = Qnil;
     rb_raise_mysql2_error(wrapper);
@@ -636,8 +636,8 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   rb_exc_raise(error);
 }
 
-static VALUE do_query(void *args) {
-  struct async_query_args *async_args = args;
+static VALUE do_query(VALUE args) {
+  struct async_query_args *async_args = (void *)args;
   struct timeval tv;
   struct timeval *tvp;
   long int sec;
@@ -797,7 +797,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
     return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
   }
 #else
-  do_send_query(&args);
+  do_send_query((VALUE)&args);
 
   /* this will just block until the result is ready */
   return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);

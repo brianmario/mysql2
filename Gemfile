@@ -2,8 +2,12 @@ source 'https://rubygems.org'
 
 gemspec
 
-gem 'rake', '~> 10.4.2'
-gem 'rake-compiler', '~> 1.0'
+gem 'rake', if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("2.2")
+              '~> 13.0.1'
+            else
+              '< 13'
+            end
+gem 'rake-compiler', '~> 1.1.0'
 
 group :test do
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/

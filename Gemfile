@@ -9,6 +9,9 @@ gem 'rake', if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("2.2")
             end
 gem 'rake-compiler', '~> 1.1.0'
 
+# For local debugging, irb is Gemified since Ruby 2.6
+gem 'irb', require: false
+
 group :test do
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
   gem 'rspec', '~> 3.2'

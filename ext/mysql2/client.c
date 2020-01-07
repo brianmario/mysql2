@@ -1021,6 +1021,7 @@ static VALUE rb_mysql_client_last_id(VALUE self) {
   return ULL2NUM(mysql_insert_id(wrapper->client));
 }
 
+#ifdef CLIENT_SESSION_TRACK
 /* call-seq:
  *    client.session_track
  *
@@ -1046,6 +1047,7 @@ static VALUE rb_mysql_client_session_track(VALUE self, VALUE type) {
   }
   return rbAry;
 }
+#endif
 
 /* call-seq:
  *    client.affected_rows
@@ -1451,7 +1453,6 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "socket", rb_mysql_client_socket, 0);
   rb_define_method(cMysql2Client, "async_result", rb_mysql_client_async_result, 0);
   rb_define_method(cMysql2Client, "last_id", rb_mysql_client_last_id, 0);
-  rb_define_method(cMysql2Client, "session_track", rb_mysql_client_session_track, 1);
   rb_define_method(cMysql2Client, "affected_rows", rb_mysql_client_affected_rows, 0);
   rb_define_method(cMysql2Client, "prepare", rb_mysql_client_prepare_statement, 1);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
@@ -1641,6 +1642,8 @@ void init_mysql2_client() {
 #endif
 
 #ifdef CLIENT_SESSION_TRACK
+  rb_define_method(cMysql2Client, "session_track", rb_mysql_client_session_track, 1);
+
   rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK"), INT2NUM(CLIENT_SESSION_TRACK));
   /* From mysql_com.h -- but stable from at least 5.7.4 through 8.0.20 */
   rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_SYSTEM_VARIABLES"), INT2NUM(SESSION_TRACK_SYSTEM_VARIABLES));

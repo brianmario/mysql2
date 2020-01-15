@@ -42,7 +42,13 @@ fi
 
 # TODO: get SSL working on OS X in Travis
 if ! [[ x$OSTYPE =~ ^xdarwin ]]; then
-  sudo bash .travis_ssl.sh
+  if [[ -n ${DB-} && x$DB =~ ^xmysql57 ]]; then
+    sudo bash .travis_ssl_tls.sh
+  elif [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
+    sudo bash .travis_ssl_tls.sh
+  else
+    sudo bash .travis_ssl.sh
+  fi
   sudo service mysql restart
 fi
 

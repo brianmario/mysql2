@@ -49,7 +49,7 @@ module Mysql2
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
       self.ssl_mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
-
+      self.tls_version = opts[:tls_version] if opts[:tls_version]
       flags = case opts[:flags]
       when Array
         parse_flags_array(opts[:flags], @query_options[:connect_flags])

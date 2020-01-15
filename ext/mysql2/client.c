@@ -921,6 +921,13 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       break;
 #endif
 
+#if defined(MYSQL_OPT_TLS_VERSION) // has TLS_VERSION support
+    case MYSQL_OPT_TLS_VERSION:
+      charval = (const char *)StringValueCStr(value);
+      retval  = charval;
+      break;
+#endif
+
     default:
       return Qfalse;
   }
@@ -1335,6 +1342,14 @@ static VALUE set_secure_auth(VALUE self, VALUE value) {
 #endif
 }
 
+static VALUE set_tls_version(VALUE self, VALUE value) {
+#if defined(MYSQL_OPT_TLS_VERSION) // has TLS Version support
+  return _mysql_client_options(self, MYSQL_OPT_TLS_VERSION, value);
+#else
+  return Qfalse;
+#endif
+}
+
 static VALUE set_read_default_file(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_READ_DEFAULT_FILE, value);
 }
@@ -1453,6 +1468,7 @@ void init_mysql2_client() {
   rb_define_private_method(cMysql2Client, "default_group=", set_read_default_group, 1);
   rb_define_private_method(cMysql2Client, "init_command=", set_init_command, 1);
   rb_define_private_method(cMysql2Client, "default_auth=", set_default_auth, 1);
+  rb_define_private_method(cMysql2Client, "tls_version=", set_tls_version, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
   rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
@@ -1623,6 +1639,12 @@ void init_mysql2_client() {
 #elif defined(HAVE_CONST_MYSQL_OPT_SSL_ENFORCE) // MySQL 5.7.3 - 5.7.10
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"), INT2NUM(SSL_MODE_DISABLED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"), INT2NUM(SSL_MODE_REQUIRED));
+#endif
+
+#ifdef MYSQL_OPT_TLS_VERSION
+  rb_const_set(cMysql2Client, rb_intern("OPT_TLS_VERSION_AVAILABLE"), INT2NUM(1));
+#else
+  rb_const_set(cMysql2Client, rb_intern("OPT_TLS_VERSION_AVAILABLE"), INT2NUM(0));
 #endif
 
 #ifndef HAVE_CONST_SSL_MODE_DISABLED

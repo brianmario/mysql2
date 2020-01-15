@@ -142,13 +142,16 @@ RSpec.describe Mysql2::Client do
       :sslca     => '/etc/mysql/ca-cert.pem',
       :sslcipher => 'DHE-RSA-AES256-SHA',
       :sslverify => true,
+      :tls_version => 'TLSv1.2',
     }
+
     %i[sslkey sslcert sslca].each do |item|
       unless File.exist?(option_overrides[item])
         pending("DON'T WORRY, THIS TEST PASSES - but #{option_overrides[item]} does not exist.")
         break
       end
     end
+
     expect do
       ssl_client = new_client(option_overrides)
     end.not_to raise_error
@@ -159,6 +162,13 @@ RSpec.describe Mysql2::Client do
 
     expect(ssl_client.ssl_cipher).not_to be_empty
     expect(results['Ssl_cipher']).to eql(ssl_client.ssl_cipher)
+
+    performance_schema = @client.query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'performance_schema'")
+    session_status_table_exists = performance_schema.any? { |x| x['TABLE_NAME'] == 'session_status' }
+    if session_status_table_exists && !Mysql2::Client::OPT_TLS_VERSION_AVAILABLE.zero?
+      results = Hash[ssl_client.query("SELECT * FROM performance_schema.session_status WHERE VARIABLE_NAME = 'Ssl_version'").map { |x| x.values_at('VARIABLE_NAME', 'VARIABLE_VALUE') }]
+      expect(results['Ssl_version']).to eql('TLSv1.2')
+    end
   end
 
   def run_gc

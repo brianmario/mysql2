@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-RSpec.describe Mysql2::Client do
+RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   context "using defaults file" do
     let(:cnf_file) { File.expand_path('../../my.cnf', __FILE__) }
 

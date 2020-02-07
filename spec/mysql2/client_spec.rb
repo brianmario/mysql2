@@ -1026,6 +1026,49 @@ RSpec.describe Mysql2::Client do
     expect(@client).to respond_to(:ping)
   end
 
+  context "session_track" do
+    before(:each) do
+      unless Mysql2::Client.const_defined?(:SESSION_TRACK)
+        skip('Server versions must be MySQL 5.7 later.')
+      end
+      @client.query("SET @@SESSION.session_track_system_variables='*';")
+    end
+
+    it "returns changes system variables for SESSION_TRACK_SYSTEM_VARIABLES" do
+      @client.query("SET @@SESSION.session_track_state_change=ON;")
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_SYSTEM_VARIABLES)
+      expect(res).to eq(%w[session_track_state_change ON])
+    end
+
+    it "returns database name for SESSION_TRACK_SCHEMA" do
+      @client.query("USE information_schema")
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_SCHEMA)
+      expect(res).to eq(["information_schema"])
+    end
+
+    it "returns multiple session track type values when available" do
+      @client.query("SET @@SESSION.session_track_transaction_info='CHARACTERISTICS'")
+
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_STATE)
+      expect(res).to eq(["________"])
+
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_CHARACTERISTICS)
+      expect(res).to eq([""])
+
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_STATE_CHANGE)
+      expect(res).to be_nil
+
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_SYSTEM_VARIABLES)
+      expect(res).to eq(%w[session_track_transaction_info CHARACTERISTICS])
+    end
+
+    it "returns empty array if session track type not found" do
+      @client.query("SET @@SESSION.session_track_state_change=ON;")
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_CHARACTERISTICS)
+      expect(res).to be_nil
+    end
+  end
+
   context "select_db" do
     before(:each) do
       2.times do |i|

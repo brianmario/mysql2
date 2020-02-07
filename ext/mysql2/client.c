@@ -1021,13 +1021,13 @@ static VALUE rb_mysql_client_last_id(VALUE self) {
   return ULL2NUM(mysql_insert_id(wrapper->client));
 }
 
-#ifdef CLIENT_SESSION_TRACK
 /* call-seq:
  *    client.session_track
  *
  * Returns information about changes to the session state on the server.
  */
 static VALUE rb_mysql_client_session_track(VALUE self, VALUE type) {
+#ifdef CLIENT_SESSION_TRACK
   const char *data;
   size_t length;
   my_ulonglong retVal;
@@ -1036,7 +1036,7 @@ static VALUE rb_mysql_client_session_track(VALUE self, VALUE type) {
   REQUIRE_CONNECTED(wrapper);
   retVal = mysql_session_track_get_first(wrapper->client, NUM2INT(type), &data, &length);
   if (retVal != 0) {
-    rb_raise_mysql2_error(wrapper);
+    return Qnil;
   }
   VALUE rbAry = rb_ary_new();
   VALUE rbFirst = rb_str_new(data, length);
@@ -1046,8 +1046,10 @@ static VALUE rb_mysql_client_session_track(VALUE self, VALUE type) {
     rb_ary_push(rbAry, rbNext);
   }
   return rbAry;
-}
+#else
+  return Qnil;
 #endif
+}
 
 /* call-seq:
  *    client.affected_rows
@@ -1469,6 +1471,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "query_info_string", rb_mysql_info, 0);
   rb_define_method(cMysql2Client, "ssl_cipher", rb_mysql_get_ssl_cipher, 0);
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
+  rb_define_method(cMysql2Client, "session_track", rb_mysql_client_session_track, 1);
 
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
   rb_define_private_method(cMysql2Client, "read_timeout=", set_read_timeout, 1);
@@ -1642,8 +1645,6 @@ void init_mysql2_client() {
 #endif
 
 #ifdef CLIENT_SESSION_TRACK
-  rb_define_method(cMysql2Client, "session_track", rb_mysql_client_session_track, 1);
-
   rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK"), INT2NUM(CLIENT_SESSION_TRACK));
   /* From mysql_com.h -- but stable from at least 5.7.4 through 8.0.20 */
   rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_SYSTEM_VARIABLES"), INT2NUM(SESSION_TRACK_SYSTEM_VARIABLES));

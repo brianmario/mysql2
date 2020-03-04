@@ -58,6 +58,17 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
 #endif
 
 /*
+ * mariadb-connector-c defines CLIENT_SESSION_TRACKING and SESSION_TRACK_TRANSACTION_TYPE
+ * while mysql-connector-c defines CLIENT_SESSION_TRACK and SESSION_TRACK_TRANSACTION_STATE
+ * This is a hack to take care of both clients.
+ */
+#if defined(CLIENT_SESSION_TRACK)
+#elif defined(CLIENT_SESSION_TRACKING)
+  #define CLIENT_SESSION_TRACK CLIENT_SESSION_TRACKING
+  #define SESSION_TRACK_TRANSACTION_STATE SESSION_TRACK_TRANSACTION_TYPE
+#endif
+
+/*
  * compatibility with mysql-connector-c 6.1.x, and with MySQL 5.7.3 - 5.7.10.
  */
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE

@@ -197,6 +197,23 @@ statement = @client.prepare("SELECT * FROM users WHERE last_login >= ? AND locat
 result = statement.execute(1, "CA", :as => :array)
 ```
 
+Session Tracking information can be accessed with
+
+```ruby
+c = Mysql2::Client.new(
+  host: "127.0.0.1",
+  username: "root",
+  flags: "SESSION_TRACK",
+  init_command: "SET @@SESSION.session_track_schema=ON"
+)
+c.query("INSERT INTO test VALUES (1)")
+session_track_type = Mysql2::Client::SESSION_TRACK_SCHEMA
+session_track_data = c.session_track(session_track_type)
+```
+
+The types of session track types can be found at
+[https://dev.mysql.com/doc/refman/5.7/en/mysql-session-track-get-first.html](https://dev.mysql.com/doc/refman/5.7/en/mysql-session-track-get-first.html)
+
 ## Connection options
 
 You may set the following connection options in Mysql2::Client.new(...):

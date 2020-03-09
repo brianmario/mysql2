@@ -58,6 +58,17 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
 #endif
 
 /*
+ * mariadb-connector-c defines CLIENT_SESSION_TRACKING and SESSION_TRACK_TRANSACTION_TYPE
+ * while mysql-connector-c defines CLIENT_SESSION_TRACK and SESSION_TRACK_TRANSACTION_STATE
+ * This is a hack to take care of both clients.
+ */
+#if defined(CLIENT_SESSION_TRACK)
+#elif defined(CLIENT_SESSION_TRACKING)
+  #define CLIENT_SESSION_TRACK CLIENT_SESSION_TRACKING
+  #define SESSION_TRACK_TRANSACTION_STATE SESSION_TRACK_TRANSACTION_TYPE
+#endif
+
+/*
  * compatibility with mysql-connector-c 6.1.x, and with MySQL 5.7.3 - 5.7.10.
  */
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
@@ -1023,6 +1034,36 @@ static VALUE rb_mysql_client_last_id(VALUE self) {
 }
 
 /* call-seq:
+ *    client.session_track
+ *
+ * Returns information about changes to the session state on the server.
+ */
+static VALUE rb_mysql_client_session_track(VALUE self, VALUE type) {
+#ifdef CLIENT_SESSION_TRACK
+  const char *data;
+  size_t length;
+  my_ulonglong retVal;
+  GET_CLIENT(self);
+
+  REQUIRE_CONNECTED(wrapper);
+  retVal = mysql_session_track_get_first(wrapper->client, NUM2INT(type), &data, &length);
+  if (retVal != 0) {
+    return Qnil;
+  }
+  VALUE rbAry = rb_ary_new();
+  VALUE rbFirst = rb_str_new(data, length);
+  rb_ary_push(rbAry, rbFirst);
+  while(mysql_session_track_get_next(wrapper->client, NUM2INT(type), &data, &length) == 0) {
+    VALUE rbNext = rb_str_new(data, length);
+    rb_ary_push(rbAry, rbNext);
+  }
+  return rbAry;
+#else
+  return Qnil;
+#endif
+}
+
+/* call-seq:
  *    client.affected_rows
  *
  * returns the number of rows changed, deleted, or inserted by the last statement
@@ -1442,6 +1483,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "query_info_string", rb_mysql_info, 0);
   rb_define_method(cMysql2Client, "ssl_cipher", rb_mysql_get_ssl_cipher, 0);
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
+  rb_define_method(cMysql2Client, "session_track", rb_mysql_client_session_track, 1);
 
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
   rb_define_private_method(cMysql2Client, "read_timeout=", set_read_timeout, 1);
@@ -1612,6 +1654,17 @@ void init_mysql2_client() {
    * but we're using it in our default connection flags. */
   rb_const_set(cMysql2Client, rb_intern("CONNECT_ATTRS"),
       INT2NUM(0));
+#endif
+
+#ifdef CLIENT_SESSION_TRACK
+  rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK"), INT2NUM(CLIENT_SESSION_TRACK));
+  /* From mysql_com.h -- but stable from at least 5.7.4 through 8.0.20 */
+  rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_SYSTEM_VARIABLES"), INT2NUM(SESSION_TRACK_SYSTEM_VARIABLES));
+  rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_SCHEMA"), INT2NUM(SESSION_TRACK_SCHEMA));
+  rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_STATE_CHANGE"), INT2NUM(SESSION_TRACK_STATE_CHANGE));
+  rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_GTIDS"), INT2NUM(SESSION_TRACK_GTIDS));
+  rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_TRANSACTION_CHARACTERISTICS"), INT2NUM(SESSION_TRACK_TRANSACTION_CHARACTERISTICS));
+  rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_TRANSACTION_STATE"), INT2NUM(SESSION_TRACK_TRANSACTION_STATE));
 #endif
 
 #if defined(FULL_SSL_MODE_SUPPORT) // MySQL 5.7.11 and above

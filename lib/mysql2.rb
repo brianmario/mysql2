@@ -82,5 +82,6 @@ module Mysql2
     else
       ::Timeout::Error
     end
+    TIMEOUT_ERROR_NEVER = { TIMEOUT_ERROR_CLASS => :never }.freeze
   end
 end

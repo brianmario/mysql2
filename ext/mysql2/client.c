@@ -269,7 +269,7 @@ static VALUE invalidate_fd(int clientfd)
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
-  if (!wrapper->closed) {
+  if (wrapper->initialized && !wrapper->closed) {
     mysql_close(wrapper->client);
     wrapper->closed = 1;
     wrapper->reconnect_enabled = 0;

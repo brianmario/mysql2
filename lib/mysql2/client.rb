@@ -127,7 +127,7 @@ module Mysql2
     end
 
     def query(sql, options = {})
-      Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_CLASS => :never) do
+      Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_NEVER) do
         _query(sql, @query_options.merge(options))
       end
     end

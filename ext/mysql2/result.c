@@ -17,6 +17,20 @@ static rb_encoding *binaryEncoding;
  */
 #define MYSQL2_MIN_TIME 2678400ULL
 
+#define MYSQL2_MAX_BYTES_PER_CHAR 3
+
+/* From Mysql documentations:
+ *   To distinguish between binary and nonbinary data for string data types,
+ *   check whether the charsetnr value is 63. If so, the character set is binary,
+ *   which indicates binary rather than nonbinary data. This enables you to distinguish BINARY
+ *   from CHAR, VARBINARY from VARCHAR, and the BLOB types from the TEXT types.
+ */
+#define MYSQL2_BINARY_CHARSET 63
+
+#ifndef MYSQL_TYPE_JSON
+#define MYSQL_TYPE_JSON 245
+#endif
+
 #define GET_RESULT(self) \
   mysql2_result_wrapper *wrapper; \
   Data_Get_Struct(self, mysql2_result_wrapper, wrapper);
@@ -169,9 +183,171 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
   return rb_field;
 }
 
+static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
+  VALUE rb_field_type;
+  GET_RESULT(self);
+
+  if (wrapper->fieldTypes == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->fieldTypes = rb_ary_new2(wrapper->numberOfFields);
+  }
+
+  rb_field_type = rb_ary_entry(wrapper->fieldTypes, idx);
+  if (rb_field_type == Qnil) {
+    MYSQL_FIELD *field = NULL;
+    rb_encoding *default_internal_enc = rb_default_internal_encoding();
+    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+    int precision;
+
+    field = mysql_fetch_field_direct(wrapper->result, idx);
+
+    switch(field->type) {
+      case MYSQL_TYPE_NULL:         // NULL
+        rb_field_type = rb_str_new_cstr("null");
+        break;
+      case MYSQL_TYPE_TINY:         // signed char
+        rb_field_type = rb_sprintf("tinyint(%ld)", field->length);
+        break;
+      case MYSQL_TYPE_SHORT:        // short int
+        rb_field_type = rb_sprintf("smallint(%ld)", field->length);
+        break;
+      case MYSQL_TYPE_YEAR:         // short int
+        rb_field_type = rb_sprintf("year(%ld)", field->length);
+        break;
+      case MYSQL_TYPE_INT24:        // int
+        rb_field_type = rb_sprintf("mediumint(%ld)", field->length);
+        break;
+      case MYSQL_TYPE_LONG:         // int
+        rb_field_type = rb_sprintf("int(%ld)", field->length);
+        break;
+      case MYSQL_TYPE_LONGLONG:     // long long int
+        rb_field_type = rb_sprintf("bigint(%ld)", field->length);
+        break;
+      case MYSQL_TYPE_FLOAT:        // float
+        rb_field_type = rb_sprintf("float(%ld,%d)", field->length, field->decimals);
+        break;
+      case MYSQL_TYPE_DOUBLE:       // double
+        rb_field_type = rb_sprintf("double(%ld,%d)", field->length, field->decimals);
+        break;
+      case MYSQL_TYPE_TIME:         // MYSQL_TIME
+        rb_field_type = rb_str_new_cstr("time");
+        break;
+      case MYSQL_TYPE_DATE:         // MYSQL_TIME
+      case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
+        rb_field_type = rb_str_new_cstr("date");
+        break;
+      case MYSQL_TYPE_DATETIME:     // MYSQL_TIME
+        rb_field_type = rb_str_new_cstr("datetime");
+        break;
+      case MYSQL_TYPE_TIMESTAMP:    // MYSQL_TIME
+        rb_field_type = rb_str_new_cstr("timestamp");
+        break;
+      case MYSQL_TYPE_DECIMAL:      // char[]
+      case MYSQL_TYPE_NEWDECIMAL:   // char[]
+        /*
+          Handle precision similar to this line from mysql's code:
+          https://github.com/mysql/mysql-server/blob/ea7d2e2d16ac03afdd9cb72a972a95981107bf51/sql/field.cc#L2246
+        */
+        precision = field->length - (field->decimals > 0 ? 2 : 1);
+        rb_field_type = rb_sprintf("decimal(%ld,%d)", precision, field->decimals);
+        break;
+      case MYSQL_TYPE_STRING:       // char[]
+        if (field->flags & ENUM_FLAG) {
+          rb_field_type = rb_str_new_cstr("enum");
+        } else if (field->flags & SET_FLAG) {
+          rb_field_type = rb_str_new_cstr("set");
+        } else {
+          if (field->charsetnr == MYSQL2_BINARY_CHARSET) {
+            rb_field_type = rb_sprintf("binary(%ld)", field->length);
+          } else {
+            rb_field_type = rb_sprintf("char(%ld)", field->length / MYSQL2_MAX_BYTES_PER_CHAR);
+          }
+        }
+        break;
+      case MYSQL_TYPE_VAR_STRING:   // char[]
+        if (field->charsetnr == MYSQL2_BINARY_CHARSET) {
+          rb_field_type = rb_sprintf("varbinary(%ld)", field->length);
+        } else {
+          rb_field_type = rb_sprintf("varchar(%ld)", field->length / MYSQL2_MAX_BYTES_PER_CHAR);
+        }
+        break;
+      case MYSQL_TYPE_VARCHAR:      // char[]
+        rb_field_type = rb_sprintf("varchar(%ld)", field->length / MYSQL2_MAX_BYTES_PER_CHAR);
+        break;
+      case MYSQL_TYPE_TINY_BLOB:    // char[]
+        rb_field_type = rb_str_new_cstr("tinyblob");
+        break;
+      case MYSQL_TYPE_BLOB:         // char[]
+        if (field->charsetnr == MYSQL2_BINARY_CHARSET) {
+          switch(field->length) {
+            case 255:
+              rb_field_type = rb_str_new_cstr("tinyblob");
+              break;
+            case 65535:
+              rb_field_type = rb_str_new_cstr("blob");
+              break;
+            case 16777215:
+              rb_field_type = rb_str_new_cstr("mediumblob");
+              break;
+            case 4294967295:
+              rb_field_type = rb_str_new_cstr("longblob");
+            default:
+              break;
+          }
+        } else {
+          if (field->length == (255 * MYSQL2_MAX_BYTES_PER_CHAR)) {
+            rb_field_type = rb_str_new_cstr("tinytext");
+          } else if (field->length == (65535 * MYSQL2_MAX_BYTES_PER_CHAR)) {
+            rb_field_type = rb_str_new_cstr("text");
+          } else if (field->length == (16777215 * MYSQL2_MAX_BYTES_PER_CHAR)) {
+            rb_field_type = rb_str_new_cstr("mediumtext");
+          } else if (field->length == 4294967295) {
+            rb_field_type = rb_str_new_cstr("longtext");
+          } else {
+            rb_field_type = rb_sprintf("text(%ld)", field->length);
+          }
+        }
+        break;
+      case MYSQL_TYPE_MEDIUM_BLOB:  // char[]
+        rb_field_type = rb_str_new_cstr("mediumblob");
+        break;
+      case MYSQL_TYPE_LONG_BLOB:    // char[]
+        rb_field_type = rb_str_new_cstr("longblob");
+        break;
+      case MYSQL_TYPE_BIT:          // char[]
+        rb_field_type = rb_sprintf("bit(%ld)", field->length);
+        break;
+      case MYSQL_TYPE_SET:          // char[]
+        rb_field_type = rb_str_new_cstr("set");
+        break;
+      case MYSQL_TYPE_ENUM:         // char[]
+        rb_field_type = rb_str_new_cstr("enum");
+        break;
+      case MYSQL_TYPE_GEOMETRY:     // char[]
+        rb_field_type = rb_str_new_cstr("geometry");
+        break;
+      case MYSQL_TYPE_JSON:         // json
+        rb_field_type = rb_str_new_cstr("json");
+        break;
+      default:
+        rb_field_type = rb_str_new_cstr("unknown");
+        break;
+    }
+
+    rb_enc_associate(rb_field_type, conn_enc);
+    if (default_internal_enc) {
+      rb_field_type = rb_str_export_to_enc(rb_field_type, default_internal_enc);
+    }
+
+    rb_ary_store(wrapper->fieldTypes, idx, rb_field_type);
+  }
+
+  return rb_field_type;
+}
+
 static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc) {
   /* if binary flag is set, respect its wishes */
-  if (field.flags & BINARY_FLAG && field.charsetnr == 63) {
+  if (field.flags & BINARY_FLAG && field.charsetnr == MYSQL2_BINARY_CHARSET) {
     rb_enc_associate(val, binaryEncoding);
   } else if (!field.charsetnr) {
     /* MySQL 4.x may not provide an encoding, binary will get the bytes through */
@@ -716,6 +892,25 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   return wrapper->fields;
 }
 
+static VALUE rb_mysql_result_fetch_field_types(VALUE self) {
+  unsigned int i = 0;
+
+  GET_RESULT(self);
+
+  if (wrapper->fieldTypes == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->fieldTypes = rb_ary_new2(wrapper->numberOfFields);
+  }
+
+  if ((my_ulonglong)RARRAY_LEN(wrapper->fieldTypes) != wrapper->numberOfFields) {
+    for (i=0; i<wrapper->numberOfFields; i++) {
+      rb_mysql_result_fetch_field_type(self, i);
+    }
+  }
+
+  return wrapper->fieldTypes;
+}
+
 static VALUE rb_mysql_result_each_(VALUE self,
                                    VALUE(*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args),
                                    const result_each_args *args)
@@ -934,6 +1129,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->resultFreed = 0;
   wrapper->result = r;
   wrapper->fields = Qnil;
+  wrapper->fieldTypes = Qnil;
   wrapper->rows = Qnil;
   wrapper->encoding = encoding;
   wrapper->streamingComplete = 0;
@@ -971,6 +1167,7 @@ void init_mysql2_result() {
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
+  rb_define_method(cMysql2Result, "field_types", rb_mysql_result_fetch_field_types, 0);
   rb_define_method(cMysql2Result, "free", rb_mysql_result_free_, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
   rb_define_alias(cMysql2Result, "size", "count");

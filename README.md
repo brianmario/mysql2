@@ -165,11 +165,12 @@ client.query("SELECT * FROM users WHERE group='githubbers'", :symbolize_keys => 
 end
 ```
 
-You can get the headers and the columns in the order that they were returned
+You can get the headers, columns, and the field types in the order that they were returned
 by the query like this:
 
 ``` ruby
 headers = results.fields # <= that's an array of field names, in order
+types = results.field_types # <= that's an array of field types, in order
 results.each(:as => :array) do |row|
   # Each row is an array, ordered the same as the query results
   # An otter's den is called a "holt" or "couch"

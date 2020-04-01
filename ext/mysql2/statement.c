@@ -572,10 +572,17 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
 
 void init_mysql2_statement() {
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
+  rb_global_variable(&cDate);
+
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
+  rb_global_variable(&cDateTime);
+
   cBigDecimal = rb_const_get(rb_cObject, rb_intern("BigDecimal"));
+  rb_global_variable(&cBigDecimal);
 
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
+  rb_global_variable(&cMysql2Statement);
+
   rb_define_method(cMysql2Statement, "param_count", rb_mysql_stmt_param_count, 0);
   rb_define_method(cMysql2Statement, "field_count", rb_mysql_stmt_field_count, 0);
   rb_define_method(cMysql2Statement, "_execute", rb_mysql_stmt_execute, -1);

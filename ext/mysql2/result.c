@@ -1162,9 +1162,13 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
 
 void init_mysql2_result() {
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
+  rb_global_variable(&cDate);
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
+  rb_global_variable(&cDateTime);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
+  rb_global_variable(&cMysql2Result);
+  
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
   rb_define_method(cMysql2Result, "field_types", rb_mysql_result_fetch_field_types, 0);

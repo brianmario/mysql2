@@ -1453,6 +1453,7 @@ void init_mysql2_client() {
   mMysql2      = rb_define_module("Mysql2"); Teach RDoc about Mysql2 constant.
 #endif
   cMysql2Client = rb_define_class_under(mMysql2, "Client", rb_cObject);
+  rb_global_variable(&cMysql2Client);
 
   rb_define_alloc_func(cMysql2Client, allocate);
 

@@ -1297,6 +1297,10 @@ void init_mysql2_client() {
 #ifdef CLIENT_LONG_PASSWORD
   rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),
       LONG2NUM(CLIENT_LONG_PASSWORD));
+#else
+  /* HACK because MariaDB 10.2 no longer defines this constant,
+   * but we're using it in our default connection flags. */
+  rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"), INT2NUM(0));
 #endif
 
 #ifdef CLIENT_FOUND_ROWS

@@ -297,7 +297,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, ID db_timezone, ID app_timezo
             break;
           }
           msec = msec_char_to_uint(msec_char, sizeof(msec_char));
-          val = rb_funcall(rb_cTime, db_timezone, 6, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
+          val = rb_funcall(rb_cTime, db_timezone, 7, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
           if (!NIL_P(app_timezone)) {
             if (app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);

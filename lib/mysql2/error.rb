@@ -16,7 +16,7 @@ module Mysql2
     def initialize(msg, server_version=nil)
       self.server_version = server_version
 
-      super(clean_message(msg))
+      super(mysql2_clean_message(msg))
     end
 
     def sql_state=(state)
@@ -52,7 +52,9 @@ module Mysql2
     # Except for if we're on 1.8, where we'll do nothing ;)
     #
     # Returns a valid UTF-8 string in Ruby 1.9+, the original string on Ruby 1.8
-    def clean_message(message)
+    
+    # the name `mysql2_clean_message` is used to avoid conflict with `clean_message` method in activesupport 2.3
+    def mysql2_clean_message(message)
       return message if !message.respond_to?(:encoding)
 
       if @server_version && @server_version > 50500

@@ -47,7 +47,9 @@ dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w[
   /usr/local/mysql-*
   /usr/local/lib/mysql5*
   /usr/local/opt/mysql5*
+  /usr/local/opt/mysql@*
   /usr/local/opt/mysql-client
+  /usr/local/opt/mysql-client@*
 ].map { |dir| dir << '/bin' }
 
 # For those without HOMEBREW_ROOT in PATH

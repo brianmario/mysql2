@@ -21,6 +21,11 @@ def add_ssl_defines(header)
   $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if has_no_support
 end
 
+# Homebrew openssl
+if RUBY_PLATFORM =~ /darwin/
+  $LDFLAGS << ' -L/usr/local/opt/openssl/lib'
+end
+
 # 2.1+
 have_func('rb_absint_size')
 have_func('rb_absint_singlebit_p')

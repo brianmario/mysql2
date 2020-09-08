@@ -21,6 +21,9 @@ def add_ssl_defines(header)
   $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if has_no_support
 end
 
+# Homebrew openssl
+$LDFLAGS << ' -L/usr/local/opt/openssl/lib' if RUBY_PLATFORM =~ /darwin/
+
 # 2.1+
 have_func('rb_absint_size')
 have_func('rb_absint_singlebit_p')
@@ -42,6 +45,9 @@ dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w[
   /usr/local/mysql-*
   /usr/local/lib/mysql5*
   /usr/local/opt/mysql5*
+  /usr/local/opt/mysql@*
+  /usr/local/opt/mysql-client
+  /usr/local/opt/mysql-client@*
 ].map { |dir| dir << '/bin' }
 
 # For those without HOMEBREW_ROOT in PATH

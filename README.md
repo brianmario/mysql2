@@ -21,7 +21,7 @@ The API consists of three classes:
 
 ### General Instructions
 
-``` sh
+```sh
 gem install mysql2
 ```
 
@@ -33,43 +33,43 @@ system-specific instructions.
 
 By default, the mysql2 gem will try to find a copy of MySQL in this order:
 
-* Option `--with-mysql-dir`, if provided (see below).
-* Option `--with-mysql-config`, if provided (see below).
-* Several typical paths for `mysql_config` (default for the majority of users).
-* The directory `/usr/local`.
+-   Option `--with-mysql-dir`, if provided (see below).
+-   Option `--with-mysql-config`, if provided (see below).
+-   Several typical paths for `mysql_config` (default for the majority of users).
+-   The directory `/usr/local`.
 
 ### Configuration options
 
 Use these options by `gem install mysql2 -- [--optionA] [--optionB=argument]`.
 
-* `--with-mysql-dir[=/path/to/mysqldir]` -
-Specify the directory where MySQL is installed. The mysql2 gem will not use
-`mysql_config`, but will instead look at `mysqldir/lib` and `mysqldir/include`
-for the library and header files.
-This option is mutually exclusive with `--with-mysql-config`.
+-   `--with-mysql-dir[=/path/to/mysqldir]` -
+    Specify the directory where MySQL is installed. The mysql2 gem will not use
+    `mysql_config`, but will instead look at `mysqldir/lib` and `mysqldir/include`
+    for the library and header files.
+    This option is mutually exclusive with `--with-mysql-config`.
 
-* `--with-mysql-config[=/path/to/mysql_config]` -
-Specify a path to the `mysql_config` binary provided by your copy of MySQL. The
-mysql2 gem will ask this `mysql_config` binary about the compiler and linker
-arguments needed.
-This option is mutually exclusive with `--with-mysql-dir`.
+-   `--with-mysql-config[=/path/to/mysql_config]` -
+    Specify a path to the `mysql_config` binary provided by your copy of MySQL. The
+    mysql2 gem will ask this `mysql_config` binary about the compiler and linker
+    arguments needed.
+    This option is mutually exclusive with `--with-mysql-dir`.
 
-* `--with-mysql-rpath=/path/to/mysql/lib` / `--without-mysql-rpath` -
-Override the runtime path used to find the MySQL libraries.
-This may be needed if you deploy to a system where these libraries
-are located somewhere different than on your build system.
-This overrides any rpath calculated by default or by the options above.
+-   `--with-mysql-rpath=/path/to/mysql/lib` / `--without-mysql-rpath` -
+    Override the runtime path used to find the MySQL libraries.
+    This may be needed if you deploy to a system where these libraries
+    are located somewhere different than on your build system.
+    This overrides any rpath calculated by default or by the options above.
 
-* `--with-sanitize[=address,cfi,integer,memory,thread,undefined]` -
-Enable sanitizers for Clang / GCC. If no argument is given, try to enable
-all sanitizers or fail if none are available. If a command-separated list of
-specific sanitizers is given, configure will fail unless they all are available.
-Note that the some sanitizers may incur a performance penalty, and the Address
-Sanitizer may require a runtime library.
-To see line numbers in backtraces, declare these environment variables
-(adjust the llvm-symbolizer path as needed for your system):
+-   `--with-sanitize[=address,cfi,integer,memory,thread,undefined]` -
+    Enable sanitizers for Clang / GCC. If no argument is given, try to enable
+    all sanitizers or fail if none are available. If a command-separated list of
+    specific sanitizers is given, configure will fail unless they all are available.
+    Note that the some sanitizers may incur a performance penalty, and the Address
+    Sanitizer may require a runtime library.
+    To see line numbers in backtraces, declare these environment variables
+    (adjust the llvm-symbolizer path as needed for your system):
 
-``` sh
+```sh
   export ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer-3.4
   export ASAN_OPTIONS=symbolize=1
 ```
@@ -104,16 +104,16 @@ By default, the `libmysql.dll` library will be copied into the mysql2 gem
 directory. To prevent this, add the flag `--no-vendor-libmysql`. The mysql2 gem
 will search for `libmysql.dll` in the following paths, in order:
 
-* Environment variable `RUBY_MYSQL2_LIBMYSQL_DLL=C:\path\to\libmysql.dll`
-  (_note the Windows-style backslashes_).
-* In the mysql2 gem's own directory `vendor/libmysql.dll`
-* In the system's default library search paths.
+-   Environment variable `RUBY_MYSQL2_LIBMYSQL_DLL=C:\path\to\libmysql.dll`
+    (_note the Windows-style backslashes_).
+-   In the mysql2 gem's own directory `vendor/libmysql.dll`
+-   In the system's default library search paths.
 
 ## Usage
 
 Connect to a database:
 
-``` ruby
+```ruby
 # this takes a hash of options, almost all of which map directly
 # to the familiar database.yml in rails
 # See http://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/Mysql2Adapter.html
@@ -122,13 +122,13 @@ client = Mysql2::Client.new(:host => "localhost", :username => "root")
 
 Then query it:
 
-``` ruby
+```ruby
 results = client.query("SELECT * FROM users WHERE group='githubbers'")
 ```
 
 Need to escape something first?
 
-``` ruby
+```ruby
 escaped = client.escape("gi'thu\"bbe\0r's")
 results = client.query("SELECT * FROM users WHERE group='#{escaped}'")
 ```
@@ -137,7 +137,7 @@ You can get a count of your results with `results.count`.
 
 Finally, iterate over the results:
 
-``` ruby
+```ruby
 results.each do |row|
   # conveniently, row is a hash
   # the keys are the fields, as you'd expect
@@ -151,7 +151,7 @@ end
 
 Or, you might just keep it simple:
 
-``` ruby
+```ruby
 client.query("SELECT * FROM users WHERE group='githubbers'").each do |row|
   # do something with row, it's ready to rock
 end
@@ -159,7 +159,7 @@ end
 
 How about with symbolized keys?
 
-``` ruby
+```ruby
 client.query("SELECT * FROM users WHERE group='githubbers'", :symbolize_keys => true).each do |row|
   # do something with row, it's ready to rock
 end
@@ -168,7 +168,7 @@ end
 You can get the headers, columns, and the field types in the order that they were returned
 by the query like this:
 
-``` ruby
+```ruby
 headers = results.fields # <= that's an array of field names, in order
 types = results.field_types # <= that's an array of field types, in order
 results.each(:as => :array) do |row|
@@ -186,7 +186,7 @@ to the execute method.
 Be sure to read about the known limitations of prepared statements at
 [https://dev.mysql.com/doc/refman/5.6/en/c-api-prepared-statement-problems.html](https://dev.mysql.com/doc/refman/5.6/en/c-api-prepared-statement-problems.html)
 
-``` ruby
+```ruby
 statement = @client.prepare("SELECT * FROM users WHERE login_count = ?")
 result1 = statement.execute(1)
 result2 = statement.execute(2)
@@ -219,7 +219,7 @@ The types of session track types can be found at
 
 You may set the following connection options in Mysql2::Client.new(...):
 
-``` ruby
+```ruby
 Mysql2::Client.new(
   :host,
   :username,
@@ -248,13 +248,13 @@ Mysql2::Client.new(
 The underlying MySQL client library uses the `:host` parameter to determine the
 type of connection to make, with special interpretation you should be aware of:
 
-* An empty value or `"localhost"` will attempt a local connection:
-  * On Unix, connect to the default local socket path. (To set a custom socket
-    path, use the `:socket` parameter).
-  * On Windows, connect using a shared-memory connection, if enabled, or TCP.
-* A value of `"."` on Windows specifies a named-pipe connection.
-* An IPv4 or IPv6 address will result in a TCP connection.
-* Any other value will be looked up as a hostname for a TCP connection.
+-   An empty value or `"localhost"` will attempt a local connection:
+    -   On Unix, connect to the default local socket path. (To set a custom socket
+        path, use the `:socket` parameter).
+    -   On Windows, connect using a shared-memory connection, if enabled, or TCP.
+-   A value of `"."` on Windows specifies a named-pipe connection.
+-   An IPv4 or IPv6 address will result in a TCP connection.
+-   Any other value will be looked up as a hostname for a TCP connection.
 
 ### SSL options
 
@@ -262,11 +262,13 @@ Setting any of the following options will enable an SSL connection, but only if
 your MySQL client library and server have been compiled with SSL support.
 MySQL client library defaults will be used for any parameters that are left out
 or set to nil. Relative paths are allowed, and may be required by managed
-hosting providers such as Heroku. For MySQL versions > `5.7.11` do not use `:sslverify` 
-key as that correlates to `SSL_VERIFY_VERIFY_CERT` which is deprecated in version `5.7.11` and completely removed in version `8.0`.
-Use [`:ssl_mode`](https://dev.mysql.com/doc/refman/5.7/en/connection-options.html#option_general_ssl-mode) instead. 
+hosting providers such as Heroku. For MySQL versions 5.7.11 and higher,
+use `:ssl_mode` to prefer or require an SSL connection and certificate validation.
+Check the MySQL [docs](https://dev.mysql.com/doc/refman/5.7/en/connection-options.html#option_general_ssl-mode)
+for the available options for `:ssl_mode` and what they mean.
+For earlier versions of MySQL, use the `:sslverify` boolean
 
-``` ruby
+```ruby
 Mysql2::Client.new(
   # ...options as above...,
   :sslkey => '/path/to/client-key.pem',
@@ -302,20 +304,20 @@ Plain flags are added to the default flags, while flags prefixed with `-`
 Active Record typically reads its configuration from a file named `database.yml` or an environment variable `DATABASE_URL`.
 Use the value `mysql2` as the adapter name. For example:
 
-``` yaml
+```yaml
 development:
-  adapter: mysql2
-  encoding: utf8
-  database: my_db_name
-  username: root
-  password: my_password
-  host: 127.0.0.1
-  port: 3306
-  flags:
-    - -COMPRESS
-    - FOUND_ROWS
-    - MULTI_STATEMENTS
-  secure_auth: false
+    adapter: mysql2
+    encoding: utf8
+    database: my_db_name
+    username: root
+    password: my_password
+    host: 127.0.0.1
+    port: 3306
+    flags:
+        - -COMPRESS
+        - FOUND_ROWS
+        - MULTI_STATEMENTS
+    secure_auth: false
 ```
 
 ### Using Active Record's DATABASE_URL
@@ -323,7 +325,7 @@ development:
 Active Record typically reads its configuration from a file named `database.yml` or an environment variable `DATABASE_URL`.
 Use the value `mysql2` as the protocol name. For example:
 
-``` shell
+```shell
 DATABASE_URL=mysql2://sql_user:sql_pass@sql_host_name:port/sql_db_name?option1=value1&option2=value2
 ```
 
@@ -332,7 +334,7 @@ DATABASE_URL=mysql2://sql_user:sql_pass@sql_host_name:port/sql_db_name?option1=v
 You may read configuration options from a MySQL configuration file by passing
 the `:default_file` and `:default_group` parameters. For example:
 
-``` ruby
+```ruby
 Mysql2::Client.new(:default_file => '/user/.my.cnf', :default_group => 'client')
 ```
 
@@ -342,7 +344,7 @@ If you specify the `:init_command` option, the SQL string you provide will be ex
 If `:reconnect` is set to `true`, init_command will also be executed after a successful reconnect.
 It is useful if you want to provide session options which survive reconnection.
 
-``` ruby
+```ruby
 Mysql2::Client.new(:init_command => "SET @@SESSION.sql_mode = 'STRICT_ALL_TABLES'")
 ```
 
@@ -353,7 +355,7 @@ connect with flags `Mysql2::Client::MULTI_STATEMENTS`. Multiple result sets can
 be used with stored procedures that return more than one result set, and for
 bundling several SQL statements into a single call to `client.query`.
 
-``` ruby
+```ruby
 client = Mysql2::Client.new(:host => "localhost", :username => "root", :flags => Mysql2::Client::MULTI_STATEMENTS)
 result = client.query('CALL sp_customer_list( 25, 10 )')
 # result now contains the first result set
@@ -370,7 +372,7 @@ raised until `client.next_result` is called to find the status of the respective
 query. Subsequent queries are not executed if an earlier query raised an
 exception. Subsequent calls to `client.next_result` will return false.
 
-``` ruby
+```ruby
 result = client.query('SELECT 1; SELECT 2; SELECT A; SELECT 3')
 p result.first
 
@@ -392,26 +394,26 @@ next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
 
 The default config hash is at:
 
-``` ruby
+```ruby
 Mysql2::Client.default_query_options
 ```
 
 which defaults to:
 
-``` ruby
+```ruby
 {:async => false, :as => :hash, :symbolize_keys => false}
 ```
 
 that can be used as so:
 
-``` ruby
+```ruby
 # these are the defaults all Mysql2::Client instances inherit
 Mysql2::Client.default_query_options.merge!(:as => :array)
 ```
 
 or
 
-``` ruby
+```ruby
 # this will change the defaults for all future results returned by the #query method _for this connection only_
 c = Mysql2::Client.new
 c.query_options.merge!(:symbolize_keys => true)
@@ -419,7 +421,7 @@ c.query_options.merge!(:symbolize_keys => true)
 
 or
 
-``` ruby
+```ruby
 # this will set the options for the Mysql2::Result instance returned from the #query method
 c = Mysql2::Client.new
 c.query(sql, :symbolize_keys => true)
@@ -427,7 +429,7 @@ c.query(sql, :symbolize_keys => true)
 
 or
 
-``` ruby
+```ruby
 # this will set the options for the Mysql2::Result instance returned from the #execute method
 c = Mysql2::Client.new
 s = c.prepare(sql)
@@ -448,7 +450,7 @@ The default result type is set to :hash, but you can override a previous setting
 
 Mysql2 now supports two timezone options:
 
-``` ruby
+```ruby
 :database_timezone # this is the timezone Mysql2 will assume fields are already stored as, and will use this when creating the initial Time objects in ruby
 :application_timezone # this is the timezone Mysql2 will convert to before finally handing back to the caller
 ```
@@ -462,14 +464,14 @@ Both options only allow two values - `:local` or `:utc` - with the exception tha
 
 You can now tell Mysql2 to cast `tinyint(1)` fields to boolean values in Ruby with the `:cast_booleans` option.
 
-``` ruby
+```ruby
 client = Mysql2::Client.new
 result = client.query("SELECT * FROM table_with_boolean_field", :cast_booleans => true)
 ```
 
 Keep in mind that this works only with fields and not with computed values, e.g. this result will contain `1`, not `true`:
 
-``` ruby
+```ruby
 client = Mysql2::Client.new
 result = client.query("SELECT true", :cast_booleans => true)
 ```
@@ -478,16 +480,16 @@ CAST function wouldn't help here as there's no way to cast to TINYINT(1). Appare
 
 ### Skipping casting
 
-Mysql2 casting is fast, but not as fast as not casting data.  In rare cases where typecasting is not needed, it will be faster to disable it by providing :cast => false. (Note that :cast => false overrides :cast_booleans => true.)
+Mysql2 casting is fast, but not as fast as not casting data. In rare cases where typecasting is not needed, it will be faster to disable it by providing :cast => false. (Note that :cast => false overrides :cast_booleans => true.)
 
-``` ruby
+```ruby
 client = Mysql2::Client.new
 result = client.query("SELECT * FROM table", :cast => false)
 ```
 
 Here are the results from the `query_without_mysql_casting.rb` script in the benchmarks folder:
 
-``` sh
+```sh
                            user     system      total        real
 Mysql2 (cast: true)    0.340000   0.000000   0.340000 (  0.405018)
 Mysql2 (cast: false)   0.160000   0.010000   0.170000 (  0.209937)
@@ -495,23 +497,23 @@ Mysql                  0.080000   0.000000   0.080000 (  0.129355)
 do_mysql               0.520000   0.010000   0.530000 (  0.574619)
 ```
 
-Although Mysql2 performs reasonably well at retrieving uncasted data, it (currently) is not as fast as the Mysql gem.  In spite of this small disadvantage, Mysql2 still sports a friendlier interface and doesn't block the entire ruby process when querying.
+Although Mysql2 performs reasonably well at retrieving uncasted data, it (currently) is not as fast as the Mysql gem. In spite of this small disadvantage, Mysql2 still sports a friendlier interface and doesn't block the entire ruby process when querying.
 
 ### Async
 
 NOTE: Not supported on Windows.
 
-`Mysql2::Client` takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.
+`Mysql2::Client` takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for _all_ queries.
 But, in order to take full advantage of it in your Ruby code, you can do:
 
-``` ruby
+```ruby
 client.query("SELECT sleep(5)", :async => true)
 ```
 
 Which will return nil immediately. At this point you'll probably want to use some socket monitoring mechanism
 like EventMachine or even IO.select. Once the socket becomes readable, you can do:
 
-``` ruby
+```ruby
 # result will be a Mysql2::Result instance
 result = client.async_result
 ```
@@ -532,14 +534,14 @@ This would be helpful if you wanted to iterate over the results in a streaming m
 
 `Mysql2::Client` can optionally only fetch rows from the server on demand by setting `:stream => true`. This is handy when handling very large result sets which might not fit in memory on the client.
 
-``` ruby
+```ruby
 result = client.query("SELECT * FROM really_big_Table", :stream => true)
 ```
 
 There are a few things that need to be kept in mind while using streaming:
 
-* `:cache_rows` is ignored currently. (if you want to use `:cache_rows` you probably don't want to be using `:stream`)
-* You must fetch all rows in the result set of your query before you can make new queries. (i.e. with `Mysql2::Result#each`)
+-   `:cache_rows` is ignored currently. (if you want to use `:cache_rows` you probably don't want to be using `:stream`)
+-   You must fetch all rows in the result set of your query before you can make new queries. (i.e. with `Mysql2::Result#each`)
 
 Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: [http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html](http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html).
 
@@ -562,21 +564,21 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 This gem is tested with the following Ruby versions on Linux and Mac OS X:
 
-* Ruby MRI 2.0.0, 2.1.x, 2.2.x, 2.3.x, 2.4.x, 2.5.x, 2.6.x
-* Rubinius 2.x and 3.x do work but may fail under some workloads
+-   Ruby MRI 2.0.0, 2.1.x, 2.2.x, 2.3.x, 2.4.x, 2.5.x, 2.6.x
+-   Rubinius 2.x and 3.x do work but may fail under some workloads
 
 This gem is tested with the following MySQL and MariaDB versions:
 
-* MySQL 5.5, 5.6, 5.7, 8.0
-* MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
-* MariaDB 5.5, 10.0, 10.1, 10.2, 10.3
+-   MySQL 5.5, 5.6, 5.7, 8.0
+-   MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
+-   MariaDB 5.5, 10.0, 10.1, 10.2, 10.3
 
 ### Ruby on Rails / Active Record
 
-* mysql2 0.5.x works with Rails / Active Record 4.2.11, 5.0.7, 5.1.6, and higher.
-* mysql2 0.4.x works with Rails / Active Record 4.2.5 - 5.0 and higher.
-* mysql2 0.3.x works with Rails / Active Record 3.1, 3.2, 4.x, 5.0.
-* mysql2 0.2.x works with Rails / Active Record 2.3 - 3.0.
+-   mysql2 0.5.x works with Rails / Active Record 4.2.11, 5.0.7, 5.1.6, and higher.
+-   mysql2 0.4.x works with Rails / Active Record 4.2.5 - 5.0 and higher.
+-   mysql2 0.3.x works with Rails / Active Record 3.1, 3.2, 4.x, 5.0.
+-   mysql2 0.2.x works with Rails / Active Record 2.3 - 3.0.
 
 ### Asynchronous Active Record
 
@@ -592,7 +594,7 @@ Use the prefix "mysql2://" in your connection specification.
 The mysql2 EventMachine deferrable api allows you to make async queries using EventMachine,
 while specifying callbacks for success for failure. Here's a simple example:
 
-``` ruby
+```ruby
 require 'mysql2/em'
 
 EM.run do
@@ -618,12 +620,12 @@ The do_mysql gem also converts MySQL fields types, but has a considerably more c
 
 The mysql gem returns only nil or string data types, leaving you to convert field values to Ruby types in Ruby-land, which is much slower than mysql2's C code.
 
-For a comparative benchmark, the script below performs a basic "SELECT * FROM"
+For a comparative benchmark, the script below performs a basic "SELECT \* FROM"
 query on a table with 30k rows and fields of nearly every Ruby-representable
 data type, then iterating over every row using an #each like method yielding a
 block:
 
-``` sh
+```sh
          user       system     total       real
 Mysql2   0.750000   0.180000   0.930000   (1.821655)
 do_mysql 1.650000   0.200000   1.850000   (2.811357)
@@ -636,7 +638,7 @@ These results are from the `query_with_mysql_casting.rb` script in the benchmark
 
 Use 'bundle install' to install the necessary development and testing gems:
 
-``` sh
+```sh
 bundle install
 rake
 ```
@@ -644,7 +646,7 @@ rake
 The tests require the "test" database to exist, and expect to connect
 both as root and the running user, both with a blank password:
 
-``` sql
+```sql
 CREATE DATABASE test;
 CREATE USER '<user>'@'localhost' IDENTIFIED BY '';
 GRANT ALL PRIVILEGES ON test.* TO '<user>'@'localhost';
@@ -658,12 +660,12 @@ though.
 
 ## Special Thanks
 
-* Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude
-* [Yury Korolev](http://github.com/yury) - for TONS of help testing the Active Record adapter
-* [Aaron Patterson](http://github.com/tenderlove) - tons of contributions, suggestions and general badassness
-* [Mike Perham](http://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
-* [Aaron Stone](http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support
-* [Kouhei Ueno](https://github.com/nyaxt) - for the original work on Prepared Statements way back in 2012
-* [John Cant](http://github.com/johncant) - polishing and updating Prepared Statements support
-* [Justin Case](http://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
-* [Tamir Duberstein](http://github.com/tamird) - for help with timeouts and all around updates and cleanups
+-   Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude
+-   [Yury Korolev](http://github.com/yury) - for TONS of help testing the Active Record adapter
+-   [Aaron Patterson](http://github.com/tenderlove) - tons of contributions, suggestions and general badassness
+-   [Mike Perham](http://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
+-   [Aaron Stone](http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support
+-   [Kouhei Ueno](https://github.com/nyaxt) - for the original work on Prepared Statements way back in 2012
+-   [John Cant](http://github.com/johncant) - polishing and updating Prepared Statements support
+-   [Justin Case](http://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
+-   [Tamir Duberstein](http://github.com/tamird) - for help with timeouts and all around updates and cleanups

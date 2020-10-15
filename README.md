@@ -236,7 +236,6 @@ Mysql2::Client.new(
   :reconnect = true/false,
   :local_infile = true/false,
   :secure_auth = true/false,
-  :ssl_mode = :disabled / :preferred / :required / :verify_ca / :verify_identity,
   :default_file = '/path/to/my.cfg',
   :default_group = 'my.cfg section',
   :default_auth = 'authentication_windows_client'
@@ -263,8 +262,9 @@ Setting any of the following options will enable an SSL connection, but only if
 your MySQL client library and server have been compiled with SSL support.
 MySQL client library defaults will be used for any parameters that are left out
 or set to nil. Relative paths are allowed, and may be required by managed
-hosting providers such as Heroku. Set `:sslverify => true` to require that the
-server presents a valid certificate.
+hosting providers such as Heroku. For MySQL versions > `5.7.11` do not use `:sslverify` 
+key as that correlates to `SSL_VERIFY_VERIFY_CERT` which is deprecated in version `5.7.11` and completely removed in version `8.0`.
+Use [`:ssl_mode`](https://dev.mysql.com/doc/refman/5.7/en/connection-options.html#option_general_ssl-mode) instead. 
 
 ``` ruby
 Mysql2::Client.new(
@@ -275,6 +275,7 @@ Mysql2::Client.new(
   :sslcapath => '/path/to/cacerts',
   :sslcipher => 'DHE-RSA-AES256-SHA',
   :sslverify => true,
+  :ssl_mode = :disabled / :preferred / :required / :verify_ca / :verify_identity,
   )
 ```
 

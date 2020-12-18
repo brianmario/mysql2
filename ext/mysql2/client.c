@@ -797,6 +797,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
+  (void)RB_GC_GUARD(sql);
 
   if (rb_hash_aref(current, sym_async) == Qtrue) {
     return Qnil;
@@ -810,6 +811,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   }
 #else
   do_send_query((VALUE)&args);
+  (void)RB_GC_GUARD(sql);
 
   /* this will just block until the result is ready */
   return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);

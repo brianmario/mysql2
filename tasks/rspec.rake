@@ -37,7 +37,8 @@ file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
 
   File.open(dst_path, 'w') do |dst_file|
     File.open(src_path).each_line do |line|
-      dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])
+      line.gsub!(/LOCALUSERNAME/, ENV['USER'])
+      dst_file.write line
     end
   end
 end

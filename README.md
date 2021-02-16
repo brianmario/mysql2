@@ -586,6 +586,52 @@ Please see the [em-synchrony](https://github.com/igrigorik/em-synchrony) project
 Sequel includes a mysql2 adapter in all releases since 3.15 (2010-09-01).
 Use the prefix "mysql2://" in your connection specification.
 
+### AWS Aurora Fast Failover
+
+Patch contributed by Percona to enable Aurora Fast Failover support in `mysql2`
+
+This implementation requires you to specifically invoke an Aurora enabled client, which utilizes the AWS Aurora MySQL information_schema.replica_host_status 
+table to find information about the current state of your Aurora cluster, thus enabling Fast Failover. Node endpoints can be used in your connection string, 
+However since the driver will automatically discover nodes in your cluster it is recommended that Aurora MySQL cluster endpoint is used for fast failover functionality.
+
+Here's a simple example:
+
+``` ruby
+require 'mysql2/aws_aurora'
+
+@mysql_client = Mysql2::AWSAurora::Client.new(
+    host: ENV['DB_HOST'],
+    username: ENV['DB_USERNAME'],
+    password: ENV['DB_PASS'],
+    database: ENV['DB_NAME'],
+    aws_reconnect: true,
+    aws_reconnect_attempts: 3,
+    initial_retry_wait: 0.5,
+)
+```
+
+`Mysql2::AWSAurora::Client` supports all `Mysql2::Client` options and also has a few extra options.
+To use AWS Aurora Fast Failover `aws_reconnect` option should be `true`.
+
+To preset cluster endpoints set `cluster_endpoints` option. It expects server endpoints without cluster suffix.
+
+You may set the following connection options in Mysql2::AWSAurora::Client.new(...):
+
+``` ruby
+Mysql2::AWSAurora::Client.new(
+  ...
+  :aws_reconnect = true/false,
+  :aws_reconnect_attempts = seconds,
+  :initial_retry_wait = seconds,
+  :max_retry_wait = seconds,
+  :cluster_endpoints = array of strings,
+  )
+```
+
+
+When correctly invoked, this client extension provides full support for the Aurora Fast Failover feature and also resolves
+the behavior described in Issue #948 for those using Aurora.
+
 ### EventMachine
 
 The mysql2 EventMachine deferrable api allows you to make async queries using EventMachine,

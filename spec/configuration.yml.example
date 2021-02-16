@@ -9,3 +9,9 @@ user:
   username: LOCALUSERNAME
   password:
   database: mysql2_test
+
+aws:
+  host: mydbinstance-cluster.cluster-xd5i43ct4fbx.us-east-2.rds.amazonaws.com
+  username: root
+  password:
+  database: test

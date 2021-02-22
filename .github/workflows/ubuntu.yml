@@ -1,4 +1,4 @@
-name: Test
+name: Ubuntu
 on: [push, pull_request]
 jobs:
   build:

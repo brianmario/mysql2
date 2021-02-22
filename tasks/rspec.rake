@@ -30,6 +30,10 @@ rescue LoadError
   puts "rspec, or one of its dependencies, is not available. Install it with: sudo gem install rspec"
 end
 
+# Get the value from `id` command as the environment variable USER is
+# not defined in a container.
+user_name = ENV['USER'] || `id -un`.rstrip
+
 file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
   CLEAN.exclude task.name
   src_path = File.expand_path("../../#{task.prerequisites.first}", __FILE__)
@@ -37,7 +41,7 @@ file 'spec/configuration.yml' => 'spec/configuration.yml.example' do |task|
 
   File.open(dst_path, 'w') do |dst_file|
     File.open(src_path).each_line do |line|
-      dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])
+      dst_file.write line.gsub(/LOCALUSERNAME/, user_name)
     end
   end
 end
@@ -49,7 +53,7 @@ file 'spec/my.cnf' => 'spec/my.cnf.example' do |task|
 
   File.open(dst_path, 'w') do |dst_file|
     File.open(src_path).each_line do |line|
-      dst_file.write line.gsub(/LOCALUSERNAME/, ENV['USER'])
+      dst_file.write line.gsub(/LOCALUSERNAME/, user_name)
     end
   end
 end

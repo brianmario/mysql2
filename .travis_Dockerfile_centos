@@ -1,23 +1,25 @@
-FROM centos:7
+ARG IMAGE=centos:7
+FROM ${IMAGE}
 
 WORKDIR /build
 COPY . .
 
-RUN yum -y update
-RUN yum -y install epel-release
+RUN cat /etc/redhat-release
+RUN yum -yq update
+RUN yum -yq install epel-release
 # The options are to install faster.
-RUN yum -y install \
+RUN yum -yq install \
   --setopt=deltarpm=0 \
   --setopt=install_weak_deps=false \
   --setopt=tsflags=nodocs \
-  mariadb-server \
-  mariadb-devel \
-  ruby-devel \
-  git \
   gcc \
   gcc-c++ \
-  make
-RUN gem install --no-document "rubygems-update:~>2.7" && update_rubygems
+  git \
+  make \
+  mariadb-devel \
+  mariadb-server \
+  ruby-devel
+RUN gem install --no-document "rubygems-update:~>2.7" && update_rubygems > /dev/null
 RUN gem install --no-document "bundler:~>1.17"
 
-CMD sh .travis_centos.sh
+CMD bash .travis_container.sh

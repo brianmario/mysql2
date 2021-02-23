@@ -33,8 +33,9 @@ group :development do
   gem 'rake-compiler-dock', '~> 0.7.0'
 end
 
-platforms :rbx do
-  gem 'rubysl-bigdecimal'
-  gem 'rubysl-drb'
-  gem 'rubysl-rake'
-end
+# On MRI Ruby >= 3.0, rubysl-rake causes the conflict on GitHub Actions.
+# platforms :rbx do
+#   gem 'rubysl-bigdecimal'
+#   gem 'rubysl-drb'
+#   gem 'rubysl-rake'
+# end

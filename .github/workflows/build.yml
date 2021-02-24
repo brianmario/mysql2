@@ -1,4 +1,4 @@
-name: Ubuntu
+name: Build
 on: [push, pull_request]
 jobs:
   build:
@@ -38,6 +38,12 @@ jobs:
           # `service mysql restart` fails.
           - {os: ubuntu-20.04, ruby: 2.4, db: mysql80, allow-failure: true}
           - {os: ubuntu-18.04, ruby: 'head', db: '', allow-failure: true}
+          # db: the DB's brew package name in macOS case.
+          # Allow failure due to the following test failures.
+          # https://github.com/brianmario/mysql2/issues/965
+          - {os: macos-latest, ruby: 2.4, db: 'mariadb@10.4', allow-failure: true}
+          # Allow failure due to Mysql2::Error: Unknown system variable 'session_track_system_variables'.
+          - {os: macos-latest, ruby: 2.4, db: 'mysql@5.6', allow-failure: true}
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails unlike Travis fast_finish.
       fail-fast: false

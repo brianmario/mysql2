@@ -49,14 +49,5 @@ matrix:
       addons:
         hosts:
           - mysql2gem.example.com
-    - os: osx
-      rvm: 2.4
-      env: DB=mysql56
-      addons:
-        hosts:
-          - mysql2gem.example.com
   fast_finish: true
   allow_failures:
-    - os: osx
-      rvm: 2.4
-      env: DB=mysql56

@@ -629,7 +629,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end
 
         # the query ran uninterrupted
-        expect(mark.fetch(:QUERY_END) - mark.fetch(:QUERY_START)).to be_within(0.1).of(query_time)
+        expect(mark.fetch(:QUERY_END) - mark.fetch(:QUERY_START)).to be_within(0.2).of(query_time)
         # signals fired while the query was running
         expect(mark.fetch(:USR1)).to be_between(mark.fetch(:QUERY_START), mark.fetch(:QUERY_END))
       end
@@ -708,7 +708,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
         # This check demonstrates that the threads are sleeping concurrently:
         # In the serial case, the difference would be a multiple of sleep time
-        expect(stop - start).to be_within(0.1).of(sleep_time)
+        expect(stop - start).to be_within(0.2).of(sleep_time)
 
         expect(values).to match_array(threads.map(&:object_id))
       end

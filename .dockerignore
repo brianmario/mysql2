@@ -1,0 +1,6 @@
+*.bundle
+Gemfile.lock
+spec/configuration.yml
+spec/my.cnf
+tmp
+vendor

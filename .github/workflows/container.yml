@@ -1,0 +1,33 @@
+# Test Linux distributions which do not exist on GitHub Actions
+# by the containers.
+name: Container
+on: [push, pull_request]
+jobs:
+  build:
+    name: >-
+      ${{ matrix.distro }} ${{ matrix.image }}
+    runs-on: ubuntu-20.04 # focal
+    continue-on-error: ${{ matrix.allow-failure }}
+    strategy:
+      matrix:
+        include:
+          - {distro: centos, image: 'centos:7', allow-failure: false}
+          # Fedora latest stable version
+          # Allow failure due to the following test failures.
+          # https://github.com/brianmario/mysql2/issues/965
+          - {distro: fedora, image: 'fedora:latest', allow-failure: true}
+          # Fedora development version
+          # Allow failure due to the following test failures.
+          # https://github.com/brianmario/mysql2/issues/1152
+          - {distro: fedora, image: 'fedora:rawhide', allow-failure: true}
+      # On the fail-fast: true, it cancels all in-progress jobs
+      # if any matrix job fails unlike Travis fast_finish.
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v2
+      - run: docker build -t mysql2 -f .travis_Dockerfile_${{ matrix.distro }} --build-arg IMAGE=${{ matrix.image }} .
+      # Add the "--cap-add=... --security-opt seccomp=..." options
+      # as a temporary workaround to avoid the following issue
+      # in the Fedora >= 34 containers.
+      # https://bugzilla.redhat.com/show_bug.cgi?id=1900021
+      - run: docker run --add-host=mysql2gem.example.com:127.0.0.1 -t --cap-add=SYS_PTRACE --security-opt seccomp=unconfined mysql2

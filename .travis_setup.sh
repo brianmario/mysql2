@@ -85,7 +85,8 @@ if [[ x$OSTYPE =~ ^xdarwin ]]; then
     brew search "${KEYWORD}"
   done
 
-  brew install "$DB" mariadb-connector-c
+  brew info "$DB"
+  brew install "$DB"
   DB_PREFIX="$(brew --prefix "${DB}")"
   export PATH="${DB_PREFIX}/bin:${PATH}"
   export LDFLAGS="-L${DB_PREFIX}/lib"

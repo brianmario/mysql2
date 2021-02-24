@@ -666,3 +666,4 @@ though.
 * [John Cant](http://github.com/johncant) - polishing and updating Prepared Statements support
 * [Justin Case](http://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
 * [Tamir Duberstein](http://github.com/tamird) - for help with timeouts and all around updates and cleanups
+* [Jun Aruga](http://github.com/junaruga) - for migrating CI tests to GitHub Actions and other improvements

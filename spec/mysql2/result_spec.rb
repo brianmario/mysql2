@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 RSpec.describe Mysql2::Result do
-  before(:each) do
+  before(:example) do
     @result = @client.query "SELECT 1"
   end
 

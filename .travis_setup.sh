@@ -9,7 +9,7 @@ CHANGED_PWD=false
 CHANGED_PWD_BY_RECREATE=false
 
 # Install the default used DB if DB is not set.
-if [[ -n ${GITHUB_ACTION-} && -z ${DB-} ]]; then
+if [[ -n ${GITHUB_ACTIONS-} && -z ${DB-} ]]; then
   if command -v lsb_release > /dev/null; then
     case "$(lsb_release -cs)" in
     xenial | bionic)
@@ -45,7 +45,7 @@ fi
 
 # Install MariaDB client headers after Travis CI fix for MariaDB 10.2 broke earlier 10.x
 if [[ -n ${DB-} && x$DB =~ ^xmariadb10.0 ]]; then
-  if [[ -n ${GITHUB_ACTION-} ]]; then
+  if [[ -n ${GITHUB_ACTIONS-} ]]; then
     sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.0 libmariadb2
     CHANGED_PWD_BY_RECREATE=true
   else
@@ -55,7 +55,7 @@ fi
 
 # Install MariaDB client headers after Travis CI fix for MariaDB 10.2 broke earlier 10.x
 if [[ -n ${DB-} && x$DB =~ ^xmariadb10.1 ]]; then
-  if [[ -n ${GITHUB_ACTION-} ]]; then
+  if [[ -n ${GITHUB_ACTIONS-} ]]; then
     sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.1 libmariadb-dev
     CHANGED_PWD_BY_RECREATE=true
   else
@@ -70,7 +70,7 @@ if [[ -n ${DB-} && x$DB =~ ^xmariadb10.2 ]]; then
 fi
 
 # Install MariaDB 10.3 if DB=mariadb10.3
-if [[ -n ${GITHUB_ACTION-} && -n ${DB-} && x$DB =~ ^xmariadb10.3 ]]; then
+if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.3 ]]; then
   sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.3 libmariadb-dev
   CHANGED_PWD=true
 fi
@@ -95,7 +95,7 @@ if [[ x$OSTYPE =~ ^xdarwin ]]; then
 else
   mysqld --version
 
-  if [[ -n ${GITHUB_ACTION-} && -f /etc/mysql/debian.cnf ]]; then
+  if [[ -n ${GITHUB_ACTIONS-} && -f /etc/mysql/debian.cnf ]]; then
     MYSQL_OPTS='--defaults-extra-file=/etc/mysql/debian.cnf'
     # Install from packages in OS official packages.
     if sudo grep -q debian-sys-maint /etc/mysql/debian.cnf; then

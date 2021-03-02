@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v2
-      - run: docker build -t mysql2 -f .travis_Dockerfile_${{ matrix.distro }} --build-arg IMAGE=${{ matrix.image }} .
+      - run: docker build -t mysql2 -f ci/Dockerfile_${{ matrix.distro }} --build-arg IMAGE=${{ matrix.image }} .
       # Add the "--cap-add=... --security-opt seccomp=..." options
       # as a temporary workaround to avoid the following issue
       # in the Fedora >= 34 containers.

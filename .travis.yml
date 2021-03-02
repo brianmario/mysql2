@@ -8,7 +8,7 @@ before_install:
   - gem update --system --quiet || gem update --system 2.7.10 --quiet
   - gem update bundler
   - gem --version
-  - bash .travis_setup.sh
+  - bash ci/setup.sh
 addons:
   hosts:
     - mysql2gem.example.com

@@ -29,18 +29,18 @@ fi
 
 # Install MySQL 5.5 if DB=mysql55
 if [[ -n ${DB-} && x$DB =~ ^xmysql55 ]]; then
-  sudo bash .travis_mysql55.sh
+  sudo bash ci/mysql55.sh
 fi
 
 # Install MySQL 5.7 if DB=mysql57
 if [[ -n ${DB-} && x$DB =~ ^xmysql57 ]]; then
-  sudo bash .travis_mysql57.sh
+  sudo bash ci/mysql57.sh
   CHANGED_PASSWORD=true
 fi
 
 # Install MySQL 8.0 if DB=mysql80
 if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
-  sudo bash .travis_mysql80.sh
+  sudo bash ci/mysql80.sh
   CHANGED_PASSWORD=true
 fi
 
@@ -98,7 +98,7 @@ fi
 
 # TODO: get SSL working on OS X in Travis
 if ! [[ x$OSTYPE =~ ^xdarwin ]]; then
-  sudo bash .travis_ssl.sh
+  sudo bash ci/ssl.sh
   sudo service mysql restart
 fi
 

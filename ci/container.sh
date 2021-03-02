@@ -6,6 +6,6 @@ ruby -v
 bundle install --path vendor/bundle --without benchmarks development
 
 # Start mysqld service.
-bash .travis_setup_container.sh
+bash ci/setup_container.sh
 
 bundle exec rake

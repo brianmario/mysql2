@@ -30,7 +30,7 @@ jobs:
         include:
           # Allow failure due to Mysql2::Error: Unknown system variable 'session_track_system_variables'.
           - {os: ubuntu-16.04, ruby: 2.4, db: mariadb10.0, allow-failure: true}
-          # Comment out due to .travis_setup.sh stucking.
+          # Comment out due to ci/setup.sh stucking.
           # - {os: ubuntu-18.04, ruby: 2.4, db: mariadb10.1, allow-failure: false}
           # Allow failure due to the issue #1165.
           - {os: ubuntu-20.04, ruby: 2.4, db: mariadb10.3, allow-failure: true}
@@ -62,5 +62,5 @@ jobs:
       - if: matrix.db != ''
         run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
       - run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
-      - run: bash .travis_setup.sh
+      - run: bash ci/setup.sh
       - run: bundle exec rake

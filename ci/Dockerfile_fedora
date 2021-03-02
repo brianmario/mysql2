@@ -22,4 +22,4 @@ RUN dnf -yq install \
   rubygem-bigdecimal \
   rubygem-bundler
 
-CMD bash .travis_container.sh
+CMD bash ci/container.sh

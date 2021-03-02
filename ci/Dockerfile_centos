@@ -22,4 +22,4 @@ RUN yum -yq install \
 RUN gem install --no-document "rubygems-update:~>2.7" && update_rubygems > /dev/null
 RUN gem install --no-document "bundler:~>1.17"
 
-CMD bash .travis_container.sh
+CMD bash ci/container.sh

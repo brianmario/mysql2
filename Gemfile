@@ -19,12 +19,13 @@ group :test do
   gem 'rubocop', '~> 0.50.0'
 end
 
-group :benchmarks do
+group :benchmarks, optional: true do
   gem 'activerecord', '>= 3.0'
   gem 'benchmark-ips'
   gem 'do_mysql'
   gem 'faker'
-  gem 'mysql'
+  # The installation of the mysql latest version 2.9.1 fails on Ruby >= 2.4.
+  gem 'mysql' if Gem::Version.new(RUBY_VERSION) < Gem::Version.new('2.4')
   gem 'sequel'
 end
 

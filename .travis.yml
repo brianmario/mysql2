@@ -1,7 +1,7 @@
 sudo: required
 dist: trusty
 language: ruby
-bundler_args: --without benchmarks development
+bundler_args: --without development
 # Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
 before_install:
   - gem --version

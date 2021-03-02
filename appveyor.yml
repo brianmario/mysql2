@@ -7,7 +7,7 @@ install:
   - ruby --version
   - gem --version
   - bundler --version
-  - bundle install --without benchmarks --path vendor/bundle
+  - bundle install --path vendor/bundle
   - IF DEFINED MINGW_PACKAGE_PREFIX (ridk exec pacman -S --noconfirm --needed %MINGW_PACKAGE_PREFIX%-libmariadbclient)
 build_script:
   - bundle exec rake compile

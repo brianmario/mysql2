@@ -7,11 +7,11 @@ jobs:
     name: >-
       ${{ matrix.distro }} ${{ matrix.image }}
     runs-on: ubuntu-20.04 # focal
-    continue-on-error: ${{ matrix.allow-failure }}
+    continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       matrix:
         include:
-          - {distro: centos, image: 'centos:7', allow-failure: false}
+          - {distro: centos, image: 'centos:7'}
           # Fedora latest stable version
           # Allow failure due to the following test failures.
           # https://github.com/brianmario/mysql2/issues/965

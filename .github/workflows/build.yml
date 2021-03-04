@@ -7,7 +7,7 @@ jobs:
     # Run all the tests on the new environment as much as possible.
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/specifications-for-github-hosted-runners
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.allow-failure }}
+    continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       matrix:
         os:
@@ -26,15 +26,14 @@ jobs:
           - 2.2
           - 2.1
         db: ['']
-        allow-failure: [false]
         include:
           # Allow failure due to Mysql2::Error: Unknown system variable 'session_track_system_variables'.
           - {os: ubuntu-16.04, ruby: 2.4, db: mariadb10.0, allow-failure: true}
           # Comment out due to ci/setup.sh stucking.
-          # - {os: ubuntu-18.04, ruby: 2.4, db: mariadb10.1, allow-failure: false}
+          # - {os: ubuntu-18.04, ruby: 2.4, db: mariadb10.1}
           # `service mysql restart` fails.
           - {os: ubuntu-20.04, ruby: 2.4, db: mariadb10.3, allow-failure: true}
-          - {os: ubuntu-18.04, ruby: 2.4, db: mysql57, allow-failure: false}
+          - {os: ubuntu-18.04, ruby: 2.4, db: mysql57}
           # Allow failure due to the issue #1165.
           - {os: ubuntu-20.04, ruby: 2.4, db: mysql80, allow-failure: true}
           - {os: ubuntu-18.04, ruby: 'head', db: '', allow-failure: true}

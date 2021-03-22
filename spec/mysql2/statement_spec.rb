@@ -1,7 +1,7 @@
 require './spec/spec_helper.rb'
 
 RSpec.describe Mysql2::Statement do
-  before :each do
+  before(:example) do
     @client = new_client(encoding: "utf8")
   end
 
@@ -211,7 +211,7 @@ RSpec.describe Mysql2::Statement do
   end
 
   context "utf8_db" do
-    before(:each) do
+    before(:example) do
       @client.query("DROP DATABASE IF EXISTS test_mysql2_stmt_utf8")
       @client.query("CREATE DATABASE test_mysql2_stmt_utf8")
       @client.query("USE test_mysql2_stmt_utf8")
@@ -219,7 +219,7 @@ RSpec.describe Mysql2::Statement do
       @client.query("INSERT INTO テーブル (整数, 文字列) VALUES (1, 'イチ'), (2, '弐'), (3, 'さん')")
     end
 
-    after(:each) do
+    after(:example) do
       @client.query("DROP DATABASE test_mysql2_stmt_utf8")
     end
 
@@ -627,12 +627,12 @@ RSpec.describe Mysql2::Statement do
   end
 
   context 'last_id' do
-    before(:each) do
+    before(:example) do
       @client.query 'USE test'
       @client.query 'CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))'
     end
 
-    after(:each) do
+    after(:example) do
       @client.query 'DROP TABLE lastIdTest'
     end
 
@@ -655,12 +655,12 @@ RSpec.describe Mysql2::Statement do
   end
 
   context 'affected_rows' do
-    before :each do
+    before(:example) do
       @client.query 'USE test'
       @client.query 'CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))'
     end
 
-    after :each do
+    after(:example) do
       @client.query 'DROP TABLE lastIdTest'
     end
 

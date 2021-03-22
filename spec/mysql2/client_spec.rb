@@ -407,7 +407,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   context ":local_infile" do
-    before(:all) do
+    before(:context) do
       new_client(local_infile: true) do |client|
         local = client.query "SHOW VARIABLES LIKE 'local_infile'"
         local_enabled = local.any? { |x| x['Value'] == 'ON' }
@@ -423,7 +423,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
     end
 
-    after(:all) do
+    after(:context) do
       new_client do |client|
         client.query "DROP TABLE IF EXISTS infileTest"
       end
@@ -730,7 +730,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     context "Multiple results sets" do
-      before(:each) do
+      before(:example) do
         @multi_client = new_client(flags: Mysql2::Client::MULTI_STATEMENTS)
       end
 
@@ -974,12 +974,12 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   context 'write operations api' do
-    before(:each) do
+    before(:example) do
       @client.query "USE test"
       @client.query "CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
     end
 
-    after(:each) do
+    after(:example) do
       @client.query "DROP TABLE lastIdTest"
     end
 
@@ -1027,7 +1027,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   context "session_track" do
-    before(:each) do
+    before(:example) do
       unless Mysql2::Client.const_defined?(:SESSION_TRACK)
         skip('Server versions must be MySQL 5.7 later.')
       end
@@ -1070,7 +1070,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   context "select_db" do
-    before(:each) do
+    before(:example) do
       2.times do |i|
         @client.query("CREATE DATABASE test_selectdb_#{i}")
         @client.query("USE test_selectdb_#{i}")
@@ -1078,7 +1078,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
     end
 
-    after(:each) do
+    after(:example) do
       2.times do |i|
         @client.query("DROP DATABASE test_selectdb_#{i}")
       end

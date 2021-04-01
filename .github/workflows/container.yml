@@ -5,13 +5,14 @@ on: [push, pull_request]
 jobs:
   build:
     name: >-
-      ${{ matrix.distro }} ${{ matrix.image }}
+      ${{ matrix.distro }} ${{ matrix.image }} ${{ matrix.name_extra || '' }}
     runs-on: ubuntu-20.04 # focal
-    continue-on-error: ${{ matrix.allow-failure }}
+    continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       matrix:
         include:
-          - {distro: centos, image: 'centos:7', allow-failure: false}
+          # CentOS 7 system Ruby is the fixed version 2.0.0.
+          - {distro: centos, image: 'centos:7', name_extra: 'ruby 2.0.0'}
           # Fedora latest stable version
           # Allow failure due to the following test failures.
           # https://github.com/brianmario/mysql2/issues/965

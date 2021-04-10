@@ -124,8 +124,8 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
   GET_CLIENT(self);
   int val = NUM2INT( setting );
-  // Either MySQL 5.7.3 - 5.7.10, or Connector/C 6.1.3 - 6.1.x
-  if ((version >= 50703 && version < 50711) || (version >= 60103 && version < 60200)) {
+  // Either MySQL 5.7.3 - 5.7.10, or Connector/C 6.1.3 - 6.1.x, or MariaDB 10.x
+  if ((version >= 50703 && version < 50711) || (version >= 60103 && version < 60200) || (version >= 100000 && version < 110000)) {
     if (val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED) {
       my_bool b = ( val == SSL_MODE_REQUIRED );
       int result = mysql_options( wrapper->client, MYSQL_OPT_SSL_ENFORCE, &b );

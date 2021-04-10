@@ -3,7 +3,7 @@ on: [push, pull_request]
 jobs:
   build:
     name: >-
-      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
+      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }} ${{ matrix.db-client || '' }}
     # Run all the tests on the new environment as much as possible.
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/specifications-for-github-hosted-runners
     runs-on: ${{ matrix.os }}
@@ -26,6 +26,7 @@ jobs:
           - 2.2
           - 2.1
         db: ['']
+        db-client: [null]
         include:
           # Allow failure due to Mysql2::Error: Unknown system variable 'session_track_system_variables'.
           - {os: ubuntu-16.04, ruby: 2.4, db: mariadb10.0, allow-failure: true}
@@ -36,6 +37,7 @@ jobs:
           - {os: ubuntu-18.04, ruby: 2.4, db: mysql57}
           # Allow failure due to the issue #1165.
           - {os: ubuntu-20.04, ruby: 2.4, db: mysql80, allow-failure: true}
+          - {os: ubuntu-20.04, ruby: 2.4, db: mysql80, db-client: mariadb, allow-failure: true}
           - {os: ubuntu-18.04, ruby: 'head', db: '', allow-failure: true}
           # db: A DB's brew package name in macOS case.
           #     Set a name "db: 'name@X.Y'" when using an old version.
@@ -60,6 +62,10 @@ jobs:
       - run: bundle install --without development
       - if: matrix.db != ''
         run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
+      - if: matrix.db-client != null
+        run: echo 'DB_CLIENT=${{ matrix.db-client }}' >> $GITHUB_ENV
       - run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
       - run: bash ci/setup.sh
+      - run: bundle exec rake compile
+      - run: ldd lib/mysql2/mysql2.so
       - run: bundle exec rake

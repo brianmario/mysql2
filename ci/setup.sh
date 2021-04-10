@@ -9,6 +9,8 @@ CHANGED_PASSWORD=false
 # https://stackoverflow.com/questions/56052177/
 CHANGED_PASSWORD_BY_RECREATE=false
 
+echo "DB: ${DB-}, DB_CLIENT: ${DB_CLIENT-}"
+
 # Install the default used DB if DB is not set.
 if [[ -n ${GITHUB_ACTIONS-} && -z ${DB-} ]]; then
   if command -v lsb_release > /dev/null; then
@@ -41,6 +43,12 @@ fi
 # Install MySQL 8.0 if DB=mysql80
 if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
   sudo bash ci/mysql80.sh
+  if [[ -n ${DB_CLIENT-} && x$DB_CLIENT =~ ^xmariadb ]]; then
+    sudo apt-get install -qq libmariadb-dev-compat
+  else
+    sudo apt-get install -qq libmysqlclient-dev
+  fi
+
   CHANGED_PASSWORD=true
 fi
 

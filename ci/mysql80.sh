@@ -10,4 +10,4 @@ apt-key add support/5072E1F5.asc
 wget -q --spider http://repo.mysql.com/apt/ubuntu/dists/$(lsb_release -cs)/mysql-8.0
 add-apt-repository 'http://repo.mysql.com/apt/ubuntu mysql-8.0'
 apt-get update -qq
-apt-get install -qq mysql-server libmysqlclient-dev
+apt-get install -qq mysql-server

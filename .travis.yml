@@ -1,5 +1,8 @@
 dist: trusty
 language: ruby
+env:
+  global:
+    - RUBY_MYSQL2_DEBUG=true
 bundler_args: --without development
 # Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
 before_install:

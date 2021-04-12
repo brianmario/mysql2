@@ -1,10 +1,8 @@
 dist: trusty
 language: ruby
 bundler_args: --without development
-# Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
 before_install:
   - gem --version
-  - gem update --system --quiet || gem update --system 2.7.10 --quiet
   - gem update bundler
   - gem --version
   - bash ci/setup.sh

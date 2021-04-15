@@ -28,6 +28,9 @@ $LDFLAGS << ' -L/usr/local/opt/openssl/lib' if RUBY_PLATFORM =~ /darwin/
 have_func('rb_absint_size')
 have_func('rb_absint_singlebit_p')
 
+# 2.7+
+have_func('rb_gc_mark_movable')
+
 # Missing in RBX (https://github.com/rubinius/rubinius/issues/3771)
 have_func('rb_wait_for_single_fd')
 

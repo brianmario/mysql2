@@ -192,10 +192,46 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
 static void rb_mysql_client_mark(void * wrapper) {
   mysql_client_wrapper * w = wrapper;
   if (w) {
-    rb_gc_mark(w->encoding);
-    rb_gc_mark(w->active_fiber);
+    rb_gc_mark_movable(w->encoding);
+    rb_gc_mark_movable(w->active_fiber);
   }
 }
+
+/* this is called during GC */
+static void rb_mysql_client_free(void *ptr) {
+  mysql_client_wrapper *wrapper = ptr;
+  decr_mysql2_client(wrapper);
+}
+
+static size_t rb_mysql_client_memsize(const void * wrapper) {
+  const mysql_client_wrapper * w = wrapper;
+  return sizeof(*w);
+}
+
+static void rb_mysql_client_compact(void * wrapper) {
+  mysql_client_wrapper * w = wrapper;
+  if (w) {
+    rb_mysql2_gc_location(w->encoding);
+    rb_mysql2_gc_location(w->active_fiber);
+  }
+}
+
+const rb_data_type_t rb_mysql_client_type = {
+  "rb_mysql_client",
+  {
+    rb_mysql_client_mark,
+    rb_mysql_client_free,
+    rb_mysql_client_memsize,
+#ifdef HAVE_RB_GC_MARK_MOVABLE
+    rb_mysql_client_compact,
+#endif
+  },
+  0,
+  0,
+#ifdef RUBY_TYPED_FREE_IMMEDIATELY
+  RUBY_TYPED_FREE_IMMEDIATELY,
+#endif
+};
 
 static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   VALUE rb_error_msg = rb_str_new2(mysql_error(wrapper->client));
@@ -303,12 +339,6 @@ static void *nogvl_close(void *ptr) {
   return NULL;
 }
 
-/* this is called during GC */
-static void rb_mysql_client_free(void *ptr) {
-  mysql_client_wrapper *wrapper = ptr;
-  decr_mysql2_client(wrapper);
-}
-
 void decr_mysql2_client(mysql_client_wrapper *wrapper)
 {
   wrapper->refcount--;
@@ -340,7 +370,11 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
 static VALUE allocate(VALUE klass) {
   VALUE obj;
   mysql_client_wrapper * wrapper;
+#ifdef NEW_TYPEDDATA_WRAPPER
+  obj = TypedData_Make_Struct(klass, mysql_client_wrapper, &rb_mysql_client_type, wrapper);
+#else
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
+#endif
   wrapper->encoding = Qnil;
   wrapper->active_fiber = Qnil;
   wrapper->automatic_close = 1;

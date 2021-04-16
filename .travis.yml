@@ -41,3 +41,6 @@ matrix:
           - mysql2gem.example.com
   fast_finish: true
   allow_failures:
+    # Allow failure due to a package repository not found for now.
+    # https://travis-ci.org/github/brianmario/mysql2/jobs/767276558#L1255
+    - env: DB=mysql55

@@ -5,12 +5,19 @@ RSpec.describe Mysql2::Statement do
     @client = new_client(encoding: "utf8")
   end
 
+  let(:performance_schema_enabled) do
+    performance_schema = @client.query "SHOW VARIABLES LIKE 'performance_schema'"
+    performance_schema.any? { |x| x['Value'] == 'ON' }
+  end
+
   def stmt_count
     # Use the performance schema in MySQL 5.7 and above
-    @client.query("SELECT COUNT(1) AS count FROM performance_schema.prepared_statements_instances").first['count'].to_i
-  rescue Mysql2::Error
-    # Fall back to the global prepapred statement counter
-    @client.query("SHOW STATUS LIKE 'Prepared_stmt_count'").first['Value'].to_i
+    if performance_schema_enabled
+      @client.query("SELECT COUNT(1) AS count FROM performance_schema.prepared_statements_instances").first['count'].to_i
+    else
+      # Fall back to the global prepapred statement counter
+      @client.query("SHOW STATUS LIKE 'Prepared_stmt_count'").first['Value'].to_i
+    end
   end
 
   it "should create a statement" do

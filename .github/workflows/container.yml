@@ -14,13 +14,9 @@ jobs:
           # CentOS 7 system Ruby is the fixed version 2.0.0.
           - {distro: centos, image: 'centos:7', name_extra: 'ruby 2.0.0'}
           # Fedora latest stable version
-          # Allow failure due to the following test failures.
-          # https://github.com/brianmario/mysql2/issues/965
-          - {distro: fedora, image: 'fedora:latest', allow-failure: true}
+          - {distro: fedora, image: 'fedora:latest'}
           # Fedora development version
-          # Allow failure due to the following test failures.
-          # https://github.com/brianmario/mysql2/issues/1152
-          - {distro: fedora, image: 'fedora:rawhide', allow-failure: true}
+          - {distro: fedora, image: 'fedora:rawhide'}
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails unlike Travis fast_finish.
       fail-fast: false

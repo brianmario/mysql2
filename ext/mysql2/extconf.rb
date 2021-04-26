@@ -154,7 +154,7 @@ end
 $CFLAGS << ' ' << usable_flags.join(' ')
 
 enabled_sanitizers = disabled_sanitizers = []
-# Specify a commna-separated list of sanitizers, or try them all by default
+# Specify a comma-separated list of sanitizers, or try them all by default
 sanitizers = with_config('sanitize')
 case sanitizers
 when true

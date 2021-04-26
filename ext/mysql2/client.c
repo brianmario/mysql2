@@ -45,7 +45,7 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
   }
 
 /*
- * compatability with mysql-connector-c, where LIBMYSQL_VERSION is the correct
+ * compatibility with mysql-connector-c, where LIBMYSQL_VERSION is the correct
  * variable to use, but MYSQL_SERVER_VERSION gives the correct numbers when
  * linking against the server itself
  */

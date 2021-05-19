@@ -22,7 +22,7 @@ organizationalUnitName_default = Mysql2Gem
 emailAddress_default           = mysql2gem@example.com
 " | tee ca.cnf cert.cnf
 
-# The client and server certs must have a diferent common name than the CA
+# The client and server certs must have a different common name than the CA
 # to avoid "SSL connection error: error:00000001:lib(0):func(0):reason(1)"
 
 echo "

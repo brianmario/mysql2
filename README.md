@@ -148,7 +148,7 @@ results.each do |row|
   # the keys are the fields, as you'd expect
   # the values are pre-built ruby primitives mapped from their corresponding field types in MySQL
   puts row["id"] # row["id"].is_a? Integer
-  if row["dne"]  # non-existant hash entry is nil
+  if row["dne"]  # non-existent hash entry is nil
     puts row["dne"]
   end
 end
@@ -285,7 +285,7 @@ Mysql2::Client.new(
 
 ### Secure auth
 
-Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
+Starting with MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
 When secure_auth is enabled, the server will refuse a connection if the account password is stored in old pre-MySQL 4.1 format.
 The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
 To bypass this restriction in the client, pass the option `:secure_auth => false` to Mysql2::Client.new().

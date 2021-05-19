@@ -31,6 +31,8 @@ have_func('rb_absint_singlebit_p')
 # Missing in RBX (https://github.com/rubinius/rubinius/issues/3771)
 have_func('rb_wait_for_single_fd')
 
+have_func("rb_enc_interned_str", "ruby.h")
+
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
 dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w[

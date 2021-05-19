@@ -118,6 +118,13 @@ RSpec.describe Mysql2::Result do
       result = @client.query "SELECT 'a', 'b', 'c'"
       expect(result.fields).to eql(%w[a b c])
     end
+
+    it "should return an array of frozen strings" do
+      result = @client.query "SELECT 'a', 'b', 'c'"
+      result.fields.each do |f|
+        expect(f).to be_frozen
+      end
+    end
   end
 
   context "#field_types" do

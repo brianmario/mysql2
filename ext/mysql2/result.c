@@ -171,11 +171,18 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
       rb_field = rb_intern3(field->name, field->name_length, rb_utf8_encoding());
       rb_field = ID2SYM(rb_field);
     } else {
-      rb_field = rb_str_new(field->name, field->name_length);
-      rb_enc_associate(rb_field, conn_enc);
-      if (default_internal_enc) {
+#ifdef HAVE_RB_ENC_INTERNED_STR
+      rb_field = rb_enc_interned_str(field->name, field->name_length, conn_enc);
+      if (default_internal_enc && default_internal_enc != conn_enc) {
+        rb_field = rb_str_to_interned_str(rb_str_export_to_enc(rb_field, default_internal_enc));
+      }
+#else
+      rb_field = rb_enc_str_new(field->name, field->name_length, conn_enc);
+      if (default_internal_enc && default_internal_enc != conn_enc) {
         rb_field = rb_str_export_to_enc(rb_field, default_internal_enc);
       }
+      rb_obj_freeze(rb_field);
+#endif
     }
     rb_ary_store(wrapper->fields, idx, rb_field);
   }

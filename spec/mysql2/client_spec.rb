@@ -1,6 +1,11 @@
 require 'spec_helper'
 
 RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
+  let(:performance_schema_enabled) do
+    performance_schema = @client.query "SHOW VARIABLES LIKE 'performance_schema'"
+    performance_schema.any? { |x| x['Value'] == 'ON' }
+  end
+
   context "using defaults file" do
     let(:cnf_file) { File.expand_path('../../my.cnf', __FILE__) }
 
@@ -479,6 +484,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   it "should set default program_name in connect_attrs" do
+    skip("DON'T WORRY, THIS TEST PASSES - but PERFORMANCE SCHEMA is not enabled in your MySQL daemon.") unless performance_schema_enabled
     client = new_client
     if Mysql2::Client::CONNECT_ATTRS.zero? || client.server_info[:version].match(/10.[01].\d+-MariaDB/)
       pending('Both client and server versions must be MySQL 5.6 or MariaDB 10.2 or later.')
@@ -488,6 +494,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   it "should set custom connect_attrs" do
+    skip("DON'T WORRY, THIS TEST PASSES - but PERFORMANCE SCHEMA is not enabled in your MySQL daemon.") unless performance_schema_enabled
     client = new_client(connect_attrs: { program_name: 'my_program_name', foo: 'fooval', bar: 'barval' })
     if Mysql2::Client::CONNECT_ATTRS.zero? || client.server_info[:version].match(/10.[01].\d+-MariaDB/)
       pending('Both client and server versions must be MySQL 5.6 or MariaDB 10.2 or later.')

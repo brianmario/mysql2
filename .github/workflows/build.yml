@@ -40,9 +40,8 @@ jobs:
           # db: A DB's brew package name in macOS case.
           #     Set a name "db: 'name@X.Y'" when using an old version.
           # MariaDB lastet version
-          # Allow failure due to the following test failures.
-          # https://github.com/brianmario/mysql2/issues/965
-          # https://github.com/brianmario/mysql2/issues/1152
+          # Allow failure due to the following test failures that rarely happens.
+          # https://github.com/brianmario/mysql2/issues/1194
           - {os: macos-latest, ruby: 2.4, db: mariadb, allow-failure: true}
           # MySQL latest version
           # Allow failure due to the issue #1165.

@@ -39,6 +39,10 @@ RSpec.describe Mysql2::Error do
       end
     end
 
+    let(:server_info) do
+      @client.server_info
+    end
+
     before do
       # sanity check
       expect(valid_utf8.encoding).to eql(Encoding::UTF_8)
@@ -56,7 +60,15 @@ RSpec.describe Mysql2::Error do
         expect(bad_err.message.encoding).to eql(Encoding::UTF_8)
         expect(bad_err.message).to be_valid_encoding
 
-        expect(bad_err.message).to include("??}\u001F")
+        # MariaDB 10.5 returns a little different error message unlike MySQL
+        # and other old MariaDBs.
+        # https://jira.mariadb.org/browse/MDEV-25400
+        err_str = if server_info[:version].match(/MariaDB/) && server_info[:id] >= 100500
+          "??}\\001F"
+        else
+          "??}\u001F"
+        end
+        expect(bad_err.message).to include(err_str)
       end
     end
 

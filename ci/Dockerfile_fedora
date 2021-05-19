@@ -20,6 +20,7 @@ RUN dnf -yq install \
   redhat-rpm-config \
   ruby-devel \
   rubygem-bigdecimal \
-  rubygem-bundler
+  rubygem-bundler \
+  rubygem-json
 
 CMD bash ci/container.sh

@@ -31,7 +31,7 @@ jobs:
           - {os: ubuntu-16.04, ruby: 2.4, db: mariadb10.0, allow-failure: true}
           # Comment out due to ci/setup.sh stucking.
           # - {os: ubuntu-18.04, ruby: 2.4, db: mariadb10.1}
-          # `service mysql restart` fails.
+          # Allow failure due to the issue #965, #1165.
           - {os: ubuntu-20.04, ruby: 2.4, db: mariadb10.3, allow-failure: true}
           - {os: ubuntu-18.04, ruby: 2.4, db: mysql57}
           # Allow failure due to the issue #1165.

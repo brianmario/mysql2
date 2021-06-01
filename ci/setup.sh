@@ -72,8 +72,13 @@ fi
 
 # Install MariaDB 10.3 if DB=mariadb10.3
 if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.3 ]]; then
+  sudo ln -s /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/
+  sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
+  sudo apt-get purge -y 'mysql-common*' 'mysql-client*' 'mysql-server*'
+  sudo mv /etc/mysql "/etc/mysql-$(date +%Y%m%d-%H%M%S)"
+  sudo mv /var/lib/mysql "/var/lib/mysql-$(date +%Y%m%d-%H%M%S)"
   sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.3 libmariadb-dev
-  CHANGED_PASSWORD=true
+  CHANGED_PASSWORD_BY_RECREATE=true
 fi
 
 # Install MySQL/MariaDB if OS=darwin

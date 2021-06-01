@@ -36,6 +36,19 @@ void Init_mysql2(void);
 typedef bool my_bool;
 #endif
 
+// ruby 2.7+
+#ifdef HAVE_RB_GC_MARK_MOVABLE
+#define rb_mysql2_gc_location(ptr) ptr = rb_gc_location(ptr)
+#else
+#define rb_gc_mark_movable(ptr) rb_gc_mark(ptr)
+#define rb_mysql2_gc_location(ptr)
+#endif
+
+// ruby 2.2+
+#ifdef TypedData_Make_Struct
+#define NEW_TYPEDDATA_WRAPPER 1
+#endif
+
 #include <client.h>
 #include <statement.h>
 #include <result.h>

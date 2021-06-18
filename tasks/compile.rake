@@ -3,6 +3,12 @@ require "rake/extensiontask"
 load File.expand_path('../../mysql2.gemspec', __FILE__) unless defined? Mysql2::GEMSPEC
 
 Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
+  if ENV['RUBY_MYSQL2_DEBUG']
+    # Set MAKEFLAGS for GNU/BSD make to print compiling commands in verbose mode.
+    # https://github.com/rake-compiler/rake-compiler/pull/192
+    ENV['MAKEFLAGS'] = 'V=1' unless ENV['MAKEFLAGS']
+  end
+
   # put binaries into lib/mysql2/ or lib/mysql2/x.y/
   ext.lib_dir = File.join 'lib', 'mysql2'
 

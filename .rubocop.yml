@@ -26,3 +26,10 @@ Style/TrailingCommaInLiteral:
 
 Style/TrivialAccessors:
   AllowPredicates: true
+
+Metrics/BlockLength:
+  Exclude:
+    - 'benchmark/setup_db.rb'
+    - '**/*.rake'
+    - 'spec/spec_helper.rb'
+    - 'spec/**/*_spec.rb'

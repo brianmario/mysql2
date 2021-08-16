@@ -22,7 +22,12 @@ def add_ssl_defines(header)
 end
 
 # Homebrew openssl
-$LDFLAGS << ' -L/usr/local/opt/openssl/lib' if RUBY_PLATFORM =~ /darwin/
+if RUBY_PLATFORM =~ /darwin/ && system("command -v brew")
+  openssl_location = `brew --prefix openssl`.strip
+  if openssl_location
+    $LDFLAGS << " -L#{openssl_location}/lib" 
+  end
+end
 
 # 2.1+
 have_func('rb_absint_size')

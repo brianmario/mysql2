@@ -15,10 +15,15 @@ def add_ssl_defines(header)
   all_modes_found = %w[SSL_MODE_DISABLED SSL_MODE_PREFERRED SSL_MODE_REQUIRED SSL_MODE_VERIFY_CA SSL_MODE_VERIFY_IDENTITY].inject(true) do |m, ssl_mode|
     m && have_const(ssl_mode, header)
   end
-  $CFLAGS << ' -DFULL_SSL_MODE_SUPPORT' if all_modes_found
-  # if we only have ssl toggle (--ssl,--disable-ssl) from 5.7.3 to 5.7.10
-  has_no_support = all_modes_found ? false : !have_const('MYSQL_OPT_SSL_ENFORCE', header)
-  $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if has_no_support
+  if all_modes_found
+    $CFLAGS << ' -DFULL_SSL_MODE_SUPPORT'
+  else
+    # if we only have ssl toggle (--ssl,--disable-ssl) from 5.7.3 to 5.7.10
+    # and the verify server cert option. This is also the case for MariaDB.
+    has_verify_support  = have_const('MYSQL_OPT_SSL_VERIFY_SERVER_CERT', header)
+    has_enforce_support = have_const('MYSQL_OPT_SSL_ENFORCE', header)
+    $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if !has_verify_support && !has_enforce_support
+  end
 end
 
 # Homebrew openssl

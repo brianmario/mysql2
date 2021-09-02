@@ -218,7 +218,7 @@ session_track_data = c.session_track(session_track_type)
 ```
 
 The types of session track types can be found at
-[https://dev.mysql.com/doc/refman/5.7/en/mysql-session-track-get-first.html](https://dev.mysql.com/doc/refman/5.7/en/mysql-session-track-get-first.html)
+[https://dev.mysql.com/doc/refman/5.7/en/session-state-tracking.html](https://dev.mysql.com/doc/refman/5.7/en/session-state-tracking.html)
 
 ## Connection options
 

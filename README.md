@@ -89,12 +89,28 @@ the library file `libmysqlclient.so` but is missing the header file `mysql.h`
 
 ### Mac OS X
 
+``` sh
+  brew install openssl
+  gem install mysql2 -- --with-opt-dir="$(brew --prefix openssl)"
+```
+
+You may hit this issue `ld: library not found for -lssl`, because [MacOS is pointing to
+LibreSSL instead of OpenSSL](https://stackoverflow.com/questions/62195898/openssl-still-pointing-to-libressl-2-8-3).
+
 You may use MacPorts, Homebrew, or a native MySQL installer package. The most
 common paths will be automatically searched. If you want to select a specific
 MySQL directory, use the `--with-mysql-dir` or `--with-mysql-config` options above.
 
 If you have not done so already, you will need to install the XCode select tools by running
 `xcode-select --install`.
+
+If you are using `bundle install` to manage dependencies in project, you might need to set
+`bundle config`.
+``` sh
+  brew install openssl
+  bundle config --local build.mysql2 --with-opt-dir="$(brew --prefix openssl)"
+  bundle install
+```
 
 ### Windows
 

@@ -46,9 +46,14 @@ module Mysql2
       # force the encoding to utf8
       self.charset_name = opts[:encoding] || 'utf8'
 
+      mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
+      if (mode == SSL_MODE_VERIFY_CA || mode == SSL_MODE_VERIFY_IDENTITY) && !opts[:sslca]
+        opts[:sslca] = find_default_ca_path
+      end
+
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
-      self.ssl_mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
+      self.ssl_mode = mode if mode
 
       flags = case opts[:flags]
       when Array
@@ -113,6 +118,18 @@ module Mysql2
           memo
         end
       end
+    end
+
+    # Find any default system CA paths to handle system roots
+    # by default if stricter validation is requested and no
+    # path is provide.
+    def find_default_ca_path
+      [
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/ca-bundle.pem",
+        "/etc/ssl/cert.pem",
+      ].find { |f| File.exist?(f) }
     end
 
     # Set default program_name in performance_schema.session_connect_attrs

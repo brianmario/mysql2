@@ -29,9 +29,7 @@ end
 # Homebrew openssl
 if RUBY_PLATFORM =~ /darwin/ && system("command -v brew")
   openssl_location = `brew --prefix openssl`.strip
-  if openssl_location
-    $LDFLAGS << " -L#{openssl_location}/lib" 
-  end
+  $LDFLAGS << " -L#{openssl_location}/lib" if openssl_location
 end
 
 # 2.1+

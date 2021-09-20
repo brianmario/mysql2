@@ -69,7 +69,7 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
 #endif
 
 /*
- * compatibility with mysql-connector-c 6.1.x, and with MySQL 5.7.3 - 5.7.10.
+ * compatibility with mysql-connector-c 6.1.x, MySQL 5.7.3 - 5.7.10 & with MariaDB 10.x and later.
  */
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
   #define SSL_MODE_VERIFY_IDENTITY 5
@@ -128,8 +128,8 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
 #if defined(HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT) || defined(HAVE_CONST_MYSQL_OPT_SSL_ENFORCE)
   GET_CLIENT(self);
   int val = NUM2INT( setting );
-  // Either MySQL 5.7.3 - 5.7.10, or Connector/C 6.1.3 - 6.1.x, or MariaDB 10.x
-  if ((version >= 50703 && version < 50711) || (version >= 60103 && version < 60200) || (version >= 100000 && version < 110000)) {
+  // Either MySQL 5.7.3 - 5.7.10, or Connector/C 6.1.3 - 6.1.x, or MariaDB 10.x and later
+  if ((version >= 50703 && version < 50711) || (version >= 60103 && version < 60200) || version >= 100000) {
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
     if (val == SSL_MODE_VERIFY_IDENTITY) {
       my_bool b = 1;
@@ -1690,10 +1690,10 @@ void init_mysql2_client() {
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_CA"), INT2NUM(SSL_MODE_VERIFY_CA));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_IDENTITY"), INT2NUM(SSL_MODE_VERIFY_IDENTITY));
 #else
-#ifdef HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT // MySQL 5.7.3 - 5.7.10
+#ifdef HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT // MySQL 5.7.3 - 5.7.10 & MariaDB 10.x and later
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_IDENTITY"), INT2NUM(SSL_MODE_VERIFY_IDENTITY));
 #endif
-#ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE // MySQL 5.7.3 - 5.7.10
+#ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE // MySQL 5.7.3 - 5.7.10 & MariaDB 10.x and later
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"), INT2NUM(SSL_MODE_DISABLED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"), INT2NUM(SSL_MODE_REQUIRED));
 #endif

@@ -371,6 +371,20 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       @client.close
       expect(@client.closed?).to eql(true)
     end
+
+    it "should detect a closed connection" do
+      skip "libmysqlclient does not export vio_is_connected()" unless Mysql2::Client.info[:has_vio_is_connected]
+      connection_id = @client.thread_id
+      Thread.new do
+        sleep(0.1)
+        Mysql2::Client.new(DatabaseCredentials['root']).tap do |supervisor|
+          supervisor.query("KILL #{connection_id}")
+        end.close
+      end
+      expect(@client.query("SELECT 1").first["1"]).to eql(1)
+      sleep(0.2)
+      expect(@client.closed?).to be true
+    end
   end
 
   it "should not try to query closed mysql connection" do
@@ -604,7 +618,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
       expect do
         @client.query("SELECT SLEEP(1)")
-      end.to raise_error(Mysql2::Error, /Lost connection to MySQL server/)
+      end.to raise_error(Mysql2::Error)
 
       if RUBY_PLATFORM !~ /mingw|mswin/
         expect do

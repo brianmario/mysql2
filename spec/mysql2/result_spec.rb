@@ -6,12 +6,17 @@ RSpec.describe Mysql2::Result do
   end
 
   it "should raise a TypeError exception when it doesn't wrap a result set" do
-    r = Mysql2::Result.new
-    expect { r.count }.to raise_error(TypeError)
-    expect { r.fields }.to raise_error(TypeError)
-    expect { r.field_types }.to raise_error(TypeError)
-    expect { r.size }.to raise_error(TypeError)
-    expect { r.each }.to raise_error(TypeError)
+    if RUBY_VERSION >= "3.1"
+      expect { Mysql2::Result.new }.to raise_error(TypeError)
+      expect { Mysql2::Result.allocate }.to raise_error(TypeError)
+    else
+      r = Mysql2::Result.new
+      expect { r.count }.to raise_error(TypeError)
+      expect { r.fields }.to raise_error(TypeError)
+      expect { r.field_types }.to raise_error(TypeError)
+      expect { r.size }.to raise_error(TypeError)
+      expect { r.each }.to raise_error(TypeError)
+    end
   end
 
   it "should have included Enumerable" do

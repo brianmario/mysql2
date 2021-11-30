@@ -55,6 +55,11 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
+      - name: Install openssl
+        if: matrix.os == 'macos-latest'
+        run: |
+            brew update
+            brew install openssl
       - run: ruby -v
       - run: bundle install --without development
       - if: matrix.db != ''

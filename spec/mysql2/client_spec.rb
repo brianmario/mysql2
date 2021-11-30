@@ -1091,8 +1091,8 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "returns valid transaction state inside a transaction" do
-      @client.query("SET @@SESSION.session_track_transaction_info='CHARACTERISTICS';")
-      @client.query("START TRANSACTION;")
+      @client.query("SET @@SESSION.session_track_transaction_info='CHARACTERISTICS'")
+      @client.query("START TRANSACTION")
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_STATE)
       expect(res).to eq(["T_______"])

@@ -415,8 +415,13 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should raise an error given an invalid DATETIME" do
-      expect { @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each }.to \
-        raise_error(Mysql2::Error, "Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
+      if @client.info[:version] < "8.0"
+        expect { @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each }.to \
+          raise_error(Mysql2::Error, "Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
+      else
+        expect(@client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").to_a.first).to \
+          eql("bad_datetime" => nil)
+      end
     end
 
     context "string encoding for ENUM values" do

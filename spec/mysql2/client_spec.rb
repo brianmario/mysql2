@@ -604,7 +604,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
       expect do
         @client.query("SELECT SLEEP(1)")
-      end.to raise_error(Mysql2::Error, /Lost connection to MySQL server/)
+      end.to raise_error(Mysql2::Error, /Lost connection to (MySQL )?server/)
 
       if RUBY_PLATFORM !~ /mingw|mswin/
         expect do

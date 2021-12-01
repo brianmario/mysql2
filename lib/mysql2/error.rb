@@ -24,6 +24,7 @@ module Mysql2
       1159 => ConnectionError, # ER_NET_READ_INTERRUPTED
       1160 => ConnectionError, # ER_NET_ERROR_ON_WRITE
       1161 => ConnectionError, # ER_NET_WRITE_INTERRUPTED
+      1927 => ConnectionError, # ER_CONNECTION_KILLED
 
       2001 => ConnectionError, # CR_SOCKET_CREATE_ERROR
       2002 => ConnectionError, # CR_CONNECTION_ERROR

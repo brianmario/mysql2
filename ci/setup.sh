@@ -99,9 +99,14 @@ if [[ x$OSTYPE =~ ^xdarwin ]]; then
 
   mysql.server start
   CHANGED_PASSWORD_BY_RECREATE=true
+
+  # the mysql & mariadb formulas depend on an older openssl and leave
+  # `brew --prefix openssl` pointing to an empty directory.
+  # So we install it again.
+  brew install openssl
 fi
 
-# TODO: get SSL working on OS X in Travis
+# TODO: get SSL working on OS X
 if ! [[ x$OSTYPE =~ ^xdarwin ]]; then
   sudo bash ci/ssl.sh
   sudo service mysql restart

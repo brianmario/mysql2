@@ -1174,6 +1174,7 @@ void init_mysql2_result() {
   rb_global_variable(&cDateTime);
 
   cMysql2Result = rb_define_class_under(mMysql2, "Result", rb_cObject);
+  rb_undef_alloc_func(cMysql2Result);
   rb_global_variable(&cMysql2Result);
   
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);

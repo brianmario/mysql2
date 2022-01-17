@@ -935,10 +935,12 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval  = charval;
       break;
 
+#ifdef HAVE_MYSQL_DEFAULT_AUTH
     case MYSQL_DEFAULT_AUTH:
       charval = (const char *)StringValueCStr(value);
       retval  = charval;
       break;
+#endif
 
 #ifdef HAVE_CONST_MYSQL_ENABLE_CLEARTEXT_PLUGIN
     case MYSQL_ENABLE_CLEARTEXT_PLUGIN:
@@ -1404,7 +1406,11 @@ static VALUE set_init_command(VALUE self, VALUE value) {
 }
 
 static VALUE set_default_auth(VALUE self, VALUE value) {
+#ifdef HAVE_MYSQL_DEFAULT_AUTH
   return _mysql_client_options(self, MYSQL_DEFAULT_AUTH, value);
+#else
+  rb_raise(cMysql2Error, "pluggable authentication is not available, you may need a newer MySQL client library");
+#endif
 }
 
 static VALUE set_enable_cleartext_plugin(VALUE self, VALUE value) {

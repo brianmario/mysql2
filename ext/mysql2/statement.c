@@ -581,6 +581,7 @@ void init_mysql2_statement() {
   rb_global_variable(&cBigDecimal);
 
   cMysql2Statement = rb_define_class_under(mMysql2, "Statement", rb_cObject);
+  rb_undef_alloc_func(cMysql2Statement);
   rb_global_variable(&cMysql2Statement);
 
   rb_define_method(cMysql2Statement, "param_count", rb_mysql_stmt_param_count, 0);

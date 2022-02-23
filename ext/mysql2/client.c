@@ -1260,6 +1260,22 @@ static VALUE rb_mysql_client_encoding(VALUE self) {
 }
 
 /* call-seq:
+ *    client.db
+ *
+ * Returns the currently selected db.
+ */
+static VALUE rb_mysql_client_db(VALUE self) {
+  GET_CLIENT(self);
+
+  char *db = wrapper->client->db;
+  if (!db) {
+    return Qnil;
+  }
+
+  return rb_str_new_cstr(wrapper->client->db);
+}
+
+/* call-seq:
  *    client.automatic_close?
  *
  * @return [Boolean]
@@ -1500,6 +1516,7 @@ void init_mysql2_client() {
   rb_define_method(cMysql2Client, "ssl_cipher", rb_mysql_get_ssl_cipher, 0);
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
   rb_define_method(cMysql2Client, "session_track", rb_mysql_client_session_track, 1);
+  rb_define_method(cMysql2Client, "db", rb_mysql_client_db, 0);
 
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
   rb_define_private_method(cMysql2Client, "read_timeout=", set_read_timeout, 1);

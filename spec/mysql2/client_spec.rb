@@ -1181,6 +1181,49 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context 'database' do
+    before(:example) do
+      2.times do |i|
+        @client.query("CREATE DATABASE test_db#{i}")
+      end
+    end
+
+    after(:example) do
+      2.times do |i|
+        @client.query("DROP DATABASE test_db#{i}")
+      end
+    end
+
+    it "should be `nil` when no database is selected" do
+      client = new_client(database: nil)
+      expect(client.database).to eq(nil)
+    end
+
+    it "should reflect the initially connected database" do
+      client = new_client(database: 'test_db0')
+      expect(client.database).to eq('test_db0')
+    end
+
+    context "when session tracking is on" do
+      it "should change to reflect currently selected database" do
+        client = new_client(database: 'test_db0')
+        client.query('SET session_track_schema=on')
+        expect { client.query('USE test_db1') }.to change {
+          client.database
+        }.from('test_db0').to('test_db1')
+      end
+    end
+
+    context "when session tracking is off" do
+      it "does not change when a new database is selected" do
+        client = new_client(database: 'test_db0')
+        client.query('SET session_track_schema=off')
+        expect(client.database).to eq('test_db0')
+        expect { client.query('USE test_db1') }.not_to(change { client.database })
+      end
+    end
+  end
+
   it "#thread_id should return a boolean" do
     expect(@client.ping).to eql(true)
     @client.close

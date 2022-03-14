@@ -322,6 +322,8 @@ development:
   secure_auth: false
 ```
 
+In this example, the compression flag is negated with `-COMPRESS`.
+
 ### Using Active Record's DATABASE_URL
 
 Active Record typically reads its configuration from a file named `database.yml` or an environment variable `DATABASE_URL`.

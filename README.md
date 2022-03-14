@@ -316,7 +316,7 @@ development:
   host: 127.0.0.1
   port: 3306
   flags:
-    - COMPRESS
+    - -COMPRESS
     - FOUND_ROWS
     - MULTI_STATEMENTS
   secure_auth: false

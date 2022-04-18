@@ -51,18 +51,17 @@ jobs:
       # if any matrix job fails unlike Travis fast_finish.
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+      - name: Install openssl
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install openssl
       # https://github.com/ruby/setup-ruby
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-      - name: Install openssl
-        if: matrix.os == 'macos-latest'
-        run: |
-            brew update
-            brew install openssl
-      - run: ruby -v
-      - run: bundle install --without development
+          bundler-cache: true
       - if: matrix.db != ''
         run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
       - run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts

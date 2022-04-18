@@ -21,7 +21,7 @@ jobs:
       # if any matrix job fails unlike Travis fast_finish.
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - run: docker build -t mysql2 -f ci/Dockerfile_${{ matrix.distro }} --build-arg IMAGE=${{ matrix.image }} .
       # Add the "--cap-add=... --security-opt seccomp=..." options
       # as a temporary workaround to avoid the following issue

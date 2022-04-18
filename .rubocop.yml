@@ -8,6 +8,9 @@ AllCops:
     - 'pkg/**/*'
     - 'tmp/**/*'
     - 'vendor/**/*'
+    # Suppress errors on RuboCop 0.50.0 & Ruby 3.1+
+    - 'lib/mysql2/console.rb'
+    - 'tasks/generate.rake'
 
 Layout/CaseIndentation:
   EnforcedStyle: end

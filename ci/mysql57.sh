@@ -5,7 +5,8 @@ set -eux
 apt-get purge -qq '^mysql*' '^libmysql*'
 rm -fr /etc/mysql
 rm -fr /var/lib/mysql
-apt-key add support/5072E1F5.asc
+apt-key add support/5072E1F5.asc # old signing key
+apt-key add support/3A79BD29.asc # 5.7.37 and higher
 # Verify the repository as add-apt-repository does not.
 wget -q --spider http://repo.mysql.com/apt/ubuntu/dists/$(lsb_release -cs)/mysql-5.7
 add-apt-repository 'http://repo.mysql.com/apt/ubuntu mysql-5.7'

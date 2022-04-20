@@ -5,7 +5,8 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    env:
+      BUNDLE_WITHOUT: development
     steps:
     - uses: actions/checkout@v3
     - name: Set up Ruby 2.4

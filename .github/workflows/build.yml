@@ -61,7 +61,7 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
+          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
       - if: matrix.db != ''
         run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
       - run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts

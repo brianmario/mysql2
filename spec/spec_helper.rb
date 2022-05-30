@@ -32,6 +32,7 @@ RSpec.configure do |config|
     @clients ||= []
     @clients << client
     return client unless block_given?
+
     begin
       yield client
     ensure
@@ -42,7 +43,7 @@ RSpec.configure do |config|
 
   def num_classes
     # rubocop:disable Lint/UnifiedInteger
-    0.class == Integer ? [Integer] : [Fixnum, Bignum]
+    0.instance_of?(Integer) ? [Integer] : [Fixnum, Bignum]
     # rubocop:enable Lint/UnifiedInteger
   end
 

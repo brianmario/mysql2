@@ -18,6 +18,9 @@ Layout/FirstHashElementIndentation:
 Layout/EndAlignment:
   EnforcedStyleAlignWith: variable
 
+Layout/HashAlignment:
+  EnforcedHashRocketStyle: table
+
 Style/TrailingCommaInArguments:
   EnforcedStyleForMultiline: consistent_comma
 

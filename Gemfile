@@ -19,7 +19,7 @@ group :test do
   # Downgrade psych because old RuboCop can't use new Psych
   gem 'psych', '< 4.0.0'
   # https://github.com/bbatsov/rubocop/pull/4789
-  gem 'rubocop', '~> 0.50.0'
+  gem 'rubocop', '~> 1.30'
 end
 
 group :benchmarks, optional: true do

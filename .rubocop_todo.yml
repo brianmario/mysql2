@@ -10,7 +10,7 @@
 # Cop supports --auto-correct.
 # Configuration parameters: EnforcedStyle, SupportedStyles.
 # SupportedStyles: auto_detection, squiggly, active_support, powerpack, unindent
-Layout/IndentHeredoc:
+Layout/HeredocIndentation:
   Exclude:
     - 'support/ruby_enc_to_mysql.rb'
     - 'tasks/compile.rake'
@@ -41,7 +41,7 @@ Metrics/CyclomaticComplexity:
 # Offense count: 313
 # Configuration parameters: AllowHeredoc, AllowURI, URISchemes, IgnoreCopDirectives, IgnoredPatterns.
 # URISchemes: http, https
-Metrics/LineLength:
+Layout/LineLength:
   Max: 232
 
 # Offense count: 6

@@ -16,8 +16,6 @@ group :test do
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
   gem 'rspec', '~> 3.2'
 
-  # Downgrade psych because old RuboCop can't use new Psych
-  gem 'psych', '< 4.0.0'
   # https://github.com/bbatsov/rubocop/pull/4789
   gem 'rubocop', '~> 1.30' if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('2.6')
 end

@@ -126,16 +126,6 @@ Style/MultipleComparison:
 Style/NumericLiterals:
   MinDigits: 20
 
-# Offense count: 4
-# This cop supports safe autocorrection (--autocorrect).
-# Configuration parameters: ConvertCodeThatCanStartToReturnNil, AllowedMethods, MaxChainLength.
-# AllowedMethods: present?, blank?, presence, try, try!
-Style/SafeNavigation:
-  Exclude:
-    - 'benchmark/setup_db.rb'
-    - 'ext/mysql2/extconf.rb'
-    - 'lib/mysql2/em.rb'
-
 # Offense count: 14
 # This cop supports unsafe autocorrection (--autocorrect-all).
 # Configuration parameters: Mode.

@@ -497,17 +497,17 @@ RSpec.describe Mysql2::Result do
     end
 
     {
-      'char_test' => 'CHAR',
-      'varchar_test' => 'VARCHAR',
-      'varbinary_test' => 'VARBINARY',
-      'tiny_blob_test' => 'TINYBLOB',
-      'tiny_text_test' => 'TINYTEXT',
-      'blob_test' => 'BLOB',
-      'text_test' => 'TEXT',
+      'char_test'        => 'CHAR',
+      'varchar_test'     => 'VARCHAR',
+      'varbinary_test'   => 'VARBINARY',
+      'tiny_blob_test'   => 'TINYBLOB',
+      'tiny_text_test'   => 'TINYTEXT',
+      'blob_test'        => 'BLOB',
+      'text_test'        => 'TEXT',
       'medium_blob_test' => 'MEDIUMBLOB',
       'medium_text_test' => 'MEDIUMTEXT',
-      'long_blob_test' => 'LONGBLOB',
-      'long_text_test' => 'LONGTEXT',
+      'long_blob_test'   => 'LONGBLOB',
+      'long_text_test'   => 'LONGTEXT',
     }.each do |field, type|
       it "should return a String for #{type}" do
         expect(test_result[field]).to be_an_instance_of(String)

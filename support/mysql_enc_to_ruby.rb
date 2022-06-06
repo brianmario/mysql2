@@ -55,7 +55,7 @@ encodings_with_nil = Array.new(encodings.size)
 collations.each do |collation|
   mysql_col_idx = collation[2].to_i
   rb_enc = mysql_to_rb.fetch(collation[1]) do |mysql_enc|
-    $stderr.puts "WARNING: Missing mapping for collation \"#{collation[0]}\" with encoding \"#{mysql_enc}\" and id #{mysql_col_idx}, assuming NULL"
+    warn "WARNING: Missing mapping for collation \"#{collation[0]}\" with encoding \"#{mysql_enc}\" and id #{mysql_col_idx}, assuming NULL"
     "NULL"
   end
   encodings[mysql_col_idx - 1] = [mysql_col_idx, rb_enc]

@@ -2,11 +2,11 @@ source 'https://rubygems.org'
 
 gemspec
 
-gem 'rake', if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("2.2")
-              '~> 13.0.1'
-            else
-              '< 13'
-            end
+if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("2.2")
+  gem 'rake', '~> 13.0.1'
+else
+  gem 'rake', '< 13'
+end
 gem 'rake-compiler', '~> 1.1.0'
 
 # For local debugging, irb is Gemified since Ruby 2.6
@@ -16,10 +16,8 @@ group :test do
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
   gem 'rspec', '~> 3.2'
 
-  # Downgrade psych because old RuboCop can't use new Psych
-  gem 'psych', '< 4.0.0'
   # https://github.com/bbatsov/rubocop/pull/4789
-  gem 'rubocop', '~> 0.50.0'
+  gem 'rubocop', '~> 1.30', '>= 1.30.1' if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('2.6')
 end
 
 group :benchmarks, optional: true do

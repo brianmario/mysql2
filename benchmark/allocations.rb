@@ -16,7 +16,7 @@ def bench_allocations(feature, iterations = 10, batch_size = 1000)
   GC::Profiler.clear
   GC::Profiler.enable
   iterations.times { yield batch_size }
-  GC::Profiler.report(STDOUT)
+  GC::Profiler.report($stdout)
   GC::Profiler.disable
 end
 

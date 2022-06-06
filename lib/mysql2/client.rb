@@ -20,6 +20,7 @@ module Mysql2
 
     def initialize(opts = {})
       raise Mysql2::Error, "Options parameter must be a Hash" unless opts.is_a? Hash
+
       opts = Mysql2::Util.key_hash_as_symbols(opts)
       @read_timeout = nil
       @query_options = self.class.default_query_options.dup
@@ -33,6 +34,7 @@ module Mysql2
       # TODO: stricter validation rather than silent massaging
       %i[reconnect connect_timeout local_infile read_timeout write_timeout default_file default_group secure_auth init_command automatic_close enable_cleartext_plugin default_auth].each do |key|
         next unless opts.key?(key)
+
         case key
         when :reconnect, :local_infile, :secure_auth, :automatic_close, :enable_cleartext_plugin
           send(:"#{key}=", !!opts[key]) # rubocop:disable Style/DoubleNegation
@@ -136,6 +138,7 @@ module Mysql2
     # and performance_schema.session_account_connect_attrs
     def parse_connect_attrs(conn_attrs)
       return {} if Mysql2::Client::CONNECT_ATTRS.zero?
+
       conn_attrs ||= {}
       conn_attrs[:program_name] ||= $PROGRAM_NAME
       conn_attrs.each_with_object({}) do |(key, value), hash|
@@ -152,6 +155,7 @@ module Mysql2
     def query_info
       info = query_info_string
       return {} unless info
+
       info_hash = {}
       info.split.each_slice(2) { |s| info_hash[s[0].downcase.delete(':').to_sym] = s[1].to_i }
       info_hash

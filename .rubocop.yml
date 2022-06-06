@@ -2,6 +2,8 @@ inherit_from: .rubocop_todo.yml
 
 AllCops:
   TargetRubyVersion: 2.0
+  SuggestExtensions: false
+  NewCops: disable
 
   DisplayCopNames: true
   Exclude:
@@ -12,16 +14,22 @@ AllCops:
 Layout/CaseIndentation:
   EnforcedStyle: end
 
-Layout/IndentHash:
+Layout/FirstHashElementIndentation:
   EnforcedStyle: consistent
 
-Lint/EndAlignment:
+Layout/EndAlignment:
   EnforcedStyleAlignWith: variable
+
+Layout/HashAlignment:
+  EnforcedHashRocketStyle: table
 
 Style/TrailingCommaInArguments:
   EnforcedStyleForMultiline: consistent_comma
 
-Style/TrailingCommaInLiteral:
+Style/TrailingCommaInArrayLiteral:
+  EnforcedStyleForMultiline: consistent_comma
+
+Style/TrailingCommaInHashLiteral:
   EnforcedStyleForMultiline: consistent_comma
 
 Style/TrivialAccessors:

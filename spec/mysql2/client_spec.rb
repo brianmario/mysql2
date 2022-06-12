@@ -54,6 +54,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   Klient = Class.new(Mysql2::Client) do
     attr_reader :connect_args
+
     def connect(*args)
       @connect_args ||= []
       @connect_args << args
@@ -212,6 +213,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       10.times do
         closed = @client.query("SHOW PROCESSLIST").none? { |row| row['Id'] == connection_id }
         break if closed
+
         sleep(0.1)
       end
       expect(closed).to eq(true)

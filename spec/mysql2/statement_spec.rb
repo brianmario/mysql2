@@ -1,4 +1,4 @@
-require './spec/spec_helper.rb'
+require './spec/spec_helper'
 
 RSpec.describe Mysql2::Statement do
   before(:example) do
@@ -277,7 +277,7 @@ RSpec.describe Mysql2::Statement do
   end
 
   context "#each" do
-    # note: The current impl. of prepared statement requires results to be cached on #execute except for streaming queries
+    # NOTE: The current impl. of prepared statement requires results to be cached on #execute except for streaming queries
     #       The drawback of this is that args of Result#each is ignored...
 
     it "should yield rows as hash's" do
@@ -320,7 +320,7 @@ RSpec.describe Mysql2::Statement do
       result = @client.prepare("SELECT 1 UNION SELECT 2").execute(stream: true, cache_rows: false)
       expect do
         result.each {}
-        result.each {}
+        result.each {} # rubocop:disable Style/CombinableLoops
       end.to raise_exception(Mysql2::Error)
     end
   end
@@ -573,17 +573,17 @@ RSpec.describe Mysql2::Statement do
     end
 
     {
-      'char_test' => 'CHAR',
-      'varchar_test' => 'VARCHAR',
-      'varbinary_test' => 'VARBINARY',
-      'tiny_blob_test' => 'TINYBLOB',
-      'tiny_text_test' => 'TINYTEXT',
-      'blob_test' => 'BLOB',
-      'text_test' => 'TEXT',
+      'char_test'        => 'CHAR',
+      'varchar_test'     => 'VARCHAR',
+      'varbinary_test'   => 'VARBINARY',
+      'tiny_blob_test'   => 'TINYBLOB',
+      'tiny_text_test'   => 'TINYTEXT',
+      'blob_test'        => 'BLOB',
+      'text_test'        => 'TEXT',
       'medium_blob_test' => 'MEDIUMBLOB',
       'medium_text_test' => 'MEDIUMTEXT',
-      'long_blob_test' => 'LONGBLOB',
-      'long_text_test' => 'LONGTEXT',
+      'long_blob_test'   => 'LONGBLOB',
+      'long_text_test'   => 'LONGTEXT',
     }.each do |field, type|
       it "should return a String for #{type}" do
         expect(test_result[field]).to be_an_instance_of(String)

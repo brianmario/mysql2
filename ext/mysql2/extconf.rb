@@ -181,7 +181,7 @@ when String
   end
 end
 
-unless disabled_sanitizers.empty?
+unless disabled_sanitizers.empty? # rubocop:disable Style/IfUnlessModifier
   abort "-----\nCould not enable requested sanitizers: #{disabled_sanitizers.join(',')}\n-----"
 end
 

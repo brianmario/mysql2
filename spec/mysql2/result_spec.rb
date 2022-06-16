@@ -220,8 +220,8 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should return an array of frozen strings" do
-      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1")
-      result.tables.each do |f|
+      result = @client.query "SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1"
+      result.fields.each do |f|
         expect(f).to be_frozen
       end
     end
@@ -241,7 +241,7 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should return an array of frozen strings" do
-      result = @client.query ""SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1""
+      result = @client.query "SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1"
       result.dbs.each do |f|
         expect(f).to be_frozen
       end

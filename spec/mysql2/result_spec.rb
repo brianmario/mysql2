@@ -517,8 +517,8 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
 
     it "should return an array of database names in proper order" do
       db = DatabaseCredentials['root']['database']
-      result = @client.query( "SELECT id, bit_test, single_bit_test FROM mysql2_test ORDER BY id DESC LIMIT 1" )
-      expect(result.dbs).to eql([db,db,db])
+      result = @client.query("SELECT id, bit_test, single_bit_test FROM mysql2_test ORDER BY id DESC LIMIT 1")
+      expect(result.dbs).to eql([db, db, db])
     end
 
     it "should return an array of frozen strings" do

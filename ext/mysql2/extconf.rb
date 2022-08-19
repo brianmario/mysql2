@@ -48,6 +48,7 @@ dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w[
   /opt/local
   /opt/local/mysql
   /opt/local/lib/mysql5*
+  /opt/homebrew/opt/mysql*
   /usr
   /usr/mysql
   /usr/local

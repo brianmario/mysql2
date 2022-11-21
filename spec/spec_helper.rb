@@ -2,6 +2,8 @@ require 'rspec'
 require 'mysql2'
 require 'timeout'
 require 'yaml'
+require 'fiber'
+
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 if GC.respond_to?(:verify_compaction_references)

@@ -3,7 +3,7 @@
 
 typedef struct {
   VALUE encoding;
-  VALUE active_thread; /* rb_thread_current() or Qnil */
+  VALUE active_fiber; /* rb_fiber_current() or Qnil */
   long server_version;
   int reconnect_enabled;
   unsigned int connect_timeout;
@@ -15,7 +15,6 @@ typedef struct {
   MYSQL *client;
 } mysql_client_wrapper;
 
-void rb_mysql_client_set_active_thread(VALUE self);
 void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result);
 
 #define GET_CLIENT(self) \

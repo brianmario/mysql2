@@ -40,10 +40,10 @@ jobs:
           # MariaDB lastet version
           # Allow failure due to the following test failures that rarely happens.
           # https://github.com/brianmario/mysql2/issues/1194
-          - {os: macos-latest, ruby: '2.4', db: mariadb, allow-failure: true}
+          - {os: macos-latest, ruby: '2.6', db: mariadb, allow-failure: true}
           # MySQL latest version
           # Allow failure due to the issue #1165.
-          - {os: macos-latest, ruby: '2.4', db: mysql, allow-failure: true}
+          - {os: macos-latest, ruby: '2.6', db: mysql, allow-failure: true}
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails unlike Travis fast_finish.
       fail-fast: false

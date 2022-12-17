@@ -193,7 +193,7 @@ static void rb_mysql_client_mark(void * wrapper) {
   mysql_client_wrapper * w = wrapper;
   if (w) {
     rb_gc_mark(w->encoding);
-    rb_gc_mark(w->active_thread);
+    rb_gc_mark(w->active_fiber);
   }
 }
 
@@ -297,7 +297,7 @@ static void *nogvl_close(void *ptr) {
     mysql_close(wrapper->client);
     wrapper->closed = 1;
     wrapper->reconnect_enabled = 0;
-    wrapper->active_thread = Qnil;
+    wrapper->active_fiber = Qnil;
   }
 
   return NULL;
@@ -342,7 +342,7 @@ static VALUE allocate(VALUE klass) {
   mysql_client_wrapper * wrapper;
   obj = Data_Make_Struct(klass, mysql_client_wrapper, rb_mysql_client_mark, rb_mysql_client_free, wrapper);
   wrapper->encoding = Qnil;
-  wrapper->active_thread = Qnil;
+  wrapper->active_fiber = Qnil;
   wrapper->automatic_close = 1;
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
@@ -543,7 +543,7 @@ static VALUE do_send_query(VALUE args) {
   mysql_client_wrapper *wrapper = query_args->wrapper;
   if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, query_args, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, we're not active anymore */
-    wrapper->active_thread = Qnil;
+    wrapper->active_fiber = Qnil;
     rb_raise_mysql2_error(wrapper);
   }
   return Qnil;
@@ -573,7 +573,7 @@ static void *nogvl_do_result(void *ptr, char use_result) {
 
   /* once our result is stored off, this connection is
      ready for another command to be issued */
-  wrapper->active_thread = Qnil;
+  wrapper->active_fiber = Qnil;
 
   return result;
 }
@@ -599,13 +599,13 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   GET_CLIENT(self);
 
   /* if we're not waiting on a result, do nothing */
-  if (NIL_P(wrapper->active_thread))
+  if (NIL_P(wrapper->active_fiber))
     return Qnil;
 
   REQUIRE_CONNECTED(wrapper);
   if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, mark this connection inactive */
-    wrapper->active_thread = Qnil;
+    wrapper->active_fiber = Qnil;
     rb_raise_mysql2_error(wrapper);
   }
 
@@ -618,7 +618,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 
   if (result == NULL) {
     if (mysql_errno(wrapper->client) != 0) {
-      wrapper->active_thread = Qnil;
+      wrapper->active_fiber = Qnil;
       rb_raise_mysql2_error(wrapper);
     }
     /* no data and no error, so query was not a SELECT */
@@ -645,7 +645,7 @@ struct async_query_args {
 static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   GET_CLIENT(self);
 
-  wrapper->active_thread = Qnil;
+  wrapper->active_fiber = Qnil;
 
   /* Invalidate the MySQL socket to prevent further communication.
    * The GC will come along later and call mysql_close to free it.
@@ -710,7 +710,7 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
   GET_CLIENT(self);
 
   /* Check if execution terminated while result was still being read. */
-  if (!NIL_P(wrapper->active_thread)) {
+  if (!NIL_P(wrapper->active_fiber)) {
     if (CONNECTED(wrapper)) {
       /* Invalidate the MySQL socket to prevent further communication. */
 #ifndef _WIN32
@@ -725,24 +725,24 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
     }
     /* Skip mysql client check performed before command execution. */
     wrapper->client->status = MYSQL_STATUS_READY;
-    wrapper->active_thread = Qnil;
+    wrapper->active_fiber = Qnil;
   }
 
   return Qnil;
 }
 
-void rb_mysql_client_set_active_thread(VALUE self) {
-  VALUE thread_current = rb_thread_current();
+static void rb_mysql_client_set_active_fiber(VALUE self) {
+  VALUE fiber_current = rb_fiber_current();
   GET_CLIENT(self);
 
   // see if this connection is still waiting on a result from a previous query
-  if (NIL_P(wrapper->active_thread)) {
+  if (NIL_P(wrapper->active_fiber)) {
     // mark this connection active
-    wrapper->active_thread = thread_current;
-  } else if (wrapper->active_thread == thread_current) {
+    wrapper->active_fiber = fiber_current;
+  } else if (wrapper->active_fiber == fiber_current) {
     rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
   } else {
-    VALUE inspect = rb_inspect(wrapper->active_thread);
+    VALUE inspect = rb_inspect(wrapper->active_fiber);
     const char *thr = StringValueCStr(inspect);
 
     rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
@@ -806,7 +806,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   args.sql_len = RSTRING_LEN(args.sql);
   args.wrapper = wrapper;
 
-  rb_mysql_client_set_active_thread(self);
+  rb_mysql_client_set_active_fiber(self);
 
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);

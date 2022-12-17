@@ -624,10 +624,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       it "should describe the thread holding the active query" do
-        thr = Thread.new { @client.query("SELECT 1", async: true) }
+        thr = Thread.new do
+          @client.query("SELECT 1", async: true)
+          Fiber.current
+        end
 
-        thr.join
-        expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(thr.inspect)))
+        fiber = thr.value
+        expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(fiber.inspect)))
       end
 
       it "should timeout if we wait longer than :read_timeout" do

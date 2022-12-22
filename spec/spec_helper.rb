@@ -60,6 +60,19 @@ RSpec.configure do |config|
     end
   end
 
+  # A directory where SSL certificates pem files exist.
+  def ssl_cert_dir
+    return @ssl_cert_dir if @ssl_cert_dir
+
+    dir = ENV['TEST_RUBY_MYSQL2_SSL_CERT_DIR']
+    @ssl_cert_dir = if dir && !dir.empty?
+      dir
+    else
+      '/etc/mysql'
+    end
+    @ssl_cert_dir
+  end
+
   config.before(:suite) do
     begin
       new_client

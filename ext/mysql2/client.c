@@ -122,7 +122,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
 
   if (version < 50703) {
-    rb_warn( "Your mysql client library does not support setting ssl_mode; full support comes with 5.7.11." );
+    rb_warn("Your mysql client library version %lu does not support setting ssl_mode; full support comes with 5.7.11.", version);
     return Qnil;
   }
 #if defined(HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT) || defined(HAVE_CONST_MYSQL_OPT_SSL_ENFORCE)
@@ -163,7 +163,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   return INT2NUM(result);
 #endif
 #ifdef NO_SSL_MODE_SUPPORT
-  rb_warn( "Your mysql client library does not support setting ssl_mode; full support comes with 5.7.11." );
+  rb_warn("Your mysql client library does not support setting ssl_mode; full support comes with 5.7.11.");
   return Qnil;
 #endif
 }

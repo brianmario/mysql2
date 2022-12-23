@@ -87,6 +87,7 @@ Style/Documentation:
     - 'lib/mysql2/client.rb'
     - 'lib/mysql2/em.rb'
     - 'lib/mysql2/error.rb'
+    - 'lib/mysql2/result.rb'
     - 'lib/mysql2/statement.rb'
 
 # Offense count: 6

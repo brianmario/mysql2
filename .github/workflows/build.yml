@@ -48,6 +48,9 @@ jobs:
       fail-fast: false
     env:
       BUNDLE_WITHOUT: development
+      # reduce MacOS CI time, don't need to clean a runtime that isn't saved
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
     steps:
       - uses: actions/checkout@v3
       # https://github.com/ruby/setup-ruby

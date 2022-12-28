@@ -50,11 +50,6 @@ jobs:
       BUNDLE_WITHOUT: development
     steps:
       - uses: actions/checkout@v3
-      - name: Install openssl
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install openssl
       # https://github.com/ruby/setup-ruby
       - uses: ruby/setup-ruby@v1
         with:

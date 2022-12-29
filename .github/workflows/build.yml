@@ -4,46 +4,45 @@ jobs:
   build:
     name: >-
       ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
-    # Run all the tests on the new environment as much as possible.
-    # https://docs.github.com/en/free-pro-team@latest/actions/reference/specifications-for-github-hosted-runners
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       matrix:
-        os:
-          # Use ubuntu-18.04 instead of ubuntu-20.04 temporarily, due to a failing test on mysql 8.0.
-          # https://github.com/brianmario/mysql2/issues/1165
-          # - ubuntu-20.04 # focal
-          - ubuntu-18.04 # bionic
-        ruby:
-          - '3.2'
-          - '3.1'
-          - '3.0'
-          - '2.7'
-          - '2.6'
-          - '2.5'
-          - '2.4'
-          - '2.3'
-          - '2.2'
-          - '2.1'
         include:
-          # Comment out due to ci/setup.sh stucking.
-          # - {os: ubuntu-18.04, ruby: 2.4, db: mariadb10.1}
-          - {os: ubuntu-20.04, ruby: '2.4', db: mariadb10.3}
-          - {os: ubuntu-18.04, ruby: '2.4', db: mysql57}
+          # Ruby 3.x on Ubuntu 22.04 LTS (latest at this time)
+          - {os: ubuntu-22.04, ruby: 'head', db: mysql80}
+          - {os: ubuntu-22.04, ruby: '3.2', db: mysql80}
+          - {os: ubuntu-22.04, ruby: '3.1', db: mysql80}
+          - {os: ubuntu-22.04, ruby: '3.0', db: mysql80}
+
+          # Ruby 2.x on Ubuntu 20.04 LTS
+          - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}
+          - {os: ubuntu-20.04, ruby: '2.6', db: mysql80}
+          - {os: ubuntu-20.04, ruby: '2.5', db: mysql80}
           - {os: ubuntu-20.04, ruby: '2.4', db: mysql80}
-          - {os: ubuntu-18.04, ruby: 'head'}
-          # db: A DB's brew package name in macOS case.
-          #     Set a name "db: 'name@X.Y'" when using an old version.
-          # MariaDB lastet version
-          # Allow failure due to the following test failures that rarely happens.
+          - {os: ubuntu-20.04, ruby: '2.3', db: mysql80}
+          - {os: ubuntu-20.04, ruby: '2.2', db: mysql80}
+          - {os: ubuntu-20.04, ruby: '2.1', db: mysql80}
+          - {os: ubuntu-20.04, ruby: '2.0', db: mysql80}
+
+          # db: on Linux, ci/setup.sh installs the specified packages
+          # db: on MacOS, installs a Homebrew package use "name@X.Y" to specify a version
+
+          - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}
+          - {os: ubuntu-20.04, ruby: '2.7', db: mariadb10.6}
+          - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}
+          - {os: ubuntu-18.04, ruby: '2.7', db: mysql57}
+
+          # TODO - Windows CI
+          # - {os: windows-2022, ruby: '3.2', db: mysql80}
+          # - {os: windows-2022, ruby: '2.7', db: mysql80}
+
+          # Allow failure due to this issue:
           # https://github.com/brianmario/mysql2/issues/1194
           - {os: macos-latest, ruby: '2.6', db: mariadb, ssl: openssl@1.1, allow-failure: true}
-          # MySQL latest version
-          # Allow failure due to the issue #1194.
           - {os: macos-latest, ruby: '2.6', db: mysql, ssl: openssl@1.1, allow-failure: true}
       # On the fail-fast: true, it cancels all in-progress jobs
-      # if any matrix job fails unlike Travis fast_finish.
+      # if any matrix job fails, which we don't want.
       fail-fast: false
     env:
       BUNDLE_WITHOUT: development
@@ -52,14 +51,15 @@ jobs:
       HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
     steps:
       - uses: actions/checkout@v3
-      # https://github.com/ruby/setup-ruby
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-      - if: matrix.db
-        run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
-      - run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
+      - if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
+      - if: runner.os == 'Windows'
+        run: echo "127.0.0.1 mysql2gem.example.com" | tee -a C:/Windows/System32/drivers/etc/hosts
+      - run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
       - run: bash ci/setup.sh
       - if: matrix.ssl
         run: echo "rake_spec_opts=--with-openssl-dir=$(brew --prefix ${{ matrix.ssl }})" >> $GITHUB_ENV

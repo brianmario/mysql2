@@ -7,6 +7,8 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
 typedef struct {
   VALUE fields;
   VALUE fieldTypes;
+  VALUE tables;
+  VALUE dbs;
   VALUE rows;
   VALUE client;
   VALUE encoding;

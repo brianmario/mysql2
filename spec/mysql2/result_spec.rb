@@ -207,6 +207,47 @@ RSpec.describe Mysql2::Result do
     end
   end
 
+  context "#tables" do
+    let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1") }
+
+    it "method should exist" do
+      expect(test_result).to respond_to(:tables)
+    end
+
+    it "should return an array of table names in proper order" do
+      result = @client.query("SELECT id, bit_test, single_bit_test FROM mysql2_test ORDER BY id DESC LIMIT 1")
+      expect(result.tables).to eql(%w[mysql2_test mysql2_test mysql2_test])
+    end
+
+    it "should return an array of frozen strings" do
+      result = @client.query "SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1"
+      result.tables.each do |f|
+        expect(f).to be_frozen
+      end
+    end
+  end
+
+  context "#dbs" do
+    let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1") }
+
+    it "method should exist" do
+      expect(test_result).to respond_to(:dbs)
+    end
+
+    it "should return an array of database names in proper order" do
+      db = DatabaseCredentials['root']['database']
+      result = @client.query("SELECT id, bit_test, single_bit_test FROM mysql2_test ORDER BY id DESC LIMIT 1")
+      expect(result.dbs).to eql([db, db, db])
+    end
+
+    it "should return an array of frozen strings" do
+      result = @client.query "SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1"
+      result.dbs.each do |f|
+        expect(f).to be_frozen
+      end
+    end
+  end
+
   context "streaming" do
     it "should maintain a count while streaming" do
       result = @client.query('SELECT 1', stream: true, cache_rows: false)

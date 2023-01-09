@@ -121,7 +121,7 @@ struct nogvl_select_db_args {
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
 
-  if (version < 50703) {
+  if (version >= 50000 && version < 50703) {
     rb_warn("Your mysql client library version %lu does not support setting ssl_mode; full support comes with 5.7.11.", version);
     return Qnil;
   }

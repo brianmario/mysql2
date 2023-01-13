@@ -27,6 +27,7 @@ jobs:
           - '2.2'
           - '2.1'
         db: ['']
+        ssl: ['']
         include:
           # Comment out due to ci/setup.sh stucking.
           # - {os: ubuntu-18.04, ruby: 2.4, db: mariadb10.1}
@@ -39,10 +40,10 @@ jobs:
           # MariaDB lastet version
           # Allow failure due to the following test failures that rarely happens.
           # https://github.com/brianmario/mysql2/issues/1194
-          - {os: macos-latest, ruby: '2.6', db: mariadb, allow-failure: true}
+          - {os: macos-latest, ruby: '2.6', db: mariadb, ssl: openssl@1.1, allow-failure: true}
           # MySQL latest version
           # Allow failure due to the issue #1194.
-          - {os: macos-latest, ruby: '2.6', db: mysql, allow-failure: true}
+          - {os: macos-latest, ruby: '2.6', db: mysql, ssl: openssl@1.1, allow-failure: true}
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails unlike Travis fast_finish.
       fail-fast: false
@@ -60,6 +61,8 @@ jobs:
           bundler-cache: true # runs 'bundle install' and caches installed gems automatically
       - if: matrix.db != ''
         run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
+      - if: startsWith(matrix.os, 'macos') && matrix.ssl != ''
+        run: echo "RUBY_MYSQL2_SSL_DIR=$(brew --prefix ${{ matrix.ssl }})" >> $GITHUB_ENV
       - run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
       - run: bash ci/setup.sh
       - run: bundle exec rake spec

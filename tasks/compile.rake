@@ -51,6 +51,9 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
       POST_INSTALL_MESSAGE
     end
   end
+
+  ssl_dir = ENV['RUBY_MYSQL2_SSL_DIR']
+  ext.config_options << "--with-ssl-dir=#{ssl_dir}" if ssl_dir
 end
 Rake::Task[:spec].prerequisites << :compile
 

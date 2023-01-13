@@ -28,8 +28,16 @@ end
 
 # Homebrew openssl
 if RUBY_PLATFORM =~ /darwin/ && system("command -v brew")
-  openssl_location = `brew --prefix openssl`.strip
-  $LDFLAGS << " -L#{openssl_location}/lib" if openssl_location
+  _, lib = dir_config('ssl')
+  unless lib
+    openssl_location = `brew --prefix openssl`.strip
+    lib = "#{openssl_location}/lib" if openssl_location
+  end
+
+  if lib
+    abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
+    $LDFLAGS << " -L#{lib}"
+  end
 end
 
 # 2.1+

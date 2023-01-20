@@ -121,8 +121,8 @@ struct nogvl_select_db_args {
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
 
-  if (version < 50703) {
-    rb_warn( "Your mysql client library does not support setting ssl_mode; full support comes with 5.7.11." );
+  if (version < 50630 || (version >= 50700 && version < 50703)) {
+    rb_warn( "Your mysql client library does not support setting ssl_mode; full support comes with 5.6.36+, 5.7.11+, 8.0+" );
     return Qnil;
   }
 #if defined(HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT) || defined(HAVE_CONST_MYSQL_OPT_SSL_ENFORCE)
@@ -1723,7 +1723,7 @@ void init_mysql2_client() {
   rb_const_set(cMysql2Client, rb_intern("SESSION_TRACK_TRANSACTION_STATE"), INT2NUM(SESSION_TRACK_TRANSACTION_STATE));
 #endif
 
-#if defined(FULL_SSL_MODE_SUPPORT) // MySQL 5.7.11 and above
+#if defined(FULL_SSL_MODE_SUPPORT) // MySQL 5.6.36 and MySQL 5.7.11 and above
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"), INT2NUM(SSL_MODE_DISABLED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_PREFERRED"), INT2NUM(SSL_MODE_PREFERRED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"), INT2NUM(SSL_MODE_REQUIRED));

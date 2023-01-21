@@ -33,12 +33,14 @@ static size_t rb_mysql_stmt_memsize(const void * ptr) {
   return sizeof(*stmt_wrapper);
 }
 
+#ifdef HAVE_RB_GC_MARK_MOVABLE
 static void rb_mysql_stmt_compact(void * ptr) {
   mysql_stmt_wrapper *stmt_wrapper = ptr;
   if (!stmt_wrapper) return;
 
   rb_mysql2_gc_location(stmt_wrapper->client);
 }
+#endif
 
 static const rb_data_type_t rb_mysql_statement_type = {
   "rb_mysql_statement",

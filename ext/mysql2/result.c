@@ -143,6 +143,7 @@ static size_t rb_mysql_result_memsize(const void * wrapper) {
   return memsize;
 }
 
+#ifdef HAVE_RB_GC_MARK_MOVABLE
 static void rb_mysql_result_compact(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
@@ -153,6 +154,7 @@ static void rb_mysql_result_compact(void * wrapper) {
     rb_mysql2_gc_location(w->statement);
   }
 }
+#endif
 
 static const rb_data_type_t rb_mysql_result_type = {
   "rb_mysql_result",

@@ -28,6 +28,8 @@ jobs:
           # db: on Linux, ci/setup.sh installs the specified packages
           # db: on MacOS, installs a Homebrew package use "name@X.Y" to specify a version
 
+          - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.11}
+          - {os: ubuntu-22.04, ruby: '2.7', db: mariadb10.11}
           - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}
           - {os: ubuntu-20.04, ruby: '2.7', db: mariadb10.6}
           - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}

@@ -166,16 +166,26 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       new_client(option_overrides)
     end
 
-    %i[disabled preferred required verify_ca verify_identity].each do |ssl_mode|
+    # 'preferred' or 'verify_ca' are only in MySQL 5.6.36+, 5.7.11+, 8.0+
+    version = Mysql2::Client.info
+    ssl_modes = case version
+    when 50636...50700, 50711...50800, 80000...90000
+      %i[disabled preferred required verifa_ca verify_identity]
+    else
+      %i[disabled required verify_identity]
+    end
+
+    # MySQL and MariaDB and all versions of Connector/C
+    ssl_modes.each do |ssl_mode|
       it "should set ssl_mode option #{ssl_mode}" do
         options = {
           ssl_mode: ssl_mode,
         }
         options.merge!(option_overrides)
-        # Relax the matching condition by checking if an error is not raised.
-        # TODO: Verify warnings by checking stderr.
         expect do
-          new_client(options)
+          expect do
+            new_client(options)
+          end.not_to output(/does not support ssl_mode/).to_stderr
         end.not_to raise_error
       end
     end

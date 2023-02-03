@@ -94,7 +94,7 @@ the library file `libmysqlclient.so` but is missing the header file `mysql.h`
 
 ### Mac OS X
 
-You may use Homebew, MacPorts, or a native MySQL installer package. The most
+You may use Homebrew, MacPorts, or a native MySQL installer package. The most
 common paths will be automatically searched. If you want to select a specific
 MySQL directory, use the `--with-mysql-dir` or `--with-mysql-config` options above.
 

@@ -2,6 +2,10 @@
 
 set -eux
 
+# TEST_RUBY_MYSQL2_SSL_CERT_HOST: custom host for the SSL certificates.
+SSL_CERT_HOST=${TEST_RUBY_MYSQL2_SSL_CERT_HOST:-mysql2gem.example.com}
+echo "Generating the SSL certifications from the host ${SSL_CERT_HOST}.."
+
 echo "
 [ ca ]
 # January 1, 2015
@@ -30,7 +34,7 @@ commonName_default             = ca_mysql2gem
 " >> ca.cnf
 
 echo "
-commonName_default             = mysql2gem.example.com
+commonName_default             = ${SSL_CERT_HOST}
 " >> cert.cnf
 
 # Generate a set of certificates

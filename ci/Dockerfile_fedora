@@ -17,6 +17,7 @@ RUN dnf -yq install \
   make \
   mariadb-connector-c-devel \
   mariadb-server \
+  openssl \
   redhat-rpm-config \
   ruby-devel \
   rubygem-bigdecimal \

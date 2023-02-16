@@ -16,7 +16,7 @@ jobs:
           # Fedora latest stable version
           - {distro: fedora, image: 'fedora:latest'}
           # Fedora development version
-          - {distro: fedora, image: 'fedora:rawhide', ssl_cert_dir: '/tmp/mysql2'}
+          - {distro: fedora, image: 'fedora:rawhide', ssl_cert_dir: '/tmp/mysql2', ssl_cert_host: 'localhost'}
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails unlike Travis fast_finish.
       fail-fast: false
@@ -29,8 +29,9 @@ jobs:
       # https://bugzilla.redhat.com/show_bug.cgi?id=1900021
       - run: |
           docker run \
-            --add-host=mysql2gem.example.com:127.0.0.1 \
+            --add-host=${{ matrix.ssl_cert_host || 'mysql2gem.example.com' }}:127.0.0.1 \
             -t \
             -e TEST_RUBY_MYSQL2_SSL_CERT_DIR="${{ matrix.ssl_cert_dir || '' }}" \
+            -e TEST_RUBY_MYSQL2_SSL_CERT_HOST="${{ matrix.ssl_cert_host || '' }}" \
             --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
             mysql2

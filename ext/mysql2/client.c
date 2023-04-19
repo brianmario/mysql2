@@ -54,7 +54,9 @@ static VALUE rb_hash_dup(VALUE other) {
  * variable to use, but MYSQL_SERVER_VERSION gives the correct numbers when
  * linking against the server itself
  */
-#ifdef LIBMYSQL_VERSION
+#if defined(MARIADB_CLIENT_VERSION_STR)
+  #define MYSQL_LINK_VERSION MARIADB_CLIENT_VERSION_STR
+#elif defined(LIBMYSQL_VERSION)
   #define MYSQL_LINK_VERSION LIBMYSQL_VERSION
 #else
   #define MYSQL_LINK_VERSION MYSQL_SERVER_VERSION
@@ -436,7 +438,7 @@ static VALUE do_send_query(void *args) {
  */
 static void *nogvl_read_query_result(void *ptr) {
   MYSQL * client = ptr;
-  my_bool res = mysql_read_query_result(client);
+  bool res = mysql_read_query_result(client);
 
   return (void *)(res == 0 ? Qtrue : Qfalse);
 }
@@ -759,7 +761,7 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   const void *retval = NULL;
   unsigned int intval = 0;
   const char * charval = NULL;
-  my_bool boolval;
+  bool boolval;
 
   GET_CLIENT(self);
 
@@ -794,10 +796,12 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval = &boolval;
       break;
 
+#if defined(MYSQL_SECURE_AUTH)
     case MYSQL_SECURE_AUTH:
       boolval = (value == Qfalse ? 0 : 1);
       retval = &boolval;
       break;
+#endif
 
     case MYSQL_READ_DEFAULT_FILE:
       charval = (const char *)StringValueCStr(value);
@@ -1182,7 +1186,9 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
 }
 
 static VALUE set_secure_auth(VALUE self, VALUE value) {
+#if defined(MYSQL_SECURE_AUTH)
   return _mysql_client_options(self, MYSQL_SECURE_AUTH, value);
+#endif
 }
 
 static VALUE set_read_default_file(VALUE self, VALUE value) {
@@ -1297,6 +1303,10 @@ void init_mysql2_client() {
 #ifdef CLIENT_LONG_PASSWORD
   rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),
       LONG2NUM(CLIENT_LONG_PASSWORD));
+#else
+  /* HACK because MariaDB 10.2 no longer defines this constant,
+   * but we're using it in our default connection flags. */
+  rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"), INT2NUM(0));
 #endif
 
 #ifdef CLIENT_FOUND_ROWS

@@ -796,10 +796,12 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval = &boolval;
       break;
 
+#if defined(MYSQL_SECURE_AUTH)
     case MYSQL_SECURE_AUTH:
       boolval = (value == Qfalse ? 0 : 1);
       retval = &boolval;
       break;
+#endif
 
     case MYSQL_READ_DEFAULT_FILE:
       charval = (const char *)StringValueCStr(value);
@@ -1184,7 +1186,9 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
 }
 
 static VALUE set_secure_auth(VALUE self, VALUE value) {
+#if defined(MYSQL_SECURE_AUTH)
   return _mysql_client_options(self, MYSQL_SECURE_AUTH, value);
+#endif
 }
 
 static VALUE set_read_default_file(VALUE self, VALUE value) {

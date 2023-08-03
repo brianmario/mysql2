@@ -51,7 +51,7 @@ mysql2_mysql_enc_name_to_rb_hash (str, len)
       74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
       74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
       74, 74, 74, 74, 74, 74, 74, 74, 15,  5,
-       0, 74,  5, 25, 40, 10, 20, 50, 74, 74,
+       0, 30,  5, 25, 40, 10, 20, 50, 74, 74,
       74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
       74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
       74, 74, 74, 74, 74, 74, 74, 74, 74, 74,
@@ -89,7 +89,7 @@ mysql2_mysql_enc_name_to_rb (str, len)
 {
   enum
     {
-      TOTAL_KEYWORDS = 41,
+      TOTAL_KEYWORDS = 42,
       MIN_WORD_LENGTH = 3,
       MAX_WORD_LENGTH = 8,
       MIN_HASH_VALUE = 3,
@@ -133,7 +133,8 @@ mysql2_mysql_enc_name_to_rb (str, len)
       {"big5", "Big5"},
       {"euckr", "EUC-KR"},
       {"latin2", "ISO-8859-2"},
-      {""}, {""},
+      {"utf8mb3", "UTF-8"},
+      {""},
       {"dec8", NULL},
       {"cp850", "CP850"},
       {"latin1", "ISO-8859-1"},

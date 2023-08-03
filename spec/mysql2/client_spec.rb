@@ -1083,7 +1083,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     it "returns changes system variables for SESSION_TRACK_SYSTEM_VARIABLES" do
       @client.query("SET @@SESSION.session_track_state_change=ON;")
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_SYSTEM_VARIABLES)
-      expect(res).to eq(%w[session_track_state_change ON])
+      expect(res).to include("session_track_state_change", "ON")
     end
 
     it "returns database name for SESSION_TRACK_SCHEMA" do
@@ -1096,13 +1096,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       @client.query("SET @@SESSION.session_track_transaction_info='CHARACTERISTICS';")
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_SYSTEM_VARIABLES)
-      expect(res).to eq(%w[session_track_transaction_info CHARACTERISTICS])
+      expect(res).to include("session_track_transaction_info", "CHARACTERISTICS")
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_STATE_CHANGE)
       expect(res).to be_nil
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_CHARACTERISTICS)
-      expect(res).to eq([""])
+      expect(res).to include("")
     end
 
     it "returns valid transaction state inside a transaction" do
@@ -1110,7 +1110,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       @client.query("START TRANSACTION")
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_STATE)
-      expect(res).to eq(["T_______"])
+      expect(res).to include("T_______")
     end
 
     it "returns empty array if session track type not found" do

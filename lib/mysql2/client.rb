@@ -78,6 +78,10 @@ module Mysql2
         warn "============= END WARNING FROM mysql2 ========="
       end
 
+      # avoid logging sensitive data via #inspect
+      @query_options.delete(:password)
+      @query_options.delete(:pass)
+
       user     = opts[:username] || opts[:user]
       pass     = opts[:password] || opts[:pass]
       host     = opts[:host] || opts[:hostname]

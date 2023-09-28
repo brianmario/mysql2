@@ -1176,8 +1176,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   it "should not include the password in the output of #inspect" do
     client_class = Class.new(Mysql2::Client) do
-      def connect(*args)
-      end
+      def connect(*args); end
     end
 
     client = client_class.new(password: "secretsecret")

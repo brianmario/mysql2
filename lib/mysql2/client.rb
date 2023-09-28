@@ -71,16 +71,7 @@ module Mysql2
       # SSL verify is a connection flag rather than a mysql_ssl_set option
       flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify]
 
-      if %i[user pass hostname dbname db sock].any? { |k| @query_options.key?(k) }
-        warn "============= WARNING FROM mysql2 ============="
-        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."
-        warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
-        warn "============= END WARNING FROM mysql2 ========="
-      end
-
-      # avoid logging sensitive data via #inspect
-      @query_options.delete(:password)
-      @query_options.delete(:pass)
+      check_and_clean_query_options
 
       user     = opts[:username] || opts[:user]
       pass     = opts[:password] || opts[:pass]
@@ -167,6 +158,21 @@ module Mysql2
 
     def info
       self.class.info
+    end
+
+    private
+
+    def check_and_clean_query_options
+      if %i[user pass hostname dbname db sock].any? { |k| @query_options.key?(k) }
+        warn "============= WARNING FROM mysql2 ============="
+        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."
+        warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
+        warn "============= END WARNING FROM mysql2 ========="
+      end
+
+      # avoid logging sensitive data via #inspect
+      @query_options.delete(:password)
+      @query_options.delete(:pass)
     end
 
     class << self

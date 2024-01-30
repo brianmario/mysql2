@@ -1435,12 +1435,21 @@ static VALUE set_charset_name(VALUE self, VALUE value) {
 static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE capath, VALUE cipher) {
   GET_CLIENT(self);
 
-  mysql_ssl_set(wrapper->client,
-      NIL_P(key)    ? NULL : StringValueCStr(key),
-      NIL_P(cert)   ? NULL : StringValueCStr(cert),
-      NIL_P(ca)     ? NULL : StringValueCStr(ca),
-      NIL_P(capath) ? NULL : StringValueCStr(capath),
-      NIL_P(cipher) ? NULL : StringValueCStr(cipher));
+  if (NIL_P(key)) {
+    mysql_options(wrapper->client, MYSQL_OPT_SSL_KEY, StringValueCStr(key));
+  }
+  if (NIL_P(cert)) {
+    mysql_options(wrapper->client, MYSQL_OPT_SSL_CERT, StringValueCStr(cert));
+  }
+  if (NIL_P(ca)) {
+    mysql_options(wrapper->client, MYSQL_OPT_SSL_CA, StringValueCStr(ca));
+  }
+  if (NIL_P(capath)) {
+    mysql_options(wrapper->client, MYSQL_OPT_SSL_CAPATH, StringValueCStr(capath));
+  }
+  if (NIL_P(cipher)) {
+    mysql_options(wrapper->client, MYSQL_OPT_SSL_CIPHER, StringValueCStr(cipher));
+  }
 
   return self;
 }

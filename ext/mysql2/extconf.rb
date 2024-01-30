@@ -164,6 +164,9 @@ have_const('MYSQL_OPTION_MULTI_STATEMENTS_OFF', mysql_h)
 # to retain compatibility with the typedef in earlier MySQLs.
 have_type('my_bool', mysql_h)
 
+# detect mysql functions
+have_func('mysql_ssl_set', mysql_h)
+
 ### Compiler flags to help catch errors
 
 # This is our wishlist. We use whichever flags work on the host.

@@ -1444,19 +1444,19 @@ static VALUE set_ssl_options(VALUE self, VALUE key, VALUE cert, VALUE ca, VALUE 
       NIL_P(cipher) ? NULL : StringValueCStr(cipher));
 #else
   /* mysql 8.3 does not provide mysql_ssl_set */
-  if (NIL_P(key)) {
+  if (!NIL_P(key)) {
     mysql_options(wrapper->client, MYSQL_OPT_SSL_KEY, StringValueCStr(key));
   }
-  if (NIL_P(cert)) {
+  if (!NIL_P(cert)) {
     mysql_options(wrapper->client, MYSQL_OPT_SSL_CERT, StringValueCStr(cert));
   }
-  if (NIL_P(ca)) {
+  if (!NIL_P(ca)) {
     mysql_options(wrapper->client, MYSQL_OPT_SSL_CA, StringValueCStr(ca));
   }
-  if (NIL_P(capath)) {
+  if (!NIL_P(capath)) {
     mysql_options(wrapper->client, MYSQL_OPT_SSL_CAPATH, StringValueCStr(capath));
   }
-  if (NIL_P(cipher)) {
+  if (!NIL_P(cipher)) {
     mysql_options(wrapper->client, MYSQL_OPT_SSL_CIPHER, StringValueCStr(cipher));
   }
 #endif

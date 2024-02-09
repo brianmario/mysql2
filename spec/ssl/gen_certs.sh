@@ -10,6 +10,10 @@ default_startdate = 2015010360000Z
 [ req ]
 distinguished_name = req_distinguished_name
 
+# Root CA certificate extensions
+[ v3_ca ]
+basicConstraints = critical, CA:true
+
 [ req_distinguished_name ]
 # If this isn't set, the error is "error, no objects specified in config file"
 commonName = Common Name (hostname, IP, or your name)
@@ -35,7 +39,7 @@ commonName_default             = mysql2gem.example.com
 
 # Generate a set of certificates
 openssl genrsa -out ca-key.pem 2048
-openssl req -new -x509 -nodes -days 3600 -key ca-key.pem -out ca-cert.pem -batch -config ca.cnf
+openssl req -new -x509 -nodes -extensions v3_ca -days 3600 -key ca-key.pem -out ca-cert.pem -batch -config ca.cnf
 openssl req -newkey rsa:2048 -days 3600 -nodes -keyout pkcs8-server-key.pem -out server-req.pem -batch -config cert.cnf
 openssl x509 -req -in server-req.pem -days 3600 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
 openssl req -newkey rsa:2048 -days 3600 -nodes -keyout pkcs8-client-key.pem -out client-req.pem -batch -config cert.cnf

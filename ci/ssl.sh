@@ -4,12 +4,14 @@ set -eux
 
 # TEST_RUBY_MYSQL2_SSL_CERT_DIR: custom SSL certs directory.
 SSL_CERT_DIR=${TEST_RUBY_MYSQL2_SSL_CERT_DIR:-/etc/mysql}
+# TEST_RUBY_MYSQL2_SSL_CERT_HOST: custom host for the SSL certificates.
+SSL_CERT_HOST=${TEST_RUBY_MYSQL2_SSL_CERT_HOST:-mysql2gem.example.com}
 
 # Make sure there is an /etc/mysql
 mkdir -p "${SSL_CERT_DIR}"
 
 # Copy the local certs to /etc/mysql
-cp spec/ssl/*pem "${SSL_CERT_DIR}"
+cp spec/ssl/${SSL_CERT_HOST}/*pem "${SSL_CERT_DIR}"
 
 # Wherever MySQL configs live, go there (this is for cross-platform)
 cd $(my_print_defaults --help | grep my.cnf | xargs find 2>/dev/null | xargs dirname)

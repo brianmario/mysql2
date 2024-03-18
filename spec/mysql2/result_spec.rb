@@ -42,11 +42,24 @@ RSpec.describe Mysql2::Result do
     r = @client.query "SELECT 1"
     expect(r.count).to eql(1)
     expect(r.size).to eql(1)
+    expect(r.empty?).to eq(false)
   end
 
   context "metadata queries" do
     it "should show tables" do
       @result = @client.query "SHOW TABLES"
+    end
+  end
+
+  context "#empty?" do
+    it "should return true when result is not exists" do
+      r = @client.query "SELECT * FROM mysql2_test WHERE 0 = 1"
+      expect(r).to be_empty
+    end
+
+    it "should return false when result exists" do
+      r = @client.query "SELECT 1"
+      expect(r).not_to be_empty
     end
   end
 

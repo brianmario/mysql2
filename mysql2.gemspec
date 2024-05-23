@@ -22,4 +22,6 @@ Mysql2::GEMSPEC = Gem::Specification.new do |s|
   s.files = `git ls-files README.md CHANGELOG.md LICENSE ext lib support`.split
 
   s.metadata['msys2_mingw_dependencies'] = 'libmariadbclient'
+
+  s.add_runtime_dependency 'bigdecimal'
 end

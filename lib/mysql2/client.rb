@@ -79,7 +79,7 @@ module Mysql2
       end
 
       user     = opts[:username] || opts[:user]
-      pass     = opts[:password] || opts[:pass]
+      pass     = extract_password(opts)
       host     = opts[:host] || opts[:hostname]
       port     = opts[:port]
       database = opts[:database] || opts[:dbname] || opts[:db]
@@ -95,6 +95,15 @@ module Mysql2
       conn_attrs = parse_connect_attrs(opts[:connect_attrs])
 
       connect user, pass, host, port, database, socket, flags, conn_attrs
+    end
+
+    def extract_password(opts)
+      return opts[:password] || opts[:pass] unless opts[:password_provider]
+
+      klass = Kernel.const_get(opts[:password_provider])
+
+      obj = klass.new(opts)
+      obj.password
     end
 
     def parse_ssl_mode(mode)

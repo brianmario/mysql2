@@ -98,7 +98,8 @@ module Mysql2
     end
 
     def extract_password(opts)
-      return (opts[:password] || opts[:pass]) if !opts[:password_provider]
+      return opts[:password] || opts[:pass] unless opts[:password_provider]
+
       klass = Kernel.const_get(opts[:password_provider])
 
       obj = klass.new(opts)

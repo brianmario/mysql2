@@ -319,7 +319,7 @@ RSpec.describe Mysql2::Statement do
     it "should throw an exception if we try to iterate twice when streaming is enabled" do
       result = @client.prepare("SELECT 1 UNION SELECT 2").execute(stream: true, cache_rows: false)
       expect do
-        result.each {}
+        result.each {} # rubocop:disable Style/CombinableLoops
         result.each {}
       end.to raise_exception(Mysql2::Error)
     end

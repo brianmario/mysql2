@@ -70,7 +70,7 @@ if [[ x$OSTYPE =~ ^xdarwin ]]; then
   done
 
   brew info "$DB"
-  brew install "$DB"
+  brew install "$DB" zstd
   DB_PREFIX="$(brew --prefix "${DB}")"
   export PATH="${DB_PREFIX}/bin:${PATH}"
   export LDFLAGS="-L${DB_PREFIX}/lib"

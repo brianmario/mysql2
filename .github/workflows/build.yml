@@ -34,7 +34,7 @@ jobs:
           - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}
           - {os: ubuntu-20.04, ruby: '2.7', db: mariadb10.6}
           - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}
-          - {os: ubuntu-18.04, ruby: '2.7', db: mysql57}
+          # - {os: ubuntu-18.04, ruby: '2.7', db: mysql57} # no longer exists
 
           # TODO - Windows CI
           # - {os: windows-2022, ruby: '3.2', db: mysql80}

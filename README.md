@@ -107,7 +107,7 @@ Ruby runtime and MySQL client libraries are compiled with the same OpenSSL
 family, 1.0 or 1.1 or 3.0, since only one can be loaded at runtime.
 
 ``` sh
-$ brew install openssl@1.1
+$ brew install openssl@1.1 zstd
 $ gem install mysql2 -- --with-openssl-dir=$(brew --prefix openssl@1.1)
 
 or

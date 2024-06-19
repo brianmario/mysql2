@@ -886,7 +886,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "should carry over the original string's encoding" do
-      str = "abc'def\"ghi\0jkl%mno"
+      str = "abc'def\"ghi\0jkl%mno".dup
       escaped = Mysql2::Client.escape(str)
       expect(escaped.encoding).to eql(str.encoding)
 

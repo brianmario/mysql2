@@ -86,7 +86,7 @@ dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w[
   /usr/local/opt/mysql@*
   /usr/local/opt/mysql-client
   /usr/local/opt/mysql-client@*
-].map { |dir| dir << '/bin' }
+].map { |dir| "#{dir}/bin" }
 
 # For those without HOMEBREW_ROOT in PATH
 dirs << "#{ENV['HOMEBREW_ROOT']}/bin" if ENV['HOMEBREW_ROOT']

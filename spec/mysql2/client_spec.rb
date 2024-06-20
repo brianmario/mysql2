@@ -153,7 +153,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     let(:option_overrides) do
       {
-        'host'     => 'mysql2gem.example.com', # must match the certificates
+        'host'     => ssl_cert_host, # must match the certificates
         :sslkey    => "#{ssl_cert_dir}/client-key.pem",
         :sslcert   => "#{ssl_cert_dir}/client-cert.pem",
         :sslca     => "#{ssl_cert_dir}/ca-cert.pem",

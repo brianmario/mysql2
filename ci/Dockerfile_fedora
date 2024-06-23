@@ -1,4 +1,4 @@
-ARG IMAGE=fedora:latest
+ARG IMAGE=fedora:39
 FROM ${IMAGE}
 
 WORKDIR /build
@@ -16,12 +16,13 @@ RUN dnf -yq install \
   git \
   libyaml-devel \
   make \
-  mariadb-connector-c-devel \
-  mariadb-server \
   redhat-rpm-config \
   ruby-devel \
   rubygem-bigdecimal \
   rubygem-bundler \
   rubygem-json
+
+RUN rpm -ivh https://dev.mysql.com/get/mysql80-community-release-fc39-2.noarch.rpm && \
+    yum --enablerepo=mysql80-community install -y mysql-community-devel mysql-community-common mysql-community-server mysql-community-client
 
 CMD bash ci/container.sh

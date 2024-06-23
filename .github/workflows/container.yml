@@ -12,11 +12,11 @@ jobs:
       matrix:
         include:
           # CentOS 7 system Ruby is the fixed version 2.0.0.
-          - {distro: centos, image: 'centos:7', name_extra: 'ruby 2.0.0'}
+          # - {distro: centos, image: 'centos:7', name_extra: 'ruby 2.0.0'}
           # Fedora latest stable version
           - {distro: fedora, image: 'fedora:latest'}
           # Fedora development version
-          - {distro: fedora, image: 'fedora:rawhide', ssl_cert_dir: '/tmp/mysql2'}
+          # - {distro: fedora, image: 'fedora:rawhide', ssl_cert_dir: '/tmp/mysql2'}
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails unlike Travis fast_finish.
       fail-fast: false

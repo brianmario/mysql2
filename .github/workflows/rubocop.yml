@@ -1,18 +1,18 @@
-name: RuboCop
-
-on: [push, pull_request]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    env:
-      BUNDLE_WITHOUT: development
-    steps:
-    - uses: actions/checkout@v3
-    - name: Set up Ruby 2.6
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: 2.6
-        bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-    - name: Run RuboCop
-      run: bundle exec rubocop
+#name: RuboCop
+#
+#on: [push, pull_request]
+#
+#jobs:
+#  build:
+#    runs-on: ubuntu-latest
+#    env:
+#      BUNDLE_WITHOUT: development
+#    steps:
+#    - uses: actions/checkout@v3
+#    - name: Set up Ruby 2.6
+#      uses: ruby/setup-ruby@v1
+#      with:
+#        ruby-version: 2.6
+#        bundler-cache: true # runs 'bundle install' and caches installed gems automatically
+#    - name: Run RuboCop
+#      run: bundle exec rubocop

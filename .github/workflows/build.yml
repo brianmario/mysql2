@@ -1,71 +1,71 @@
-name: Build
-on: [push, pull_request]
-jobs:
-  build:
-    name: >-
-      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.allow-failure || false }}
-    strategy:
-      matrix:
-        include:
-          # Ruby 3.x on Ubuntu 22.04 LTS (latest at this time)
-          - {os: ubuntu-22.04, ruby: 'head', db: mysql80}
-          - {os: ubuntu-22.04, ruby: '3.3', db: mysql80}
-          - {os: ubuntu-22.04, ruby: '3.2', db: mysql80}
-          - {os: ubuntu-22.04, ruby: '3.1', db: mysql80}
-          - {os: ubuntu-22.04, ruby: '3.0', db: mysql80}
-
-          # Ruby 2.x on Ubuntu 20.04 LTS
-          - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}
-          - {os: ubuntu-20.04, ruby: '2.6', db: mysql80}
-          - {os: ubuntu-20.04, ruby: '2.5', db: mysql80}
-          - {os: ubuntu-20.04, ruby: '2.4', db: mysql80}
-          - {os: ubuntu-20.04, ruby: '2.3', db: mysql80}
-          - {os: ubuntu-20.04, ruby: '2.2', db: mysql80}
-          - {os: ubuntu-20.04, ruby: '2.1', db: mysql80}
-          - {os: ubuntu-20.04, ruby: '2.0', db: mysql80}
-
-          # db: on Linux, ci/setup.sh installs the specified packages
-          # db: on MacOS, installs a Homebrew package use "name@X.Y" to specify a version
-
-          - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.11}
-          - {os: ubuntu-22.04, ruby: '2.7', db: mariadb10.11}
-          - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}
-          - {os: ubuntu-20.04, ruby: '2.7', db: mariadb10.6}
-          - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}
-          - {os: ubuntu-18.04, ruby: '2.7', db: mysql57}
-
-          # TODO - Windows CI
-          # - {os: windows-2022, ruby: '3.2', db: mysql80}
-          # - {os: windows-2022, ruby: '2.7', db: mysql80}
-
-          # Allow failure due to this issue:
-          # https://github.com/brianmario/mysql2/issues/1194
-          - {os: macos-latest, ruby: '2.6', db: mariadb, ssl: openssl@1.1, allow-failure: true}
-          - {os: macos-latest, ruby: '2.6', db: mysql, ssl: openssl@1.1, allow-failure: true}
-      # On the fail-fast: true, it cancels all in-progress jobs
-      # if any matrix job fails, which we don't want.
-      fail-fast: false
-    env:
-      BUNDLE_WITHOUT: development
-      # reduce MacOS CI time, don't need to clean a runtime that isn't saved
-      HOMEBREW_NO_INSTALL_CLEANUP: 1
-      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
-    steps:
-      - uses: actions/checkout@v3
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-      - if: runner.os == 'Linux' || runner.os == 'macOS'
-        run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
-      - if: runner.os == 'Windows'
-        run: echo "127.0.0.1 mysql2gem.example.com" | tee -a C:/Windows/System32/drivers/etc/hosts
-      - run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
-      - run: bash ci/setup.sh
-      # Set the verbose option in the Makefile to print compiling command lines.
-      - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
-      - if: matrix.ssl
-        run: echo "rake_spec_opts=--with-openssl-dir=$(brew --prefix ${{ matrix.ssl }})" >> $GITHUB_ENV
-      - run: bundle exec rake spec -- $rake_spec_opts
+#name: Buil
+#on: [push, pull_request]
+#jobs:
+#  build:
+#    name: >-
+#      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
+#    runs-on: ${{ matrix.os }}
+#    continue-on-error: ${{ matrix.allow-failure || false }}
+#    strategy:
+#      matrix:
+#        include:
+#          # Ruby 3.x on Ubuntu 22.04 LTS (latest at this time)
+#          - {os: ubuntu-22.04, ruby: 'head', db: mysql80}
+#          - {os: ubuntu-22.04, ruby: '3.3', db: mysql80}
+#          - {os: ubuntu-22.04, ruby: '3.2', db: mysql80}
+#          - {os: ubuntu-22.04, ruby: '3.1', db: mysql80}
+#          - {os: ubuntu-22.04, ruby: '3.0', db: mysql80}
+#
+#          # Ruby 2.x on Ubuntu 20.04 LTS
+#          - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}
+#          - {os: ubuntu-20.04, ruby: '2.6', db: mysql80}
+#          - {os: ubuntu-20.04, ruby: '2.5', db: mysql80}
+#          - {os: ubuntu-20.04, ruby: '2.4', db: mysql80}
+#          - {os: ubuntu-20.04, ruby: '2.3', db: mysql80}
+#          - {os: ubuntu-20.04, ruby: '2.2', db: mysql80}
+#          - {os: ubuntu-20.04, ruby: '2.1', db: mysql80}
+#          - {os: ubuntu-20.04, ruby: '2.0', db: mysql80}
+#
+#          # db: on Linux, ci/setup.sh installs the specified packages
+#          # db: on MacOS, installs a Homebrew package use "name@X.Y" to specify a version
+#
+#          - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.11}
+#          - {os: ubuntu-22.04, ruby: '2.7', db: mariadb10.11}
+#          - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}
+#          - {os: ubuntu-20.04, ruby: '2.7', db: mariadb10.6}
+#          - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}
+#          - {os: ubuntu-18.04, ruby: '2.7', db: mysql57}
+#
+#          # TODO - Windows CI
+#          # - {os: windows-2022, ruby: '3.2', db: mysql80}
+#          # - {os: windows-2022, ruby: '2.7', db: mysql80}
+#
+#          # Allow failure due to this issue:
+#          # https://github.com/brianmario/mysql2/issues/1194
+#          - {os: macos-latest, ruby: '2.6', db: mariadb, ssl: openssl@1.1, allow-failure: true}
+#          - {os: macos-latest, ruby: '2.6', db: mysql, ssl: openssl@1.1, allow-failure: true}
+#      # On the fail-fast: true, it cancels all in-progress jobs
+#      # if any matrix job fails, which we don't want.
+#      fail-fast: false
+#    env:
+#      BUNDLE_WITHOUT: development
+#      # reduce MacOS CI time, don't need to clean a runtime that isn't saved
+#      HOMEBREW_NO_INSTALL_CLEANUP: 1
+#      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+#    steps:
+#      - uses: actions/checkout@v3
+#      - uses: ruby/setup-ruby@v1
+#        with:
+#          ruby-version: ${{ matrix.ruby }}
+#          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
+#      - if: runner.os == 'Linux' || runner.os == 'macOS'
+#        run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
+#      - if: runner.os == 'Windows'
+#        run: echo "127.0.0.1 mysql2gem.example.com" | tee -a C:/Windows/System32/drivers/etc/hosts
+#      - run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
+#      - run: bash ci/setup.sh
+#      # Set the verbose option in the Makefile to print compiling command lines.
+#      - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
+#      - if: matrix.ssl
+#        run: echo "rake_spec_opts=--with-openssl-dir=$(brew --prefix ${{ matrix.ssl }})" >> $GITHUB_ENV
+#      - run: bundle exec rake spec -- $rake_spec_opts

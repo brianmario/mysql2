@@ -281,6 +281,7 @@ Mysql2::Client.new(
   :reconnect = true/false,
   :local_infile = true/false,
   :secure_auth = true/false,
+  :get_server_public_key = true/false,
   :default_file = '/path/to/my.cfg',
   :default_group = 'my.cfg section',
   :default_auth = 'authentication_windows_client'

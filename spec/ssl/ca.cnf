@@ -6,6 +6,10 @@ default_startdate = 2015010360000Z
 [ req ]
 distinguished_name = req_distinguished_name
 
+# Root CA certificate extensions
+[ v3_ca ]
+basicConstraints = critical, CA:true
+
 [ req_distinguished_name ]
 # If this isn't set, the error is error, no objects specified in config file
 commonName = Common Name (hostname, IP, or your name)

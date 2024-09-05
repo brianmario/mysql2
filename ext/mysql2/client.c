@@ -1496,7 +1496,7 @@ static VALUE set_get_server_public_key(VALUE self, VALUE value) {
 #ifdef HAVE_CONST_MYSQL_OPT_GET_SERVER_PUBLIC_KEY
   return _mysql_client_options(self, MYSQL_OPT_GET_SERVER_PUBLIC_KEY, value);
 #else
-  return Qfalse;
+  rb_raise(cMysql2Error, "get-server-public-key is not available, you may need a newer MySQL client library");
 #endif
 }
 

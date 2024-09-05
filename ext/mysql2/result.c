@@ -27,6 +27,10 @@ static rb_encoding *binaryEncoding;
  */
 #define MYSQL2_BINARY_CHARSET 63
 
+#ifndef MYSQL_TYPE_VECTOR
+#define MYSQL_TYPE_VECTOR 242
+#endif
+
 #ifndef MYSQL_TYPE_JSON
 #define MYSQL_TYPE_JSON 245
 #endif
@@ -381,6 +385,9 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
         break;
       case MYSQL_TYPE_JSON:         // json
         rb_field_type = rb_str_new_cstr("json");
+        break;
+      case MYSQL_TYPE_VECTOR:       // vector
+        rb_field_type = rb_str_new_cstr("vector");
         break;
       default:
         rb_field_type = rb_str_new_cstr("unknown");

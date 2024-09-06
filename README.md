@@ -133,7 +133,7 @@ $ bundle config --local build.mysql2 -- $(ruby -r rbconfig -e 'puts RbConfig::CO
 ```
 
 Note the additional double dashes (`--`) these separate command-line arguments
-that `gem` or `bundler` interpret from the addiitonal arguments that are passed
+that `gem` or `bundler` interpret from the additional arguments that are passed
 to the mysql2 build process.
 
 ### Windows

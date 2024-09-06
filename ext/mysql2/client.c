@@ -307,7 +307,7 @@ static void *nogvl_connect(void *ptr) {
  * a socket that may be in use by the parent or other processes after fork.
  *
  * /dev/null is used to absorb writes; previously a dummy socket was used, but
- * it could not abosrb writes and caused openssl to go into an infinite loop.
+ * it could not absorb writes and caused openssl to go into an infinite loop.
  *
  * Returns Qtrue or Qfalse (success or failure)
  *

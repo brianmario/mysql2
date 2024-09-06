@@ -28,7 +28,7 @@ def add_ssl_defines(header)
   end
 end
 
-### Check for Ruby C extention interfaces
+### Check for Ruby C extension interfaces
 
 # 2.1+
 have_func('rb_absint_size')

@@ -3,6 +3,8 @@ require 'mysql2'
 
 module Mysql2
   module EM
+    class ReadTimeout < ::RuntimeError; end
+
     class Client < ::Mysql2::Client
       module Watcher
         def initialize(client, deferable)
@@ -41,6 +43,9 @@ module Mysql2
         if ::EM.reactor_running?
           super(sql, opts.merge(async: true))
           deferable = ::EM::DefaultDeferrable.new
+          if @read_timeout
+            deferable.timeout(@read_timeout, Mysql2::EM::ReadTimeout.new)
+          end
           @watch = ::EM.watch(socket, Watcher, self, deferable)
           @watch.notify_readable = true
           deferable

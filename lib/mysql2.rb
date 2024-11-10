@@ -38,6 +38,7 @@ require 'mysql2/result'
 require 'mysql2/client'
 require 'mysql2/field'
 require 'mysql2/statement'
+require 'mysql2/aws_iam_auth'
 
 # = Mysql2
 #

@@ -15,8 +15,7 @@ module Mysql2
       begin
         require 'aws-sdk-rds'
       rescue LoadError
-        puts "gem aws-sdk-rds was not found.  Please add this gem to your bundle to use AWS IAM Authentication."
-        exit
+        raise LoadError, "gem aws-sdk-rds was not found.  Please add this gem to your bundle to use AWS IAM Authentication."
       end
 
       @mutex = Mutex.new

@@ -411,6 +411,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->initialized = 0; /* will be set true after calling mysql_init */
   wrapper->closed = 1; /* will be set false after calling mysql_real_connect */
   wrapper->refcount = 1;
+  wrapper->affected_rows = -1;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
 
   return obj;
@@ -669,6 +670,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     wrapper->active_fiber = Qnil;
     rb_raise_mysql2_error(wrapper);
   }
+  wrapper->affected_rows = mysql_affected_rows(wrapper->client);
 
   is_streaming = rb_hash_aref(rb_ivar_get(self, intern_current_query_options), sym_stream);
   if (is_streaming == Qtrue) {
@@ -1155,12 +1157,12 @@ static VALUE rb_mysql_client_session_track(VALUE self, VALUE type) {
  * if it was an UPDATE, DELETE, or INSERT.
  */
 static VALUE rb_mysql_client_affected_rows(VALUE self) {
-  my_ulonglong retVal;
+  uint64_t retVal;
   GET_CLIENT(self);
 
   REQUIRE_CONNECTED(wrapper);
-  retVal = mysql_affected_rows(wrapper->client);
-  if (retVal == (my_ulonglong)-1) {
+  retVal = wrapper->affected_rows;
+  if (retVal == (uint64_t)-1) {
     rb_raise_mysql2_error(wrapper);
   }
   return ULL2NUM(retVal);

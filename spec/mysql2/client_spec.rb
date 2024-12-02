@@ -1033,7 +1033,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(@client).to respond_to(:last_id)
     end
 
-    it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
+    it "#last_id should return a Fixnum, from the last INSERT/UPDATE" do
       expect(@client.last_id).to eql(0)
       @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
       expect(@client.last_id).to eql(1)
@@ -1043,13 +1043,6 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(@client).to respond_to(:last_id)
     end
 
-    it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
-      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
-      expect(@client.affected_rows).to eql(1)
-      @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
-      expect(@client.affected_rows).to eql(1)
-    end
-
     it "#last_id should handle BIGINT auto-increment ids above 32 bits" do
       # The id column type must be BIGINT. Surprise: INT(x) is limited to 32-bits for all values of x.
       # Insert a row with a given ID, this should raise the auto-increment state
@@ -1057,6 +1050,35 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(@client.last_id).to eql(5000000000)
       @client.query "INSERT INTO lastIdTest (blah) VALUES (5001)"
       expect(@client.last_id).to eql(5000000001)
+    end
+
+    it "#last_id isn't cleared by Statement#close" do
+      stmt = @client.prepare("INSERT INTO lastIdTest (blah) VALUES (1234)")
+
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+      expect(@client.last_id).to eql(1)
+
+      stmt.close
+
+      expect(@client.last_id).to eql(1)
+    end
+
+    it "#affected_rows should return a Fixnum, from the last INSERT/UPDATE" do
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+      expect(@client.affected_rows).to eql(1)
+      @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
+      expect(@client.affected_rows).to eql(1)
+    end
+
+    it "#affected_rows isn't cleared by Statement#close" do
+      stmt = @client.prepare("INSERT INTO lastIdTest (blah) VALUES (1234)")
+
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+      expect(@client.affected_rows).to eql(1)
+
+      stmt.close
+
+      expect(@client.affected_rows).to eql(1)
     end
   end
 

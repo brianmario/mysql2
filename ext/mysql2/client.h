@@ -12,6 +12,7 @@ typedef struct {
   int initialized;
   int refcount;
   int closed;
+  uint64_t affected_rows;
   MYSQL *client;
 } mysql_client_wrapper;
 

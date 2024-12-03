@@ -1195,4 +1195,22 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   it "should respond to #encoding" do
     expect(@client).to respond_to(:encoding)
   end
+
+  it "should not include the password in the output of #inspect" do
+    client_class = Class.new(Mysql2::Client) do
+      def connect(*args); end
+    end
+
+    client = client_class.new(password: "secretsecret")
+
+    expect(client.inspect).not_to include("password")
+    expect(client.inspect).not_to include("secretsecret")
+
+    expect do
+      client = client_class.new(pass: "secretsecret")
+    end.to output(/WARNING/).to_stderr
+
+    expect(client.inspect).not_to include("pass")
+    expect(client.inspect).not_to include("secretsecret")
+  end
 end

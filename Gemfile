@@ -17,7 +17,8 @@ group :test do
   gem 'rspec', '~> 3.2'
 
   # https://github.com/bbatsov/rubocop/pull/4789
-  gem 'rubocop', '~> 1.30', '>= 1.30.1' if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('2.6')
+  # 1.51 is the last version supporting Ruby 2.6
+  gem 'rubocop', '>= 1.30.1', '< 1.51' if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('2.6')
 end
 
 group :benchmarks, optional: true do

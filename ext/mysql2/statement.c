@@ -10,9 +10,12 @@ static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_ho
 #define TypedData_Get_Struct(obj, type, ignore, sval) Data_Get_Struct(obj, type, sval)
 #endif
 
-#define GET_STATEMENT(self) \
+#define RAW_GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
   TypedData_Get_Struct(self, mysql_stmt_wrapper, &rb_mysql_statement_type, stmt_wrapper); \
+
+#define GET_STATEMENT(self) \
+  RAW_GET_STATEMENT(self) \
   if (!stmt_wrapper->stmt) { rb_raise(cMysql2Error, "Invalid statement handle"); } \
   if (stmt_wrapper->closed) { rb_raise(cMysql2Error, "Statement handle already closed"); }
 
@@ -603,10 +606,25 @@ static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
  * own prepared statement cache.
  */
 static VALUE rb_mysql_stmt_close(VALUE self) {
-  GET_STATEMENT(self);
-  stmt_wrapper->closed = 1;
-  rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+  RAW_GET_STATEMENT(self);
+
+  if (!stmt_wrapper->closed) {
+      stmt_wrapper->closed = 1;
+      rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+  }
+
   return Qnil;
+}
+
+/* call-seq:
+ *    stmt.closed?
+ *
+ * Returns wheter or not the statement have been closed.
+ */
+static VALUE rb_mysql_stmt_closed_p(VALUE self) {
+  RAW_GET_STATEMENT(self);
+
+  return stmt_wrapper->closed ? Qtrue : Qfalse;
 }
 
 void init_mysql2_statement() {
@@ -630,6 +648,7 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "last_id", rb_mysql_stmt_last_id, 0);
   rb_define_method(cMysql2Statement, "affected_rows", rb_mysql_stmt_affected_rows, 0);
   rb_define_method(cMysql2Statement, "close", rb_mysql_stmt_close, 0);
+  rb_define_method(cMysql2Statement, "closed?", rb_mysql_stmt_closed_p, 0);
 
   sym_stream = ID2SYM(rb_intern("stream"));
 

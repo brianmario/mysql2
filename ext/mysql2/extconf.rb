@@ -63,7 +63,12 @@ if with_config('openssl-dir')
 # Homebrew OpenSSL on MacOS
 elsif RUBY_PLATFORM =~ /darwin/ && system('command -v brew')
   openssl_location = `brew --prefix openssl`.strip
-  $LDFLAGS << " -L#{openssl_location}/lib" if openssl_location
+  $LIBPATH << "#{openssl_location}/lib" unless openssl_location.empty?
+end
+
+if RUBY_PLATFORM =~ /darwin/ && system('command -v brew')
+  zstd_location = `brew --prefix zstd`.strip
+  $LIBPATH << "#{zstd_location}/lib" unless zstd_location.empty?
 end
 
 ### Find MySQL client library

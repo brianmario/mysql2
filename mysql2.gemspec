@@ -23,5 +23,5 @@ Mysql2::GEMSPEC = Gem::Specification.new do |s|
 
   s.metadata['msys2_mingw_dependencies'] = 'libmariadbclient'
 
-  s.add_runtime_dependency 'bigdecimal'
+  s.add_dependency 'bigdecimal'
 end

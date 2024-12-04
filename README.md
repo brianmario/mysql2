@@ -273,7 +273,7 @@ Mysql2::Client.new(
   :database,
   :socket = '/path/to/mysql.sock',
   :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | MULTI_STATEMENTS,
-  :encoding = 'utf8',
+  :encoding = 'utf8mb4',
   :read_timeout = seconds,
   :write_timeout = seconds,
   :connect_timeout = seconds,
@@ -367,7 +367,7 @@ Use the value `mysql2` as the adapter name. For example:
 ``` yaml
 development:
   adapter: mysql2
-  encoding: utf8
+  encoding: utf8mb4
   database: my_db_name
   username: root
   password: my_password

@@ -45,8 +45,8 @@ module Mysql2
         end
       end
 
-      # force the encoding to utf8
-      self.charset_name = opts[:encoding] || 'utf8'
+      # force the encoding to utf8mb4
+      self.charset_name = opts[:encoding] || 'utf8mb4'
 
       mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
       if (mode == SSL_MODE_VERIFY_CA || mode == SSL_MODE_VERIFY_IDENTITY) && !opts[:sslca]

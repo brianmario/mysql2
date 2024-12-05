@@ -284,8 +284,10 @@ Mysql2::Client.new(
   :get_server_public_key = true/false,
   :default_file = '/path/to/my.cfg',
   :default_group = 'my.cfg section',
-  :default_auth = 'authentication_windows_client'
-  :init_command => sql
+  :default_auth = 'authentication_windows_client',
+  :init_command => sql,
+  :use_iam_authentication => true/false,
+  :host_region,
   )
 ```
 
@@ -347,6 +349,32 @@ Starting with MySQL 5.6.5, secure_auth is enabled by default on servers (it was 
 When secure_auth is enabled, the server will refuse a connection if the account password is stored in old pre-MySQL 4.1 format.
 The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
 To bypass this restriction in the client, pass the option `:secure_auth => false` to Mysql2::Client.new().
+
+### AWS IAM Authentication
+
+You may use AWS IAM Authentication instead of setting a password in
+the configuration.  A temporary token used in place of the password
+will be fetched as necessary and used for connections until it
+expires.  The value for :host_region will either use the one provided,
+or if not provided, the environment variable AWS_REGION.
+
+You must add the `aws-sdk-rds` gem to your bundle to use this functionality.
+
+| `:use_iam_authentication` | true                                 |
+| ---                       | ---                                  |
+| `:username`               | The database username configured to use IAM Authentication |
+| `:host`                   | The database host |
+| `:port`                   | The database port |
+| `:host_region`            | An AWS region name, e.g. `us-east-1` |
+
+As prerequisites, you must enable IAM authentication on the RDS
+instance, create an IAM policy, attach the policy to the target IAM
+user or role, create the database user set to use the AWS
+Authentication Plugin, and then run your ruby code using that IAM user or
+role.  See
+[AWS documentation](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.Connecting.html)
+for details on these steps.
+
 
 ### Flags option parsing
 

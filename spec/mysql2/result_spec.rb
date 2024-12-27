@@ -133,7 +133,7 @@ RSpec.describe Mysql2::Result do
     it "should return correct types" do
       expected_types = %w[
         mediumint(9)
-        varchar(10)
+        varchar(13)
         bit(64)
         bit(1)
         tinyint(4)
@@ -152,16 +152,16 @@ RSpec.describe Mysql2::Result do
         timestamp
         time
         year(4)
-        char(10)
-        varchar(10)
+        char(13)
+        varchar(13)
         binary(10)
         varbinary(10)
         tinyblob
-        tinytext
+        text(1020)
         blob
-        text
+        text(262140)
         mediumblob
-        mediumtext
+        text(67108860)
         longblob
         longtext
         enum

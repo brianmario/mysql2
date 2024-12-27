@@ -9,11 +9,11 @@ jobs:
     strategy:
       matrix:
         include:
-          # Ruby 3.x on Ubuntu 22.04 LTS (latest at this time)
+          # Ruby 3.x on Ubuntu 24.04 LTS
           - {os: ubuntu-24.04, ruby: 'head', db: mysql84}
           - {os: ubuntu-24.04, ruby: '3.4', db: mysql84}
 
-          # Ruby 3.x on Ubuntu 22.04 LTS (latest at this time)
+          # Ruby 3.x on Ubuntu 22.04 LTS
           - {os: ubuntu-22.04, ruby: '3.4', db: mysql80}
           - {os: ubuntu-22.04, ruby: '3.3', db: mysql80}
           - {os: ubuntu-22.04, ruby: '3.2', db: mysql80}
@@ -30,6 +30,10 @@ jobs:
           - {os: ubuntu-20.04, ruby: '2.1', db: mysql80}
           - {os: ubuntu-20.04, ruby: '2.0', db: mysql80}
 
+          # MySQL 5.7 packages stopped after Ubuntu 18.04 Bionic
+          # - {os: ubuntu-18.04, ruby: '2.7', db: mysql57}
+
+          # MariaDB LTS versions
           # db: on Linux, ci/setup.sh installs the specified packages
           # db: on MacOS, installs a Homebrew package use "name@X.Y" to specify a version
 
@@ -38,10 +42,6 @@ jobs:
           - {os: ubuntu-22.04, ruby: '2.7', db: mariadb10.11}
           - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}
           - {os: ubuntu-20.04, ruby: '2.7', db: mariadb10.6}
-          - {os: ubuntu-20.04, ruby: '2.7', db: mysql80}
-
-          # MySQL 5.7 packages stopped after Ubuntu 18.04 Bionic
-          # - {os: ubuntu-18.04, ruby: '2.7', db: mysql57}
 
           # TODO - Windows CI
           # - {os: windows-2022, ruby: '3.2', db: mysql80}
@@ -52,6 +52,7 @@ jobs:
           - {os: macos-latest, ruby: '3.4', db: mariadb@11.4, ssl: openssl@3, allow-failure: true}
           - {os: macos-latest, ruby: '3.4', db: mysql@8.4, ssl: openssl@3, allow-failure: true}
           - {os: macos-latest, ruby: '2.6', db: mysql@8.0, ssl: openssl@1.1, allow-failure: true}
+
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails, which we don't want.
       fail-fast: false

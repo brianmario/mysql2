@@ -84,6 +84,7 @@ if [[ x$OSTYPE =~ ^xdarwin ]]; then
 
   brew info "$DB"
   brew install "$DB" zstd
+  brew link "$DB" # explicitly activate in case of kegged LTS versions
   DB_PREFIX="$(brew --prefix "${DB}")"
   export PATH="${DB_PREFIX}/bin:${PATH}"
   export LDFLAGS="-L${DB_PREFIX}/lib"

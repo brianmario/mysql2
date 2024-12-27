@@ -19,6 +19,10 @@ end
 RSpec.configure do |config|
   config.disable_monkey_patching!
 
+  config.expect_with :rspec do |expectations|
+    expectations.max_formatted_output_length = 1200
+  end
+
   def with_internal_encoding(encoding)
     old_enc = Encoding.default_internal
     old_verbose = $VERBOSE

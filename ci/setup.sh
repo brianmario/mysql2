@@ -4,6 +4,7 @@ set -eux
 
 # Change the password to be empty.
 CHANGED_PASSWORD=false
+CHANGED_PASSWORD_SHA2=false
 # Change the password to be empty, recreating the root user on mariadb < 10.2
 # where ALTER USER is not available.
 # https://stackoverflow.com/questions/56052177/
@@ -45,7 +46,13 @@ fi
 # Install MySQL 8.0 if DB=mysql80
 if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
   sudo bash ci/mysql80.sh
-  CHANGED_PASSWORD=true
+  CHANGED_PASSWORD_SHA2=true
+fi
+
+# Install MySQL 8.4 if DB=mysql84
+if [[ -n ${DB-} && x$DB =~ ^xmysql84 ]]; then
+  sudo bash ci/mysql84.sh
+  CHANGED_PASSWORD_SHA2=true
 fi
 
 # Install MariaDB 10.6 if DB=mariadb10.6
@@ -60,6 +67,12 @@ if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.11 ]]; then
   CHANGED_PASSWORD_BY_RECREATE=true
 fi
 
+# Install MariaDB 11.4 if DB=mariadb11.4
+if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb11.4 ]]; then
+  sudo bash ci/mariadb114.sh
+  CHANGED_PASSWORD_BY_RECREATE=true
+fi
+
 # Install MySQL/MariaDB if OS=darwin
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
   brew update > /dev/null
@@ -71,6 +84,7 @@ if [[ x$OSTYPE =~ ^xdarwin ]]; then
 
   brew info "$DB"
   brew install "$DB" zstd
+  brew link "$DB" # explicitly activate in case of kegged LTS versions
   DB_PREFIX="$(brew --prefix "${DB}")"
   export PATH="${DB_PREFIX}/bin:${PATH}"
   export LDFLAGS="-L${DB_PREFIX}/lib"
@@ -108,6 +122,11 @@ if [ "${CHANGED_PASSWORD}" = true ]; then
   # https://www.percona.com/blog/2016/03/16/change-user-password-in-mysql-5-7-with-plugin-auth_socket/
   sudo mysql ${MYSQL_OPTS} -u "${DB_SYS_USER}" \
     -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY ''"
+elif [ "${CHANGED_PASSWORD_SHA2}" = true ]; then
+  # In MySQL 5.7, the default authentication plugin is mysql_native_password.
+  # As of MySQL 8.0, the default authentication plugin is changed to caching_sha2_password.
+  sudo mysql ${MYSQL_OPTS} -u "${DB_SYS_USER}" \
+    -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY ''"
 elif [ "${CHANGED_PASSWORD_BY_RECREATE}" = true ]; then
   sudo mysql ${MYSQL_OPTS} -u "${DB_SYS_USER}" <<SQL
 DROP USER 'root'@'localhost';

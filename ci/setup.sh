@@ -48,6 +48,12 @@ if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
   CHANGED_PASSWORD=true
 fi
 
+# Install MySQL 8.4 if DB=mysql84
+if [[ -n ${DB-} && x$DB =~ ^xmysql84 ]]; then
+  sudo bash ci/mysql84.sh
+  CHANGED_PASSWORD=true
+fi
+
 # Install MariaDB 10.6 if DB=mariadb10.6
 if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.6 ]]; then
   sudo bash ci/mariadb106.sh
@@ -57,6 +63,12 @@ fi
 # Install MariaDB 10.11 if DB=mariadb10.11
 if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.11 ]]; then
   sudo bash ci/mariadb1011.sh
+  CHANGED_PASSWORD_BY_RECREATE=true
+fi
+
+# Install MariaDB 11.4 if DB=mariadb11.4
+if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb11.4 ]]; then
+  sudo bash ci/mariadb114.sh
   CHANGED_PASSWORD_BY_RECREATE=true
 fi
 

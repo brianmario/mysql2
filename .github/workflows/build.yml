@@ -10,7 +10,11 @@ jobs:
       matrix:
         include:
           # Ruby 3.x on Ubuntu 22.04 LTS (latest at this time)
-          - {os: ubuntu-22.04, ruby: 'head', db: mysql80}
+          - {os: ubuntu-24.04, ruby: 'head', db: mysql84}
+          - {os: ubuntu-24.04, ruby: '3.4', db: mysql84}
+
+          # Ruby 3.x on Ubuntu 22.04 LTS (latest at this time)
+          - {os: ubuntu-22.04, ruby: '3.4', db: mysql80}
           - {os: ubuntu-22.04, ruby: '3.3', db: mysql80}
           - {os: ubuntu-22.04, ruby: '3.2', db: mysql80}
           - {os: ubuntu-22.04, ruby: '3.1', db: mysql80}
@@ -29,6 +33,7 @@ jobs:
           # db: on Linux, ci/setup.sh installs the specified packages
           # db: on MacOS, installs a Homebrew package use "name@X.Y" to specify a version
 
+          - {os: ubuntu-24.04, ruby: '3.4', db: mariadb11.4}
           - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.11}
           - {os: ubuntu-22.04, ruby: '2.7', db: mariadb10.11}
           - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}

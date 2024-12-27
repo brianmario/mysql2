@@ -49,8 +49,9 @@ jobs:
 
           # Allow failure due to this issue:
           # https://github.com/brianmario/mysql2/issues/1194
-          - {os: macos-latest, ruby: '2.6', db: mariadb, ssl: openssl@1.1, allow-failure: true}
-          - {os: macos-latest, ruby: '2.6', db: mysql, ssl: openssl@1.1, allow-failure: true}
+          - {os: macos-latest, ruby: '3.4', db: mariadb@11.4, ssl: openssl@3, allow-failure: true}
+          - {os: macos-latest, ruby: '3.4', db: mysql@8.4, ssl: openssl@3, allow-failure: true}
+          - {os: macos-latest, ruby: '2.6', db: mysql@8.0, ssl: openssl@1.1, allow-failure: true}
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails, which we don't want.
       fail-fast: false

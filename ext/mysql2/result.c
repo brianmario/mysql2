@@ -655,7 +655,9 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           ts = (MYSQL_TIME*)result_buffer->buffer;
           seconds = (ts->year*31557600ULL) + (ts->month*2592000ULL) + (ts->day*86400ULL) + (ts->hour*3600ULL) + (ts->minute*60ULL) + ts->second;
 
-          if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
+          if (seconds == 0) {
+            val = Qnil;
+          } else if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
             VALUE offset = INT2NUM(0);
             if (args->db_timezone == intern_local) {
               offset = rb_funcall(cMysql2Client, intern_local_offset, 0);

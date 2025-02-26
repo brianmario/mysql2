@@ -287,17 +287,29 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
         rb_field_type = rb_sprintf("double(%ld,%d)", field->length, field->decimals);
         break;
       case MYSQL_TYPE_TIME:         // MYSQL_TIME
-        rb_field_type = rb_str_new_cstr("time");
+        if (field->decimals == 0) {
+          rb_field_type = rb_str_new_cstr("time");
+        } else {
+          rb_field_type = rb_sprintf("time(%d)", field->decimals);
+        }
         break;
       case MYSQL_TYPE_DATE:         // MYSQL_TIME
       case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
         rb_field_type = rb_str_new_cstr("date");
         break;
       case MYSQL_TYPE_DATETIME:     // MYSQL_TIME
-        rb_field_type = rb_str_new_cstr("datetime");
+        if (field->decimals == 0) {
+          rb_field_type = rb_str_new_cstr("datetime");
+        } else {
+          rb_field_type = rb_sprintf("datetime(%d)", field->decimals);
+        }
         break;
       case MYSQL_TYPE_TIMESTAMP:    // MYSQL_TIME
-        rb_field_type = rb_str_new_cstr("timestamp");
+        if (field->decimals == 0) {
+          rb_field_type = rb_str_new_cstr("timestamp");
+        } else {
+          rb_field_type = rb_sprintf("timestamp(%d)", field->decimals);
+        }
         break;
       case MYSQL_TYPE_DECIMAL:      // char[]
       case MYSQL_TYPE_NEWDECIMAL:   // char[]

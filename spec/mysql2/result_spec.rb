@@ -199,6 +199,22 @@ RSpec.describe Mysql2::Result do
       expect(result.field_types).to eql(expected_types)
     end
 
+    it "should return precision for timestamps" do
+      result = @client.query(
+        "SELECT now(), " \
+        "cast(now() as datetime(3)), " \
+        "cast(now() as datetime(6))",
+      )
+
+      expected_types = %w[
+        timestamp
+        datetime(3)
+        datetime(6)
+      ]
+
+      expect(result.field_types).to eql(expected_types)
+    end
+
     it "should return json type on mysql 8.0" do
       next unless /8.\d+.\d+/ =~ @client.server_info[:version]
 

@@ -81,6 +81,19 @@ RSpec.configure do |config|
     @ssl_cert_dir
   end
 
+  # A host used to create the certificates pem files.
+  def ssl_cert_host
+    return @ssl_cert_host if @ssl_cert_host
+
+    host = ENV['TEST_RUBY_MYSQL2_SSL_CERT_HOST']
+    @ssl_cert_host = if host && !host.empty?
+      host
+    else
+      'mysql2gem.example.com'
+    end
+    @ssl_cert_host
+  end
+
   config.before(:suite) do
     begin
       new_client

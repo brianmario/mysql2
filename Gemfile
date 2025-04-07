@@ -3,11 +3,11 @@ source 'https://rubygems.org'
 gemspec
 
 if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("2.2")
-  gem 'rake', '~> 13.0.1'
+  gem 'rake', '~> 13.0'
 else
   gem 'rake', '< 13'
 end
-gem 'rake-compiler', '~> 1.1.0'
+gem 'rake-compiler', '~> 1.2.0'
 
 # For local debugging, irb is Gemified since Ruby 2.6
 gem 'irb', require: false

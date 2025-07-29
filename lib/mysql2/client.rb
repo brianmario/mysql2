@@ -32,11 +32,11 @@ module Mysql2
       opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
 
       # TODO: stricter validation rather than silent massaging
-      %i[reconnect connect_timeout local_infile read_timeout write_timeout default_file default_group secure_auth init_command automatic_close enable_cleartext_plugin default_auth].each do |key|
+      %i[reconnect connect_timeout local_infile read_timeout write_timeout default_file default_group secure_auth init_command automatic_close enable_cleartext_plugin default_auth get_server_public_key].each do |key|
         next unless opts.key?(key)
 
         case key
-        when :reconnect, :local_infile, :secure_auth, :automatic_close, :enable_cleartext_plugin
+        when :reconnect, :local_infile, :secure_auth, :automatic_close, :enable_cleartext_plugin, :get_server_public_key
           send(:"#{key}=", !!opts[key]) # rubocop:disable Style/DoubleNegation
         when :connect_timeout, :read_timeout, :write_timeout
           send(:"#{key}=", Integer(opts[key])) unless opts[key].nil?
@@ -45,8 +45,8 @@ module Mysql2
         end
       end
 
-      # force the encoding to utf8
-      self.charset_name = opts[:encoding] || 'utf8'
+      # force the encoding to utf8mb4
+      self.charset_name = opts[:encoding] || 'utf8mb4'
 
       mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
       if (mode == SSL_MODE_VERIFY_CA || mode == SSL_MODE_VERIFY_IDENTITY) && !opts[:sslca]
@@ -71,12 +71,7 @@ module Mysql2
       # SSL verify is a connection flag rather than a mysql_ssl_set option
       flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify]
 
-      if %i[user pass hostname dbname db sock].any? { |k| @query_options.key?(k) }
-        warn "============= WARNING FROM mysql2 ============="
-        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."
-        warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
-        warn "============= END WARNING FROM mysql2 ========="
-      end
+      check_and_clean_query_options
 
       user     = opts[:username] || opts[:user]
       pass     = opts[:password] || opts[:pass]
@@ -163,6 +158,21 @@ module Mysql2
 
     def info
       self.class.info
+    end
+
+    private
+
+    def check_and_clean_query_options
+      if %i[user pass hostname dbname db sock].any? { |k| @query_options.key?(k) }
+        warn "============= WARNING FROM mysql2 ============="
+        warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."
+        warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
+        warn "============= END WARNING FROM mysql2 ========="
+      end
+
+      # avoid logging sensitive data via #inspect
+      @query_options.delete(:password)
+      @query_options.delete(:pass)
     end
 
     class << self

@@ -14,9 +14,11 @@ RUN dnf -yq install \
   gcc \
   gcc-c++ \
   git \
+  libyaml-devel \
   make \
   mariadb-connector-c-devel \
   mariadb-server \
+  openssl \
   redhat-rpm-config \
   ruby-devel \
   rubygem-bigdecimal \

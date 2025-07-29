@@ -4,22 +4,31 @@ FROM ${IMAGE}
 WORKDIR /build
 COPY . .
 
-RUN cat /etc/redhat-release
-RUN yum -yq update
-RUN yum -yq install epel-release
-# The options are to install faster.
-RUN yum -yq install \
-  --setopt=deltarpm=0 \
-  --setopt=install_weak_deps=false \
-  --setopt=tsflags=nodocs \
-  gcc \
-  gcc-c++ \
-  git \
-  make \
-  mariadb-devel \
-  mariadb-server \
-  ruby-devel
-RUN gem install --no-document "rubygems-update:~>2.7" && update_rubygems > /dev/null
-RUN gem install --no-document "bundler:~>1.17"
+# mirrorlist.centos.org no longer exists, see
+# https://serverfault.com/questions/1161816/mirrorlist-centos-org-no-longer-resolve/1161847#1161847
+#
+# The --setopt flags to yum enable faster installs
+#
+RUN cat /etc/redhat-release \
+  && sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/CentOS-*.repo \
+  && sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/CentOS-*.repo \
+  && sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/CentOS-*.repo \
+  && yum -y -q update \
+  && yum -y -q install epel-release \
+  && yum -y -q install \
+      --setopt=deltarpm=0 \
+      --setopt=install_weak_deps=false \
+      --setopt=tsflags=nodocs \
+    gcc \
+    gcc-c++ \
+    git \
+    make \
+    mariadb-devel \
+    mariadb-server \
+    ruby-devel
+
+RUN gem install --no-document "rubygems-update:~>2.7" \
+  && update_rubygems > /dev/null \
+  && gem install --no-document "bundler:~>1.17"
 
 CMD bash ci/container.sh

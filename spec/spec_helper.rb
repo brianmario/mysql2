@@ -2,16 +2,26 @@ require 'rspec'
 require 'mysql2'
 require 'timeout'
 require 'yaml'
+require 'fiber'
+
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
 if GC.respond_to?(:verify_compaction_references)
   # This method was added in Ruby 3.0.0. Calling it this way asks the GC to
   # move objects around, helping to find object movement bugs.
-  GC.verify_compaction_references(double_heap: true, toward: :empty)
+  if RUBY_VERSION >= "3.2"
+    GC.verify_compaction_references(expand_heap: true, toward: :empty)
+  else
+    GC.verify_compaction_references(double_heap: true, toward: :empty)
+  end
 end
 
 RSpec.configure do |config|
   config.disable_monkey_patching!
+
+  config.expect_with :rspec do |expectations|
+    expectations.max_formatted_output_length = 1200
+  end
 
   def with_internal_encoding(encoding)
     old_enc = Encoding.default_internal
@@ -56,6 +66,32 @@ RSpec.configure do |config|
     def clock_time
       Time.now.to_f
     end
+  end
+
+  # A directory where SSL certificates pem files exist.
+  def ssl_cert_dir
+    return @ssl_cert_dir if @ssl_cert_dir
+
+    dir = ENV['TEST_RUBY_MYSQL2_SSL_CERT_DIR']
+    @ssl_cert_dir = if dir && !dir.empty?
+      dir
+    else
+      '/etc/mysql'
+    end
+    @ssl_cert_dir
+  end
+
+  # A host used to create the certificates pem files.
+  def ssl_cert_host
+    return @ssl_cert_host if @ssl_cert_host
+
+    host = ENV['TEST_RUBY_MYSQL2_SSL_CERT_HOST']
+    @ssl_cert_host = if host && !host.empty?
+      host
+    else
+      'mysql2gem.example.com'
+    end
+    @ssl_cert_host
   end
 
   config.before(:suite) do

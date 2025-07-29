@@ -4,6 +4,7 @@ set -eux
 
 # Change the password to be empty.
 CHANGED_PASSWORD=false
+CHANGED_PASSWORD_SHA2=false
 # Change the password to be empty, recreating the root user on mariadb < 10.2
 # where ALTER USER is not available.
 # https://stackoverflow.com/questions/56052177/
@@ -18,6 +19,10 @@ if [[ -n ${GITHUB_ACTIONS-} && -z ${DB-} ]]; then
       CHANGED_PASSWORD=true
       ;;
     focal)
+      sudo apt-get install -qq mysql-server-8.0 mysql-client-core-8.0 mysql-client-8.0
+      CHANGED_PASSWORD=true
+      ;;
+    jammy)
       sudo apt-get install -qq mysql-server-8.0 mysql-client-core-8.0 mysql-client-8.0
       CHANGED_PASSWORD=true
       ;;
@@ -41,43 +46,30 @@ fi
 # Install MySQL 8.0 if DB=mysql80
 if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
   sudo bash ci/mysql80.sh
-  CHANGED_PASSWORD=true
+  CHANGED_PASSWORD_SHA2=true
 fi
 
-# Install MariaDB client headers after Travis CI fix for MariaDB 10.2 broke earlier 10.x
-if [[ -n ${DB-} && x$DB =~ ^xmariadb10.0 ]]; then
-  if [[ -n ${GITHUB_ACTIONS-} ]]; then
-    sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.0 libmariadb2
-    CHANGED_PASSWORD_BY_RECREATE=true
-  else
-    sudo apt-get install -y -o Dpkg::Options::='--force-confnew' libmariadbclient-dev
-  fi
+# Install MySQL 8.4 if DB=mysql84
+if [[ -n ${DB-} && x$DB =~ ^xmysql84 ]]; then
+  sudo bash ci/mysql84.sh
+  CHANGED_PASSWORD_SHA2=true
 fi
 
-# Install MariaDB client headers after Travis CI fix for MariaDB 10.2 broke earlier 10.x
-if [[ -n ${DB-} && x$DB =~ ^xmariadb10.1 ]]; then
-  if [[ -n ${GITHUB_ACTIONS-} ]]; then
-    sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.1 libmariadb-dev
-    CHANGED_PASSWORD_BY_RECREATE=true
-  else
-    sudo apt-get install -y -o Dpkg::Options::='--force-confnew' libmariadbclient-dev
-  fi
+# Install MariaDB 10.6 if DB=mariadb10.6
+if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.6 ]]; then
+  sudo bash ci/mariadb106.sh
+  CHANGED_PASSWORD_BY_RECREATE=true
 fi
 
-# Install MariaDB 10.2 if DB=mariadb10.2
-# NOTE this is a workaround until Travis CI merges a fix to its mariadb addon.
-if [[ -n ${DB-} && x$DB =~ ^xmariadb10.2 ]]; then
-  sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.2 libmariadbclient18
+# Install MariaDB 10.11 if DB=mariadb10.11
+if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.11 ]]; then
+  sudo bash ci/mariadb1011.sh
+  CHANGED_PASSWORD_BY_RECREATE=true
 fi
 
-# Install MariaDB 10.3 if DB=mariadb10.3
-if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.3 ]]; then
-  sudo ln -s /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/
-  sudo apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld
-  sudo apt-get purge -y 'mysql-common*' 'mysql-client*' 'mysql-server*'
-  sudo mv /etc/mysql "/etc/mysql-$(date +%Y%m%d-%H%M%S)"
-  sudo mv /var/lib/mysql "/var/lib/mysql-$(date +%Y%m%d-%H%M%S)"
-  sudo apt-get install -y -o Dpkg::Options::='--force-confnew' mariadb-server mariadb-server-10.3 libmariadb-dev
+# Install MariaDB 11.4 if DB=mariadb11.4
+if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb11.4 ]]; then
+  sudo bash ci/mariadb114.sh
   CHANGED_PASSWORD_BY_RECREATE=true
 fi
 
@@ -91,7 +83,8 @@ if [[ x$OSTYPE =~ ^xdarwin ]]; then
   done
 
   brew info "$DB"
-  brew install "$DB"
+  brew install "$DB" zstd
+  brew link "$DB" # explicitly activate in case of kegged LTS versions
   DB_PREFIX="$(brew --prefix "${DB}")"
   export PATH="${DB_PREFIX}/bin:${PATH}"
   export LDFLAGS="-L${DB_PREFIX}/lib"
@@ -129,6 +122,11 @@ if [ "${CHANGED_PASSWORD}" = true ]; then
   # https://www.percona.com/blog/2016/03/16/change-user-password-in-mysql-5-7-with-plugin-auth_socket/
   sudo mysql ${MYSQL_OPTS} -u "${DB_SYS_USER}" \
     -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY ''"
+elif [ "${CHANGED_PASSWORD_SHA2}" = true ]; then
+  # In MySQL 5.7, the default authentication plugin is mysql_native_password.
+  # As of MySQL 8.0, the default authentication plugin is changed to caching_sha2_password.
+  sudo mysql ${MYSQL_OPTS} -u "${DB_SYS_USER}" \
+    -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY ''"
 elif [ "${CHANGED_PASSWORD_BY_RECREATE}" = true ]; then
   sudo mysql ${MYSQL_OPTS} -u "${DB_SYS_USER}" <<SQL
 DROP USER 'root'@'localhost';

@@ -153,10 +153,10 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     let(:option_overrides) do
       {
-        'host'     => 'mysql2gem.example.com', # must match the certificates
-        :sslkey    => '/etc/mysql/client-key.pem',
-        :sslcert   => '/etc/mysql/client-cert.pem',
-        :sslca     => '/etc/mysql/ca-cert.pem',
+        'host'     => ssl_cert_host, # must match the certificates
+        :sslkey    => "#{ssl_cert_dir}/client-key.pem",
+        :sslcert   => "#{ssl_cert_dir}/client-cert.pem",
+        :sslca     => "#{ssl_cert_dir}/ca-cert.pem",
         :sslcipher => 'DHE-RSA-AES256-SHA',
         :sslverify => true,
       }
@@ -166,16 +166,26 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       new_client(option_overrides)
     end
 
-    %i[disabled preferred required verify_ca verify_identity].each do |ssl_mode|
+    # 'preferred' or 'verify_ca' are only in MySQL 5.6.36+, 5.7.11+, 8.0+
+    version = Mysql2::Client.info
+    ssl_modes = case version
+    when 50636...50700, 50711...50800, 80000...90000
+      %i[disabled preferred required verifa_ca verify_identity]
+    else
+      %i[disabled required verify_identity]
+    end
+
+    # MySQL and MariaDB and all versions of Connector/C
+    ssl_modes.each do |ssl_mode|
       it "should set ssl_mode option #{ssl_mode}" do
         options = {
           ssl_mode: ssl_mode,
         }
         options.merge!(option_overrides)
-        # Relax the matching condition by checking if an error is not raised.
-        # TODO: Verify warnings by checking stderr.
         expect do
-          new_client(options)
+          expect do
+            new_client(options)
+          end.not_to output(/does not support ssl_mode/).to_stderr
         end.not_to raise_error
       end
     end
@@ -624,10 +634,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       it "should describe the thread holding the active query" do
-        thr = Thread.new { @client.query("SELECT 1", async: true) }
+        thr = Thread.new do
+          @client.query("SELECT 1", async: true)
+          Fiber.current
+        end
 
-        thr.join
-        expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(thr.inspect)))
+        fiber = thr.value
+        expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(fiber.inspect)))
       end
 
       it "should timeout if we wait longer than :read_timeout" do
@@ -873,7 +886,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "should carry over the original string's encoding" do
-      str = "abc'def\"ghi\0jkl%mno"
+      str = "abc'def\"ghi\0jkl%mno".dup
       escaped = Mysql2::Client.escape(str)
       expect(escaped.encoding).to eql(str.encoding)
 
@@ -1020,7 +1033,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(@client).to respond_to(:last_id)
     end
 
-    it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
+    it "#last_id should return a Fixnum, from the last INSERT/UPDATE" do
       expect(@client.last_id).to eql(0)
       @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
       expect(@client.last_id).to eql(1)
@@ -1030,13 +1043,6 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(@client).to respond_to(:last_id)
     end
 
-    it "#last_id should return a Fixnum, the from the last INSERT/UPDATE" do
-      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
-      expect(@client.affected_rows).to eql(1)
-      @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
-      expect(@client.affected_rows).to eql(1)
-    end
-
     it "#last_id should handle BIGINT auto-increment ids above 32 bits" do
       # The id column type must be BIGINT. Surprise: INT(x) is limited to 32-bits for all values of x.
       # Insert a row with a given ID, this should raise the auto-increment state
@@ -1044,6 +1050,35 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(@client.last_id).to eql(5000000000)
       @client.query "INSERT INTO lastIdTest (blah) VALUES (5001)"
       expect(@client.last_id).to eql(5000000001)
+    end
+
+    it "#last_id isn't cleared by Statement#close" do
+      stmt = @client.prepare("INSERT INTO lastIdTest (blah) VALUES (1234)")
+
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+      expect(@client.last_id).to eql(1)
+
+      stmt.close
+
+      expect(@client.last_id).to eql(1)
+    end
+
+    it "#affected_rows should return a Fixnum, from the last INSERT/UPDATE" do
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+      expect(@client.affected_rows).to eql(1)
+      @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
+      expect(@client.affected_rows).to eql(1)
+    end
+
+    it "#affected_rows isn't cleared by Statement#close" do
+      stmt = @client.prepare("INSERT INTO lastIdTest (blah) VALUES (1234)")
+
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
+      expect(@client.affected_rows).to eql(1)
+
+      stmt.close
+
+      expect(@client.affected_rows).to eql(1)
     end
   end
 
@@ -1070,7 +1105,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     it "returns changes system variables for SESSION_TRACK_SYSTEM_VARIABLES" do
       @client.query("SET @@SESSION.session_track_state_change=ON;")
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_SYSTEM_VARIABLES)
-      expect(res).to eq(%w[session_track_state_change ON])
+      expect(res).to include("session_track_state_change", "ON")
     end
 
     it "returns database name for SESSION_TRACK_SCHEMA" do
@@ -1083,13 +1118,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       @client.query("SET @@SESSION.session_track_transaction_info='CHARACTERISTICS';")
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_SYSTEM_VARIABLES)
-      expect(res).to eq(%w[session_track_transaction_info CHARACTERISTICS])
+      expect(res).to include("session_track_transaction_info", "CHARACTERISTICS")
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_STATE_CHANGE)
       expect(res).to be_nil
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_CHARACTERISTICS)
-      expect(res).to eq([""])
+      expect(res).to include("")
     end
 
     it "returns valid transaction state inside a transaction" do
@@ -1097,7 +1132,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       @client.query("START TRANSACTION")
 
       res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_STATE)
-      expect(res).to eq(["T_______"])
+      expect(res).to include("T_______")
     end
 
     it "returns empty array if session track type not found" do
@@ -1159,5 +1194,23 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   it "should respond to #encoding" do
     expect(@client).to respond_to(:encoding)
+  end
+
+  it "should not include the password in the output of #inspect" do
+    client_class = Class.new(Mysql2::Client) do
+      def connect(*args); end
+    end
+
+    client = client_class.new(password: "secretsecret")
+
+    expect(client.inspect).not_to include("password")
+    expect(client.inspect).not_to include("secretsecret")
+
+    expect do
+      client = client_class.new(pass: "secretsecret")
+    end.to output(/WARNING/).to_stderr
+
+    expect(client.inspect).not_to include("pass")
+    expect(client.inspect).not_to include("secretsecret")
   end
 end

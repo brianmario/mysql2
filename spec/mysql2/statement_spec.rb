@@ -1,6 +1,6 @@
 require './spec/spec_helper'
 
-RSpec.describe Mysql2::Statement do
+RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
   before(:example) do
     @client = new_client(encoding: "utf8")
   end
@@ -319,8 +319,8 @@ RSpec.describe Mysql2::Statement do
     it "should throw an exception if we try to iterate twice when streaming is enabled" do
       result = @client.prepare("SELECT 1 UNION SELECT 2").execute(stream: true, cache_rows: false)
       expect do
-        result.each {}
-        result.each {} # rubocop:disable Style/CombinableLoops
+        result.to_a
+        result.to_a
       end.to raise_exception(Mysql2::Error)
     end
   end
@@ -719,6 +719,16 @@ RSpec.describe Mysql2::Statement do
       stmt = @client.prepare 'SELECT 1'
       stmt.close
       expect { stmt.execute }.to raise_error(Mysql2::Error, /Invalid statement handle/)
+    end
+
+    it 'should not raise if called multiple times' do
+      stmt = @client.prepare 'SELECT 1'
+      expect(stmt).to_not be_closed
+
+      3.times do
+        expect { stmt.close }.to_not raise_error
+        expect(stmt).to be_closed
+      end
     end
   end
 end

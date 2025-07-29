@@ -2,6 +2,10 @@
 
 set -eux
 
+# TEST_RUBY_MYSQL2_SSL_CERT_HOST: custom host for the SSL certificates.
+SSL_CERT_HOST=${TEST_RUBY_MYSQL2_SSL_CERT_HOST:-mysql2gem.example.com}
+echo "Generating the SSL certifications from the host ${SSL_CERT_HOST}.."
+
 echo "
 [ ca ]
 # January 1, 2015
@@ -9,6 +13,10 @@ default_startdate = 2015010360000Z
 
 [ req ]
 distinguished_name = req_distinguished_name
+
+# Root CA certificate extensions
+[ v3_ca ]
+basicConstraints = critical, CA:true
 
 [ req_distinguished_name ]
 # If this isn't set, the error is "error, no objects specified in config file"
@@ -30,12 +38,12 @@ commonName_default             = ca_mysql2gem
 " >> ca.cnf
 
 echo "
-commonName_default             = mysql2gem.example.com
+commonName_default             = ${SSL_CERT_HOST}
 " >> cert.cnf
 
 # Generate a set of certificates
 openssl genrsa -out ca-key.pem 2048
-openssl req -new -x509 -nodes -days 3600 -key ca-key.pem -out ca-cert.pem -batch -config ca.cnf
+openssl req -new -x509 -nodes -extensions v3_ca -days 3600 -key ca-key.pem -out ca-cert.pem -batch -config ca.cnf
 openssl req -newkey rsa:2048 -days 3600 -nodes -keyout pkcs8-server-key.pem -out server-req.pem -batch -config cert.cnf
 openssl x509 -req -in server-req.pem -days 3600 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
 openssl req -newkey rsa:2048 -days 3600 -nodes -keyout pkcs8-client-key.pem -out client-req.pem -batch -config cert.cnf

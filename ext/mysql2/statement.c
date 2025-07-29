@@ -6,9 +6,16 @@ static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year,
   intern_query_options;
 
-#define GET_STATEMENT(self) \
+#ifndef NEW_TYPEDDATA_WRAPPER
+#define TypedData_Get_Struct(obj, type, ignore, sval) Data_Get_Struct(obj, type, sval)
+#endif
+
+#define RAW_GET_STATEMENT(self) \
   mysql_stmt_wrapper *stmt_wrapper; \
-  Data_Get_Struct(self, mysql_stmt_wrapper, stmt_wrapper); \
+  TypedData_Get_Struct(self, mysql_stmt_wrapper, &rb_mysql_statement_type, stmt_wrapper); \
+
+#define GET_STATEMENT(self) \
+  RAW_GET_STATEMENT(self) \
   if (!stmt_wrapper->stmt) { rb_raise(cMysql2Error, "Invalid statement handle"); } \
   if (stmt_wrapper->closed) { rb_raise(cMysql2Error, "Statement handle already closed"); }
 
@@ -16,8 +23,44 @@ static void rb_mysql_stmt_mark(void * ptr) {
   mysql_stmt_wrapper *stmt_wrapper = ptr;
   if (!stmt_wrapper) return;
 
-  rb_gc_mark(stmt_wrapper->client);
+  rb_gc_mark_movable(stmt_wrapper->client);
 }
+
+static void rb_mysql_stmt_free(void *ptr) {
+  mysql_stmt_wrapper *stmt_wrapper = ptr;
+  decr_mysql2_stmt(stmt_wrapper);
+}
+
+static size_t rb_mysql_stmt_memsize(const void * ptr) {
+  const mysql_stmt_wrapper *stmt_wrapper = ptr;
+  return sizeof(*stmt_wrapper);
+}
+
+#ifdef HAVE_RB_GC_MARK_MOVABLE
+static void rb_mysql_stmt_compact(void * ptr) {
+  mysql_stmt_wrapper *stmt_wrapper = ptr;
+  if (!stmt_wrapper) return;
+
+  rb_mysql2_gc_location(stmt_wrapper->client);
+}
+#endif
+
+static const rb_data_type_t rb_mysql_statement_type = {
+  "rb_mysql_statement",
+  {
+    rb_mysql_stmt_mark,
+    rb_mysql_stmt_free,
+    rb_mysql_stmt_memsize,
+#ifdef HAVE_RB_GC_MARK_MOVABLE
+    rb_mysql_stmt_compact,
+#endif
+  },
+  0,
+  0,
+#ifdef RUBY_TYPED_FREE_IMMEDIATELY
+  RUBY_TYPED_FREE_IMMEDIATELY,
+#endif
+};
 
 static void *nogvl_stmt_close(void *ptr) {
   mysql_stmt_wrapper *stmt_wrapper = ptr;
@@ -26,11 +69,6 @@ static void *nogvl_stmt_close(void *ptr) {
     stmt_wrapper->stmt = NULL;
   }
   return NULL;
-}
-
-static void rb_mysql_stmt_free(void *ptr) {
-  mysql_stmt_wrapper *stmt_wrapper = ptr;
-  decr_mysql2_stmt(stmt_wrapper);
 }
 
 void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
@@ -96,7 +134,11 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
 
   Check_Type(sql, T_STRING);
 
+#ifdef NEW_TYPEDDATA_WRAPPER
+  rb_stmt = TypedData_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, &rb_mysql_statement_type, stmt_wrapper);
+#else
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
+#endif
   {
     stmt_wrapper->client = rb_client;
     stmt_wrapper->refcount = 1;
@@ -448,7 +490,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   if (metadata == NULL) {
     if (mysql_stmt_errno(stmt) != 0) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
-      wrapper->active_thread = Qnil;
+      wrapper->active_fiber = Qnil;
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     // no data and no error, so query was not a SELECT
@@ -461,7 +503,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
       mysql_free_result(metadata);
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
-    wrapper->active_thread = Qnil;
+    wrapper->active_fiber = Qnil;
   }
 
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);
@@ -502,7 +544,7 @@ static VALUE rb_mysql_stmt_fields(VALUE self) {
   if (metadata == NULL) {
     if (mysql_stmt_errno(stmt) != 0) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
-      wrapper->active_thread = Qnil;
+      wrapper->active_fiber = Qnil;
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     // no data and no error, so query was not a SELECT
@@ -564,10 +606,25 @@ static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
  * own prepared statement cache.
  */
 static VALUE rb_mysql_stmt_close(VALUE self) {
-  GET_STATEMENT(self);
-  stmt_wrapper->closed = 1;
-  rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+  RAW_GET_STATEMENT(self);
+
+  if (!stmt_wrapper->closed) {
+      stmt_wrapper->closed = 1;
+      rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+  }
+
   return Qnil;
+}
+
+/* call-seq:
+ *    stmt.closed?
+ *
+ * Returns wheter or not the statement have been closed.
+ */
+static VALUE rb_mysql_stmt_closed_p(VALUE self) {
+  RAW_GET_STATEMENT(self);
+
+  return stmt_wrapper->closed ? Qtrue : Qfalse;
 }
 
 void init_mysql2_statement() {
@@ -591,6 +648,7 @@ void init_mysql2_statement() {
   rb_define_method(cMysql2Statement, "last_id", rb_mysql_stmt_last_id, 0);
   rb_define_method(cMysql2Statement, "affected_rows", rb_mysql_stmt_affected_rows, 0);
   rb_define_method(cMysql2Statement, "close", rb_mysql_stmt_close, 0);
+  rb_define_method(cMysql2Statement, "closed?", rb_mysql_stmt_closed_p, 0);
 
   sym_stream = ID2SYM(rb_intern("stream"));
 

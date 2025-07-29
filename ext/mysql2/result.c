@@ -27,13 +27,21 @@ static rb_encoding *binaryEncoding;
  */
 #define MYSQL2_BINARY_CHARSET 63
 
+#ifndef MYSQL_TYPE_VECTOR
+#define MYSQL_TYPE_VECTOR 242
+#endif
+
 #ifndef MYSQL_TYPE_JSON
 #define MYSQL_TYPE_JSON 245
 #endif
 
+#ifndef NEW_TYPEDDATA_WRAPPER
+#define TypedData_Get_Struct(obj, type, ignore, sval) Data_Get_Struct(obj, type, sval)
+#endif
+
 #define GET_RESULT(self) \
   mysql2_result_wrapper *wrapper; \
-  Data_Get_Struct(self, mysql2_result_wrapper, wrapper);
+  TypedData_Get_Struct(self, mysql2_result_wrapper, &rb_mysql_result_type, wrapper);
 
 typedef struct {
   int symbolizeKeys;
@@ -61,13 +69,13 @@ static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
 static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
-    rb_gc_mark(w->fields);
-    rb_gc_mark(w->tables);
-    rb_gc_mark(w->dbs);
-    rb_gc_mark(w->rows);
-    rb_gc_mark(w->encoding);
-    rb_gc_mark(w->client);
-    rb_gc_mark(w->statement);
+    rb_gc_mark_movable(w->fields);
+    rb_gc_mark_movable(w->tables);
+    rb_gc_mark_movable(w->dbs);
+    rb_gc_mark_movable(w->rows);
+    rb_gc_mark_movable(w->encoding);
+    rb_gc_mark_movable(w->client);
+    rb_gc_mark_movable(w->statement);
   }
 }
 
@@ -128,6 +136,48 @@ static void rb_mysql_result_free(void *ptr) {
 
   xfree(wrapper);
 }
+
+static size_t rb_mysql_result_memsize(const void * wrapper) {
+  const mysql2_result_wrapper * w = wrapper;
+  size_t memsize = sizeof(*w);
+  if (w->stmt_wrapper) {
+    memsize += sizeof(*w->stmt_wrapper);
+  }
+  if (w->client_wrapper) {
+    memsize += sizeof(*w->client_wrapper);
+  }
+  return memsize;
+}
+
+#ifdef HAVE_RB_GC_MARK_MOVABLE
+static void rb_mysql_result_compact(void * wrapper) {
+  mysql2_result_wrapper * w = wrapper;
+  if (w) {
+    rb_mysql2_gc_location(w->fields);
+    rb_mysql2_gc_location(w->rows);
+    rb_mysql2_gc_location(w->encoding);
+    rb_mysql2_gc_location(w->client);
+    rb_mysql2_gc_location(w->statement);
+  }
+}
+#endif
+
+static const rb_data_type_t rb_mysql_result_type = {
+  "rb_mysql_result",
+  {
+    rb_mysql_result_mark,
+    rb_mysql_result_free,
+    rb_mysql_result_memsize,
+#ifdef HAVE_RB_GC_MARK_MOVABLE
+    rb_mysql_result_compact,
+#endif
+  },
+  0,
+  0,
+#ifdef RUBY_TYPED_FREE_IMMEDIATELY
+  RUBY_TYPED_FREE_IMMEDIATELY,
+#endif
+};
 
 static VALUE rb_mysql_result_free_(VALUE self) {
   GET_RESULT(self);
@@ -405,6 +455,9 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
         break;
       case MYSQL_TYPE_JSON:         // json
         rb_field_type = rb_str_new_cstr("json");
+        break;
+      case MYSQL_TYPE_VECTOR:       // vector
+        rb_field_type = rb_str_new_cstr("vector");
         break;
       default:
         rb_field_type = rb_str_new_cstr("unknown");
@@ -1070,7 +1123,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
       rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
     }
   } else {
-    if (args->cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
+    if (args->cacheRows && wrapper->resultFreed) {
       /* we've already read the entire dataset from the C result into our */
       /* internal array. Lets hand that over to the user since it's ready to go */
       for (i = 0; i < wrapper->numberOfRows; i++) {
@@ -1237,7 +1290,11 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   VALUE obj;
   mysql2_result_wrapper * wrapper;
 
+#ifdef NEW_TYPEDDATA_WRAPPER
+  obj = TypedData_Make_Struct(cMysql2Result, mysql2_result_wrapper, &rb_mysql_result_type, wrapper);
+#else
   obj = Data_Make_Struct(cMysql2Result, mysql2_result_wrapper, rb_mysql_result_mark, rb_mysql_result_free, wrapper);
+#endif
   wrapper->numberOfFields = 0;
   wrapper->numberOfRows = 0;
   wrapper->lastRowProcessed = 0;

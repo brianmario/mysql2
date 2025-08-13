@@ -89,6 +89,11 @@ module Mysql2
       socket = socket.to_s unless socket.nil?
       conn_attrs = parse_connect_attrs(opts[:connect_attrs])
 
+      if opts[:use_iam_authentication]
+        aws = Mysql2::AwsIamAuth.instance
+        pass = aws.password(user, host, port, opts)
+      end
+
       connect user, pass, host, port, database, socket, flags, conn_attrs
     end
 

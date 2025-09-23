@@ -8,11 +8,11 @@ jobs:
     env:
       BUNDLE_WITHOUT: development
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Ruby 2.6
+    - uses: actions/checkout@v5
+    - name: Set up Ruby 3.4
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: 2.6
+        ruby-version: 3.4
         bundler-cache: true # runs 'bundle install' and caches installed gems automatically
     - name: Run RuboCop
       run: bundle exec rubocop

@@ -16,9 +16,7 @@ group :test do
   gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
   gem 'rspec', '~> 3.2'
 
-  # https://github.com/bbatsov/rubocop/pull/4789
-  # 1.51 is the last version supporting Ruby 2.6
-  gem 'rubocop', '>= 1.30.1', '< 1.51' if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('2.6')
+  gem 'rubocop'
 end
 
 group :benchmarks, optional: true do

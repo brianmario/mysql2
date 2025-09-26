@@ -1015,7 +1015,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
       rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");
     }
   } else {
-    if (args->cacheRows && wrapper->resultFreed) {
+    if (args->cacheRows && wrapper->lastRowProcessed == wrapper->numberOfRows) {
       /* we've already read the entire dataset from the C result into our */
       /* internal array. Lets hand that over to the user since it's ready to go */
       for (i = 0; i < wrapper->numberOfRows; i++) {

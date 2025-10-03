@@ -1064,10 +1064,21 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "#affected_rows should return a Fixnum, from the last INSERT/UPDATE" do
-      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
-      expect(@client.affected_rows).to eql(1)
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234), (5678)"
+      expect(@client.affected_rows).to eql(2)
       @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
       expect(@client.affected_rows).to eql(1)
+    end
+
+    it "#affected_rows with multi statements returns the last result's affected_rows" do
+      @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_ON)
+
+      @client.query("INSERT INTO lastIdTest (blah) VALUES (1234), (5678); UPDATE lastIdTest SET blah=4321 WHERE id=1")
+      expect(@client.affected_rows).to eq(2)
+      expect(@client.next_result).to eq(true)
+      expect(@client.affected_rows).to eq(1)
+    ensure
+      @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_OFF)
     end
 
     it "#affected_rows isn't cleared by Statement#close" do

@@ -90,7 +90,8 @@ find the particular package. The most common issue we see is a user who has
 the library file `libmysqlclient.so` but is missing the header file `mysql.h`
 -- double check that you have the _-dev_ packages installed.
 
-### Mac OS X
+### macOS
+<a name="mac-os-x">
 
 You may use Homebrew, MacPorts, or a native MySQL installer package. The most
 common paths will be automatically searched. If you want to select a specific
@@ -102,15 +103,15 @@ If you have not done so already, you will need to install the XCode select tools
 Later versions of MacOS no longer distribute a linkable OpenSSL library. It is
 common to use Homebrew or MacPorts to install OpenSSL. Make sure that both the
 Ruby runtime and MySQL client libraries are compiled with the same OpenSSL
-family, 1.0 or 1.1 or 3.0, since only one can be loaded at runtime.
+family, 3.x, since only one can be loaded at runtime.
 
 ``` sh
-$ brew install openssl@1.1 zstd
-$ gem install mysql2 -- --with-openssl-dir=$(brew --prefix openssl@1.1)
+$ brew install openssl@3 zstd
+$ gem install mysql2 -- --with-openssl-dir=$(brew --prefix openssl@3)
 
 or
 
-$ sudo port install openssl11
+$ sudo port install openssl3
 ```
 
 Since most Ruby projects use Bundler, you can set build options in the Bundler
@@ -118,7 +119,7 @@ config rather than manually installing a global mysql2 gem. This example shows
 how to set build arguments with [Bundler config](https://bundler.io/man/bundle-config.1.html):
 
 ``` sh
-$ bundle config --local build.mysql2 -- --with-openssl-dir=$(brew --prefix openssl@1.1)
+$ bundle config --local build.mysql2 -- --with-openssl-dir=$(brew --prefix openssl@3)
 ```
 
 Another helpful trick is to use the same OpenSSL library that your Ruby was

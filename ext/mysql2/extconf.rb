@@ -113,7 +113,7 @@ if inc && lib
   warn "-----\nUsing --with-mysql-dir=#{File.dirname inc}\n-----"
   rpath_dir = lib
   have_library('mysqlclient')
-elsif (mc = (with_config('mysql-config') || Dir[GLOB].first))
+elsif (mc = with_config('mysql-config') || Dir[GLOB].first)
   # If the user has provided a --with-mysql-config argument, we must respect it or fail.
   # If the user gave --with-mysql-config with no argument means we should try to find it.
   mc = Dir[GLOB].first if mc == true

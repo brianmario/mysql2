@@ -148,9 +148,9 @@ RSpec.describe Mysql2::Result do
         decimal(10,3)
         decimal(10,3)
         date
-        datetime
-        timestamp
-        time
+        datetime(0)
+        timestamp(0)
+        time(0)
         year(4)
         char(13)
         varchar(13)
@@ -194,6 +194,22 @@ RSpec.describe Mysql2::Result do
         decimal(15,0)
         decimal(16,0)
         decimal(16,1)
+      ]
+
+      expect(result.field_types).to eql(expected_types)
+    end
+
+    it "should return precision for datetimes" do
+      result = @client.query(
+        "SELECT cast(now() as datetime), " \
+        "cast(now() as datetime(3)), " \
+        "cast(now() as datetime(6))",
+      )
+
+      expected_types = %w[
+        datetime(0)
+        datetime(3)
+        datetime(6)
       ]
 
       expect(result.field_types).to eql(expected_types)

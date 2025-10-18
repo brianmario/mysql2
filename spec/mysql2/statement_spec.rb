@@ -461,6 +461,11 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       expect(r.first['test']).to be_an_instance_of(Time)
     end
 
+    it "should return nil when timestamp is 0000-00-00T00:00:00" do
+      r = @client.prepare("SELECT CAST('0000-00-00 00:00:00' AS DATETIME) as test").execute
+      expect(r.first['test']).to be_nil
+    end
+
     it "should return Time for a TIMESTAMP value when within the supported range" do
       expect(test_result['timestamp_test']).to be_an_instance_of(Time)
       expect(test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')

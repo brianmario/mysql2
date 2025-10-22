@@ -1071,14 +1071,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "#affected_rows with multi statements returns the last result's affected_rows" do
-      @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_ON)
+      begin
+        @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_ON)
 
-      @client.query("INSERT INTO lastIdTest (blah) VALUES (1234), (5678); UPDATE lastIdTest SET blah=4321 WHERE id=1")
-      expect(@client.affected_rows).to eq(2)
-      expect(@client.next_result).to eq(true)
-      expect(@client.affected_rows).to eq(1)
-    ensure
-      @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_OFF)
+        @client.query("INSERT INTO lastIdTest (blah) VALUES (1234), (5678); UPDATE lastIdTest SET blah=4321 WHERE id=1")
+        expect(@client.affected_rows).to eq(2)
+        expect(@client.next_result).to eq(true)
+        expect(@client.affected_rows).to eq(1)
+      ensure
+        @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_OFF)
+      end
     end
 
     it "#affected_rows isn't cleared by Statement#close" do

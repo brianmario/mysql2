@@ -184,12 +184,20 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
   end
 
   it "should tell us about the fields" do
-    statement = @client.prepare 'SELECT 1 as foo, 2'
+    statement = @client.prepare 'SELECT 1 AS foo, 2'
     statement.execute
     list = statement.fields
     expect(list.length).to eq(2)
     expect(list.first).to eq('foo')
     expect(list[1]).to eq('2')
+  end
+
+  it "should give us fields when no rows" do
+    statement = @client.prepare 'SELECT 1 AS foo FROM mysql2_test WHERE 1=0'
+    result = statement.execute
+    list = result.fields
+    expect(list.length).to eq(1)
+    expect(list.first).to eq('foo')
   end
 
   it "should handle as a decimal binding a BigDecimal" do

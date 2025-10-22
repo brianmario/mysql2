@@ -1093,6 +1093,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  it "#affected_rows when no rows were affected returns 1" do
+    @client.query "SELECT sleep(0.01)"
+    expect(@client.affected_rows).to eq(1)
+  end
+
   it "should respond to #thread_id" do
     expect(@client).to respond_to(:thread_id)
   end

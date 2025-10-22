@@ -673,7 +673,6 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     wrapper->active_fiber = Qnil;
     rb_raise_mysql2_error(wrapper);
   }
-  wrapper->affected_rows = mysql_affected_rows(wrapper->client);
 
   is_streaming = rb_hash_aref(rb_ivar_get(self, intern_current_query_options), sym_stream);
   if (is_streaming == Qtrue) {
@@ -681,6 +680,8 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   } else {
     result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
   }
+
+  wrapper->affected_rows = mysql_affected_rows(wrapper->client);
 
   if (result == NULL) {
     if (mysql_errno(wrapper->client) != 0) {
@@ -1165,7 +1166,7 @@ static VALUE rb_mysql_client_affected_rows(VALUE self) {
 
   REQUIRE_CONNECTED(wrapper);
   retVal = wrapper->affected_rows;
-  if (retVal == (uint64_t)-1) {
+  if (retVal == (my_ulonglong)-1) {
     rb_raise_mysql2_error(wrapper);
   }
   return ULL2NUM(retVal);

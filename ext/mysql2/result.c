@@ -575,7 +575,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   }
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
-    VALUE field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+    VALUE field = Qnil;  /* Only fetched for hash mode to avoid allocation overhead */
     VALUE val = Qnil;
     MYSQL_TIME *ts;
 
@@ -705,6 +705,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     if (args->asArray) {
       rb_ary_push(rowVal, val);
     } else {
+      field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
       rb_hash_aset(rowVal, field, val);
     }
   }
@@ -744,7 +745,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   fieldLengths = mysql_fetch_lengths(wrapper->result);
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
-    VALUE field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+    VALUE field = Qnil;  /* Only fetched for hash mode to avoid allocation overhead */
     if (row[i]) {
       VALUE val = Qnil;
       enum enum_field_types type = fields[i].type;
@@ -912,12 +913,14 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
       if (args->asArray) {
         rb_ary_push(rowVal, val);
       } else {
+        field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
         rb_hash_aset(rowVal, field, val);
       }
     } else {
       if (args->asArray) {
         rb_ary_push(rowVal, Qnil);
       } else {
+        field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
         rb_hash_aset(rowVal, field, Qnil);
       }
     }

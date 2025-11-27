@@ -1067,9 +1067,9 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
-  VALUE defaults, opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
-  ID db_timezone, app_timezone, dbTz, appTz;
-  int symbolizeKeys, asArray, castBool, cacheRows, cast;
+  VALUE opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+  int symbolize_keys, as_array, cast_bool, cache_rows, cast;
+  ID db_timezone, app_timezone;
 
   GET_RESULT(self);
 
@@ -1077,61 +1077,68 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     rb_raise(cMysql2Error, "Statement handle already closed");
   }
 
-  defaults = rb_ivar_get(self, intern_query_options);
-  Check_Type(defaults, T_HASH);
-
-  // A block can be passed to this method, but since we don't call the block directly from C,
-  // we don't need to capture it into a variable here with the "&" scan arg.
+  // Use cached options from wrapper to avoid hash lookups.
+  // Only parse options from arguments if they're explicitly provided.
   if (rb_scan_args(argc, argv, "01", &opts) == 1) {
+    // Options were provided - need to merge and parse them
+    VALUE defaults = rb_ivar_get(self, intern_query_options);
+    Check_Type(defaults, T_HASH);
     opts = rb_funcall(defaults, intern_merge, 1, opts);
+
+    symbolize_keys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
+    as_array       = rb_hash_aref(opts, sym_as) == sym_array;
+    cast_bool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
+    cache_rows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
+    cast           = RTEST(rb_hash_aref(opts, sym_cast));
+
+    VALUE db_tz = rb_hash_aref(opts, sym_database_timezone);
+    if (db_tz == sym_local) {
+      db_timezone = intern_local;
+    } else if (db_tz == sym_utc) {
+      db_timezone = intern_utc;
+    } else {
+      if (!NIL_P(db_tz)) {
+        rb_warn(":database_timezone option must be :utc or :local - defaulting to :local");
+      }
+      db_timezone = intern_local;
+    }
+
+    VALUE app_tz = rb_hash_aref(opts, sym_application_timezone);
+    if (app_tz == sym_local) {
+      app_timezone = intern_local;
+    } else if (app_tz == sym_utc) {
+      app_timezone = intern_utc;
+    } else {
+      app_timezone = Qnil;
+    }
   } else {
-    opts = defaults;
+    // No options provided - use cached values from wrapper (fast path)
+    symbolize_keys = wrapper->symbolize_keys;
+    as_array       = wrapper->as_array;
+    cast_bool      = wrapper->cast_bool;
+    cache_rows     = wrapper->cache_rows;
+    cast           = wrapper->cast;
+    db_timezone    = wrapper->db_timezone;
+    app_timezone   = wrapper->app_timezone;
   }
 
-  symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
-  asArray       = rb_hash_aref(opts, sym_as) == sym_array;
-  castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
-  cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
-  cast          = RTEST(rb_hash_aref(opts, sym_cast));
-
-  if (wrapper->is_streaming && cacheRows) {
+  if (wrapper->is_streaming && cache_rows) {
     rb_warn(":cache_rows is ignored if :stream is true");
   }
 
-  if (wrapper->stmt_wrapper && !cacheRows && !wrapper->is_streaming) {
+  if (wrapper->stmt_wrapper && !cache_rows && !wrapper->is_streaming) {
     rb_warn(":cache_rows is forced for prepared statements (if not streaming)");
-    cacheRows = 1;
+    cache_rows = 1;
   }
 
   if (wrapper->stmt_wrapper && !cast) {
     rb_warn(":cast is forced for prepared statements");
   }
 
-  dbTz = rb_hash_aref(opts, sym_database_timezone);
-  if (dbTz == sym_local) {
-    db_timezone = intern_local;
-  } else if (dbTz == sym_utc) {
-    db_timezone = intern_utc;
-  } else {
-    if (!NIL_P(dbTz)) {
-      rb_warn(":database_timezone option must be :utc or :local - defaulting to :local");
-    }
-    db_timezone = intern_local;
-  }
-
-  appTz = rb_hash_aref(opts, sym_application_timezone);
-  if (appTz == sym_local) {
-    app_timezone = intern_local;
-  } else if (appTz == sym_utc) {
-    app_timezone = intern_utc;
-  } else {
-    app_timezone = Qnil;
-  }
-
   if (wrapper->rows == Qnil && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt_wrapper ? mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt) : mysql_num_rows(wrapper->result);
     wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
-  } else if (wrapper->rows && !cacheRows) {
+  } else if (wrapper->rows && !cache_rows) {
     if (wrapper->resultFreed) {
       rb_raise(cMysql2Error, "Result set has already been freed");
     }
@@ -1141,10 +1148,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   }
 
   // Backward compat
-  args.symbolizeKeys = symbolizeKeys;
-  args.asArray = asArray;
-  args.castBool = castBool;
-  args.cacheRows = cacheRows;
+  args.symbolizeKeys = symbolize_keys;
+  args.asArray = as_array;
+  args.castBool = cast_bool;
+  args.cacheRows = cache_rows;
   args.cast = cast;
   args.db_timezone = db_timezone;
   args.app_timezone = app_timezone;
@@ -1220,9 +1227,36 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   rb_obj_call_init(obj, 0, NULL);
   rb_ivar_set(obj, intern_query_options, options);
 
-  /* Options that cannot be changed in results.each(...) { |row| }
-   * should be processed here. */
+  // Options that cannot be changed in results.each(...) { |row| } should be processed here.
   wrapper->is_streaming = (rb_hash_aref(options, sym_stream) == Qtrue ? 1 : 0);
+
+  // Cache query options to avoid hash lookups during iteration
+  wrapper->symbolize_keys = RTEST(rb_hash_aref(options, sym_symbolize_keys));
+  wrapper->as_array = rb_hash_aref(options, sym_as) == sym_array;
+  wrapper->cast_bool = RTEST(rb_hash_aref(options, sym_cast_booleans));
+  wrapper->cache_rows = RTEST(rb_hash_aref(options, sym_cache_rows));
+  wrapper->cast = RTEST(rb_hash_aref(options, sym_cast));
+
+  VALUE db_tz = rb_hash_aref(options, sym_database_timezone);
+  if (db_tz == sym_local) {
+    wrapper->db_timezone = intern_local;
+  } else if (db_tz == sym_utc) {
+    wrapper->db_timezone = intern_utc;
+  } else {
+    if (!NIL_P(db_tz)) {
+      rb_warn(":database_timezone option must be :utc or :local - defaulting to :local");
+    }
+    wrapper->db_timezone = intern_local;
+  }
+
+  VALUE app_tz = rb_hash_aref(options, sym_application_timezone);
+  if (app_tz == sym_local) {
+    wrapper->app_timezone = intern_local;
+  } else if (app_tz == sym_utc) {
+    wrapper->app_timezone = intern_utc;
+  } else {
+    wrapper->app_timezone = Qnil;
+  }
 
   return obj;
 }

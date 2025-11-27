@@ -25,6 +25,14 @@ typedef struct {
   my_bool *is_null;
   my_bool *error;
   unsigned long *length;
+  // Cached query options to avoid hash lookups on each iteration
+  int symbolize_keys;
+  int as_array;
+  int cast_bool;
+  int cache_rows;
+  int cast;
+  ID db_timezone;
+  ID app_timezone;
 } mysql2_result_wrapper;
 
 #endif

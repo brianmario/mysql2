@@ -537,8 +537,11 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   default_internal_enc = rb_default_internal_encoding();
   conn_enc = rb_to_encoding(wrapper->encoding);
 
-  if (wrapper->fields == Qnil) {
+  if (wrapper->numberOfFields == 0) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+  }
+  // Only allocate fields array for hash mode (where field names are needed)
+  if (!args->asArray && wrapper->fields == Qnil) {
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
   if (args->asArray) {
@@ -733,8 +736,11 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
     return Qnil;
   }
 
-  if (wrapper->fields == Qnil) {
+  if (wrapper->numberOfFields == 0) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+  }
+  // Only allocate fields array for hash mode (where field names are needed)
+  if (!args->asArray && wrapper->fields == Qnil) {
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
   if (args->asArray) {

@@ -33,6 +33,8 @@ typedef struct {
   int cast;
   ID db_timezone;
   ID app_timezone;
+  // Server status for lazy server_flags
+  unsigned int server_status;
 } mysql2_result_wrapper;
 
 #endif

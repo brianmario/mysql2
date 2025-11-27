@@ -1166,6 +1166,11 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   return rb_mysql_result_each_(self, fetch_row_func, &args);
 }
 
+static VALUE rb_mysql_result_server_status(VALUE self) {
+  GET_RESULT(self);
+  return UINT2NUM(wrapper->server_status);
+}
+
 static VALUE rb_mysql_result_count(VALUE self) {
   GET_RESULT(self);
 
@@ -1258,6 +1263,9 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
     wrapper->app_timezone = Qnil;
   }
 
+  // Store server_status for lazy server_flags creation
+  wrapper->server_status = wrapper->client_wrapper->client->server_status;
+
   return obj;
 }
 
@@ -1277,6 +1285,25 @@ void init_mysql2_result() {
   rb_define_method(cMysql2Result, "free", rb_mysql_result_free_, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
   rb_define_alias(cMysql2Result, "size", "count");
+  rb_define_private_method(cMysql2Result, "server_status", rb_mysql_result_server_status, 0);
+
+  // Expose server status flag constants for Ruby-level server_flags computation
+  // Use Qnil for unavailable constants to simplify Ruby code
+#ifdef HAVE_CONST_SERVER_QUERY_NO_GOOD_INDEX_USED
+  rb_define_const(cMysql2Result, "SERVER_QUERY_NO_GOOD_INDEX_USED", UINT2NUM(SERVER_QUERY_NO_GOOD_INDEX_USED));
+#else
+  rb_define_const(cMysql2Result, "SERVER_QUERY_NO_GOOD_INDEX_USED", Qnil);
+#endif
+#ifdef HAVE_CONST_SERVER_QUERY_NO_INDEX_USED
+  rb_define_const(cMysql2Result, "SERVER_QUERY_NO_INDEX_USED", UINT2NUM(SERVER_QUERY_NO_INDEX_USED));
+#else
+  rb_define_const(cMysql2Result, "SERVER_QUERY_NO_INDEX_USED", Qnil);
+#endif
+#ifdef HAVE_CONST_SERVER_QUERY_WAS_SLOW
+  rb_define_const(cMysql2Result, "SERVER_QUERY_WAS_SLOW", UINT2NUM(SERVER_QUERY_WAS_SLOW));
+#else
+  rb_define_const(cMysql2Result, "SERVER_QUERY_WAS_SLOW", Qnil);
+#endif
 
   intern_new          = rb_intern("new");
   intern_utc          = rb_intern("utc");

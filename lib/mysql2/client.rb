@@ -141,9 +141,11 @@ module Mysql2
       end
     end
 
-    def query(sql, options = {})
+    def query(sql, options = nil)
       Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_NEVER) do
-        _query(sql, @query_options.merge(options))
+        # Avoid hash allocation when no options are passed
+        opts = options ? @query_options.merge(options) : @query_options
+        _query(sql, opts)
       end
     end
 

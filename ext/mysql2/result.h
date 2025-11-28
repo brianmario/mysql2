@@ -35,6 +35,9 @@ typedef struct {
   ID app_timezone;
   // Server status for lazy server_flags
   unsigned int server_status;
+  // Cached encoding info to avoid per-row lookups
+  rb_encoding *default_internal_enc;
+  rb_encoding *conn_enc;
 } mysql2_result_wrapper;
 
 #endif

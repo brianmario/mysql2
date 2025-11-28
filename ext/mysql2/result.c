@@ -213,8 +213,8 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
   rb_field = rb_ary_entry(wrapper->fields, idx);
   if (rb_field == Qnil) {
     MYSQL_FIELD *field = NULL;
-    rb_encoding *default_internal_enc = rb_default_internal_encoding();
-    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+    rb_encoding *default_internal_enc = wrapper->default_internal_enc;
+    rb_encoding *conn_enc = wrapper->conn_enc;
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
@@ -252,8 +252,8 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
   rb_field_type = rb_ary_entry(wrapper->fieldTypes, idx);
   if (rb_field_type == Qnil) {
     MYSQL_FIELD *field = NULL;
-    rb_encoding *default_internal_enc = rb_default_internal_encoding();
-    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+    rb_encoding *default_internal_enc = wrapper->default_internal_enc;
+    rb_encoding *conn_enc = wrapper->conn_enc;
     int precision;
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
@@ -566,8 +566,9 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   rb_encoding *conn_enc;
   GET_RESULT(self);
 
-  default_internal_enc = rb_default_internal_encoding();
-  conn_enc = rb_to_encoding(wrapper->encoding);
+  // Use cached encoding info to avoid per-row lookups
+  default_internal_enc = wrapper->default_internal_enc;
+  conn_enc = wrapper->conn_enc;
 
   if (wrapper->numberOfFields == 0) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
@@ -759,8 +760,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   rb_encoding *conn_enc;
   GET_RESULT(self);
 
-  default_internal_enc = rb_default_internal_encoding();
-  conn_enc = rb_to_encoding(wrapper->encoding);
+  // Use cached encoding info to avoid per-row lookups
+  default_internal_enc = wrapper->default_internal_enc;
+  conn_enc = wrapper->conn_enc;
 
   ptr = wrapper->result;
   row = (MYSQL_ROW)rb_thread_call_without_gvl(nogvl_fetch_row, ptr, RUBY_UBF_IO, 0);
@@ -1311,6 +1313,10 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
 
   // Store server_status for lazy server_flags creation
   wrapper->server_status = wrapper->client_wrapper->client->server_status;
+
+  // Cache encoding info to avoid per-row lookups
+  wrapper->default_internal_enc = rb_default_internal_encoding();
+  wrapper->conn_enc = rb_to_encoding(encoding);
 
   return obj;
 }

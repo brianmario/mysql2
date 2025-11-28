@@ -38,6 +38,8 @@ typedef struct {
   // Cached encoding info to avoid per-row lookups
   rb_encoding *default_internal_enc;
   rb_encoding *conn_enc;
+  // User-specified forced encoding (bypasses charset detection)
+  rb_encoding *forced_encoding;
 } mysql2_result_wrapper;
 
 #endif

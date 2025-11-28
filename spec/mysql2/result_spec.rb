@@ -562,6 +562,49 @@ RSpec.describe Mysql2::Result do
     end
   end
 
+  context "force_encoding option" do
+    it "should use specified encoding when force_encoding is a string" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: 'utf-8').first
+      expect(result['varchar_test'].encoding).to eql(Encoding::UTF_8)
+      expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+    end
+
+    it "should use specified encoding when force_encoding is an Encoding object" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: Encoding::UTF_8).first
+      expect(result['varchar_test'].encoding).to eql(Encoding::UTF_8)
+      expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+    end
+
+    it "should use binary encoding when force_encoding: 'binary'" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: 'binary').first
+      expect(result['varchar_test'].encoding).to eql(Encoding::BINARY)
+      expect(result['enum_test'].encoding).to eql(Encoding::BINARY)
+    end
+
+    it "should work with cast: false mode" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", cast: false, force_encoding: 'utf-8').first
+      expect(result['varchar_test'].encoding).to eql(Encoding::UTF_8)
+      expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+      # All values should be strings with cast: false
+      expect(result['id']).to be_kind_of(String)
+    end
+
+    it "should not convert to default_internal when force_encoding is specified" do
+      with_internal_encoding Encoding::ASCII do
+        # Force to UTF-8, even though default_internal is ASCII
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: Encoding::UTF_8).first
+        # Should be UTF-8, NOT converted to ASCII
+        expect(result['varchar_test'].encoding).to eql(Encoding::UTF_8)
+        expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+      end
+    end
+
+    it "should work with SET field types" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: 'utf-8').first
+      expect(result['set_test'].encoding).to eql(Encoding::UTF_8)
+    end
+  end
+
   context "server flags" do
     let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY null_test DESC LIMIT 1") }
 

@@ -69,7 +69,7 @@ static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_o
   intern_query_options;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
-  sym_cache_rows, sym_cast, sym_stream, sym_name;
+  sym_cache_rows, sym_cast, sym_stream, sym_name, sym_force_encoding;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
@@ -411,7 +411,13 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
   return rb_field_type;
 }
 
-static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc) {
+static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc, rb_encoding *forced_encoding) {
+  /* If user specified forced encoding, use it exactly - no conversion */
+  if (forced_encoding) {
+    rb_enc_associate(val, forced_encoding);
+    return val;
+  }
+
   /* if binary flag is set, respect its wishes */
   if (field.flags & BINARY_FLAG && field.charsetnr == MYSQL2_BINARY_CHARSET) {
     rb_enc_associate(val, binaryEncoding);
@@ -750,7 +756,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         case MYSQL_TYPE_GEOMETRY:     // char[]
         default:
           val = rb_str_new(result_buffer->buffer, *(result_buffer->length));
-          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_encoding);
           break;
       }
     }
@@ -810,7 +816,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
       VALUE val;
       if (row[i]) {
         val = rb_str_new(row[i], fieldLengths[i]);
-        val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+        val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_encoding);
       } else {
         val = Qnil;
       }
@@ -999,7 +1005,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_GEOMETRY:   /* Spatial fielda */
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
-          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_encoding);
           break;
         }
 
@@ -1363,6 +1369,17 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->default_internal_enc = rb_default_internal_encoding();
   wrapper->conn_enc = rb_to_encoding(encoding);
 
+  // Parse force_encoding option - must be explicit (string or Encoding object)
+  VALUE force_enc_opt = rb_hash_aref(options, sym_force_encoding);
+  if (!NIL_P(force_enc_opt)) {
+    // force_encoding: 'utf-8' or Encoding::UTF_8
+    // rb_to_encoding() handles both String and Encoding object
+    wrapper->forced_encoding = rb_to_encoding(force_enc_opt);
+  } else {
+    // No forced encoding
+    wrapper->forced_encoding = NULL;
+  }
+
   return obj;
 }
 
@@ -1425,6 +1442,7 @@ void init_mysql2_result() {
   sym_cast           = ID2SYM(rb_intern("cast"));
   sym_stream         = ID2SYM(rb_intern("stream"));
   sym_name           = ID2SYM(rb_intern("name"));
+  sym_force_encoding = ID2SYM(rb_intern("force_encoding"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); /*never GC */

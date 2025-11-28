@@ -450,6 +450,38 @@ static unsigned int msec_char_to_uint(char *msec_char, size_t len)
   return (unsigned int)strtoul(msec_char, NULL, 10);
 }
 
+/*
+ * Optimized integer parsing functions
+ * Similar to trilogy's ll_from_buf/ull_from_buf for faster conversion
+ * MySQL guarantees valid integer strings, so no error checking needed
+ */
+static unsigned long long ull_from_buf(const char *digits, size_t len)
+{
+  if (!len)
+    return 0;
+
+  unsigned long long val = 0;
+
+  while (len--) {
+    unsigned digit = *digits++ - '0';
+    val = val * 10 + digit;
+  }
+
+  return val;
+}
+
+static long long ll_from_buf(const char *digits, size_t len)
+{
+  if (!len)
+    return 0;
+
+  if (digits[0] == '-') {
+    return -(long long)ull_from_buf(&digits[1], len - 1);
+  } else {
+    return (long long)ull_from_buf(digits, len);
+  }
+}
+
 static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields) {
   unsigned int i;
   GET_RESULT(self);
@@ -785,12 +817,20 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_INT24:      /* MEDIUMINT field */
         case MYSQL_TYPE_LONGLONG:   /* BIGINT field */
         case MYSQL_TYPE_YEAR:       /* YEAR field */
-          val = rb_cstr2inum(row[i], 10);
+          if (fields[i].flags & UNSIGNED_FLAG) {
+            val = ULL2NUM(ull_from_buf(row[i], fieldLengths[i]));
+          } else {
+            val = LL2NUM(ll_from_buf(row[i], fieldLengths[i]));
+          }
           break;
         case MYSQL_TYPE_DECIMAL:    /* DECIMAL or NUMERIC field */
         case MYSQL_TYPE_NEWDECIMAL: /* Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up) */
           if (fields[i].decimals == 0) {
-            val = rb_cstr2inum(row[i], 10);
+            if (fields[i].flags & UNSIGNED_FLAG) {
+              val = ULL2NUM(ull_from_buf(row[i], fieldLengths[i]));
+            } else {
+              val = LL2NUM(ll_from_buf(row[i], fieldLengths[i]));
+            }
           } else if (strtod(row[i], NULL) == 0.000000){
             val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, opt_decimal_zero);
           }else{

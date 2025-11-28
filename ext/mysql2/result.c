@@ -773,6 +773,42 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   if (wrapper->numberOfFields == 0) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
   }
+
+  // Optimized fast path for cast: false (raw string mode)
+  // Bypass all type conversion overhead for maximum performance
+  if (!args->cast) {
+    // Only allocate fields array for hash mode (where field names are needed)
+    if (!args->asArray && wrapper->fields == Qnil) {
+      wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
+    }
+    if (args->asArray) {
+      rowVal = rb_ary_new2(wrapper->numberOfFields);
+    } else {
+      rowVal = rb_hash_new();
+    }
+    fieldLengths = mysql_fetch_lengths(wrapper->result);
+
+    // Tight loop: just create strings, no type checking
+    for (i = 0; i < wrapper->numberOfFields; i++) {
+      VALUE val;
+      if (row[i]) {
+        val = rb_str_new(row[i], fieldLengths[i]);
+        val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+      } else {
+        val = Qnil;
+      }
+
+      if (args->asArray) {
+        rb_ary_push(rowVal, val);
+      } else {
+        VALUE field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+        rb_hash_aset(rowVal, field, val);
+      }
+    }
+    return rowVal;
+  }
+
+  // Normal path with type conversion (cast: true)
   // Only allocate fields array for hash mode (where field names are needed)
   if (!args->asArray && wrapper->fields == Qnil) {
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
@@ -790,15 +826,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
       VALUE val = Qnil;
       enum enum_field_types type = fields[i].type;
 
-      if (!args->cast) {
-        if (type == MYSQL_TYPE_NULL) {
-          val = Qnil;
-        } else {
-          val = rb_str_new(row[i], fieldLengths[i]);
-          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
-        }
-      } else {
-        switch(type) {
+      switch(type) {
         case MYSQL_TYPE_NULL:       /* NULL-type field */
           val = Qnil;
           break;
@@ -957,7 +985,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
           break;
         }
-      }
+
       if (args->asArray) {
         rb_ary_push(rowVal, val);
       } else {

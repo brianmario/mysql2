@@ -4,6 +4,13 @@
 void init_mysql2_result(void);
 VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement);
 
+// Cast mode enum
+typedef enum {
+  CAST_NONE = 0,  // cast: false - all strings
+  CAST_ALL = 1,   // cast: true - full type casting
+  CAST_FAST = 2   // cast: :fast - selective casting (cheap types only)
+} mysql2_cast_mode;
+
 typedef struct {
   VALUE fields;
   VALUE fieldTypes;

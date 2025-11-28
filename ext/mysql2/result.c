@@ -69,7 +69,7 @@ static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_o
   intern_query_options;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
-  sym_cache_rows, sym_cast, sym_stream, sym_name, sym_force_encoding;
+  sym_cache_rows, sym_cast, sym_fast, sym_stream, sym_name, sym_force_encoding;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
@@ -799,7 +799,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
 
   // Optimized fast path for cast: false (raw string mode)
   // Bypass all type conversion overhead for maximum performance
-  if (!args->cast) {
+  if (args->cast == CAST_NONE) {
     // Only allocate fields array for hash mode (where field names are needed)
     if (!args->asArray && wrapper->fields == Qnil) {
       wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
@@ -825,6 +825,92 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         rb_ary_push(rowVal, val);
       } else {
         VALUE field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+        rb_hash_aset(rowVal, field, val);
+      }
+    }
+    return rowVal;
+  }
+
+  // Selective cast: :fast path - cast cheap types (integers, floats), leave expensive types as strings
+  if (args->cast == CAST_FAST) {
+    // Only allocate fields array for hash mode (where field names are needed)
+    if (!args->asArray && wrapper->fields == Qnil) {
+      wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
+    }
+    if (args->asArray) {
+      rowVal = rb_ary_new2(wrapper->numberOfFields);
+    } else {
+      rowVal = rb_hash_new();
+    }
+    fieldLengths = mysql_fetch_lengths(wrapper->result);
+
+    for (i = 0; i < wrapper->numberOfFields; i++) {
+      VALUE field = Qnil;
+      VALUE val = Qnil;
+      if (row[i]) {
+        enum enum_field_types type = fields[i].type;
+
+        switch(type) {
+          // CHEAP TYPES - Cast in C (fast!)
+          case MYSQL_TYPE_NULL:
+            val = Qnil;
+            break;
+          case MYSQL_TYPE_TINY:       // TINYINT - cheap integer cast
+            if (args->castBool && fields[i].length == 1) {
+              val = *row[i] != '0' ? Qtrue : Qfalse;
+              break;
+            }
+          case MYSQL_TYPE_SHORT:      // SMALLINT
+          case MYSQL_TYPE_LONG:       // INTEGER
+          case MYSQL_TYPE_INT24:      // MEDIUMINT
+          case MYSQL_TYPE_LONGLONG:   // BIGINT
+          case MYSQL_TYPE_YEAR:       // YEAR
+            if (fields[i].flags & UNSIGNED_FLAG) {
+              val = ULL2NUM(ull_from_buf(row[i], fieldLengths[i]));
+            } else {
+              val = LL2NUM(ll_from_buf(row[i], fieldLengths[i]));
+            }
+            break;
+          case MYSQL_TYPE_FLOAT:      // FLOAT - cheap float cast
+          case MYSQL_TYPE_DOUBLE: {   // DOUBLE
+            double column_to_double = strtod(row[i], NULL);
+            if (column_to_double == 0.000000) {
+              val = opt_float_zero;
+            } else {
+              val = rb_float_new(column_to_double);
+            }
+            break;
+          }
+
+          // EXPENSIVE TYPES - Leave as strings for AR lazy casting
+          case MYSQL_TYPE_DECIMAL:    // DECIMAL - expensive BigDecimal construction
+          case MYSQL_TYPE_NEWDECIMAL:
+          case MYSQL_TYPE_TIMESTAMP:  // TIMESTAMP - expensive parsing
+          case MYSQL_TYPE_DATETIME:   // DATETIME - expensive parsing
+          case MYSQL_TYPE_TIME:       // TIME - expensive parsing
+          case MYSQL_TYPE_DATE:       // DATE - expensive parsing
+          case MYSQL_TYPE_NEWDATE:
+            // Return as string - let ActiveRecord do lazy deserialization
+            val = rb_str_new(row[i], fieldLengths[i]);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_encoding);
+            break;
+
+          // Everything else - return as string (BLOBs, TEXT, VARCHAR, etc.)
+          default:
+            val = rb_str_new(row[i], fieldLengths[i]);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_encoding);
+            break;
+        }
+      }
+
+      if (args->asArray) {
+        rb_ary_push(rowVal, val);
+      } else {
+        if (!args->symbolizeKeys) {
+          field = rb_mysql_result_fetch_field(self, i, 0);
+        } else {
+          field = rb_mysql_result_fetch_field(self, i, 1);
+        }
         rb_hash_aset(rowVal, field, val);
       }
     }
@@ -1188,7 +1274,16 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     as_array       = rb_hash_aref(opts, sym_as) == sym_array;
     cast_bool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
     cache_rows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
-    cast           = RTEST(rb_hash_aref(opts, sym_cast));
+
+    // Parse cast option: false/nil → CAST_NONE, true → CAST_ALL, :fast → CAST_FAST
+    VALUE cast_opt = rb_hash_aref(opts, sym_cast);
+    if (cast_opt == sym_fast) {
+      cast = CAST_FAST;
+    } else if (RTEST(cast_opt)) {
+      cast = CAST_ALL;
+    } else {
+      cast = CAST_NONE;
+    }
 
     VALUE db_tz = rb_hash_aref(opts, sym_database_timezone);
     if (db_tz == sym_local) {
@@ -1230,7 +1325,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     cache_rows = 1;
   }
 
-  if (wrapper->stmt_wrapper && !cast) {
+  if (wrapper->stmt_wrapper && cast == CAST_NONE) {
     rb_warn(":cast is forced for prepared statements");
   }
 
@@ -1339,7 +1434,16 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->as_array = rb_hash_aref(options, sym_as) == sym_array;
   wrapper->cast_bool = RTEST(rb_hash_aref(options, sym_cast_booleans));
   wrapper->cache_rows = RTEST(rb_hash_aref(options, sym_cache_rows));
-  wrapper->cast = RTEST(rb_hash_aref(options, sym_cast));
+
+  // Parse cast option: false/nil → CAST_NONE, true → CAST_ALL, :fast → CAST_FAST
+  VALUE cast_opt = rb_hash_aref(options, sym_cast);
+  if (cast_opt == sym_fast) {
+    wrapper->cast = CAST_FAST;
+  } else if (RTEST(cast_opt)) {
+    wrapper->cast = CAST_ALL;
+  } else {
+    wrapper->cast = CAST_NONE;
+  }
 
   VALUE db_tz = rb_hash_aref(options, sym_database_timezone);
   if (db_tz == sym_local) {
@@ -1440,6 +1544,7 @@ void init_mysql2_result() {
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
   sym_cast           = ID2SYM(rb_intern("cast"));
+  sym_fast           = ID2SYM(rb_intern("fast"));
   sym_stream         = ID2SYM(rb_intern("stream"));
   sym_name           = ID2SYM(rb_intern("name"));
   sym_force_encoding = ID2SYM(rb_intern("force_encoding"));

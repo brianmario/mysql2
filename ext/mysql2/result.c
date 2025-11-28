@@ -5,6 +5,12 @@
 
 static rb_encoding *binaryEncoding;
 
+/* Trilogy-style encoding index cache: charset number → encoding index
+ * 0 = not yet cached, -1 = cached "not found", > 0 = valid encoding index
+ * Amortizes the expensive rb_enc_find_index() lookup across all queries
+ */
+static int encoding_index_cache[256] = {0};
+
 /* on 64bit platforms we can handle dates way outside 2038-01-19T03:14:07
  *
  * (9999*31557600) + (12*2592000) + (31*86400) + (11*3600) + (59*60) + 59
@@ -413,18 +419,29 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
     /* MySQL 4.x may not provide an encoding, binary will get the bytes through */
     rb_enc_associate(val, binaryEncoding);
   } else {
-    /* lookup the encoding configured on this field */
-    const char *enc_name;
-    int enc_index;
+    /* Trilogy-style cached encoding lookup: check cache first */
+    int enc_index = encoding_index_cache[field.charsetnr];
 
-    enc_name = (field.charsetnr-1 < MYSQL2_CHARSETNR_SIZE) ? mysql2_mysql_enc_to_rb[field.charsetnr-1] : NULL;
+    if (enc_index == 0) {
+      /* Cache miss: do full lookup and cache result */
+      const char *enc_name;
+      enc_name = (field.charsetnr-1 < MYSQL2_CHARSETNR_SIZE) ? mysql2_mysql_enc_to_rb[field.charsetnr-1] : NULL;
 
-    if (enc_name != NULL) {
-      /* use the field encoding we were able to match */
-      enc_index = rb_enc_find_index(enc_name);
+      if (enc_name != NULL) {
+        enc_index = rb_enc_find_index(enc_name);
+      } else {
+        enc_index = -1;  /* Mark as "not found" */
+      }
+
+      /* Cache the result (even -1 for "not found") */
+      encoding_index_cache[field.charsetnr] = enc_index;
+    }
+
+    /* Use the encoding index (from cache or fresh lookup) */
+    if (enc_index > 0) {
       rb_enc_set_index(val, enc_index);
     } else {
-      /* otherwise fall-back to the connection's encoding */
+      /* Encoding not found, fall back to connection encoding */
       rb_enc_associate(val, conn_enc);
     }
 

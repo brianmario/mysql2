@@ -975,10 +975,12 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       retval = &intval;
       break;
 
+#ifdef MYSQL_OPT_RECONNECT
     case MYSQL_OPT_RECONNECT:
       boolval = (value == Qfalse ? 0 : 1);
       retval = &boolval;
       break;
+#endif
 
 #ifdef MYSQL_SECURE_AUTH
     case MYSQL_SECURE_AUTH:
@@ -1035,9 +1037,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
   } else {
     /* Special case for options that are stored in the wrapper struct */
     switch (opt) {
+#ifdef MYSQL_OPT_RECONNECT
       case MYSQL_OPT_RECONNECT:
         wrapper->reconnect_enabled = boolval;
         break;
+#endif
       case MYSQL_OPT_CONNECT_TIMEOUT:
         wrapper->connect_timeout = intval;
         break;
@@ -1397,7 +1401,11 @@ static VALUE set_automatic_close(VALUE self, VALUE value) {
  * for more information.
  */
 static VALUE set_reconnect(VALUE self, VALUE value) {
+#ifdef MYSQL_OPT_RECONNECT
   return _mysql_client_options(self, MYSQL_OPT_RECONNECT, value);
+#else
+  return Qfalse;
+#endif
 }
 
 static VALUE set_local_infile(VALUE self, VALUE value) {

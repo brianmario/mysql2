@@ -761,11 +761,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
       it "evented async queries should be supported" do
         # should immediately return nil
-        expect(@client.query("SELECT sleep(0.1)", async: true)).to eql(nil)
+        expect(@client.query("SELECT sleep(0.5)", async: true)).to eql(nil)
 
         io_wrapper = IO.for_fd(@client.socket, autoclose: false)
         loops = 0
-        loops += 1 until IO.select([io_wrapper], nil, nil, 0.05)
+        loops += 1 until IO.select([io_wrapper], nil, nil, 0.01)
 
         # make sure we waited some period of time
         expect(loops >= 1).to be true

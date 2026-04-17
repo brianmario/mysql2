@@ -254,7 +254,8 @@ RSpec.describe Mysql2::Result do
           # Exhaust the first result packet then trigger a timeout
           sleep 4 if i > 0 && i % 1000 == 0
         end
-      end.to raise_error(Mysql2::Error, /Lost connection/)
+      # With TLS, disruptions surface as TLS errors rather than MySQL protocol errors
+      end.to raise_error(Mysql2::Error, /Lost connection|TLS\/SSL error/)
     end
   end
 

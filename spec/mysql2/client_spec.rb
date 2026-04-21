@@ -385,6 +385,24 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  it "should not crash when ping and close are called concurrently" do
+    100.times do
+      client = new_client
+      thread = Thread.new { client.ping }
+      client.close
+      thread.join
+    end
+  end
+
+  it "should not crash when query and close are called concurrently" do
+    100.times do
+      client = new_client
+      thread = Thread.new { client.query("SELECT 1") rescue nil }
+      client.close
+      thread.join
+    end
+  end
+
   it "should not try to query closed mysql connection" do
     client = new_client(reconnect: true)
     expect(client.close).to be_nil

@@ -1,6 +1,8 @@
 #ifndef MYSQL2_CLIENT_H
 #define MYSQL2_CLIENT_H
 
+#include <ruby/thread_native.h>
+
 typedef struct {
   VALUE encoding;
   VALUE active_fiber; /* rb_fiber_current() or Qnil */
@@ -14,6 +16,7 @@ typedef struct {
   int closed;
   uint64_t affected_rows;
   MYSQL *client;
+  rb_nativethread_lock_t mutex;
 } mysql_client_wrapper;
 
 void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result);

@@ -1,3 +1,34 @@
+/*
+ * Thread safety in mysql2
+ *
+ * Three mechanisms protect against concurrent access to a MYSQL connection.
+ * They guard against different failure modes at different layers and are
+ * not interchangeable:
+ *
+ * 1. active_fiber (Ruby level, GVL held)
+ *    Prevents two fibers or threads from starting operations on the same
+ *    connection concurrently.  Checked before rb_thread_call_without_gvl.
+ *    Raises a clear Ruby error ("This connection is in use by: ...") so
+ *    users can fix connection pool misuse.  ping and close intentionally
+ *    skip this check — ping is a lightweight health check and close must
+ *    work regardless of connection state.
+ *
+ * 2. mutex (C level, no GVL — rb_nativethread_lock_t)
+ *    Serializes nogvl_close with other nogvl_* functions that touch the
+ *    MYSQL struct.  Prevents use-after-free when close races with an
+ *    in-flight operation that has already released the GVL.  The
+ *    active_fiber check cannot help here because it runs before the GVL
+ *    is released, leaving a window between the check and the actual
+ *    libmysql call.
+ *
+ * 3. refcount (GC lifecycle)
+ *    Tracks how many Ruby objects (Client + its Result objects) reference
+ *    the mysql_client_wrapper.  A Result increments the count; GC of the
+ *    Result decrements it.  The wrapper (and MYSQL struct) is only freed
+ *    when the count reaches zero, preventing a GC ordering issue where
+ *    Client is collected before an outstanding Result.
+ */
+
 #include <mysql2_ext.h>
 
 #include <time.h>

@@ -1,3 +1,48 @@
+/*
+ * Thread safety in mysql2
+ *
+ * Three mechanisms protect against concurrent access to a MYSQL connection.
+ * They guard against different failure modes at different layers and are
+ * not interchangeable:
+ *
+ * 1. active_fiber (Ruby level, GVL held)
+ *    Prevents two fibers or threads from starting operations on the same
+ *    connection concurrently.  Checked before rb_thread_call_without_gvl.
+ *    Raises a clear Ruby error ("This connection is in use by: ...") so
+ *    users can fix connection pool misuse.  ping returns false instead of
+ *    raising.  close intentionally skips this check — it must work
+ *    regardless of connection state.
+ *
+ * 2. closed flag + socket shutdown (C level)
+ *    rb_mysql_client_close checks active_fiber while holding the GVL.
+ *    If no operation is in-flight, it calls mysql_close directly for a
+ *    clean disconnect (COM_QUIT + free).  If an operation IS in-flight,
+ *    it calls nogvl_close which sets wrapper->closed and calls
+ *    shutdown(SHUT_RDWR) to interrupt the blocked I/O, deferring
+ *    mysql_close to decr_mysql2_client (refcount == 0).
+ *
+ *    If an in-flight nogvl_* function misses the closed flag (race),
+ *    the shutdown causes its I/O to fail with a socket error rather
+ *    than use-after-free.  REQUIRE_CONNECTED and closed? also check
+ *    the flag at Ruby level.
+ *
+ *    decr_mysql2_client does NOT call nogvl_close — it sets the closed
+ *    flag directly and lets mysql_close handle cleanup, so COM_QUIT can
+ *    be sent through the still-open socket during GC.
+ *
+ *    A native mutex is intentionally avoided here: if a thread holds such
+ *    a mutex at fork() time, the child inherits a permanently-locked mutex
+ *    (the owning thread does not survive fork), and any subsequent close
+ *    or GC in the child deadlocks.
+ *
+ * 3. refcount (GC lifecycle)
+ *    Tracks how many Ruby objects (Client + its Result objects) reference
+ *    the mysql_client_wrapper.  A Result increments the count; GC of the
+ *    Result decrements it.  The wrapper (and MYSQL struct) is only freed
+ *    when the count reaches zero, preventing a GC ordering issue where
+ *    Client is collected before an outstanding Result.
+ */
+
 #include <mysql2_ext.h>
 
 #include <time.h>
@@ -34,7 +79,7 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
 
 #define REQUIRE_CONNECTED(wrapper) \
   REQUIRE_INITIALIZED(wrapper) \
-  if (!CONNECTED(wrapper) && !wrapper->reconnect_enabled) { \
+  if (wrapper->closed || (!CONNECTED(wrapper) && !wrapper->reconnect_enabled)) { \
     rb_raise(cMysql2Error, "MySQL client is not connected"); \
   }
 
@@ -360,10 +405,27 @@ static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
   if (wrapper->initialized && !wrapper->closed) {
-    mysql_close(wrapper->client);
     wrapper->closed = 1;
     wrapper->reconnect_enabled = 0;
     wrapper->active_fiber = Qnil;
+
+    /* Shut down the socket to interrupt any in-flight operations on other
+     * threads.  shutdown() is thread-safe with concurrent send()/recv() —
+     * it causes them to fail with a socket error rather than risk
+     * use-after-free.  We intentionally do NOT call mysql_close() here
+     * because it frees the MYSQL struct internals; an in-flight libmysql
+     * call on another thread may still be reading them.  The actual
+     * mysql_close() is deferred to decr_mysql2_client (refcount == 0),
+     * where no concurrent access is possible.
+     */
+#ifndef _WIN32
+    {
+      int fd = wrapper->client->net.fd;
+      if (fd >= 0) {
+        shutdown(fd, SHUT_RDWR);
+      }
+    }
+#endif
   }
 
   return NULL;
@@ -391,7 +453,20 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
     }
 #endif
 
-    nogvl_close(wrapper);
+    /* Set closed state directly — don't call nogvl_close (which would
+     * shutdown the socket before mysql_close can send COM_QUIT).
+     * Refcount == 0 guarantees no concurrent access.
+     */
+    if (!wrapper->closed) {
+      wrapper->closed = 1;
+      wrapper->reconnect_enabled = 0;
+      wrapper->active_fiber = Qnil;
+    }
+
+    if (wrapper->initialized) {
+      mysql_close(wrapper->client);
+    }
+
     xfree(wrapper->client);
     xfree(wrapper);
   }
@@ -572,8 +647,25 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
 static VALUE rb_mysql_client_close(VALUE self) {
   GET_CLIENT(self);
 
-  if (wrapper->client) {
-    rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
+  if (wrapper->client && !wrapper->closed) {
+    if (NIL_P(wrapper->active_fiber)) {
+      /* No operation in-flight.  We hold the GVL so no new operation can
+       * start (REQUIRE_CONNECTED / set_active_fiber both need the GVL).
+       * It is safe to call mysql_close which sends COM_QUIT and frees
+       * the connection cleanly.  Mark initialized=0 so decr_mysql2_client
+       * won't call mysql_close a second time. */
+      wrapper->closed = 1;
+      wrapper->reconnect_enabled = 0;
+      wrapper->active_fiber = Qnil;
+      mysql_close(wrapper->client);
+      wrapper->initialized = 0;
+    } else {
+      /* An operation is in-flight on another thread (without the GVL).
+       * Use nogvl_close to set the closed flag and shutdown the socket,
+       * interrupting the in-flight operation.  mysql_close is deferred
+       * to decr_mysql2_client (refcount == 0). */
+      rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
+    }
   }
 
   return Qnil;
@@ -586,7 +678,7 @@ static VALUE rb_mysql_client_close(VALUE self) {
  */
 static VALUE rb_mysql_client_closed(VALUE self) {
   GET_CLIENT(self);
-  return CONNECTED(wrapper) ? Qfalse : Qtrue;
+  return (wrapper->closed || !CONNECTED(wrapper)) ? Qtrue : Qfalse;
 }
 
 /*
@@ -1234,11 +1326,18 @@ static void *nogvl_ping(void *ptr) {
 static VALUE rb_mysql_client_ping(VALUE self) {
   GET_CLIENT(self);
 
-  if (!CONNECTED(wrapper)) {
+  if (wrapper->closed || !CONNECTED(wrapper)) {
     return Qfalse;
-  } else {
-    return (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
   }
+  if (!NIL_P(wrapper->active_fiber)) {
+    return Qfalse;
+  }
+
+  wrapper->active_fiber = rb_fiber_current();
+  VALUE result = (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
+  wrapper->active_fiber = Qnil;
+
+  return result;
 }
 
 /* call-seq:

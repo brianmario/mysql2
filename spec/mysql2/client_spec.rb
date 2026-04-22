@@ -385,6 +385,77 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  it "should not crash when ping and close are called concurrently" do
+    100.times do
+      client = new_client
+      thread = Thread.new { client.ping }
+      client.close
+      thread.join
+    end
+  end
+
+  it "should not crash when query and close are called concurrently" do
+    100.times do
+      client = new_client
+      thread = Thread.new { client.query("SELECT 1") rescue nil }
+      client.close
+      thread.join
+    end
+  end
+
+  it "should not deadlock when forking while a query is in-flight" do
+    skip "Fork not available" unless Process.respond_to?(:fork)
+
+    # The C extension must remain fork-safe. A naive approach using a native
+    # mutex (pthread_mutex_t) would deadlock in the child if the mutex was
+    # held at fork() time — the owning thread does not survive fork, leaving
+    # the mutex permanently locked. Instead the extension uses a closed flag
+    # + socket shutdown, which is safe across fork.
+    #
+    # A large result set keeps the connection busy during
+    # mysql_store_result for several milliseconds, making the race
+    # catchable. The sleep is varied each iteration so that fork() samples
+    # different phases of the query lifecycle.
+    large_result = "WITH RECURSIVE nums AS (SELECT 1 n UNION ALL SELECT n+1 FROM nums WHERE n < 1000) " \
+                   "SELECT REPEAT('x', 10000) AS data FROM nums"
+
+    50.times do |i|
+      client = Mysql2::Client.new(DatabaseCredentials['root'])
+
+      thread = Thread.new do
+        client.query(large_result) rescue nil
+      end
+
+      # Vary the timing so fork() lands in different phases of the query.
+      sleep(0.001 * (i % 5))
+
+      pid = fork do
+        client.close rescue nil
+        exit!(0)
+      end
+
+      # Deadlock means the child never exits. Poll with a timeout.
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+      status = nil
+      loop do
+        _, status = Process.waitpid2(pid, Process::WNOHANG)
+        break if status
+        if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+          Process.kill(:KILL, pid)
+          Process.waitpid2(pid)
+          thread.join rescue nil
+          client.close rescue nil
+          raise "Child process deadlocked — likely mutex held at fork time"
+        end
+        sleep 0.05
+      end
+
+      thread.join rescue nil
+      client.close rescue nil
+      expect(status.exitstatus).to eq(0)
+    end
+  end
+
   it "should not try to query closed mysql connection" do
     client = new_client(reconnect: true)
     expect(client.close).to be_nil

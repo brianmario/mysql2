@@ -1,34 +1,3 @@
-/*
- * Thread safety in mysql2
- *
- * Three mechanisms protect against concurrent access to a MYSQL connection.
- * They guard against different failure modes at different layers and are
- * not interchangeable:
- *
- * 1. active_fiber (Ruby level, GVL held)
- *    Prevents two fibers or threads from starting operations on the same
- *    connection concurrently.  Checked before rb_thread_call_without_gvl.
- *    Raises a clear Ruby error ("This connection is in use by: ...") so
- *    users can fix connection pool misuse.  ping and close intentionally
- *    skip this check — ping is a lightweight health check and close must
- *    work regardless of connection state.
- *
- * 2. mutex (C level, no GVL — rb_nativethread_lock_t)
- *    Serializes nogvl_close with other nogvl_* functions that touch the
- *    MYSQL struct.  Prevents use-after-free when close races with an
- *    in-flight operation that has already released the GVL.  The
- *    active_fiber check cannot help here because it runs before the GVL
- *    is released, leaving a window between the check and the actual
- *    libmysql call.
- *
- * 3. refcount (GC lifecycle)
- *    Tracks how many Ruby objects (Client + its Result objects) reference
- *    the mysql_client_wrapper.  A Result increments the count; GC of the
- *    Result decrements it.  The wrapper (and MYSQL struct) is only freed
- *    when the count reaches zero, preventing a GC ordering issue where
- *    Client is collected before an outstanding Result.
- */
-
 #include <mysql2_ext.h>
 
 #include <time.h>
@@ -150,7 +119,6 @@ struct nogvl_send_query_args {
 struct nogvl_select_db_args {
   MYSQL *mysql;
   char *db;
-  mysql_client_wrapper *wrapper;
 };
 
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
@@ -391,14 +359,12 @@ static VALUE invalidate_fd(int clientfd)
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
-  rb_native_mutex_lock(&wrapper->mutex);
   if (wrapper->initialized && !wrapper->closed) {
     mysql_close(wrapper->client);
     wrapper->closed = 1;
     wrapper->reconnect_enabled = 0;
     wrapper->active_fiber = Qnil;
   }
-  rb_native_mutex_unlock(&wrapper->mutex);
 
   return NULL;
 }
@@ -426,7 +392,6 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
 #endif
 
     nogvl_close(wrapper);
-    rb_native_mutex_destroy(&wrapper->mutex);
     xfree(wrapper->client);
     xfree(wrapper);
   }
@@ -451,7 +416,6 @@ static VALUE allocate(VALUE klass) {
   wrapper->refcount = 1;
   wrapper->affected_rows = -1;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
-  rb_native_mutex_initialize(&wrapper->mutex);
 
   return obj;
 }
@@ -634,13 +598,7 @@ static void *nogvl_send_query(void *ptr) {
   struct nogvl_send_query_args *args = ptr;
   int rv;
 
-  rb_native_mutex_lock(&args->wrapper->mutex);
-  if (args->wrapper->closed) {
-    rb_native_mutex_unlock(&args->wrapper->mutex);
-    return (void *)Qfalse;
-  }
   rv = mysql_send_query(args->mysql, args->sql_ptr, args->sql_len);
-  rb_native_mutex_unlock(&args->wrapper->mutex);
 
   return (void*)(rv == 0 ? Qtrue : Qfalse);
 }
@@ -662,16 +620,8 @@ static VALUE do_send_query(VALUE args) {
  * block while calling mysql_read_query_result
  */
 static void *nogvl_read_query_result(void *ptr) {
-  mysql_client_wrapper *wrapper = ptr;
-  my_bool res;
-
-  rb_native_mutex_lock(&wrapper->mutex);
-  if (wrapper->closed) {
-    rb_native_mutex_unlock(&wrapper->mutex);
-    return (void *)Qfalse;
-  }
-  res = mysql_read_query_result(wrapper->client);
-  rb_native_mutex_unlock(&wrapper->mutex);
+  MYSQL * client = ptr;
+  my_bool res = mysql_read_query_result(client);
 
   return (void *)(res == 0 ? Qtrue : Qfalse);
 }
@@ -679,13 +629,6 @@ static void *nogvl_read_query_result(void *ptr) {
 static void *nogvl_do_result(void *ptr, char use_result) {
   mysql_client_wrapper *wrapper = ptr;
   MYSQL_RES *result;
-
-  rb_native_mutex_lock(&wrapper->mutex);
-  if (wrapper->closed) {
-    wrapper->active_fiber = Qnil;
-    rb_native_mutex_unlock(&wrapper->mutex);
-    return NULL;
-  }
 
   if (use_result) {
     result = mysql_use_result(wrapper->client);
@@ -696,7 +639,6 @@ static void *nogvl_do_result(void *ptr, char use_result) {
   /* once our result is stored off, this connection is
      ready for another command to be issued */
   wrapper->active_fiber = Qnil;
-  rb_native_mutex_unlock(&wrapper->mutex);
 
   return result;
 }
@@ -726,7 +668,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
 
   REQUIRE_CONNECTED(wrapper);
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper, RUBY_UBF_IO, 0) == Qfalse) {
+  if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, mark this connection inactive */
     wrapper->active_fiber = Qnil;
     rb_raise_mysql2_error(wrapper);
@@ -1246,17 +1188,11 @@ static VALUE rb_mysql_client_thread_id(VALUE self) {
 
 static void *nogvl_select_db(void *ptr) {
   struct nogvl_select_db_args *args = ptr;
-  void *result;
 
-  rb_native_mutex_lock(&args->wrapper->mutex);
-  if (args->wrapper->closed) {
-    rb_native_mutex_unlock(&args->wrapper->mutex);
+  if (mysql_select_db(args->mysql, args->db) == 0)
+    return (void *)Qtrue;
+  else
     return (void *)Qfalse;
-  }
-  result = (mysql_select_db(args->mysql, args->db) == 0 ? (void *)Qtrue : (void *)Qfalse);
-  rb_native_mutex_unlock(&args->wrapper->mutex);
-
-  return result;
 }
 
 /* call-seq:
@@ -1274,7 +1210,6 @@ static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
 
   args.mysql = wrapper->client;
   args.db = StringValueCStr(db);
-  args.wrapper = wrapper;
 
   if (rb_thread_call_without_gvl(nogvl_select_db, &args, RUBY_UBF_IO, 0) == Qfalse)
     rb_raise_mysql2_error(wrapper);
@@ -1283,18 +1218,9 @@ static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
 }
 
 static void *nogvl_ping(void *ptr) {
-  mysql_client_wrapper *wrapper = ptr;
-  void *result;
+  MYSQL *client = ptr;
 
-  rb_native_mutex_lock(&wrapper->mutex);
-  if (wrapper->closed) {
-    rb_native_mutex_unlock(&wrapper->mutex);
-    return (void *)Qfalse;
-  }
-  result = (void *)(mysql_ping(wrapper->client) == 0 ? Qtrue : Qfalse);
-  rb_native_mutex_unlock(&wrapper->mutex);
-
-  return result;
+  return (void *)(mysql_ping(client) == 0 ? Qtrue : Qfalse);
 }
 
 /* call-seq:
@@ -1311,7 +1237,7 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   if (!CONNECTED(wrapper)) {
     return Qfalse;
   } else {
-    return (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper, RUBY_UBF_IO, 0);
+    return (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
   }
 }
 

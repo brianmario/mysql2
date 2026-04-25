@@ -74,7 +74,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
   it "should handle booleans" do
     stmt = @client.prepare('SELECT ? AS `true`, ? AS `false`')
     result = stmt.execute(true, false)
-    expect(result.to_a).to eq(['true' => 1, 'false' => 0])
+    expect(result.to_a).to eq([{ 'true' => 1, 'false' => 0 }])
   end
 
   it "should handle bignum but in int64_t" do
@@ -82,7 +82,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     int64_max = (1 << 63) - 1
     int64_min = -(1 << 63)
     result = stmt.execute(int64_max, int64_min)
-    expect(result.to_a).to eq(['max' => int64_max, 'min' => int64_min])
+    expect(result.to_a).to eq([{ 'max' => int64_max, 'min' => int64_min }])
   end
 
   it "should handle bignum but beyond int64_t" do
@@ -94,7 +94,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     int64_min2 = -(1 << 64) + 1
     int64_min3 = -0xC000000000000000
     result = stmt.execute(int64_max1, int64_max2, int64_max3, int64_min1, int64_min2, int64_min3)
-    expect(result.to_a).to eq(['max1' => int64_max1, 'max2' => int64_max2, 'max3' => int64_max3, 'min1' => int64_min1, 'min2' => int64_min2, 'min3' => int64_min3])
+    expect(result.to_a).to eq([{ 'max1' => int64_max1, 'max2' => int64_max2, 'max3' => int64_max3, 'min1' => int64_min1, 'min2' => int64_min2, 'min3' => int64_min3 }])
   end
 
   it "should accept keyword arguments on statement execute" do

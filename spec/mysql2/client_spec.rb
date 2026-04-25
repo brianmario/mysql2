@@ -608,7 +608,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     it "should detect closed connection on query read error" do
       connection_id = @client.thread_id
-      Thread.new do
+      new_thread do
         sleep(0.1)
         Mysql2::Client.new(DatabaseCredentials['root']).tap do |supervisor|
           supervisor.query("KILL #{connection_id}")
@@ -633,14 +633,32 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.to raise_error(Mysql2::Error)
       end
 
+      it "should prevent using a connection held by a dead thread, but not closing it" do
+        thr = new_thread do
+          @client.query("SELECT SLEEP(2)")
+        end
+        thr.join(0.5)
+        thr.kill
+        thr.join
+
+        expect { @client.query("SELECT 4") }.to raise_error(Mysql2::Error)
+        @client.close
+      end
+
       it "should describe the thread holding the active query" do
-        thr = Thread.new do
+        out_queue = Queue.new
+        in_queue = Queue.new
+
+        thr = new_thread do
           @client.query("SELECT 1", async: true)
-          Fiber.current
+          out_queue << Fiber.current
+          in_queue.pop
         end
 
-        fiber = thr.value
+        fiber = out_queue.pop
         expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(fiber.inspect)))
+        in_queue.close
+        thr.join
       end
 
       it "should timeout if we wait longer than :read_timeout" do
@@ -742,7 +760,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         # Note that each thread opens its own database connection
         start = clock_time
         threads = Array.new(5) do
-          Thread.new do
+          new_thread do
             new_client do |client|
               client.query("SELECT SLEEP(#{sleep_time})")
             end
@@ -772,6 +790,12 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
         result = @client.async_result
         expect(result).to be_an_instance_of(Mysql2::Result)
+      end
+
+      it "can close a connection with on the fly async query" do
+        expect(@client.query("SELECT sleep(0.5)", async: true)).to eql(nil)
+        @client.close
+        expect(@client.async_result).to be nil
       end
     end
 
@@ -875,13 +899,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     it "should not overflow the thread stack" do
       expect do
-        Thread.new { Mysql2::Client.escape("'" * 256 * 1024) }.join
+        new_thread { Mysql2::Client.escape("'" * 256 * 1024) }.join
       end.not_to raise_error
     end
 
     it "should not overflow the process stack" do
       expect do
-        Thread.new { Mysql2::Client.escape("'" * 1024 * 1024 * 4) }.join
+        new_thread { Mysql2::Client.escape("'" * 1024 * 1024 * 4) }.join
       end.not_to raise_error
     end
 
@@ -912,13 +936,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     it "should not overflow the thread stack" do
       expect do
-        Thread.new { @client.escape("'" * 256 * 1024) }.join
+        new_thread { @client.escape("'" * 256 * 1024) }.join
       end.not_to raise_error
     end
 
     it "should not overflow the process stack" do
       expect do
-        Thread.new { @client.escape("'" * 1024 * 1024 * 4) }.join
+        new_thread { @client.escape("'" * 1024 * 1024 * 4) }.join
       end.not_to raise_error
     end
 
@@ -1278,5 +1302,31 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     expect(client.inspect).not_to include("pass")
     expect(client.inspect).not_to include("secretsecret")
+  end
+
+  it "should not allow concurrent use of #ping" do
+    @client.ping
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    10.times do
+      expect do
+        @client.ping
+      end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    end
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.ping).to eq(true)
+  end
+
+  it "should not allow concurrent use of #close" do
+    @client.ping
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    10.times do
+      expect do
+        @client.close
+      end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    end
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.close).to be_nil
   end
 end

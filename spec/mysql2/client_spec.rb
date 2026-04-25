@@ -1011,7 +1011,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   it "should raise a Mysql2::Error::ConnectionError exception upon connection failure due to invalid credentials" do
     expect do
-      new_client(host: 'localhost', username: 'asdfasdf8d2h', password: 'asdfasdfw42')
+      begin
+        new_client(host: 'localhost', username: 'asdfasdf8d2h', password: 'asdfasdfw42')
+      rescue Mysql2::Error => e
+        raise unless e.message.include?('mysql_native_password')
+
+        skip("Native password is not supported")
+      end
     end.to raise_error(Mysql2::Error::ConnectionError)
 
     expect do

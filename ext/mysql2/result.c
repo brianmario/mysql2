@@ -70,6 +70,8 @@ static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_gc_mark_movable(w->fields);
+    rb_gc_mark_movable(w->tables);
+    rb_gc_mark_movable(w->dbs);
     rb_gc_mark_movable(w->rows);
     rb_gc_mark_movable(w->encoding);
     rb_gc_mark_movable(w->client);
@@ -238,6 +240,74 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
   }
 
   return rb_field;
+}
+
+static VALUE rb_mysql_result_fetch_table(VALUE self, unsigned int idx) {
+  VALUE rb_table;
+  GET_RESULT(self);
+
+  if (wrapper->tables == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->tables = rb_ary_new2(wrapper->numberOfFields);
+  }
+
+  rb_table = rb_ary_entry(wrapper->tables, idx);
+  if (rb_table == Qnil) {
+    MYSQL_FIELD *field = NULL;
+    rb_encoding *default_internal_enc = rb_default_internal_encoding();
+    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+
+    field = mysql_fetch_field_direct(wrapper->result, idx);
+#ifdef HAVE_RB_ENC_INTERNED_STR
+    rb_table = rb_enc_interned_str(field->table, field->table_length, conn_enc);
+    if (default_internal_enc && default_internal_enc != conn_enc) {
+      rb_table = rb_str_to_interned_str(rb_str_export_to_enc(rb_table, default_internal_enc));
+    }
+#else
+    rb_table = rb_enc_str_new(field->table, field->table_length, conn_enc);
+    if (default_internal_enc && default_internal_enc != conn_enc) {
+      rb_table = rb_str_export_to_enc(rb_table, default_internal_enc);
+    }
+    rb_obj_freeze(rb_table);
+#endif
+    rb_ary_store(wrapper->tables, idx, rb_table);
+  }
+
+  return rb_table;
+}
+
+static VALUE rb_mysql_result_fetch_db(VALUE self, unsigned int idx) {
+  VALUE rb_db;
+  GET_RESULT(self);
+
+  if (wrapper->dbs == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->dbs = rb_ary_new2(wrapper->numberOfFields);
+  }
+
+  rb_db = rb_ary_entry(wrapper->dbs, idx);
+  if (rb_db == Qnil) {
+    MYSQL_FIELD *field = NULL;
+    rb_encoding *default_internal_enc = rb_default_internal_encoding();
+    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+
+    field = mysql_fetch_field_direct(wrapper->result, idx);
+#ifdef HAVE_RB_ENC_INTERNED_STR
+    rb_db = rb_enc_interned_str(field->db, field->db_length, conn_enc);
+    if (default_internal_enc && default_internal_enc != conn_enc) {
+      rb_db = rb_str_to_interned_str(rb_str_export_to_enc(rb_db, default_internal_enc));
+    }
+#else
+    rb_db = rb_enc_str_new(field->db, field->db_length, conn_enc);
+    if (default_internal_enc && default_internal_enc != conn_enc) {
+      rb_db = rb_str_export_to_enc(rb_db, default_internal_enc);
+    }
+    rb_obj_freeze(rb_db);
+#endif
+    rb_ary_store(wrapper->dbs, idx, rb_db);
+  }
+
+  return rb_db;
 }
 
 static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
@@ -952,6 +1022,44 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   return wrapper->fields;
 }
 
+static VALUE rb_mysql_result_fetch_tables(VALUE self) {
+  unsigned int i = 0;
+
+  GET_RESULT(self);
+
+  if (wrapper->tables == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->tables = rb_ary_new2(wrapper->numberOfFields);
+  }
+
+  if ((my_ulonglong)RARRAY_LEN(wrapper->tables) != wrapper->numberOfFields) {
+    for (i=0; i<wrapper->numberOfFields; i++) {
+      rb_mysql_result_fetch_table(self, i);
+    }
+  }
+
+  return wrapper->tables;
+}
+
+static VALUE rb_mysql_result_fetch_dbs(VALUE self) {
+  unsigned int i = 0;
+
+  GET_RESULT(self);
+
+  if (wrapper->dbs == Qnil) {
+    wrapper->numberOfFields = mysql_num_fields(wrapper->result);
+    wrapper->dbs = rb_ary_new2(wrapper->numberOfFields);
+  }
+
+  if ((my_ulonglong)RARRAY_LEN(wrapper->dbs) != wrapper->numberOfFields) {
+    for (i=0; i<wrapper->numberOfFields; i++) {
+      rb_mysql_result_fetch_db(self, i);
+    }
+  }
+
+  return wrapper->dbs;
+}
+
 static VALUE rb_mysql_result_fetch_field_types(VALUE self) {
   unsigned int i = 0;
 
@@ -1194,6 +1302,8 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->result = r;
   wrapper->fields = Qnil;
   wrapper->fieldTypes = Qnil;
+  wrapper->tables = Qnil;
+  wrapper->dbs = Qnil;
   wrapper->rows = Qnil;
   wrapper->encoding = encoding;
   wrapper->streamingComplete = 0;
@@ -1236,6 +1346,8 @@ void init_mysql2_result() {
 
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
+  rb_define_method(cMysql2Result, "tables", rb_mysql_result_fetch_tables, 0);
+  rb_define_method(cMysql2Result, "dbs", rb_mysql_result_fetch_dbs, 0);
   rb_define_method(cMysql2Result, "field_types", rb_mysql_result_fetch_field_types, 0);
   rb_define_method(cMysql2Result, "free", rb_mysql_result_free_, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);

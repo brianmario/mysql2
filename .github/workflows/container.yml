@@ -6,13 +6,11 @@ jobs:
   build:
     name: >-
       ${{ matrix.distro }} ${{ matrix.image }} ${{ matrix.name_extra || '' }}
-    runs-on: ubuntu-20.04 # focal
+    runs-on: ubuntu-24.04 # noble
     continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       matrix:
         include:
-          # CentOS 7 system Ruby is the fixed version 2.0.0.
-          - {distro: centos, image: 'centos:7', name_extra: 'ruby 2.0.0'}
           # Fedora latest stable version
           - {distro: fedora, image: 'fedora:latest'}
           # Fedora development version

@@ -963,6 +963,9 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   }
 
   if (wrapper->fields == Qnil) {
+    if (wrapper->resultFreed) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
@@ -982,6 +985,9 @@ static VALUE rb_mysql_result_fetch_field_types(VALUE self) {
   GET_RESULT(self);
 
   if (wrapper->fieldTypes == Qnil) {
+    if (wrapper->resultFreed) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fieldTypes = rb_ary_new2(wrapper->numberOfFields);
   }
@@ -1216,6 +1222,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->lastRowProcessed = 0;
   wrapper->resultFreed = 0;
   wrapper->result = r;
+  wrapper->numberOfFields = 0;
   wrapper->fields = Qnil;
   wrapper->fieldTypes = Qnil;
   wrapper->rows = Qnil;
@@ -1244,6 +1251,14 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   /* Options that cannot be changed in results.each(...) { |row| }
    * should be processed here. */
   wrapper->is_streaming = (rb_hash_aref(options, sym_stream) == Qtrue ? 1 : 0);
+
+  /* Eagerly populate fields for non-streaming results to prevent
+   * segfault/error when accessing .fields on 0-row results that get freed
+   * after iteration completes but before .fields is accessed.
+   * See: https://github.com/brianmario/mysql2/issues/1426 */
+  if (r != NULL && !wrapper->is_streaming) {
+    rb_mysql_result_fetch_fields(obj);
+  }
 
   return obj;
 }

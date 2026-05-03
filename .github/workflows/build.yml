@@ -9,8 +9,9 @@ jobs:
     strategy:
       matrix:
         include:
-          # Ruby 3.x on Ubuntu 24.04 LTS
+          # Ruby 3.x / 4.x on Ubuntu 24.04 LTS
           - {os: ubuntu-24.04, ruby: 'head', db: mysql84}
+          - {os: ubuntu-24.04, ruby: '4.0', db: mysql84}
           - {os: ubuntu-24.04, ruby: '3.4', db: mysql84}
 
           # Ruby 3.x on Ubuntu 22.04 LTS
@@ -30,6 +31,7 @@ jobs:
           # db: on Linux, ci/setup.sh installs the specified packages
           # db: on MacOS, installs a Homebrew package use "name@X.Y" to specify a version
 
+          - {os: ubuntu-24.04, ruby: '4.0', db: mariadb11.4}
           - {os: ubuntu-24.04, ruby: '3.4', db: mariadb11.4}
           - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.11}
           - {os: ubuntu-22.04, ruby: '2.7', db: mariadb10.11}
@@ -41,8 +43,8 @@ jobs:
 
           # Allow failure due to this issue:
           # https://github.com/brianmario/mysql2/issues/1194
-          - {os: macos-latest, ruby: '3.4', db: mariadb@11.4, ssl: openssl@3, allow-failure: true}
-          - {os: macos-latest, ruby: '3.4', db: mysql@8.4, ssl: openssl@3, allow-failure: true}
+          - {os: macos-latest, ruby: '4.0', db: mariadb@11.4, ssl: openssl@3, allow-failure: true}
+          - {os: macos-latest, ruby: '4.0', db: mysql@8.4, ssl: openssl@3, allow-failure: true}
           - {os: macos-latest, ruby: '2.6', db: mysql@8.0, ssl: openssl@1.1, allow-failure: true}
 
       # On the fail-fast: true, it cancels all in-progress jobs

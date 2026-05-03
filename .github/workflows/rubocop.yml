@@ -8,7 +8,7 @@ jobs:
     env:
       BUNDLE_WITHOUT: development
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - name: Set up Ruby 3.4
       uses: ruby/setup-ruby@v1
       with:

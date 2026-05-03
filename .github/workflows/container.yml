@@ -6,7 +6,7 @@ jobs:
   build:
     name: >-
       ${{ matrix.distro }} ${{ matrix.image }} ${{ matrix.name_extra || '' }}
-    runs-on: ubuntu-20.04 # focal
+    runs-on: ubuntu-24.04 # noble
     continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       matrix:

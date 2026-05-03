@@ -4,6 +4,7 @@
 typedef struct {
   VALUE encoding;
   VALUE active_fiber; /* rb_fiber_current() or Qnil */
+  VALUE prepared_statements;
   long server_version;
   int reconnect_enabled;
   unsigned int connect_timeout;

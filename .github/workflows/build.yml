@@ -20,6 +20,9 @@ jobs:
           - {os: ubuntu-22.04, ruby: '3.1', db: mysql80}
           - {os: ubuntu-22.04, ruby: '3.0', db: mysql80}
 
+          # Ruby 2.x on Ubuntu 22.04 LTS
+          - {os: ubuntu-22.04, ruby: '2.7', db: mysql80}
+
           # MySQL 5.7 packages stopped after Ubuntu 18.04 Bionic
           # - {os: ubuntu-18.04, ruby: '2.7', db: mysql57}
 

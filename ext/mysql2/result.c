@@ -240,6 +240,18 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
   return rb_field;
 }
 
+static int rb_mariadb_json_type(const MYSQL_FIELD *field) {
+#if defined(MARIADB_PACKAGE_VERSION)
+    MARIADB_CONST_STRING field_attr;
+
+    if (!mariadb_field_attr(&field_attr, field,
+                            MARIADB_FIELD_ATTR_FORMAT_NAME)) {
+      return field_attr.length == 4 && !memcmp(field_attr.str, "json", 4);
+    }
+#endif
+    return 0;
+}
+
 static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
   VALUE rb_field_type;
   GET_RESULT(self);
@@ -309,7 +321,9 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
         rb_field_type = rb_sprintf("decimal(%d,%d)", precision, field->decimals);
         break;
       case MYSQL_TYPE_STRING:       // char[]
-        if (field->flags & ENUM_FLAG) {
+        if (rb_mariadb_json_type(field)) {
+          rb_field_type = rb_str_new_cstr("json");
+        } else if (field->flags & ENUM_FLAG) {
           rb_field_type = rb_str_new_cstr("enum");
         } else if (field->flags & SET_FLAG) {
           rb_field_type = rb_str_new_cstr("set");
@@ -324,17 +338,27 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
       case MYSQL_TYPE_VAR_STRING:   // char[]
         if (field->charsetnr == MYSQL2_BINARY_CHARSET) {
           rb_field_type = rb_sprintf("varbinary(%ld)", field->length);
+        } else if (rb_mariadb_json_type(field)) {
+          rb_field_type = rb_str_new_cstr("json");
         } else {
           rb_field_type = rb_sprintf("varchar(%ld)", field->length / MYSQL2_MAX_BYTES_PER_CHAR);
         }
         break;
       case MYSQL_TYPE_VARCHAR:      // char[]
+        if (rb_mariadb_json_type(field)) {
+          rb_field_type = rb_str_new_cstr("json");
+          break;
+        }
         rb_field_type = rb_sprintf("varchar(%ld)", field->length / MYSQL2_MAX_BYTES_PER_CHAR);
         break;
       case MYSQL_TYPE_TINY_BLOB:    // char[]
         rb_field_type = rb_str_new_cstr("tinyblob");
         break;
       case MYSQL_TYPE_BLOB:         // char[]
+        if (rb_mariadb_json_type(field)) {
+          rb_field_type = rb_str_new_cstr("json");
+          break;
+        }
         if (field->charsetnr == MYSQL2_BINARY_CHARSET) {
           switch(field->length) {
             case 255:

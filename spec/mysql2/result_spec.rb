@@ -199,9 +199,7 @@ RSpec.describe Mysql2::Result do
       expect(result.field_types).to eql(expected_types)
     end
 
-    it "should return json type on mysql 8.0" do
-      next unless /8.\d+.\d+/ =~ @client.server_info[:version]
-
+    it "should return json type" do
       result = @client.query("SELECT JSON_OBJECT('key', 'value')")
       expect(result.field_types).to eql(['json'])
     end

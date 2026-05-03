@@ -3,7 +3,9 @@
 set -eux
 
 ruby -v
-bundle install --path vendor/bundle --without development
+bundle config set --local path vendor/bundle
+bundle config set --local without development
+bundle install
 
 # Regenerate the SSL certification files from the specified host.
 if [ -n "${TEST_RUBY_MYSQL2_SSL_CERT_HOST}" ]; then

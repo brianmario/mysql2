@@ -4,6 +4,13 @@
 void init_mysql2_result(void);
 VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement);
 
+// Cast mode enum
+typedef enum {
+  CAST_NONE = 0,  // cast: false - all strings
+  CAST_ALL = 1,   // cast: true - full type casting
+  CAST_FAST = 2   // cast: :fast - selective casting (cheap types only)
+} mysql2_cast_mode;
+
 typedef struct {
   VALUE fields;
   VALUE fieldTypes;
@@ -25,6 +32,21 @@ typedef struct {
   my_bool *is_null;
   my_bool *error;
   unsigned long *length;
+  // Cached query options to avoid hash lookups on each iteration
+  int symbolize_keys;
+  int as_array;
+  int cast_bool;
+  int cache_rows;
+  int cast;
+  ID db_timezone;
+  ID app_timezone;
+  // Server status for lazy server_flags
+  unsigned int server_status;
+  // Cached encoding info to avoid per-row lookups
+  rb_encoding *default_internal_enc;
+  rb_encoding *conn_enc;
+  // User-specified forced encoding (bypasses charset detection)
+  rb_encoding *forced_encoding;
 } mysql2_result_wrapper;
 
 #endif

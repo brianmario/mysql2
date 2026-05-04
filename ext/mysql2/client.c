@@ -698,8 +698,6 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
 
-  rb_mysql_set_server_query_flags(wrapper->client, resultObj);
-
   return resultObj;
 }
 

@@ -32,17 +32,6 @@ if [[ -n ${GITHUB_ACTIONS-} && -z ${DB-} ]]; then
   fi
 fi
 
-# Install MySQL 5.5 if DB=mysql55
-if [[ -n ${DB-} && x$DB =~ ^xmysql55 ]]; then
-  sudo bash ci/mysql55.sh
-fi
-
-# Install MySQL 5.7 if DB=mysql57
-if [[ -n ${DB-} && x$DB =~ ^xmysql57 ]]; then
-  sudo bash ci/mysql57.sh
-  CHANGED_PASSWORD=true
-fi
-
 # Install MySQL 8.0 if DB=mysql80
 if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
   sudo bash ci/mysql80.sh

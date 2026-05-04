@@ -420,6 +420,26 @@ static VALUE allocate(VALUE klass) {
   return obj;
 }
 
+static void rb_mysql_client_set_active_fiber(VALUE self, bool closing) {
+  VALUE fiber_current = rb_fiber_current();
+  GET_CLIENT(self);
+
+  // see if this connection is still waiting on a result from a previous query
+  if (NIL_P(wrapper->active_fiber) || (closing && !rb_fiber_alive_p(wrapper->active_fiber))) {
+    // mark this connection active
+    wrapper->active_fiber = fiber_current;
+  } else if (wrapper->active_fiber == fiber_current) {
+    if (!closing) {
+      rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+    }
+  } else {
+    VALUE inspect = rb_inspect(wrapper->active_fiber);
+    const char *thr = StringValueCStr(inspect);
+
+    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
+  }
+}
+
 /* call-seq:
  *    Mysql2::Client.escape(string)
  *
@@ -571,10 +591,13 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
  */
 static VALUE rb_mysql_client_close(VALUE self) {
   GET_CLIENT(self);
+  rb_mysql_client_set_active_fiber(self, true);
 
   if (wrapper->client) {
     rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
   }
+
+  wrapper->active_fiber = Qnil;
 
   return Qnil;
 }
@@ -798,24 +821,6 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
   return Qnil;
 }
 
-static void rb_mysql_client_set_active_fiber(VALUE self) {
-  VALUE fiber_current = rb_fiber_current();
-  GET_CLIENT(self);
-
-  // see if this connection is still waiting on a result from a previous query
-  if (NIL_P(wrapper->active_fiber)) {
-    // mark this connection active
-    wrapper->active_fiber = fiber_current;
-  } else if (wrapper->active_fiber == fiber_current) {
-    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
-  } else {
-    VALUE inspect = rb_inspect(wrapper->active_fiber);
-    const char *thr = StringValueCStr(inspect);
-
-    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
-  }
-}
-
 /* call-seq:
  *    client.abandon_results!
  *
@@ -873,7 +878,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   args.sql_len = RSTRING_LEN(args.sql);
   args.wrapper = wrapper;
 
-  rb_mysql_client_set_active_fiber(self);
+  rb_mysql_client_set_active_fiber(self, false);
 
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
@@ -1233,12 +1238,16 @@ static void *nogvl_ping(void *ptr) {
  */
 static VALUE rb_mysql_client_ping(VALUE self) {
   GET_CLIENT(self);
+  rb_mysql_client_set_active_fiber(self, false);
 
+  VALUE result = Qnil;
   if (!CONNECTED(wrapper)) {
-    return Qfalse;
+    result = Qfalse;
   } else {
-    return (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
+    result = (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
   }
+  wrapper->active_fiber = Qnil;
+  return result;
 }
 
 /* call-seq:

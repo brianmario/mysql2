@@ -627,7 +627,7 @@ static VALUE rb_mysql_stmt_closed_p(VALUE self) {
   return stmt_wrapper->closed ? Qtrue : Qfalse;
 }
 
-void init_mysql2_statement() {
+void init_mysql2_statement(void) {
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   rb_global_variable(&cDate);
 

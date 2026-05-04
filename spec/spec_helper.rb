@@ -51,6 +51,11 @@ RSpec.configure do |config|
     end
   end
 
+  def new_thread(&block)
+    @threads << (thr = Thread.new(&block))
+    thr
+  end
+
   def num_classes
     # rubocop:disable Lint/UnifiedInteger
     0.instance_of?(Integer) ? [Integer] : [Fixnum, Bignum]
@@ -174,10 +179,15 @@ Make sure that the testing database '#{database}' exists. If it does not exist, 
   end
 
   config.before(:example) do
+    @threads = []
     @client = new_client
   end
 
   config.after(:example) do
+    @threads.each do |thr|
+      thr.kill
+      thr.join
+    end
     @clients.each(&:close)
   end
 end

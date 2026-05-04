@@ -1224,7 +1224,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   return obj;
 }
 
-void init_mysql2_result() {
+void init_mysql2_result(void) {
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   rb_global_variable(&cDate);
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));

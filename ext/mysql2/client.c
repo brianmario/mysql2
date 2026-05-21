@@ -1566,7 +1566,7 @@ static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
   return rb_mysql_stmt_new(self, sql);
 }
 
-void init_mysql2_client() {
+void init_mysql2_client(void) {
 #ifdef _WIN32
   /* verify the libmysql we're about to use was the version we were built against
      https://github.com/luislavena/mysql-gem/commit/a600a9c459597da0712f70f43736e24b484f8a99 */

@@ -228,7 +228,7 @@ question marks in the statement. Query options can be passed as keyword argument
 to the execute method.
 
 Be sure to read about the known limitations of prepared statements at
-[https://dev.mysql.com/doc/refman/5.6/en/c-api-prepared-statement-problems.html](https://dev.mysql.com/doc/refman/5.6/en/c-api-prepared-statement-problems.html)
+[https://dev.mysql.com/doc/c-api/9.7/en/c-api-prepared-statement-problems.html](https://dev.mysql.com/doc/c-api/9.7/en/c-api-prepared-statement-problems.html)
 
 ``` ruby
 statement = @client.prepare("SELECT * FROM users WHERE login_count = ?")
@@ -604,7 +604,7 @@ There are a few things that need to be kept in mind while using streaming:
 * `:cache_rows` is ignored currently. (if you want to use `:cache_rows` you probably don't want to be using `:stream`)
 * You must fetch all rows in the result set of your query before you can make new queries. (i.e. with `Mysql2::Result#each`)
 
-Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: [http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html](http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html).
+Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: [http://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html](http://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html).
 
 ### Lazy Everything
 

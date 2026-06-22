@@ -560,6 +560,210 @@ RSpec.describe Mysql2::Result do
     end
   end
 
+  context "force_encoding option" do
+    it "should use specified encoding when force_encoding is a string" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: 'utf-8').first
+      expect(result['varchar_test'].encoding).to eql(Encoding::UTF_8)
+      expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+    end
+
+    it "should use specified encoding when force_encoding is an Encoding object" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: Encoding::UTF_8).first
+      expect(result['varchar_test'].encoding).to eql(Encoding::UTF_8)
+      expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+    end
+
+    it "should use binary encoding when force_encoding: 'binary'" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: 'binary').first
+      expect(result['varchar_test'].encoding).to eql(Encoding::BINARY)
+      expect(result['enum_test'].encoding).to eql(Encoding::BINARY)
+    end
+
+    it "should work with cast: false mode" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", cast: false, force_encoding: 'utf-8').first
+      expect(result['varchar_test'].encoding).to eql(Encoding::UTF_8)
+      expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+      # All values should be strings with cast: false
+      expect(result['id']).to be_kind_of(String)
+    end
+
+    context "cast: :fast mode - selective casting" do
+      # cast: :fast casts cheap types (integers, floats) in C but leaves
+      # expensive types (decimals, datetime, date, time) as strings for lazy casting.
+      # This optimizes for the common case where rows are cached and expensive
+      # columns may never be accessed.
+
+      it "should cast integer types" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['id']).to be_kind_of(Integer)
+        expect(result['tiny_int_test']).to be_kind_of(Integer)
+        expect(result['small_int_test']).to be_kind_of(Integer)
+        expect(result['medium_int_test']).to be_kind_of(Integer)
+        expect(result['int_test']).to be_kind_of(Integer)
+        expect(result['big_int_test']).to be_kind_of(Integer)
+        expect(result['year_test']).to be_kind_of(Integer)
+      end
+
+      it "should cast integer boundary values" do
+        result = @client.query("SELECT -128 AS t, -32768 AS s, -8388608 AS m, -2147483648 AS i, -9223372036854775808 AS b", cast: :fast).first
+        expect(result['t']).to eq(-128)
+        expect(result['s']).to eq(-32768)
+        expect(result['m']).to eq(-8388608)
+        expect(result['i']).to eq(-2147483648)
+        expect(result['b']).to eq(-9223372036854775808)
+      end
+
+      it "should cast integer zero" do
+        result = @client.query("SELECT 0 AS zero_int, CAST(0 AS SIGNED) AS zero_big", cast: :fast).first
+        expect(result['zero_int']).to eq(0)
+        expect(result['zero_int']).to be_kind_of(Integer)
+        expect(result['zero_big']).to eq(0)
+        expect(result['zero_big']).to be_kind_of(Integer)
+      end
+
+      it "should cast float types" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['float_test']).to be_kind_of(Float)
+        expect(result['double_test']).to be_kind_of(Float)
+      end
+
+      it "should cast float zero" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['float_zero_test']).to eq(0.0)
+        expect(result['float_zero_test']).to be_kind_of(Float)
+      end
+
+      it "should cast negative floats" do
+        result = @client.query("SELECT CAST(-123.456 AS DOUBLE) AS neg_float, CAST(-789.012 AS DOUBLE) AS neg_double", cast: :fast).first
+        expect(result['neg_float']).to be_within(0.001).of(-123.456)
+        expect(result['neg_double']).to be_within(0.001).of(-789.012)
+      end
+
+      it "should cast TINYINT(1) as boolean with cast_booleans option" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast, cast_booleans: true).first
+        expect(result['bool_cast_test']).to eq(true)
+      end
+
+      it "should cast TINYINT as integer without cast_booleans" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['tiny_int_test']).to be_kind_of(Integer)
+        expect(result['bool_cast_test']).to be_kind_of(Integer)
+      end
+
+      it "should leave multi-byte BIT as string" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['bit_test']).to be_kind_of(String)
+      end
+
+      it "should leave decimal as string for lazy casting" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['decimal_test']).to be_kind_of(String)
+        expect(result['decimal_zero_test']).to be_kind_of(String)
+        expect(result['decimal_zero_test']).to eq('0.000')
+      end
+
+      it "should leave date as string for lazy casting" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['date_test']).to be_kind_of(String)
+        expect(result['date_test']).to eq('2010-04-04')
+      end
+
+      it "should leave datetime as string for lazy casting" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['date_time_test']).to be_kind_of(String)
+        expect(result['date_time_test']).to eq('2010-04-04 11:44:00')
+      end
+
+      it "should leave time as string for lazy casting" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['time_test']).to be_kind_of(String)
+        expect(result['time_test']).to eq('11:44:00')
+      end
+
+      it "should leave timestamp as string for lazy casting" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['timestamp_test']).to be_kind_of(String)
+        expect(result['timestamp_test']).to match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
+      end
+
+      it "should preserve string types with proper encoding" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast, force_encoding: 'utf-8').first
+        %w[char_test varchar_test text_test tiny_text_test medium_text_test long_text_test].each do |col|
+          expect(result[col]).to be_kind_of(String)
+          expect(result[col].encoding).to eql(Encoding::UTF_8)
+        end
+      end
+
+      it "should preserve enum and set with proper encoding" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast, force_encoding: 'utf-8').first
+        expect(result['enum_test']).to eq('val1')
+        expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+        expect(result['set_test']).to eq('val1,val2')
+        expect(result['set_test'].encoding).to eql(Encoding::UTF_8)
+      end
+
+      it "should preserve binary types with BINARY encoding" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['binary_test']).to be_kind_of(String)
+        expect(result['binary_test'].encoding).to eql(Encoding::BINARY)
+        expect(result['varbinary_test']).to be_kind_of(String)
+        expect(result['varbinary_test'].encoding).to eql(Encoding::BINARY)
+      end
+
+      it "should preserve blob types with BINARY encoding" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        %w[tiny_blob_test blob_test medium_blob_test long_blob_test].each do |col|
+          expect(result[col]).to be_kind_of(String)
+          expect(result[col].encoding).to eql(Encoding::BINARY)
+        end
+      end
+
+      it "should handle NULL values" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast).first
+        expect(result['null_test']).to be_nil
+      end
+
+      it "should work with streaming" do
+        results = []
+        @client.query("SELECT * FROM mysql2_test LIMIT 1", cast: :fast, stream: true).each do |row|
+          results << row
+        end
+        expect(results.first['id']).to be_kind_of(Integer)
+        expect(results.first['int_test']).to be_kind_of(Integer)
+        expect(results.first['decimal_test']).to be_kind_of(String)
+        expect(results.first['varchar_test']).to be_kind_of(String)
+      end
+
+      it "should work with symbolize_keys" do
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast, symbolize_keys: true).first
+        expect(result[:id]).to be_kind_of(Integer)
+        expect(result[:decimal_test]).to be_kind_of(String)
+      end
+
+      it "should work with as: :array" do
+        result = @client.query("SELECT id, decimal_test, varchar_test FROM mysql2_test ORDER BY id ASC LIMIT 1", cast: :fast, as: :array).first
+        expect(result[0]).to be_kind_of(Integer)  # id
+        expect(result[1]).to be_kind_of(String)   # decimal_test
+        expect(result[2]).to be_kind_of(String)   # varchar_test
+      end
+    end
+
+    it "should not convert to default_internal when force_encoding is specified" do
+      with_internal_encoding Encoding::ASCII do
+        # Force to UTF-8, even though default_internal is ASCII
+        result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: Encoding::UTF_8).first
+        # Should be UTF-8, NOT converted to ASCII
+        expect(result['varchar_test'].encoding).to eql(Encoding::UTF_8)
+        expect(result['enum_test'].encoding).to eql(Encoding::UTF_8)
+      end
+    end
+
+    it "should work with SET field types" do
+      result = @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1", force_encoding: 'utf-8').first
+      expect(result['set_test'].encoding).to eql(Encoding::UTF_8)
+    end
+  end
+
   context "server flags" do
     let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY null_test DESC LIMIT 1") }
 

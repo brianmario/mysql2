@@ -91,7 +91,7 @@ the library file `libmysqlclient.so` but is missing the header file `mysql.h`
 -- double check that you have the _-dev_ packages installed.
 
 ### macOS
-<a name="mac-os-x">
+<a name="mac-os-x"></a>
 
 You may use Homebrew, MacPorts, or a native MySQL installer package. The most
 common paths will be automatically searched. If you want to select a specific
@@ -623,7 +623,7 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 ## Compatibility
 
-This gem is tested with the following Ruby versions on Linux and Mac OS X:
+This gem is tested with the following Ruby versions on Linux and macOS:
 
 * Ruby MRI 2.7, 3.0, 3.1, 3.2, 3.3, 3.4, 4.0
 

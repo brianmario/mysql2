@@ -138,7 +138,7 @@ to the mysql2 build process.
 ### Windows
 
 Make sure that you have Ruby and the DevKit compilers installed. We recommend
-the [Ruby Installer](http://rubyinstaller.org) distribution.
+the [Ruby Installer](https://rubyinstaller.org) distribution.
 
 By default, the mysql2 gem will download and use MySQL Connector/C from
 mysql.com. If you prefer to use a local installation of Connector/C, add the
@@ -160,7 +160,7 @@ Connect to a database:
 ``` ruby
 # this takes a hash of options, almost all of which map directly
 # to the familiar database.yml in rails
-# See http://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/Mysql2Adapter.html
+# See https://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/Mysql2Adapter.html
 client = Mysql2::Client.new(:host => "localhost", :username => "root")
 ```
 
@@ -604,7 +604,7 @@ There are a few things that need to be kept in mind while using streaming:
 * `:cache_rows` is ignored currently. (if you want to use `:cache_rows` you probably don't want to be using `:stream`)
 * You must fetch all rows in the result set of your query before you can make new queries. (i.e. with `Mysql2::Result#each`)
 
-Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: [http://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html](http://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html).
+Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: [https://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html](https://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html).
 
 ### Lazy Everything
 
@@ -722,12 +722,12 @@ though.
 ## Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude
-* [Yury Korolev](http://github.com/yury) - for TONS of help testing the Active Record adapter
-* [Aaron Patterson](http://github.com/tenderlove) - tons of contributions, suggestions and general badassness
-* [Mike Perham](http://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
-* [Aaron Stone](http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support
+* [Yury Korolev](https://github.com/yury) - for TONS of help testing the Active Record adapter
+* [Aaron Patterson](https://github.com/tenderlove) - tons of contributions, suggestions and general badassness
+* [Mike Perham](https://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
+* [Aaron Stone](https://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support
 * [Kouhei Ueno](https://github.com/nyaxt) - for the original work on Prepared Statements way back in 2012
-* [John Cant](http://github.com/johncant) - polishing and updating Prepared Statements support
-* [Justin Case](http://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
-* [Tamir Duberstein](http://github.com/tamird) - for help with timeouts and all around updates and cleanups
-* [Jun Aruga](http://github.com/junaruga) - for migrating CI tests to GitHub Actions and other improvements
+* [John Cant](https://github.com/johncant) - polishing and updating Prepared Statements support
+* [Justin Case](https://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
+* [Tamir Duberstein](https://github.com/tamird) - for help with timeouts and all around updates and cleanups
+* [Jun Aruga](https://github.com/junaruga) - for migrating CI tests to GitHub Actions and other improvements

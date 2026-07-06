@@ -75,7 +75,15 @@ void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
   stmt_wrapper->refcount--;
 
   if (stmt_wrapper->refcount == 0) {
+    // If the GC get to client first it will be nil, and this cleanup won't matter
+    if (stmt_wrapper->client_wrapper && stmt_wrapper->client_wrapper->refcount > 0) {
+      // Remove the reference to this statement handle from the Client object.
+      rb_hash_delete(stmt_wrapper->client_wrapper->prepared_statements,
+                     ULL2NUM((unsigned long long)stmt_wrapper));
+    }
+
     nogvl_stmt_close(stmt_wrapper);
+    decr_mysql2_client(stmt_wrapper->client_wrapper);
     xfree(stmt_wrapper);
   }
 }
@@ -140,10 +148,18 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
 #endif
   {
-    stmt_wrapper->client = rb_client;
     stmt_wrapper->refcount = 1;
     stmt_wrapper->closed = 0;
     stmt_wrapper->stmt = NULL;
+
+    /* Keep a handle to the Client to ensure it doesn't get garbage collected first */
+    stmt_wrapper->client = rb_client;
+    if (rb_client != Qnil) {
+      stmt_wrapper->client_wrapper = DATA_PTR(rb_client);
+      stmt_wrapper->client_wrapper->refcount++;
+    } else {
+      stmt_wrapper->client_wrapper = NULL;
+    }
   }
 
   // instantiate stmt
@@ -176,6 +192,18 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     if ((VALUE)rb_thread_call_without_gvl(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
+  }
+
+  // Stash a reference to this statement handle into the Client to prevent
+  // premature garbage collection.
+  //
+  // A statement can either be free explicitly or when the client object is
+  // torn down. Freeing a statement handle at any other time causes protocol
+  // traffic that might happen while the connection state is set for another
+  // operation.
+  {
+    GET_CLIENT(rb_client);
+    rb_hash_aset(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper), rb_stmt);
   }
 
   return rb_stmt;
@@ -609,7 +637,9 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
   RAW_GET_STATEMENT(self);
 
   if (!stmt_wrapper->closed) {
+      GET_CLIENT(stmt_wrapper->client);
       stmt_wrapper->closed = 1;
+      rb_hash_delete(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper));
       rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
   }
 

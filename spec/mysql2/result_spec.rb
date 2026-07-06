@@ -121,6 +121,13 @@ RSpec.describe Mysql2::Result do
         expect(f).to be_frozen
       end
     end
+
+    it "should keep fields and field_types accessible for exhausted empty results" do
+      result = @client.query("SELECT 1 AS only_col WHERE 1 = 0")
+      expect(result.each.to_a).to eql([])
+      expect(result.fields).to eql(["only_col"])
+      expect(result.field_types.length).to eql(1)
+    end
   end
 
   context "#field_types" do

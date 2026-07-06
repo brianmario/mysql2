@@ -105,11 +105,16 @@ RSpec.describe Mysql2::Result do
 
   context "#fields" do
     let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1") }
-    it("method should exist") { expect(test_result).to respond_to(:fields) }
+
+    it "method should exist" do
+      expect(test_result).to respond_to(:fields)
+    end
+
     it "should return an array of field names in proper order" do
       result = @client.query "SELECT 'a', 'b', 'c'"
       expect(result.fields).to eql(%w[a b c])
     end
+
     it "should return an array of frozen strings" do
       result = @client.query "SELECT 'a', 'b', 'c'"
       result.fields.each do |f|
@@ -127,7 +132,11 @@ RSpec.describe Mysql2::Result do
 
   context "#field_types" do
     let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1") }
-    it("method should exist") { expect(test_result).to respond_to(:field_types) }
+
+    it "method should exist" do
+      expect(test_result).to respond_to(:field_types)
+    end
+
     it "should return correct types" do
       expected_types = %w[
         mediumint(9)
@@ -165,6 +174,7 @@ RSpec.describe Mysql2::Result do
         enum
         set
       ]
+
       expect(test_result.field_types).to eql(expected_types)
     end
 
@@ -196,7 +206,10 @@ RSpec.describe Mysql2::Result do
       expect(result.field_types).to eql(expected_types)
     end
 
-    it("should return json type") { expect(@client.query("SELECT JSON_OBJECT('key', 'value')").field_types).to eql(["json"]) }
+    it "should return json type" do
+      result = @client.query("SELECT JSON_OBJECT('key', 'value')")
+      expect(result.field_types).to eql(['json'])
+    end
   end
 
   context "streaming" do

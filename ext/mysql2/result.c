@@ -1198,7 +1198,6 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->lastRowProcessed = 0;
   wrapper->resultFreed = 0;
   wrapper->result = r;
-  wrapper->numberOfFields = 0;
   wrapper->fields = Qnil;
   wrapper->fieldTypes = Qnil;
   wrapper->rows = Qnil;

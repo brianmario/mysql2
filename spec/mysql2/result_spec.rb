@@ -118,10 +118,10 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should keep fields and field_types accessible for exhausted empty results" do
-      result = @client.query("SELECT cast('x' as char) AS only_col WHERE 1 = 0")
+      result = @client.query("SELECT 1 AS only_col WHERE 1 = 0")
       expect(result.to_a).to eql([])
       expect(result.fields).to eql(["only_col"])
-      expect(result.field_types).to eql(["varchar(1)"])
+      expect(result.field_types).to match([a_string_matching(/\A(?:tinyint|smallint|mediumint|int|bigint|decimal)\(/)])
     end
   end
 

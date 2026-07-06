@@ -482,7 +482,8 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     end
 
     it "should raise an error given an invalid DATETIME" do
-      if @client.info[:version] < "8.0"
+      server_info = @client.server_info
+      if server_info[:version].include?('MariaDB') || server_info[:id] < 80000
         expect { @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each }.to \
           raise_error(Mysql2::Error, "Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
       else

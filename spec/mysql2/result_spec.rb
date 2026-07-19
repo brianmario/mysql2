@@ -128,6 +128,20 @@ RSpec.describe Mysql2::Result do
       expect(result.fields).to eql(["only_col"])
       expect(result.field_types.length).to eql(1)
     end
+
+    it "should keep fields and field_types accessible for exhausted empty streaming results" do
+      result = @client.query("SELECT 1 AS only_col WHERE 1 = 0", stream: true, cache_rows: false)
+      expect(result.each.to_a).to eql([])
+      expect(result.fields).to eql(["only_col"])
+      expect(result.field_types.length).to eql(1)
+    end
+
+    it "should keep fields and field_types accessible after free" do
+      result = @client.query("SELECT 1 AS only_col WHERE 1 = 0")
+      result.free
+      expect(result.fields).to eql(["only_col"])
+      expect(result.field_types.length).to eql(1)
+    end
   end
 
   context "#field_types" do

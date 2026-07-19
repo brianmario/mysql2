@@ -70,6 +70,7 @@ static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_gc_mark_movable(w->fields);
+    rb_gc_mark_movable(w->fieldTypes);
     rb_gc_mark_movable(w->rows);
     rb_gc_mark_movable(w->encoding);
     rb_gc_mark_movable(w->client);
@@ -152,6 +153,7 @@ static void rb_mysql_result_compact(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_mysql2_gc_location(w->fields);
+    rb_mysql2_gc_location(w->fieldTypes);
     rb_mysql2_gc_location(w->rows);
     rb_mysql2_gc_location(w->encoding);
     rb_mysql2_gc_location(w->client);

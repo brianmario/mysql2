@@ -71,6 +71,14 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(rows).to eq([{ "1" => 1 }])
   end
 
+  it "should keep fields and field_types accessible for exhausted empty results" do
+    statement = @client.prepare 'SELECT 1 AS only_col WHERE 1 = 0'
+    result = statement.execute
+    expect(result.to_a).to eql([])
+    expect(result.fields).to eql(["only_col"])
+    expect(result.field_types.length).to eql(1)
+  end
+
   it "should handle booleans" do
     stmt = @client.prepare('SELECT ? AS `true`, ? AS `false`')
     result = stmt.execute(true, false)

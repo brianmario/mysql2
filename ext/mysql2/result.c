@@ -70,6 +70,7 @@ static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_gc_mark_movable(w->fields);
+    rb_gc_mark_movable(w->fieldTypes);
     rb_gc_mark_movable(w->rows);
     rb_gc_mark_movable(w->encoding);
     rb_gc_mark_movable(w->client);
@@ -152,6 +153,7 @@ static void rb_mysql_result_compact(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_mysql2_gc_location(w->fields);
+    rb_mysql2_gc_location(w->fieldTypes);
     rb_mysql2_gc_location(w->rows);
     rb_mysql2_gc_location(w->encoding);
     rb_mysql2_gc_location(w->client);
@@ -558,6 +560,13 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   rb_encoding *conn_enc;
   GET_RESULT(self);
 
+  /* The result can be freed from inside the iteration block; end the
+   * iteration instead of touching freed statement buffers. Checked before
+   * anything else so no code below has to reason about freed state. */
+  if (wrapper->resultFreed) {
+    return Qnil;
+  }
+
   default_internal_enc = rb_default_internal_encoding();
   conn_enc = rb_to_encoding(wrapper->encoding);
 
@@ -746,6 +755,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   rb_encoding *default_internal_enc;
   rb_encoding *conn_enc;
   GET_RESULT(self);
+
+  /* The result can be freed from inside the iteration block; end the
+   * iteration instead of dereferencing the freed MYSQL_RES. Checked before
+   * anything else so no code below has to reason about freed state. */
+  if (wrapper->resultFreed) {
+    return Qnil;
+  }
 
   default_internal_enc = rb_default_internal_encoding();
   conn_enc = rb_to_encoding(wrapper->encoding);
@@ -1132,6 +1148,21 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (wrapper->stmt_wrapper && !cast) {
     rb_warn(":cast is forced for prepared statements");
+  }
+
+  /* A freed result can only be re-iterated from the fully cached rows array
+   * (or raise the streaming-specific error below when a completed stream is
+   * re-iterated); anything else would dereference the freed MYSQL_RES. The
+   * rows-length check matters: with cache_rows: false the rows array stays
+   * empty even after a full iteration, and replaying it would yield nil
+   * rows. */
+  if (wrapper->resultFreed) {
+    int replayable = cacheRows && wrapper->rows != Qnil &&
+                     wrapper->lastRowProcessed == wrapper->numberOfRows &&
+                     (my_ulonglong)RARRAY_LEN(wrapper->rows) == wrapper->numberOfRows;
+    if (wrapper->is_streaming ? !wrapper->streamingComplete : !replayable) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
   }
 
   dbTz = rb_hash_aref(opts, sym_database_timezone);

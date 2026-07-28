@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-RSpec.describe Mysql2::Result do
+RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
   before(:example) do
     @result = @client.query "SELECT 1"
   end
@@ -20,6 +20,79 @@ RSpec.describe Mysql2::Result do
 
   it "should respond to #free" do
     expect(@result).to respond_to(:free)
+  end
+
+  it "should raise when iterating a result freed before being fully cached" do
+    result = @client.query "SELECT 1"
+    result.free
+    expect { result.each.to_a }.to raise_error(Mysql2::Error, "Result set has already been freed")
+  end
+
+  it "should raise when iterating a freed cache_rows: false result instead of replaying nil rows" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2", cache_rows: false
+    result.each { |_| }
+    result.free
+    expect { result.to_a }.to raise_error(Mysql2::Error, "Result set has already been freed")
+  end
+
+  it "should raise when iterating a streaming result freed before completion" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2", stream: true, cache_rows: false
+    result.free
+    expect { result.each { |_| } }.to raise_error(Mysql2::Error, "Result set has already been freed")
+  end
+
+  it "should stop iterating cleanly when the result is freed inside the block" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2 UNION SELECT 3"
+    seen = []
+    result.each do |row|
+      seen << row
+      result.free
+    end
+    expect(seen).to eql([{ "a" => 1 }])
+  end
+
+  it "should still replay cached rows after the result is freed" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2"
+    rows = result.to_a # fully cached; C result auto-freed here
+    result.free
+    expect(result.to_a).to eql(rows)
+  end
+
+  it "should tolerate free inside the block for materialized prepared-statement results" do
+    # Non-streaming statement results are fully materialized (and their C
+    # result freed) during #execute, so iteration replays the cache and an
+    # in-block free is a harmless no-op.
+    result = @client.prepare("SELECT 1 AS a UNION SELECT 2 UNION SELECT 3").execute
+    seen = []
+    result.each do |row|
+      seen << row
+      result.free
+    end
+    expect(seen).to eql([{ "a" => 1 }, { "a" => 2 }, { "a" => 3 }])
+  end
+
+  it "should stop a streaming prepared-statement iteration cleanly when freed inside the block" do
+    result = @client.prepare("SELECT 1 AS a UNION SELECT 2 UNION SELECT 3").execute(stream: true, cache_rows: false)
+    seen = []
+    result.each do |row|
+      seen << row
+      result.free
+    end
+    expect(seen).to eql([{ "a" => 1 }])
+  end
+
+  it "should keep the streaming-specific error for re-iterating a completed stream" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2", stream: true
+    result.each { |_| }
+    expect { result.each { |_| } }.to raise_error(Mysql2::Error, /streaming is true.*to reiterate you must requery/)
+  end
+
+  it "should keep field_types valid across GC and compaction" do
+    result = @client.query "SELECT 1 AS a, 'x' AS b"
+    before_types = result.field_types.dup
+    GC.start
+    GC.verify_compaction_references(expand_heap: true, toward: :empty) if GC.respond_to?(:verify_compaction_references) && RUBY_VERSION >= "3.2"
+    expect(result.field_types).to eql(before_types)
   end
 
   it "should raise a Mysql2::Error exception upon a bad query" do

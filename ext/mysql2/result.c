@@ -741,7 +741,16 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         case MYSQL_TYPE_DATE:         // MYSQL_TIME
         case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          val = rb_funcall(cDate, intern_new, 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
+          /* Mirror the text-protocol semantics for zero and partial-zero
+           * dates: all-zero is nil, partial-zero raises Mysql2::Error. */
+          if (ts->year + ts->month + ts->day == 0) {
+            val = Qnil;
+          } else if (ts->month < 1 || ts->day < 1) {
+            rb_raise(cMysql2Error, "Invalid date in field '%.*s': %04u-%02u-%02u",
+                     (int)fields[i].name_length, fields[i].name, ts->year, ts->month, ts->day);
+          } else {
+            val = rb_funcall(cDate, intern_new, 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
+          }
           break;
         case MYSQL_TYPE_TIME:         // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
@@ -760,6 +769,17 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
           ts = (MYSQL_TIME*)result_buffer->buffer;
           seconds = (ts->year*31557600ULL) + (ts->month*2592000ULL) + (ts->day*86400ULL) + (ts->hour*3600ULL) + (ts->minute*60ULL) + ts->second;
+
+          /* Mirror the text-protocol semantics for zero and partial-zero
+           * datetimes (the text path computes the same seconds value and
+           * returns nil when it is 0, raises when month or day is 0). */
+          if (seconds == 0) {
+            val = Qnil;
+            break;
+          } else if (ts->month < 1 || ts->day < 1) {
+            rb_raise(cMysql2Error, "Invalid date in field '%.*s': %04u-%02u-%02u %02u:%02u:%02u",
+                     (int)fields[i].name_length, fields[i].name, ts->year, ts->month, ts->day, ts->hour, ts->minute, ts->second);
+          }
 
           if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
             VALUE offset = INT2NUM(0);

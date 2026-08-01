@@ -148,6 +148,7 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper, int fro
       }
       /* Clue that the next statement execute will need to allocate a new result buffer. */
       wrapper->result_buffers = NULL;
+      wrapper->result_buffers_bound = 0;
     }
 
     /* For prepared statements, wrapper->result is the result metadata
@@ -657,8 +658,23 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     rb_mysql_result_alloc_result_buffers(self, fields);
   }
 
-  if (mysql_stmt_bind_result(wrapper->stmt_wrapper->stmt, wrapper->result_buffers)) {
-    rb_raise_mysql2_stmt_error(wrapper->stmt_wrapper);
+  /* Bind once per result set rather than once per row. The buffers are
+   * allocated exactly once (rb_mysql_result_alloc_result_buffers returns early
+   * when they exist) and are never resized -- a buffer too short for a value
+   * raises on MYSQL_DATA_TRUNCATED rather than reallocating -- and they are
+   * only released by rb_mysql_result_free_result, which nulls the pointer and
+   * clears this flag. So the addresses registered here stay valid for every
+   * subsequent mysql_stmt_fetch on this result. Re-binding per row copied the
+   * whole MYSQL_BIND array into the statement each time for no gain.
+   *
+   * Binding is tracked separately from allocation so that a failed bind is
+   * still retried on a later fetch, exactly as it was when the bind ran on
+   * every row. */
+  if (!wrapper->result_buffers_bound) {
+    if (mysql_stmt_bind_result(wrapper->stmt_wrapper->stmt, wrapper->result_buffers)) {
+      rb_raise_mysql2_stmt_error(wrapper->stmt_wrapper);
+    }
+    wrapper->result_buffers_bound = 1;
   }
 
   {
@@ -1403,6 +1419,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->client_wrapper = DATA_PTR(client);
   wrapper->client_wrapper->refcount++;
   wrapper->result_buffers = NULL;
+  wrapper->result_buffers_bound = 0;
   wrapper->is_null = NULL;
   wrapper->error = NULL;
   wrapper->length = NULL;

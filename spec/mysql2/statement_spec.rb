@@ -315,6 +315,23 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       end
     end
 
+    it "should return every row of a multi-row result" do
+      # The result buffers are bound on the first fetch and reused for the rest
+      # of the result set, so a binding that went stale would show up as wrong
+      # or repeated values from the second row onward, not on the first.
+      result = @client.prepare("SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4").execute
+      expect(result.to_a).to eq([{ 'n' => 1 }, { 'n' => 2 }, { 'n' => 3 }, { 'n' => 4 }])
+    end
+
+    it "should return wide variable-width columns correctly on every row" do
+      # Variable-width buffers are sized once, from fields[i].max_length. A row
+      # fetched into a stale or too-short buffer would be truncated or wrong
+      # here, where the value is far larger than any inline buffer.
+      expected = ['a' * 60_000, 'b' * 60_000]
+      result = @client.prepare("SELECT REPEAT('a', 60000) AS v UNION ALL SELECT REPEAT('b', 60000)").execute
+      expect(result.to_a.map { |row| row['v'] }).to eq(expected)
+    end
+
     it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
       @result = @client.prepare("SELECT 1").execute(symbolize_keys: true)
       @result.each do |row|

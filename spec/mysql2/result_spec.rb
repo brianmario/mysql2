@@ -150,6 +150,24 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
   end
 
   context "#each" do
+    it "should return the same rows for any :rows_per_gvl_yield" do
+      # The option only changes how often rb_thread_schedule is called while
+      # materializing buffered rows, so every value must produce identical rows.
+      # How often other threads actually get scheduled is timing-dependent and
+      # deliberately not asserted here.
+      baseline = @client.query("SELECT 1 AS a UNION ALL SELECT 2 UNION ALL SELECT 3").to_a
+      [0, 1, 2, 8192].each do |n|
+        rows = @client.query("SELECT 1 AS a UNION ALL SELECT 2 UNION ALL SELECT 3",
+                             rows_per_gvl_yield: n,).to_a
+        expect(rows).to eql(baseline), ":rows_per_gvl_yield => #{n} changed the rows"
+      end
+    end
+
+    it "should reject a negative :rows_per_gvl_yield" do
+      expect { @client.query("SELECT 1", rows_per_gvl_yield: -1).to_a }.to \
+        raise_error(Mysql2::Error, /rows_per_gvl_yield/)
+    end
+
     it "should yield rows as hash's" do
       @result.each do |row|
         expect(row).to be_an_instance_of(Hash)

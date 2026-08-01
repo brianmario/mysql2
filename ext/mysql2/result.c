@@ -50,6 +50,7 @@ typedef struct {
   int cacheRows;
   int cast;
   int streaming;
+  unsigned long rowsPerGvlYield;
   ID db_timezone;
   ID app_timezone;
   int block_given; /* boolean */
@@ -63,7 +64,7 @@ static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_o
   intern_query_options;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
-  sym_cache_rows, sym_cast, sym_stream, sym_name;
+  sym_cache_rows, sym_cast, sym_stream, sym_name, sym_rows_per_gvl_yield;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
@@ -258,10 +259,27 @@ void mysql2_result_force_free(VALUE self) {
   wrapper->streamingComplete = 1;
 }
 
+/* Default for the :rows_per_gvl_yield query option: how many buffered rows to
+ * materialize between GVL yields. Empirical, not an alignment constant. 8192
+ * rows is 0.6-1.0ms of materialization on the shapes benchmarked, which keeps a
+ * thread waiting on the GVL from being blocked for a perceptible time while
+ * leaving the per-row handoff cost removed. The interval is a row count but the
+ * bound that matters is time, and time per row grows with row width, so a
+ * result whose rows are far wider than those shapes may want a lower value. */
+#define MYSQL2_ROWS_PER_GVL_YIELD_DEFAULT 8192
+
 /*
- * for small results, this won't hit the network, but there's no
- * reliable way for us to tell this so we'll always release the GVL
- * to be safe
+ * Only a streaming result can hit the network from a row fetch.
+ *
+ * A non-streaming result has already been drained into client memory by
+ * mysql_store_result (client.c) or mysql_stmt_store_result (statement.c), so
+ * fetching a row from it is pointer arithmetic over that buffer and cannot
+ * block. wrapper->is_streaming distinguishes the two reliably: mysql_use_result
+ * is only ever called when the query options say stream: true, and the same
+ * options hash is what sets wrapper->is_streaming.
+ *
+ * Releasing the GVL around a fetch that cannot block costs far more than the
+ * fetch itself, so the callers below only do it while streaming.
  */
 static void *nogvl_fetch_row(void *ptr) {
   MYSQL_RES *result = ptr;
@@ -736,7 +754,18 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   }
 
   {
-    switch((uintptr_t)rb_thread_call_without_gvl(nogvl_stmt_fetch, wrapper->stmt_wrapper->stmt, RUBY_UBF_IO, 0)) {
+    uintptr_t fetch_result;
+    /* See the note above nogvl_fetch_row. A streaming result reads from the
+     * socket here, so the GVL is released around that call; a buffered one is
+     * already in client-library memory, so releasing costs more than the fetch.
+     * The release is kept as tight as possible around the client-library call
+     * because the GVL is required again immediately to build Ruby objects. */
+    if (wrapper->is_streaming) {
+      fetch_result = (uintptr_t)rb_thread_call_without_gvl(nogvl_stmt_fetch, wrapper->stmt_wrapper->stmt, RUBY_UBF_IO, 0);
+    } else {
+      fetch_result = (uintptr_t)nogvl_stmt_fetch(wrapper->stmt_wrapper->stmt);
+    }
+    switch(fetch_result) {
       case 0:
         /* success */
         break;
@@ -951,7 +980,16 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   conn_enc = rb_to_encoding(wrapper->encoding);
 
   ptr = wrapper->result;
-  row = (MYSQL_ROW)rb_thread_call_without_gvl(nogvl_fetch_row, ptr, RUBY_UBF_IO, 0);
+  /* See the note above nogvl_fetch_row. A streaming result reads from the
+   * socket here, so the GVL is released around that call; a buffered one is
+   * already in client-library memory, so releasing costs more than the fetch.
+   * The release is kept as tight as possible around the client-library call
+   * because the GVL is required again immediately to build Ruby objects. */
+  if (wrapper->is_streaming) {
+    row = (MYSQL_ROW)rb_thread_call_without_gvl(nogvl_fetch_row, ptr, RUBY_UBF_IO, 0);
+  } else {
+    row = mysql_fetch_row(wrapper->result);
+  }
   if (row == NULL) {
     return Qnil;
   }
@@ -1319,6 +1357,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
       }
     } else {
       unsigned long rowsProcessed = 0;
+      unsigned long rowsSinceYield = 0;
       rowsProcessed = RARRAY_LEN(wrapper->rows);
       fields = mysql_fetch_fields(wrapper->result);
 
@@ -1328,6 +1367,20 @@ static VALUE rb_mysql_result_each_(VALUE self,
           row = rb_ary_entry(wrapper->rows, i);
         } else {
           row = fetch_row_func(self, fields, args);
+
+          /* fetch_row_func is either rb_mysql_result_fetch_row or
+           * rb_mysql_result_fetch_row_stmt, which only need to hit the network
+           * when streaming. Buffered rows are already in memory owned by the
+           * MySQL/MariaDB client library. Those functions hold the GVL while in
+           * buffered mode as rows are quickly materialized into Ruby-space.
+           * Therefore call rb_thread_schedule every N rows to ensure that a very
+           * large result set does not starve out other threads. Only rows
+           * actually fetched are counted, so re-iterating a cached result does
+           * not add scheduling points. */
+          if (args->rowsPerGvlYield && ++rowsSinceYield >= args->rowsPerGvlYield) {
+            rowsSinceYield = 0;
+            rb_thread_schedule();
+          }
           if (args->cacheRows) {
             rb_ary_store(wrapper->rows, i, row);
           }
@@ -1363,6 +1416,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   VALUE defaults, opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone, dbTz, appTz;
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
+  unsigned long rowsPerGvlYield;
+  VALUE rowsPerGvlYieldOpt;
 
   GET_RESULT(self);
 
@@ -1386,6 +1441,17 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
   cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
   cast          = RTEST(rb_hash_aref(opts, sym_cast));
+
+  /* :rows_per_gvl_yield -- 0 disables yielding; nil uses the default. */
+  rowsPerGvlYield = MYSQL2_ROWS_PER_GVL_YIELD_DEFAULT;
+  rowsPerGvlYieldOpt = rb_hash_aref(opts, sym_rows_per_gvl_yield);
+  if (!NIL_P(rowsPerGvlYieldOpt)) {
+    long requested = NUM2LONG(rowsPerGvlYieldOpt);
+    if (requested < 0) {
+      rb_raise(cMysql2Error, ":rows_per_gvl_yield must not be negative");
+    }
+    rowsPerGvlYield = (unsigned long)requested;
+  }
 
   if (wrapper->is_streaming && cacheRows) {
     rb_warn(":cache_rows is ignored if :stream is true");
@@ -1456,6 +1522,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   args.asArray = asArray;
   args.castBool = castBool;
   args.cacheRows = cacheRows;
+  args.rowsPerGvlYield = rowsPerGvlYield;
   args.cast = cast;
   args.db_timezone = db_timezone;
   args.app_timezone = app_timezone;
@@ -1577,6 +1644,7 @@ void init_mysql2_result(void) {
   sym_database_timezone     = ID2SYM(rb_intern("database_timezone"));
   sym_application_timezone  = ID2SYM(rb_intern("application_timezone"));
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
+  sym_rows_per_gvl_yield = ID2SYM(rb_intern("rows_per_gvl_yield"));
   sym_cast           = ID2SYM(rb_intern("cast"));
   sym_stream         = ID2SYM(rb_intern("stream"));
   sym_name           = ID2SYM(rb_intern("name"));

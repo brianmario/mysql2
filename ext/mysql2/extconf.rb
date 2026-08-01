@@ -46,6 +46,9 @@ have_func('rb_enc_interned_str', 'ruby.h')
 # 3.2+
 have_func('rb_hash_new_capa', 'ruby.h')
 
+# 2.3+ (guarded so the funcall path remains available on anything older)
+have_func('rb_time_timespec_new', 'ruby.h')
+
 ### Find OpenSSL library
 
 # User-specified OpenSSL if explicitly specified

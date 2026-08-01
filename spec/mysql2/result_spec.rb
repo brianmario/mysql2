@@ -614,6 +614,59 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(@client.query("SELECT CAST('0000-00-00 00:00:00' AS DATETIME) AS t").first['t']).to be_nil
     end
 
+    it "should build :utc DATETIME values identically to the generic Time path" do
+      # Pins the arithmetic fast path against Time.utc across the range and
+      # precision edges, including both sides of the 32-bit time_t boundary:
+      # 2038-01-19 03:14:07 is the last representable second there, 03:14:08
+      # the first one past it, which on a 32-bit build must decline to the
+      # funcall rather than wrap.
+      [
+        ['1901-12-13 20:45:51.000000', 0],
+        ['1969-12-31 23:59:59.123456', 123_456],
+        ['1970-01-01 00:00:00.000001', 1],
+        ['2038-01-19 03:14:07.000000', 0],
+        ['2038-01-19 03:14:08.000000', 0],
+        ['2026-07-28 12:34:56.654321', 654_321],
+        ['9999-12-31 11:59:59.500000', 500_000],
+      ].each do |literal, usec|
+        date_part, time_part = literal.split(' ')
+        y, mo, d = date_part.split('-').map(&:to_i)
+        h, mi, s = time_part.split(':')
+        expected = Time.utc(y, mo, d, h.to_i, mi.to_i, s.to_i) + Rational(usec, 1_000_000)
+
+        actual = @client.query("SELECT CAST('#{literal}' AS DATETIME(6)) AS t", database_timezone: :utc).first['t']
+        expect(actual).to eql(expected), "#{literal}: expected #{expected.inspect}, got #{actual.inspect}"
+        expect(actual.utc_offset).to eql(0)
+        expect(actual.usec).to eql(usec)
+      end
+    end
+
+    it "should normalise invalid-but-in-range :utc DATETIME values exactly as Time.utc does" do
+      # With ALLOW_INVALID_DATES the server hands back dates that are canonical
+      # in shape but not real calendar days. Time.utc does not reject these --
+      # it normalises them (Feb 31 becomes Mar 3) -- so the arithmetic path must
+      # land on the same instant rather than on its own idea of the date.
+      client = new_client
+      client.query("SET SESSION sql_mode='ALLOW_INVALID_DATES'")
+      {
+        '2023-02-31 12:00:00' => Time.utc(2023, 3, 3, 12, 0, 0),
+        '2023-04-31 01:02:03' => Time.utc(2023, 5, 1, 1, 2, 3),
+        '2023-02-29 00:00:00' => Time.utc(2023, 3, 1, 0, 0, 0),
+        '2023-11-31 23:59:59' => Time.utc(2023, 12, 1, 23, 59, 59),
+        '2024-02-30 06:30:00' => Time.utc(2024, 3, 1, 6, 30, 0),
+      }.each do |literal, expected|
+        actual = client.query("SELECT CAST('#{literal}' AS DATETIME) AS t", database_timezone: :utc).first['t']
+        expect(actual).to eql(expected), "#{literal}: expected #{expected.inspect}, got #{actual.inspect}"
+      end
+    end
+
+    it "should leave :local DATETIME handling on the generic path" do
+      literal = '2026-07-28 12:34:56'
+      actual = @client.query("SELECT CAST('#{literal}' AS DATETIME) AS t", database_timezone: :local).first['t']
+      expect(actual).to eql(Time.local(2026, 7, 28, 12, 34, 56))
+      expect(actual.utc_offset).to eql(Time.local(2026, 7, 28, 12, 34, 56).utc_offset)
+    end
+
     it "should parse DATE values identically to the sscanf path" do
       # 1000-01-01 and 9999-12-31 are MySQL's DATE range edges.
       ['2026-07-28', '1000-01-01', '9999-12-31'].each do |literal|

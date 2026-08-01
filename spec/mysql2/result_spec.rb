@@ -578,6 +578,51 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
+    it "should parse DATETIME values identically to the sscanf path across fractional widths" do
+      # Each literal is cast to the DATETIME(N) that actually puts N fractional
+      # digits on the wire. Casting everything to DATETIME(6) would not do:
+      # the server normalises '...56.5' to '...56.500000', so the short forms
+      # would never reach the parser at all. The cast: false read pins that
+      # premise, so if the server ever stopped emitting these widths the test
+      # fails rather than quietly stopping testing them.
+      # Microseconds are left-aligned: ".5" is 500000, not 5.
+      [
+        ['2026-07-28 12:34:56',        'DATETIME',    0],
+        ['2026-07-28 12:34:56.5',      'DATETIME(1)', 500_000],
+        ['2026-07-28 12:34:56.05',     'DATETIME(2)', 50_000],
+        ['2026-07-28 12:34:56.123',    'DATETIME(3)', 123_000],
+        ['2026-07-28 12:34:56.000001', 'DATETIME(6)', 1],
+        ['2026-07-28 12:34:56.123456', 'DATETIME(6)', 123_456],
+        ['1000-01-01 00:00:00.999999', 'DATETIME(6)', 999_999],
+      ].each do |literal, type, usec|
+        sql = "SELECT CAST('#{literal}' AS #{type}) AS t"
+
+        raw = @client.query(sql, cast: false).first['t']
+        expect(raw).to eql(literal), "#{type}: parser was handed #{raw.inspect}, not #{literal.inspect}"
+
+        row = @client.query(sql, database_timezone: :utc).first['t']
+        expect(row).to be_an_instance_of(Time)
+        expect(row.usec).to eql(usec), "#{literal}: expected usec #{usec}, got #{row.usec}"
+        expect(row.strftime('%Y-%m-%d %H:%M:%S')).to eql(literal[0, 19])
+        expect(row.utc_offset).to eql(0)
+      end
+    end
+
+    it "should return nil for a zero DATETIME, as the sscanf path did" do
+      # A zero date is canonical in shape, so it is accepted by the fast parser
+      # rather than handed to the fallback. It must still come back as nil.
+      expect(@client.query("SELECT CAST('0000-00-00 00:00:00' AS DATETIME) AS t").first['t']).to be_nil
+    end
+
+    it "should parse DATE values identically to the sscanf path" do
+      # 1000-01-01 and 9999-12-31 are MySQL's DATE range edges.
+      ['2026-07-28', '1000-01-01', '9999-12-31'].each do |literal|
+        row = @client.query("SELECT CAST('#{literal}' AS DATE) AS d").first['d']
+        expect(row).to be_an_instance_of(Date)
+        expect(row.strftime('%Y-%m-%d')).to eql(literal)
+      end
+    end
+
     it "should return Time for a TIME value" do
       expect(test_result['time_test']).to be_an_instance_of(Time)
       expect(test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2000-01-01 11:44:00')

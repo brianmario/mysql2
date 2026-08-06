@@ -170,8 +170,8 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     args.stmt = stmt_wrapper->stmt;
     // ensure the string is in the encoding the connection is expecting
     args.sql = rb_str_export_to_enc(sql, conn_enc);
-    args.sql_ptr = RSTRING_PTR(sql);
-    args.sql_len = RSTRING_LEN(sql);
+    args.sql_ptr = RSTRING_PTR(args.sql);
+    args.sql_len = RSTRING_LEN(args.sql);
 
     if ((VALUE)rb_thread_call_without_gvl(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
       rb_raise_mysql2_stmt_error(stmt_wrapper);

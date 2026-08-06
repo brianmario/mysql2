@@ -126,6 +126,17 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
 /* this is called during GC */
 static void rb_mysql_result_free(void *ptr) {
   mysql2_result_wrapper *wrapper = ptr;
+
+  /* An abandoned streaming Result (caller broke out of #each, or raised,
+   * before exhausting the cursor) never reaches the streamingComplete=1
+   * reset in rb_mysql_result_each_. Without this, client_wrapper->state
+   * would be stuck STREAMING forever. This only writes a plain C field on
+   * a struct we own -- no VM calls -- so it's fine to do from a dfree
+   * callback, unlike the reap itself. */
+  if (wrapper->is_streaming && !wrapper->streamingComplete && wrapper->client_wrapper) {
+    wrapper->client_wrapper->state = MYSQL2_CLIENT_IDLE;
+  }
+
   rb_mysql_result_free_result(wrapper);
 
   // If the GC gets to client first it will be nil
@@ -1085,6 +1096,14 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
       rb_mysql_result_cache_metadata_and_free(self);
       wrapper->streamingComplete = 1;
+
+      // The cursor is exhausted: the connection is free to run another
+      // command. This runs from ordinary Ruby-level code (#each), so it's
+      // safe to reap here rather than waiting for the next command.
+      if (wrapper->client_wrapper) {
+        wrapper->client_wrapper->state = MYSQL2_CLIENT_IDLE;
+        mysql2_reap_pending_stmt_closes(wrapper->client_wrapper);
+      }
 
       // Check for errors, the connection might have gone out from under us
       // mysql_error returns an empty string if there is no error

@@ -2,11 +2,11 @@
 #define MYSQL2_STATEMENT_H
 
 typedef struct {
-  int closed;
-  int refcount;
   VALUE client;
-  mysql_client_wrapper *client_wrapper;
   MYSQL_STMT *stmt;
+  mysql_client_wrapper *client_wrapper;
+  int refcount;
+  int closed;
 } mysql_stmt_wrapper;
 
 void init_mysql2_statement(void);

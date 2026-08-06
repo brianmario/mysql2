@@ -740,4 +740,55 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       end
     end
   end
+
+  context 'garbage collection ordering' do
+    # Regression coverage for the deferred pending-close queue (see
+    # decr_mysql2_stmt / mysql2_reap_pending_stmt_closes in
+    # ext/mysql2/{client,statement}.c). Before that fix, a Statement's GC
+    # free function sent COM_STMT_CLOSE straight onto the wire even while
+    # the connection was mid protocol exchange for something else,
+    # corrupting whatever command was actually in flight and producing
+    # "commands out of sync" (#1043) or wrong results.
+
+    it 'does not corrupt results when a stale prepared statement is collected between executes' do
+      begin
+        GC.stress = true
+        50.times do |i|
+          want = i.odd? ? 1 : nil
+          found = nil
+          @client.prepare('SELECT 1 AS FOUND WHERE 1 = ?').execute(i.odd? ? 1 : 0).each do |row|
+            found = row['FOUND']
+          end
+          expect(found).to eq(want)
+        end
+      ensure
+        GC.stress = false
+      end
+    end
+
+    it 'does not corrupt a streaming read when a stale statement on the same client is collected mid-stream' do
+      # Not held onto past this point, so it becomes GC-eligible once
+      # nothing else references it.
+      stale = @client.prepare('SELECT 1')
+      stale.execute.each { |_| }
+      stale = nil # rubocop:disable Lint/UselessAssignment
+
+      result = @client.query('SELECT 1 AS a UNION SELECT 2 AS a UNION SELECT 3 AS a', stream: true)
+      rows = []
+      begin
+        GC.stress = true
+        result.each { |row| rows << row['a'] }
+      ensure
+        GC.stress = false
+      end
+      expect(rows).to eq([1, 2, 3])
+    end
+
+    it 'drains #pending_prepared_statement_closes to zero at the next safe point' do
+      30.times { @client.prepare('SELECT 1').execute }
+      GC.start
+      @client.ping
+      expect(@client.pending_prepared_statement_closes).to eq(0)
+    end
+  end
 end

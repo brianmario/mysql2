@@ -95,6 +95,31 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     expect(result.field_types).to eql(before_types)
   end
 
+  it "should keep field_types valid when GC runs during the first call" do
+    # The array is stored on the C struct before the fill loop runs, and that
+    # loop allocates a String per column, so a GC inside it can collect the
+    # still-unmarked array between the store and the rb_ary_store that follows.
+    # That window is a write into a freed slot, and it is inside the very first
+    # #field_types call -- the spec above only covers a stale read on a later
+    # one. Ordinary GC is enough here; compaction is not part of the mechanism.
+    # Reproduction from @jeremy (#1453). Three fresh results give three
+    # independent first-call windows: whether the dying array temporary is
+    # conservatively pinned on the C stack is compiler/layout luck, so one
+    # window could theoretically survive unpatched where another aborts.
+    3.times do
+      result = @client.query "SELECT 1 AS a, 'x' AS b, 2.5 AS c, NOW() AS d"
+      begin
+        GC.stress = true
+        types = result.field_types # first-ever call on this Result
+      ensure
+        GC.stress = false
+      end
+      expect(types).to be_an_instance_of(Array)
+      expect(types.length).to eql(4)
+      expect(types).to all(be_an_instance_of(String))
+    end
+  end
+
   it "should raise a Mysql2::Error exception upon a bad query" do
     expect do
       @client.query "bad sql"

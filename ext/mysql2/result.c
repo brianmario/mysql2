@@ -70,6 +70,7 @@ static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_gc_mark_movable(w->fields);
+    rb_gc_mark_movable(w->fieldTypes);
     rb_gc_mark_movable(w->rows);
     rb_gc_mark_movable(w->encoding);
     rb_gc_mark_movable(w->client);
@@ -152,6 +153,7 @@ static void rb_mysql_result_compact(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_mysql2_gc_location(w->fields);
+    rb_mysql2_gc_location(w->fieldTypes);
     rb_mysql2_gc_location(w->rows);
     rb_mysql2_gc_location(w->encoding);
     rb_mysql2_gc_location(w->client);
@@ -176,12 +178,6 @@ static const rb_data_type_t rb_mysql_result_type = {
   RUBY_TYPED_FREE_IMMEDIATELY,
 #endif
 };
-
-static VALUE rb_mysql_result_free_(VALUE self) {
-  GET_RESULT(self);
-  rb_mysql_result_free_result(wrapper);
-  return Qnil;
-}
 
 /*
  * for small results, this won't hit the network, but there's no
@@ -1001,6 +997,28 @@ static VALUE rb_mysql_result_fetch_field_types(VALUE self) {
   return wrapper->fieldTypes;
 }
 
+/* Cache the fields and fieldTypes metadata, then free the C result set.
+ * Caching must happen while the result set is still valid: it keeps #fields
+ * and #field_types accessible after the free. Field names not already cached
+ * by row fetching (e.g. for 0-row results) are cached according to the query
+ * options (such as symbolize_keys); fieldTypes is never populated by row
+ * fetching.
+ * See: https://github.com/brianmario/mysql2/issues/1426
+ *
+ * Must not be called from the GC free path (rb_mysql_result_free), which
+ * cannot call back into Ruby. */
+static void rb_mysql_result_cache_metadata_and_free(VALUE self) {
+  GET_RESULT(self);
+  rb_mysql_result_fetch_fields(self);
+  rb_mysql_result_fetch_field_types(self);
+  rb_mysql_result_free_result(wrapper);
+}
+
+static VALUE rb_mysql_result_free_(VALUE self) {
+  rb_mysql_result_cache_metadata_and_free(self);
+  return Qnil;
+}
+
 static VALUE rb_mysql_result_each_(VALUE self,
                                    VALUE(*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args),
                                    const result_each_args *args)
@@ -1032,7 +1050,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
         }
       } while(row != Qnil);
 
-      rb_mysql_result_free_result(wrapper);
+      rb_mysql_result_cache_metadata_and_free(self);
       wrapper->streamingComplete = 1;
 
       // Check for errors, the connection might have gone out from under us
@@ -1071,7 +1089,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
         if (row == Qnil) {
           /* we don't need the mysql C dataset around anymore, peace it */
           if (args->cacheRows) {
-            rb_mysql_result_free_result(wrapper);
+            rb_mysql_result_cache_metadata_and_free(self);
           }
           return Qnil;
         }
@@ -1082,7 +1100,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
       }
       if (wrapper->lastRowProcessed == wrapper->numberOfRows && args->cacheRows) {
         /* we don't need the mysql C dataset around anymore, peace it */
-        rb_mysql_result_free_result(wrapper);
+        rb_mysql_result_cache_metadata_and_free(self);
       }
     }
   }
@@ -1250,14 +1268,6 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   /* Options that cannot be changed in results.each(...) { |row| }
    * should be processed here. */
   wrapper->is_streaming = (rb_hash_aref(options, sym_stream) == Qtrue ? 1 : 0);
-
-  /* Eagerly populate fields for non-streaming results to prevent
-   * segfault/error when accessing .fields on 0-row results that get freed
-   * after iteration completes but before .fields is accessed.
-   * See: https://github.com/brianmario/mysql2/issues/1426 */
-  if (r != NULL && !wrapper->is_streaming) {
-    rb_mysql_result_fetch_fields(obj);
-  }
 
   return obj;
 }

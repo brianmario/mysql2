@@ -15,10 +15,8 @@ gem 'irb', require: false
 group :test do
   unless RUBY_PLATFORM =~ /mswin|mingw/
     if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('4.0')
-      # eventmachine 1.2.7's bundled fastfilereader C++ extension uses
-      # Data_Wrap_Struct/Data_Get_Struct, removed from Ruby 4.0's headers.
-      # Fixed on eventmachine's master (not yet released), so track that
-      # until a new release is cut.
+      # Ruby 4.0 removed Data_Wrap_Struct, breaking eventmachine 1.2.7's
+      # fastfilereader ext; use git master until a fix is released.
       gem 'eventmachine', github: 'eventmachine/eventmachine'
     else
       gem 'eventmachine'

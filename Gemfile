@@ -13,7 +13,15 @@ gem 'rake-compiler', '~> 1.2.0'
 gem 'irb', require: false
 
 group :test do
-  gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
+  unless RUBY_PLATFORM =~ /mswin|mingw/
+    if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('4.0')
+      # Ruby 4.0 removed Data_Wrap_Struct, breaking eventmachine 1.2.7's
+      # fastfilereader ext; use git master until a fix is released.
+      gem 'eventmachine', github: 'eventmachine/eventmachine'
+    else
+      gem 'eventmachine'
+    end
+  end
   gem 'rspec', '~> 3.2'
 
   gem 'rubocop'

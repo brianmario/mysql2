@@ -1,5 +1,7 @@
 #include <mysql2_ext.h>
 
+#include <math.h>
+
 extern VALUE mMysql2, cMysql2Error;
 static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
@@ -395,7 +397,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
             if (CLASS_OF(argv[i]) == rb_cTime) {
               t.second_part = FIX2INT(rb_funcall(rb_time, intern_usec, 0));
             } else if (CLASS_OF(argv[i]) == cDateTime) {
-              t.second_part = NUM2DBL(rb_funcall(rb_time, intern_sec_fraction, 0)) * 1000000;
+              t.second_part = (unsigned long)round(NUM2DBL(rb_funcall(rb_time, intern_sec_fraction, 0)) * 1000000);
             }
 
             t.second = FIX2INT(rb_funcall(rb_time, intern_sec, 0));

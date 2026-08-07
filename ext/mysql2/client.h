@@ -46,6 +46,15 @@ typedef struct {
   VALUE encoding;
   VALUE active_fiber; /* rb_fiber_current() or Qnil */
   VALUE prepared_statements;
+  /* The Mysql2::Result for the currently open streaming cursor (state ==
+   * MYSQL2_CLIENT_STREAMING), or Qnil. pending_result_frees only ever gets
+   * populated once GC has actually collected an abandoned streaming
+   * Result; if the app abandons a stream and issues another command
+   * before that happens, this is what lets mysql2_abandon_active_stream
+   * find and force-drain the still-live object right now, instead of
+   * sending the new command while the server still thinks a cursor is
+   * open. */
+  VALUE active_streaming_result;
   long server_version;
   int reconnect_enabled;
   unsigned int connect_timeout;
@@ -120,5 +129,17 @@ void mysql2_reap_pending_result_frees(mysql_client_wrapper *wrapper);
  * the same tradeoff already accepted by mysql2_drop_pending_stmt_closes for
  * statements that can't be closed server-side without a round trip. */
 void mysql2_drop_pending_result_frees(mysql_client_wrapper *wrapper);
+
+/* If the connection is still STREAMING because the previous streaming
+ * Result was abandoned (caller broke out of #each, or raised, without
+ * exhausting the cursor) rather than naturally exhausted or already
+ * collected by GC, force-drain and free it now, before a new command goes
+ * out. Ordinary-Ruby-level-only, like the reap functions above -- it calls
+ * into result.c and may hit the socket. No-op if there's no live Result to
+ * drain (already handled, or already queued via
+ * mysql2_enqueue_pending_result_free for mysql2_reap_pending_result_frees
+ * to pick up). Call right before sending any new command (query, prepare,
+ * execute, ping, statement close). */
+void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper);
 
 #endif

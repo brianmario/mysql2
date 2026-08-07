@@ -568,12 +568,48 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end.to_not raise_error
     end
 
-    it "should not let you query again if iterating is not finished when streaming" do
+    it "should let you query again if the previous streaming result was abandoned (not fully iterated)" do
+      # Only fetch the first row and never touch the rest of the cursor.
+      # The next query must not raise "Commands out of sync" -- the client
+      # should force-drain the abandoned cursor itself, even though GC
+      # hasn't had a chance to collect the old Result yet.
       @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false).first
 
       expect do
         @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false)
-      end.to raise_exception(Mysql2::Error)
+      end.to_not raise_error
+    end
+
+    it "should let you query again after breaking out of #each on a streaming result early" do
+      # rubocop:disable Lint/UnreachableLoop
+      @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).each do |_row|
+        break
+      end
+      # rubocop:enable Lint/UnreachableLoop
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
+
+    it "should let you query again after an exception raised inside a streaming #each block" do
+      # rubocop:disable Lint/UnreachableLoop
+      expect do
+        @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).each do |_row|
+          raise "boom"
+        end
+      end.to raise_error("boom")
+      # rubocop:enable Lint/UnreachableLoop
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
+
+    it "should let you query again if a streaming result was abandoned and only collected by the GC" do
+      @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).first
+      run_gc
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
     end
 
     it "should only accept strings as the query parameter" do

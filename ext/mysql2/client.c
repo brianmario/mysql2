@@ -226,6 +226,7 @@ static void rb_mysql_client_mark(void * wrapper) {
     rb_gc_mark_movable(w->encoding);
     rb_gc_mark_movable(w->active_fiber);
     rb_gc_mark_movable(w->prepared_statements);
+    rb_gc_mark_movable(w->active_streaming_result);
   }
 }
 
@@ -246,6 +247,7 @@ static void rb_mysql_client_compact(void * wrapper) {
     rb_mysql2_gc_location(w->encoding);
     rb_mysql2_gc_location(w->active_fiber);
     rb_mysql2_gc_location(w->prepared_statements);
+    rb_mysql2_gc_location(w->active_streaming_result);
   }
 }
 
@@ -480,6 +482,15 @@ void mysql2_drop_pending_result_frees(mysql_client_wrapper *wrapper)
   }
 }
 
+/* See client.h. */
+void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper)
+{
+  if (wrapper->state == MYSQL2_CLIENT_STREAMING && wrapper->active_streaming_result != Qnil) {
+    mysql2_result_force_free(wrapper->active_streaming_result);
+    wrapper->active_streaming_result = Qnil;
+  }
+}
+
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
@@ -573,6 +584,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active_fiber = Qnil;
   wrapper->prepared_statements = rb_hash_new();
+  wrapper->active_streaming_result = Qnil;
   wrapper->automatic_close = 1;
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
@@ -900,7 +912,10 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
       wrapper->state = MYSQL2_CLIENT_IDLE;
       rb_raise_mysql2_error(wrapper);
     }
-    /* no data and no error, so query was not a SELECT */
+    /* no data and no error, so query was not a SELECT -- e.g. :stream was
+     * requested for an INSERT/UPDATE. No cursor was actually opened, so
+     * don't leave the connection marked STREAMING. */
+    wrapper->state = MYSQL2_CLIENT_IDLE;
     return Qnil;
   }
 
@@ -909,6 +924,12 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
+
+  /* Track the open cursor so a later command can force-drain it if it's
+   * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */
+  if (is_streaming == Qtrue) {
+    wrapper->active_streaming_result = resultObj;
+  }
 
   rb_mysql_set_server_query_flags(wrapper->client, resultObj);
 
@@ -1073,18 +1094,24 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   args.wrapper = wrapper;
 
   rb_mysql_client_set_active_fiber(self, false);
-  wrapper->state = MYSQL2_CLIENT_QUERYING;
 
   /* We're about to issue a new command: this is a safe point to close out
    * any statements that were GC'd while we were busy earlier, and to free
    * any abandoned result sets left over from a stream that was dropped
-   * mid-iteration. Deliberately last, right before the actual network
-   * write below -- rb_ivar_set/rb_str_export_to_enc above can themselves
-   * allocate, and under GC.stress (or just unlucky timing) that can be
-   * what triggers the GC sweep that abandons a stream, so reaping any
-   * earlier can still leave a fresh pending free undrained when we send. */
+   * mid-iteration -- including one that hasn't been collected by GC yet,
+   * which the reap below alone wouldn't catch (mysql2_abandon_active_stream).
+   * Deliberately last, right before the actual network write below --
+   * rb_ivar_set/rb_str_export_to_enc above can themselves allocate, and
+   * under GC.stress (or just unlucky timing) that can be what triggers the
+   * GC sweep that abandons a stream, so reaping any earlier can still leave
+   * a fresh pending free undrained when we send. Must also run before the
+   * state assignment below: mysql2_abandon_active_stream only acts while
+   * state is still STREAMING. */
+  mysql2_abandon_active_stream(wrapper);
   mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
+
+  wrapper->state = MYSQL2_CLIENT_QUERYING;
 
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
@@ -1448,7 +1475,10 @@ static VALUE rb_mysql_client_ping(VALUE self) {
 
   /* A low-traffic, frequently-called method; a good opportunistic safe
    * point to close out statements that were GC'd while we were busy, and to
-   * free any abandoned result sets. */
+   * free any abandoned result sets -- mysql_ping() itself sends a command,
+   * so a still-live abandoned stream needs the same active drain as
+   * rb_mysql_query, not just the reap. */
+  mysql2_abandon_active_stream(wrapper);
   mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
 

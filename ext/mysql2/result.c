@@ -174,7 +174,19 @@ static void rb_mysql_result_free(void *ptr) {
    * abandoned stream: the actual drain (what would make the connection
    * genuinely idle again) may have just been deferred by the call below,
    * not performed. It goes back to IDLE once mysql2_reap_pending_result_frees
-   * really runs the deferred free, at the next safe point. */
+   * really runs the deferred free, at the next safe point.
+   *
+   * active_streaming_result is different: it must be cleared right here
+   * regardless, even though state stays STREAMING. This object is about to
+   * be reclaimed, and rb_mysql_client_mark/compact touch that field
+   * unconditionally -- leaving it pointing here would crash a later GC
+   * pass. Only one stream can be open at a time, so if this wrapper is
+   * still an unfinished stream, it's the one (if any) that
+   * active_streaming_result currently references. */
+  if (wrapper->is_streaming && !wrapper->streamingComplete && wrapper->client_wrapper) {
+    wrapper->client_wrapper->active_streaming_result = Qnil;
+  }
+
   rb_mysql_result_free_result(wrapper, 1);
 
   // If the GC gets to client first it will be nil
@@ -227,6 +239,23 @@ static const rb_data_type_t rb_mysql_result_type = {
   RUBY_TYPED_FREE_IMMEDIATELY,
 #endif
 };
+
+/* See result.h. Called from ordinary Ruby-level code (has the GVL, not a
+ * GC sweep), so unlike rb_mysql_result_free above it's fine to pass
+ * from_dfree_callback=0 to rb_mysql_result_free_result: for a streaming
+ * cursor that was abandoned mid-iteration but is still live (not yet
+ * collected by GC), this performs the real, blocking
+ * mysql_free_result()/mysql_stmt_free_result() call right now instead of
+ * deferring it, so the server and client agree the previous command is
+ * done before the next one goes out. */
+void mysql2_result_force_free(VALUE self) {
+  GET_RESULT(self);
+
+  if (wrapper->resultFreed) return;
+
+  rb_mysql_result_free_result(wrapper, 0);
+  wrapper->streamingComplete = 1;
+}
 
 /*
  * for small results, this won't hit the network, but there's no
@@ -1158,6 +1187,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
       // safe to reap here rather than waiting for the next command.
       if (wrapper->client_wrapper) {
         wrapper->client_wrapper->state = MYSQL2_CLIENT_IDLE;
+        wrapper->client_wrapper->active_streaming_result = Qnil;
         mysql2_reap_pending_result_frees(wrapper->client_wrapper);
         mysql2_reap_pending_stmt_closes(wrapper->client_wrapper);
       }

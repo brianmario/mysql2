@@ -626,7 +626,7 @@ This gem is tested with the following Ruby versions on Linux and macOS:
 
 This gem is tested with the following MySQL and MariaDB versions:
 
-* MySQL 8.0, 8.4
+* MySQL 8.0, 8.4, 9.7
 * MySQL Connector/C 6.0, 6.1, 8.0 (primarily on Windows)
 * MariaDB 10.6, 10.11, 11.4
 * MariaDB Connector/C 2.x, 3.x

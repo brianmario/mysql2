@@ -1359,11 +1359,11 @@ static VALUE rb_mysql_client_database(VALUE self) {
   GET_CLIENT(self);
 
   char *db = wrapper->client->db;
-  if (!db) {
+  if (!db || db[0] == '\0') {
     return Qnil;
   }
 
-  return rb_str_new_cstr(wrapper->client->db);
+  return rb_str_new_cstr(db);
 }
 
 /* call-seq:

@@ -13,7 +13,17 @@ gem 'rake-compiler', '~> 1.2.0'
 gem 'irb', require: false
 
 group :test do
-  gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
+  unless RUBY_PLATFORM =~ /mswin|mingw/
+    if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('4.0')
+      # eventmachine 1.2.7's bundled fastfilereader C++ extension uses
+      # Data_Wrap_Struct/Data_Get_Struct, removed from Ruby 4.0's headers.
+      # Fixed on eventmachine's master (not yet released), so track that
+      # until a new release is cut.
+      gem 'eventmachine', github: 'eventmachine/eventmachine'
+    else
+      gem 'eventmachine'
+    end
+  end
   gem 'rspec', '~> 3.2'
 
   gem 'rubocop'

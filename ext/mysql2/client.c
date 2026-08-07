@@ -245,6 +245,7 @@ static void rb_mysql_client_compact(void * wrapper) {
   if (w) {
     rb_mysql2_gc_location(w->encoding);
     rb_mysql2_gc_location(w->active_fiber);
+    rb_mysql2_gc_location(w->prepared_statements);
   }
 }
 

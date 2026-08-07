@@ -25,6 +25,23 @@ typedef struct mysql2_pending_stmt_close {
   struct mysql2_pending_stmt_close *next;
 } mysql2_pending_stmt_close;
 
+/* A result set (MYSQL_RES and/or the row-fetch state of a MYSQL_STMT) whose
+ * Ruby Result wrapper was freed while it was an abandoned, not-fully-drained
+ * stream (mysql_use_result(), or a server-side cursor opened for a streaming
+ * prepared statement). Actually releasing either one can require reading and
+ * discarding whatever rows are still queued on the wire
+ * (mysql_free_result()'s flush_use_result, or mysql_stmt_free_result()
+ * discarding an open cursor's outstanding rows) -- blocking network I/O,
+ * unsafe from a dfree callback that may run during a GC sweep for the same
+ * reason as mysql2_pending_stmt_close above. Populated only from Result's
+ * dfree callback, so must never touch a Ruby VALUE or call back into the
+ * VM. */
+typedef struct mysql2_pending_result_free {
+  MYSQL_RES *result; /* NULL if nothing to free at this level */
+  MYSQL_STMT *stmt;  /* NULL for plain (non-prepared) results */
+  struct mysql2_pending_result_free *next;
+} mysql2_pending_result_free;
+
 typedef struct {
   VALUE encoding;
   VALUE active_fiber; /* rb_fiber_current() or Qnil */
@@ -42,6 +59,8 @@ typedef struct {
   mysql2_client_state_t state;
   mysql2_pending_stmt_close *pending_stmt_closes;
   unsigned long pending_stmt_close_count; /* O(1) mirror of the list above, for Client#pending_prepared_statement_closes */
+  mysql2_pending_result_free *pending_result_frees;
+  unsigned long pending_result_free_count;
 } mysql_client_wrapper;
 
 void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result);
@@ -79,5 +98,27 @@ void mysql2_reap_pending_stmt_closes(mysql_client_wrapper *wrapper);
  * prunes prepared_statements, since this runs in ordinary Ruby context and
  * can safely touch both. */
 void mysql2_drop_pending_stmt_closes(mysql_client_wrapper *wrapper);
+
+/* Safe to call from a dfree callback (GC sweep context): only touches C
+ * memory owned by wrapper, never the Ruby VM, never blocks on I/O. */
+void mysql2_enqueue_pending_result_free(mysql_client_wrapper *wrapper, MYSQL_RES *result, MYSQL_STMT *stmt);
+
+/* Must only be called from ordinary Ruby-level code (has the GVL, not
+ * inside a GC sweep): actually frees queued result sets, which may block on
+ * network I/O to discard unread rows. Call before starting a new command on
+ * the connection, and right after a streaming result finishes or is
+ * abandoned. Must be called before mysql2_reap_pending_stmt_closes at any
+ * shared call site: a statement's outstanding result must be freed before
+ * the statement handle itself is closed. */
+void mysql2_reap_pending_result_frees(mysql_client_wrapper *wrapper);
+
+/* Also ordinary-Ruby-level-only, like the reap above, but never attempts
+ * mysql_free_result()/mysql_stmt_free_result(): for Client#close, where the
+ * connection is about to go away regardless. This does leak the client-side
+ * memory for any not-yet-drained result sets (unlike prepared statements,
+ * MYSQL_RES buffers are not cleaned up as a side effect of mysql_close()) --
+ * the same tradeoff already accepted by mysql2_drop_pending_stmt_closes for
+ * statements that can't be closed server-side without a round trip. */
+void mysql2_drop_pending_result_frees(mysql_client_wrapper *wrapper);
 
 #endif

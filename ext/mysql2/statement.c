@@ -171,7 +171,10 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
       stmt_wrapper->client_wrapper->refcount++;
 
       /* We're about to prepare on this connection: a safe point to close
-       * out any statements that were GC'd while it was last busy. */
+       * out any statements that were GC'd while it was last busy, and to
+       * free any abandoned result sets left over from a stream that was
+       * dropped mid-iteration. */
+      mysql2_reap_pending_result_frees(stmt_wrapper->client_wrapper);
       mysql2_reap_pending_stmt_closes(stmt_wrapper->client_wrapper);
     } else {
       stmt_wrapper->client_wrapper = NULL;
@@ -348,7 +351,12 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   GET_CLIENT(stmt_wrapper->client);
 
   /* We're about to issue a new command on this connection: a safe point to
-   * close out any statements that were GC'd while it was last busy. */
+   * close out any statements that were GC'd while it was last busy, and to
+   * free any abandoned result sets left over from a stream that was
+   * dropped mid-iteration -- including on this very statement handle, if
+   * it was previously executed as a stream and abandoned before being
+   * fully drained. That must happen before we touch stmt below again. */
+  mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
 
   conn_enc = rb_to_encoding(wrapper->encoding);
@@ -554,6 +562,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     // no data and no error, so query was not a SELECT
+    mysql2_reap_pending_result_frees(wrapper);
     mysql2_reap_pending_stmt_closes(wrapper);
     return Qnil;
   }
@@ -569,6 +578,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     // The whole result set is buffered locally; free to reap and to run
     // another command right away.
     wrapper->state = MYSQL2_CLIENT_IDLE;
+    mysql2_reap_pending_result_frees(wrapper);
     mysql2_reap_pending_stmt_closes(wrapper);
   } else {
     // A cursor is now open on the server; leave the connection BUSY until
@@ -683,7 +693,12 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
 
       /* Ordinary Ruby-level call, not GC/dfree: a safe point to also close
        * out any other statements that were GC'd while the connection was
-       * last busy. */
+       * last busy. Reap pending result frees first: this statement itself
+       * may have a deferred mysql_stmt_free_result() still queued (from an
+       * abandoned streaming result on it), and that must run before
+       * nogvl_stmt_close below frees the same MYSQL_STMT* out from under
+       * it. */
+      mysql2_reap_pending_result_frees(wrapper);
       mysql2_reap_pending_stmt_closes(wrapper);
 
       stmt_wrapper->closed = 1;

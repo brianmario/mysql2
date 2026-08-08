@@ -1359,6 +1359,9 @@ static VALUE rb_mysql_client_database(VALUE self) {
   GET_CLIENT(self);
 
   char *db = wrapper->client->db;
+  // Oracle's libmysqlclient leaves this NULL when no database is selected;
+  // MariaDB Connector/C leaves it as an empty string instead. Treat both as
+  // "no database" so the two client libraries behave consistently.
   if (!db || db[0] == '\0') {
     return Qnil;
   }

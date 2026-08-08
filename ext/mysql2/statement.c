@@ -1,12 +1,10 @@
 #include <mysql2_ext.h>
 
-#include <math.h>
-
 extern VALUE mMysql2, cMysql2Error;
 static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year,
-  intern_query_options;
+  intern_query_options, intern_mul, intern_truncate;
 
 #ifndef NEW_TYPEDDATA_WRAPPER
 #define TypedData_Get_Struct(obj, type, ignore, sval) Data_Get_Struct(obj, type, sval)
@@ -397,7 +395,11 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
             if (CLASS_OF(argv[i]) == rb_cTime) {
               t.second_part = FIX2INT(rb_funcall(rb_time, intern_usec, 0));
             } else if (CLASS_OF(argv[i]) == cDateTime) {
-              t.second_part = (unsigned long)round(NUM2DBL(rb_funcall(rb_time, intern_sec_fraction, 0)) * 1000000);
+              // sec_fraction is an exact Rational; keep the multiply in
+              // Rational-space and only truncate to an integer at the end,
+              // so no floating-point error can creep into the microseconds.
+              VALUE usec = rb_funcall(rb_funcall(rb_time, intern_sec_fraction, 0), intern_mul, 1, INT2FIX(1000000));
+              t.second_part = NUM2ULONG(rb_funcall(usec, intern_truncate, 0));
             }
 
             t.second = FIX2INT(rb_funcall(rb_time, intern_sec, 0));
@@ -658,6 +660,8 @@ void init_mysql2_statement(void) {
   intern_each = rb_intern("each");
 
   intern_sec_fraction = rb_intern("sec_fraction");
+  intern_mul = rb_intern("*");
+  intern_truncate = rb_intern("truncate");
   intern_usec = rb_intern("usec");
   intern_sec = rb_intern("sec");
   intern_min = rb_intern("min");

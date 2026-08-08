@@ -713,7 +713,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       it 'should be impervious to connection-corrupting timeouts in #execute' do
         # attempt to break the connection
         stmt = @client.prepare('SELECT SLEEP(?)')
-        expect { Timeout.timeout(0.1) { stmt.execute(0.2) } }.to raise_error(Timeout::Error)
+        expect { Timeout.timeout(0.1) { stmt.execute(1) } }.to raise_error(Timeout::Error)
         stmt.close
 
         # expect the connection to not be broken

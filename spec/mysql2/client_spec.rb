@@ -333,7 +333,15 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
       it "should not close connections when running in a child process" do
         run_gc
-        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        # The fd-invalidation trick that makes this safe (see invalidate_fd()
+        # in ext/mysql2/client.c) only patches up the raw socket fd. A TLS
+        # connection also has an OpenSSL session/record-layer state machine
+        # that fork() duplicates right along with the fd; the child's real
+        # round-trip in this test advances that state independently of the
+        # parent's copy, permanently desyncing the parent's side regardless
+        # of anything invalidate_fd() does afterward. So this test is only
+        # meaningful over a plaintext connection.
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge('ssl_mode' => 'disabled'))
         client.automatic_close = false
 
         child = fork do

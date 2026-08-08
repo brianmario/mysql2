@@ -20,4 +20,11 @@ EOF
 
 cp support/C74CD1D8.asc /etc/apt/keyrings/mariadb-keyring.asc
 apt update
-apt install -y -o Dpkg::Options::='--force-confnew' mariadb-server libmariadb-dev
+# CLIENT_ONLY=1: install just the client library, skipping the local
+# server -- used to test this client version against a differently
+# versioned server, run separately as a job `services:` container.
+if [ "${CLIENT_ONLY-}" = 1 ]; then
+  apt install -y -o Dpkg::Options::='--force-confnew' libmariadb-dev
+else
+  apt install -y -o Dpkg::Options::='--force-confnew' mariadb-server libmariadb-dev
+fi

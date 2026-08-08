@@ -9,6 +9,10 @@ jobs:
     # points the whole job at a Fedora image instead of running directly on
     # the ubuntu-24.04 host -- Fedora isn't offered as a native runner OS.
     container: ${{ matrix.container }}
+    # Empty/unset except for the mismatched-client/server rows below, which
+    # run their server as a separate service container instead of installing
+    # one locally -- see the matrix comment there for why.
+    services: ${{ matrix.services }}
     continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       matrix:
@@ -62,6 +66,19 @@ jobs:
           - {os: ubuntu-24.04, ruby: 'system', db: 'fedora:latest', distro: fedora, container: {image: 'fedora:latest', options: '--cap-add=SYS_PTRACE --security-opt seccomp=unconfined --add-host=mysql2gem.example.com:127.0.0.1'}}
           - {os: ubuntu-24.04, ruby: 'system', db: 'fedora:rawhide', distro: fedora, container: {image: 'fedora:rawhide', options: '--cap-add=SYS_PTRACE --security-opt seccomp=unconfined'}, ssl_cert_dir: '/tmp/mysql2', ssl_cert_host: 'localhost'}
 
+          # Mismatched client/server version pairs. Every other entry in this
+          # matrix installs a client library from the same version-track as
+          # the server it talks to, so a difference in observed behavior
+          # (e.g. #1465's Client#database nil-vs-"" ) can't tell us whether
+          # the client or the server changed -- both moved together. These
+          # rows isolate that: install one version's client library only
+          # (CLIENT_ONLY=1, no local server), and point it at a *different*
+          # version's server running as an independent `services:` container.
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb11.8-client_mariadb12.3-server', client_only: mariadb11.8, services: {mariadb: {image: 'mariadb:12.3', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb12.3-client_mariadb11.8-server', client_only: mariadb12.3, services: {mariadb: {image: 'mariadb:11.8', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mysql84-client_mysql97-server', client_only: mysql84, services: {mysql: {image: 'mysql:9.7', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mysql97-client_mysql84-server', client_only: mysql97, services: {mysql: {image: 'mysql:8.4', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+
           # Allow failure due to this issue:
           # https://github.com/brianmario/mysql2/issues/1194
           - {os: macos-latest, ruby: '4.0', db: mariadb@11.4, ssl: openssl@3, allow-failure: true}
@@ -89,13 +106,15 @@ jobs:
       # Fedora already gets 127.0.0.1 mapped to mysql2gem.example.com via
       # --add-host in the container options above (rawhide's ssl_cert_host
       # is 'localhost', which needs no mapping); everything else does it here.
-      - if: (runner.os == 'Linux' || runner.os == 'macOS') && matrix.distro != 'fedora'
+      # Not needed for the mismatched-client/server rows -- they don't do
+      # any SSL hostname matching.
+      - if: (runner.os == 'Linux' || runner.os == 'macOS') && matrix.distro != 'fedora' && !matrix.client_only
         run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
       - if: runner.os == 'Windows'
         run: echo "127.0.0.1 mysql2gem.example.com" | tee -a C:/Windows/System32/drivers/etc/hosts
-      - if: matrix.distro != 'fedora'
+      - if: matrix.distro != 'fedora' && !matrix.client_only
         run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
-      - if: matrix.distro != 'fedora'
+      - if: matrix.distro != 'fedora' && !matrix.client_only
         run: bash ci/setup.sh
       - if: matrix.distro == 'fedora'
         run: |
@@ -103,6 +122,28 @@ jobs:
           echo "TEST_RUBY_MYSQL2_SSL_CERT_HOST=${{ matrix.ssl_cert_host || '' }}" >> $GITHUB_ENV
       - if: matrix.distro == 'fedora'
         run: bash ci/fedora.sh
+      # Mismatched client/server rows: install only the client library
+      # (matrix.client_only names which existing ci/<db>.sh script to reuse
+      # in client-only mode), then point spec/configuration.yml straight at
+      # the `services:` server container instead of a local socket -- the
+      # Rake task that normally generates that file from the .example only
+      # runs if it doesn't already exist, so writing it here beats it to it.
+      - if: matrix.client_only
+        run: sudo CLIENT_ONLY=1 bash ci/${{ matrix.client_only }}.sh
+      - if: matrix.client_only
+        run: |
+          cat > spec/configuration.yml <<'YAML'
+          root:
+            host: 127.0.0.1
+            username: root
+            password:
+            database: test
+          user:
+            host: 127.0.0.1
+            username: root
+            password:
+            database: test
+          YAML
       # Set the verbose option in the Makefile to print compiling command lines.
       - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
       - if: matrix.ssl

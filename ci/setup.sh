@@ -44,6 +44,12 @@ if [[ -n ${DB-} && x$DB =~ ^xmysql84 ]]; then
   CHANGED_PASSWORD_SHA2=true
 fi
 
+# Install MySQL 9.7 if DB=mysql97
+if [[ -n ${DB-} && x$DB =~ ^xmysql97 ]]; then
+  sudo bash ci/mysql97.sh
+  CHANGED_PASSWORD_SHA2=true
+fi
+
 # Install MariaDB 10.6 if DB=mariadb10.6
 if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.6 ]]; then
   sudo bash ci/mariadb106.sh

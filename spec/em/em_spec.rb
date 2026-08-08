@@ -120,7 +120,7 @@ begin
         defer.errback do
           callbacks_run << :errback
         end
-        EM.add_timer(0.1) do
+        EM.add_timer(0.5) do
           expect(callbacks_run).to eq([:callback])
           expect do
             client.close

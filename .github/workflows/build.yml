@@ -5,6 +5,10 @@ jobs:
     name: >-
       ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
     runs-on: ${{ matrix.os }}
+    # Empty/unset for every entry except the Fedora ones below, where it
+    # points the whole job at a Fedora image instead of running directly on
+    # the ubuntu-24.04 host -- Fedora isn't offered as a native runner OS.
+    container: ${{ matrix.container }}
     continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       matrix:
@@ -42,6 +46,13 @@ jobs:
           # - {os: windows-2022, ruby: '3.2', db: mysql80}
           # - {os: windows-2022, ruby: '2.7', db: mysql80}
 
+          # Fedora, which GitHub doesn't offer as a native runner OS -- these
+          # run inside a container on the ubuntu-24.04 host instead (see the
+          # job-level `container:` above). ci/fedora.sh does the distro-side
+          # setup that ci/setup.sh does for the native-runner entries above.
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'fedora:latest', distro: fedora, container: {image: 'fedora:latest', options: '--cap-add=SYS_PTRACE --security-opt seccomp=unconfined --add-host=mysql2gem.example.com:127.0.0.1'}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'fedora:rawhide', distro: fedora, container: {image: 'fedora:rawhide', options: '--cap-add=SYS_PTRACE --security-opt seccomp=unconfined'}, ssl_cert_dir: '/tmp/mysql2', ssl_cert_host: 'localhost'}
+
           # Allow failure due to this issue:
           # https://github.com/brianmario/mysql2/issues/1194
           - {os: macos-latest, ruby: '4.0', db: mariadb@11.4, ssl: openssl@3, allow-failure: true}
@@ -63,12 +74,23 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-      - if: runner.os == 'Linux' || runner.os == 'macOS'
+      # Fedora already gets 127.0.0.1 mapped to mysql2gem.example.com via
+      # --add-host in the container options above (rawhide's ssl_cert_host
+      # is 'localhost', which needs no mapping); everything else does it here.
+      - if: (runner.os == 'Linux' || runner.os == 'macOS') && matrix.distro != 'fedora'
         run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
       - if: runner.os == 'Windows'
         run: echo "127.0.0.1 mysql2gem.example.com" | tee -a C:/Windows/System32/drivers/etc/hosts
-      - run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
-      - run: bash ci/setup.sh
+      - if: matrix.distro != 'fedora'
+        run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
+      - if: matrix.distro != 'fedora'
+        run: bash ci/setup.sh
+      - if: matrix.distro == 'fedora'
+        run: |
+          echo "TEST_RUBY_MYSQL2_SSL_CERT_DIR=${{ matrix.ssl_cert_dir || '' }}" >> $GITHUB_ENV
+          echo "TEST_RUBY_MYSQL2_SSL_CERT_HOST=${{ matrix.ssl_cert_host || '' }}" >> $GITHUB_ENV
+      - if: matrix.distro == 'fedora'
+        run: bash ci/fedora.sh
       # Set the verbose option in the Makefile to print compiling command lines.
       - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
       - if: matrix.ssl

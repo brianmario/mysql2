@@ -1061,13 +1061,6 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
 
-  /* We're about to issue a new command: this is a safe point to close out
-   * any statements that were GC'd while we were busy earlier, and to free
-   * any abandoned result sets left over from a stream that was dropped
-   * mid-iteration. */
-  mysql2_reap_pending_result_frees(wrapper);
-  mysql2_reap_pending_stmt_closes(wrapper);
-
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   rb_ivar_set(self, intern_current_query_options, current);
@@ -1081,6 +1074,17 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 
   rb_mysql_client_set_active_fiber(self, false);
   wrapper->state = MYSQL2_CLIENT_QUERYING;
+
+  /* We're about to issue a new command: this is a safe point to close out
+   * any statements that were GC'd while we were busy earlier, and to free
+   * any abandoned result sets left over from a stream that was dropped
+   * mid-iteration. Deliberately last, right before the actual network
+   * write below -- rb_ivar_set/rb_str_export_to_enc above can themselves
+   * allocate, and under GC.stress (or just unlucky timing) that can be
+   * what triggers the GC sweep that abandons a stream, so reaping any
+   * earlier can still leave a fresh pending free undrained when we send. */
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
 
 #ifndef _WIN32
   rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);

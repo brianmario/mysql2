@@ -539,6 +539,16 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     }
   }
 
+  // Reap once more, right before the actual network write below: the bind
+  // setup above (rb_str_export_to_enc, rb_funcall for Time/DateTime/BigDecimal
+  // conversions, rb_hash_dup) can itself allocate, and under GC.stress (or
+  // just unlucky timing) that can be what triggers the GC sweep that abandons
+  // a *different* stream on this connection -- the earlier reap up top can't
+  // see that yet, and leaving it undrained here would desync the protocol
+  // once this command's bytes hit the wire ahead of the old stream's rows.
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
   // From here through mysql_stmt_result_metadata/mysql_stmt_store_result,
   // the connection is BUSY: a Statement freed elsewhere during this window
   // must not be allowed to write COM_STMT_CLOSE to this socket. See

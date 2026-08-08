@@ -36,6 +36,10 @@ jobs:
           # db: on Linux, ci/setup.sh installs the specified packages
           # db: on MacOS, installs a Homebrew package use "name@X.Y" to specify a version
 
+          - {os: ubuntu-24.04, ruby: '4.0', db: mariadb12.3}
+          - {os: ubuntu-24.04, ruby: '3.4', db: mariadb12.3}
+          - {os: ubuntu-24.04, ruby: '4.0', db: mariadb11.8}
+          - {os: ubuntu-24.04, ruby: '3.4', db: mariadb11.8}
           - {os: ubuntu-24.04, ruby: '4.0', db: mariadb11.4}
           - {os: ubuntu-24.04, ruby: '3.4', db: mariadb11.4}
           - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.11}

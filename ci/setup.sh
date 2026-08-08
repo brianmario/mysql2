@@ -3,34 +3,11 @@
 set -eux
 
 # Change the password to be empty.
-CHANGED_PASSWORD=false
 CHANGED_PASSWORD_SHA2=false
 # Change the password to be empty, recreating the root user on mariadb < 10.2
 # where ALTER USER is not available.
 # https://stackoverflow.com/questions/56052177/
 CHANGED_PASSWORD_BY_RECREATE=false
-
-# Install the default used DB if DB is not set.
-if [[ -n ${GITHUB_ACTIONS-} && -z ${DB-} ]]; then
-  if command -v lsb_release > /dev/null; then
-    case "$(lsb_release -cs)" in
-    xenial | bionic)
-      sudo apt-get install -qq mysql-server-5.7 mysql-client-core-5.7 mysql-client-5.7
-      CHANGED_PASSWORD=true
-      ;;
-    focal)
-      sudo apt-get install -qq mysql-server-8.0 mysql-client-core-8.0 mysql-client-8.0
-      CHANGED_PASSWORD=true
-      ;;
-    jammy)
-      sudo apt-get install -qq mysql-server-8.0 mysql-client-core-8.0 mysql-client-8.0
-      CHANGED_PASSWORD=true
-      ;;
-    *)
-      ;;
-    esac
-  fi
-fi
 
 # Install MySQL 8.0 if DB=mysql80
 if [[ -n ${DB-} && x$DB =~ ^xmysql80 ]]; then
@@ -113,11 +90,7 @@ if ! [[ x$OSTYPE =~ ^xdarwin ]]; then
   fi
 fi
 
-if [ "${CHANGED_PASSWORD}" = true ]; then
-  # https://www.percona.com/blog/2016/03/16/change-user-password-in-mysql-5-7-with-plugin-auth_socket/
-  sudo mysql ${MYSQL_OPTS} -u "${DB_SYS_USER}" \
-    -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY ''"
-elif [ "${CHANGED_PASSWORD_SHA2}" = true ]; then
+if [ "${CHANGED_PASSWORD_SHA2}" = true ]; then
   # In MySQL 5.7, the default authentication plugin is mysql_native_password.
   # As of MySQL 8.0, the default authentication plugin is changed to caching_sha2_password.
   sudo mysql ${MYSQL_OPTS} -u "${DB_SYS_USER}" \

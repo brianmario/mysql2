@@ -35,6 +35,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(client.query("SELECT 1 AS one").first).to eq("one" => 1)
   end
 
+  it "should connect via TLS" do
+    client = new_client(ssl_mode: 'required')
+    expect(client.ssl_cipher).not_to be_empty
+  end
+
   it "should raise an exception on create for invalid encodings" do
     expect do
       new_client(encoding: "fake")

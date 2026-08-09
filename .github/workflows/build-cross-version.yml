@@ -44,11 +44,16 @@ jobs:
             username: root
             password:
             database: test
+            ssl_mode: required
           user:
             host: 127.0.0.1
             username: root
             password:
             database: test
+            ssl_mode: required
           YAML
       - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
+      # No local server: the client library is installed standalone and
+      # points at a `services:` container, so there's no Unix socket to test.
+      - run: echo "MYSQL2_SPEC_NO_LOCAL_SOCKET=1" >> $GITHUB_ENV
       - run: bundle exec rake spec

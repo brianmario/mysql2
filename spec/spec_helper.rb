@@ -51,6 +51,24 @@ RSpec.configure do |config|
     end
   end
 
+  def new_socket_client(option_overrides = {})
+    skip "no local server socket available" if ENV['MYSQL2_SPEC_NO_LOCAL_SOCKET']
+
+    socket = new_client(ssl_mode: 'disabled').query('SELECT @@socket AS socket').first['socket']
+    credentials = DatabaseCredentials['root'].reject { |k, _| %w[host port ssl_mode].include?(k) }
+    client = Mysql2::Client.new(credentials.merge(socket: socket).merge(option_overrides))
+    @clients ||= []
+    @clients << client
+    return client unless block_given?
+
+    begin
+      yield client
+    ensure
+      client.close
+      @clients.delete(client)
+    end
+  end
+
   def new_thread(&block)
     @threads << (thr = Thread.new(&block))
     thr

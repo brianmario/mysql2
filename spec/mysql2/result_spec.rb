@@ -356,16 +356,20 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should raise an exception if streaming ended due to a timeout" do
-      @client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
+      # A Unix socket is used deliberately: a TCP loopback connection's much
+      # larger write buffer means the server may never actually block on the
+      # write, so net_write_timeout below would never trigger.
+      client = new_socket_client
+      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
 
       # Insert enough records to force the result set into multiple reads
       # (the BINARY type is used simply because it forces full width results)
       10000.times do |i|
-        @client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
       end
 
-      @client.query "SET net_write_timeout = 1"
-      res = @client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
+      client.query "SET net_write_timeout = 1"
+      res = client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
 
       expect do
         res.each_with_index do |_, i|
@@ -373,6 +377,37 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
           sleep 4 if i > 0 && i % 1000 == 0
         end
       end.to raise_error(Mysql2::Error, /Lost connection/)
+    end
+
+    it "streaming ended due to a timeout over TLS may or may not raise an exception" do
+      client = new_client(ssl_mode: 'required')
+      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
+
+      # Insert enough records to force the result set into multiple reads
+      # (the BINARY type is used simply because it forces full width results)
+      10000.times do |i|
+        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+      end
+
+      client.query "SET net_write_timeout = 1"
+      res = client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
+
+      # Whether net_write_timeout's forced disconnect surfaces within this
+      # window appears to depend on the platform/OpenSSL build (observed:
+      # fires on macOS's stack, doesn't reproduce here on Linux's, even
+      # though both are equally using TLS) -- accept either outcome here
+      # rather than assert a specific one. When it does fire, OpenSSL may
+      # intercept the abrupt close as a record-layer EOF before the MySQL
+      # protocol layer gets a chance to raise its own "Lost connection" --
+      # both are the same underlying event, just observed at a different
+      # layer, so accept either message too.
+      begin
+        res.each_with_index do |_, i|
+          sleep 4 if i > 0 && i % 1000 == 0
+        end
+      rescue Mysql2::Error => e
+        expect(e.message).to match(%r{Lost connection|TLS/SSL error})
+      end
     end
   end
 

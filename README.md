@@ -139,17 +139,20 @@ to the mysql2 build process.
 Make sure that you have Ruby and the DevKit compilers installed. We recommend
 the [Ruby Installer](https://rubyinstaller.org) distribution.
 
-By default, the mysql2 gem will download and use MySQL Connector/C from
-mysql.com. If you prefer to use a local installation of Connector/C, add the
-flag `--with-mysql-dir=c:/mysql-connector-c-x-y-z` (_this path may use forward slashes_).
+By default, the precompiled mysql2 gem for Windows vendors MariaDB Connector/C,
+built from the same MSYS2 mingw-w64 package a native Windows build installs via
+`pacman` (see the gemspec's `msys2_mingw_dependencies`). If you prefer to use a
+local installation of Connector/C, add the flag
+`--with-mysql-dir=c:/path/to/connector-c` (_this path may use forward slashes_).
 
-By default, the `libmysql.dll` library will be copied into the mysql2 gem
+By default, the `libmariadb.dll` library will be copied into the mysql2 gem
 directory. To prevent this, add the flag `--no-vendor-libmysql`. The mysql2 gem
-will search for `libmysql.dll` in the following paths, in order:
+will search for `libmariadb.dll` in the following paths, in order:
 
-* Environment variable `RUBY_MYSQL2_LIBMYSQL_DLL=C:\path\to\libmysql.dll`
-  (_note the Windows-style backslashes_).
-* In the mysql2 gem's own directory `vendor/libmysql.dll`
+* Environment variable `RUBY_MYSQL2_LIBMARIADB_DLL=C:\path\to\libmariadb.dll`
+  (_note the Windows-style backslashes_). The older `RUBY_MYSQL2_LIBMYSQL_DLL`
+  name is still read as a fallback.
+* In the mysql2 gem's own directory `vendor/libmariadb.dll`
 * In the system's default library search paths.
 
 ## Usage

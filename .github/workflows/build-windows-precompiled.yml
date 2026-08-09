@@ -1,0 +1,59 @@
+name: Build (Windows precompiled gem)
+on:
+  workflow_call:
+jobs:
+  build:
+    name: >-
+      install precompiled gem on ${{ matrix.os }} ruby ${{ matrix.ruby }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Ruby's RubyInstaller builds switched to the platform tag
+          # 'x64-mingw-ucrt' around Ruby 3.1; older Rubies use the
+          # traditional 'x64-mingw32' tag. Pairing each with a real Windows
+          # runner on that side of the split proves the matching precompiled
+          # gem from build-windows-cross.yml actually works, not just that
+          # it built.
+          - {os: windows-2022, ruby: '3.0', platform: x64-mingw32}
+          - {os: windows-2025, ruby: '3.4', platform: x64-mingw-ucrt}
+      fail-fast: false
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-precompiled-gems
+      - name: Install the precompiled gem (no compiler needed)
+        run: |
+          gemfile=$(ls mysql2-*-${{ matrix.platform }}.gem)
+          echo "Installing $gemfile"
+          gem install --local "$gemfile"
+      - name: Initialize and start MySQL
+        run: |
+          DATADIR="${RUNNER_TEMP}/mysql-data"
+          mkdir -p "$DATADIR"
+          mysqld --initialize-insecure --datadir="$DATADIR"
+          mysqld --datadir="$DATADIR" --port=3306 --bind-address=127.0.0.1 \
+            --pid-file="${RUNNER_TEMP}/mysqld.pid" > "${RUNNER_TEMP}/mysqld.log" 2>&1 &
+          disown
+      - name: Wait for MySQL and configure root user
+        run: |
+          for _ in $(seq 1 30); do
+            mysqladmin -h127.0.0.1 -P3306 -uroot ping 2>/dev/null && break
+            sleep 1
+          done
+          mysql -h127.0.0.1 -P3306 -uroot -e \
+            "ALTER USER 'root'@'localhost' IDENTIFIED BY 'root'; CREATE DATABASE IF NOT EXISTS test;"
+      - name: Smoke test the installed gem
+        run: |
+          ruby -rmysql2 -e "
+            client = Mysql2::Client.new(host: '127.0.0.1', port: 3306, username: 'root', password: 'root', database: 'test')
+            result = client.query('SELECT 1 AS one').first
+            raise \"unexpected result: #{result.inspect}\" unless result == {'one' => 1}
+            puts \"OK: precompiled gem works, connected via #{Mysql2::Client.info[:version]}\"
+          "

@@ -21,3 +21,8 @@ jobs:
   #   uses: ./.github/workflows/build-cross-version.yml
   windows:
     uses: ./.github/workflows/build-windows.yml
+  windows-cross:
+    uses: ./.github/workflows/build-windows-cross.yml
+  windows-precompiled:
+    needs: windows-cross
+    uses: ./.github/workflows/build-windows-precompiled.yml

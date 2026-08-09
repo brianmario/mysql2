@@ -11,40 +11,40 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
 
   if RUBY_PLATFORM =~ /mswin|mingw/ && !defined?(RubyInstaller)
     # Expand the path because the build dir is 3-4 levels deep in tmp/platform/version/
-    connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir}", __FILE__)
+    native_platform = RUBY_PLATFORM =~ /ucrt/ ? 'x64-mingw-ucrt' : 'x64-mingw32'
+    connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir(native_platform)}", __FILE__)
     ext.config_options = ["--with-mysql-dir=#{connector_dir}"]
   else
     ext.cross_compile = true
-    ext.cross_platform = ENV['CROSS_PLATFORMS'] ? ENV['CROSS_PLATFORMS'].split(':') : ['x86-mingw32', 'x86-mswin32-60', 'x64-mingw32']
+    ext.cross_platform = ENV['CROSS_PLATFORMS'] ? ENV['CROSS_PLATFORMS'].split(':') : ['x64-mingw32', 'x64-mingw-ucrt']
     ext.cross_config_options << {
-      'x86-mingw32'    => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__),
-      'x86-mswin32-60' => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x86')}", __FILE__),
-      'x64-mingw32'    => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x64')}", __FILE__),
+      'x64-mingw32'    => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x64-mingw32')}", __FILE__),
+      'x64-mingw-ucrt' => "--with-mysql-dir=" + File.expand_path("../../vendor/#{vendor_mysql_dir('x64-mingw-ucrt')}", __FILE__),
     }
 
     ext.cross_compiling do |spec|
       Rake::Task['lib/mysql2/mysql2.rb'].invoke
-      # vendor/libmysql.dll is invoked from extconf.rb
+      # vendor/libmariadb.dll is invoked from extconf.rb
       Rake::Task['vendor/README'].invoke
 
       # only the source gem has a package dependency - the binary gem ships it's own DLL version
       spec.metadata.delete('msys2_mingw_dependencies')
 
       spec.files << 'lib/mysql2/mysql2.rb'
-      spec.files << 'vendor/libmysql.dll'
+      spec.files << 'vendor/libmariadb.dll'
       spec.files << 'vendor/README'
       spec.post_install_message = <<-POST_INSTALL_MESSAGE
 
 ======================================================================================================
 
   You've installed the binary version of #{spec.name}.
-  It was built using MySQL Connector/C version #{CONNECTOR_VERSION}.
+  It was built using MariaDB Connector/C (MSYS2 package) version #{CONNECTOR_VERSION}.
   It's recommended to use the exact same version to avoid potential issues.
 
   At the time of building this gem, the necessary DLL files were retrieved from:
   #{vendor_mysql_url(spec.platform)}
 
-  This gem *includes* vendor/libmysql.dll with redistribution notice in vendor/README.
+  This gem *includes* vendor/libmariadb.dll with redistribution notice in vendor/README.
 
 ======================================================================================================
 
@@ -55,9 +55,9 @@ end
 Rake::Task[:spec].prerequisites << :compile
 
 file 'vendor/README' do
-  connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir}", __FILE__)
-  when_writing 'copying Connector/C README' do
-    cp "#{connector_dir}/README", 'vendor/README'
+  connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir('x64-mingw-ucrt')}", __FILE__)
+  when_writing 'copying Connector/C license notice' do
+    cp "#{connector_dir}/share/licenses/libmariadbclient/COPYING.LIB", 'vendor/README'
   end
 end
 
@@ -91,15 +91,10 @@ desc "Build binary gems for Windows with rake-compiler-dock"
 task 'gem:windows' do
   require 'rake_compiler_dock'
   RakeCompilerDock.sh <<-EOT
+    which zstd || (sudo apt-get update && sudo apt-get install -y zstd)
     bundle install
     rake clean
-    rm vendor/libmysql.dll
-    rake cross native gem CROSS_PLATFORMS=x86-mingw32:x86-mswin32-60
-  EOT
-  RakeCompilerDock.sh <<-EOT
-    bundle install
-    rake clean
-    rm vendor/libmysql.dll
-    rake cross native gem CROSS_PLATFORMS=x64-mingw32
+    rm -f vendor/libmariadb.dll
+    rake cross native gem CROSS_PLATFORMS=x64-mingw32:x64-mingw-ucrt
   EOT
 end

@@ -1,0 +1,62 @@
+name: Build (Windows)
+on:
+  workflow_call:
+jobs:
+  build:
+    name: >-
+      ${{ matrix.os }} ruby ${{ matrix.ruby }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # windows-2025's toolset preinstalls MySQL 8.0 client+server binaries
+          # (mysqld.exe, mysql.exe on PATH), but no running instance -- same as
+          # a fresh local dev machine, so set it up the same way ci/setup.sh
+          # does for the other platforms rather than relying on a service.
+          - {os: windows-2025, ruby: '3.4'}
+          - {os: windows-2022, ruby: '3.0'}
+      fail-fast: false
+    env:
+      BUNDLE_WITHOUT: development
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
+      - name: Initialize and start MySQL
+        run: |
+          DATADIR="${RUNNER_TEMP}/mysql-data"
+          mkdir -p "$DATADIR"
+          mysqld --initialize-insecure --datadir="$DATADIR"
+          mysqld --datadir="$DATADIR" --port=3306 --bind-address=127.0.0.1 \
+            --pid-file="${RUNNER_TEMP}/mysqld.pid" > "${RUNNER_TEMP}/mysqld.log" 2>&1 &
+          disown
+      - name: Wait for MySQL and configure root user
+        run: |
+          for _ in $(seq 1 30); do
+            mysqladmin -h127.0.0.1 -P3306 -uroot ping 2>/dev/null && break
+            sleep 1
+          done
+          mysql -h127.0.0.1 -P3306 -uroot -e \
+            "ALTER USER 'root'@'localhost' IDENTIFIED BY 'root'; CREATE DATABASE IF NOT EXISTS test;"
+          mysql -h127.0.0.1 -P3306 -uroot -proot -e \
+            "CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY 'root'; GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+      - name: Write spec/configuration.yml
+        run: |
+          cat > spec/configuration.yml <<'YAML'
+          root:
+            host: 127.0.0.1
+            username: root
+            password: root
+            database: test
+          user:
+            host: 127.0.0.1
+            username: root
+            password: root
+            database: mysql2_test
+          YAML
+      - run: bundle exec rake spec

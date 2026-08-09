@@ -6,6 +6,7 @@ jobs:
     name: >-
       install precompiled gem on ${{ matrix.os }} ruby ${{ matrix.ruby }} (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       matrix:
         include:

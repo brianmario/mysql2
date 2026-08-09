@@ -6,6 +6,7 @@ jobs:
     name: >-
       ${{ matrix.os }} ruby ${{ matrix.ruby }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       matrix:
         include:

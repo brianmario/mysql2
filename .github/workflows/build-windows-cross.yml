@@ -8,6 +8,7 @@ jobs:
     # Ubuntu runners have preinstalled -- no Windows runner needed to
     # produce the precompiled x64-mingw32 / x64-mingw-ucrt gems.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1

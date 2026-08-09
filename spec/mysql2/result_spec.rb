@@ -355,37 +355,50 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should raise an exception if streaming ended due to a timeout" do
-      @client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
+      client = new_client(ssl_mode: 'disabled')
+      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
 
       # Insert enough records to force the result set into multiple reads
       # (the BINARY type is used simply because it forces full width results)
       10000.times do |i|
-        @client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
       end
 
-      @client.query "SET net_write_timeout = 1"
-      res = @client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
+      client.query "SET net_write_timeout = 1"
+      res = client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
 
-      if @client.ssl_cipher
-        # Whether net_write_timeout's forced disconnect surfaces within
-        # this window appears to depend on the platform/OpenSSL build
-        # (observed: fires on macOS's stack, doesn't reproduce here on
-        # Linux's, even though both are equally using TLS) -- accept
-        # either outcome under TLS rather than assert a specific one.
-        begin
-          res.each_with_index do |_, i|
-            sleep 4 if i > 0 && i % 1000 == 0
-          end
-        rescue Mysql2::Error => e
-          expect(e.message).to match(/Lost connection/)
+      expect do
+        res.each_with_index do |_, i|
+          # Exhaust the first result packet then trigger a timeout
+          sleep 4 if i > 0 && i % 1000 == 0
         end
-      else
-        expect do
-          res.each_with_index do |_, i|
-            # Exhaust the first result packet then trigger a timeout
-            sleep 4 if i > 0 && i % 1000 == 0
-          end
-        end.to raise_error(Mysql2::Error, /Lost connection/)
+      end.to raise_error(Mysql2::Error, /Lost connection/)
+    end
+
+    it "streaming ended due to a timeout over TLS may or may not raise an exception" do
+      client = new_client(ssl_mode: 'required')
+      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
+
+      # Insert enough records to force the result set into multiple reads
+      # (the BINARY type is used simply because it forces full width results)
+      10000.times do |i|
+        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+      end
+
+      client.query "SET net_write_timeout = 1"
+      res = client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
+
+      # Whether net_write_timeout's forced disconnect surfaces within this
+      # window appears to depend on the platform/OpenSSL build (observed:
+      # fires on macOS's stack, doesn't reproduce here on Linux's, even
+      # though both are equally using TLS) -- accept either outcome here
+      # rather than assert a specific one.
+      begin
+        res.each_with_index do |_, i|
+          sleep 4 if i > 0 && i % 1000 == 0
+        end
+      rescue Mysql2::Error => e
+        expect(e.message).to match(/Lost connection/)
       end
     end
   end

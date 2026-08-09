@@ -725,25 +725,34 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       it 'should be impervious to connection-corrupting timeouts in #execute' do
+        client = new_client(ssl_mode: 'disabled')
+
         # attempt to break the connection
-        stmt = @client.prepare('SELECT SLEEP(?)')
+        stmt = client.prepare('SELECT SLEEP(?)')
         expect { Timeout.timeout(0.1) { stmt.execute(1) } }.to raise_error(Timeout::Error)
         stmt.close
 
-        if @client.ssl_cipher
-          # Whether interrupting a query mid-read leaves the TLS session
-          # itself resumable appears to depend on the platform/OpenSSL
-          # build (observed: recovers fine on macOS's stack, doesn't on
-          # Linux's, even though both are equally using TLS here) -- accept
-          # either outcome under TLS rather than assert a specific one.
-          begin
-            @client.query('SELECT 1')
-          rescue Mysql2::Error
-            # also acceptable over TLS -- see above
-          end
-        else
-          # expect the connection to not be broken
-          expect { @client.query('SELECT 1') }.to_not raise_error
+        # expect the connection to not be broken
+        expect { client.query('SELECT 1') }.to_not raise_error
+      end
+
+      it 'connection-corrupting timeouts in #execute over TLS may or may not break the connection' do
+        client = new_client(ssl_mode: 'required')
+
+        # attempt to break the connection
+        stmt = client.prepare('SELECT SLEEP(?)')
+        expect { Timeout.timeout(0.1) { stmt.execute(1) } }.to raise_error(Timeout::Error)
+        stmt.close
+
+        # Whether interrupting a query mid-read leaves the TLS session itself
+        # resumable appears to depend on the platform/OpenSSL build (observed:
+        # recovers fine on macOS's stack, doesn't on Linux's, even though both
+        # are equally using TLS) -- accept either outcome here rather than
+        # assert a specific one.
+        begin
+          client.query('SELECT 1')
+        rescue Mysql2::Error
+          # also acceptable over TLS -- see above
         end
       end
 

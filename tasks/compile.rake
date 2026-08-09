@@ -9,11 +9,23 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
   # clean compiled extension
   CLEAN.include "#{ext.lib_dir}/*.#{RbConfig::CONFIG['DLEXT']}"
 
-  if RUBY_PLATFORM =~ /mswin|mingw/ && !defined?(RubyInstaller)
-    # Expand the path because the build dir is 3-4 levels deep in tmp/platform/version/
-    native_platform = RUBY_PLATFORM =~ /ucrt/ ? 'x64-mingw-ucrt' : 'x64-mingw32'
-    connector_dir = File.expand_path("../../vendor/#{vendor_mysql_dir(native_platform)}", __FILE__)
-    ext.config_options = ["--with-mysql-dir=#{connector_dir}"]
+  if RUBY_PLATFORM =~ /mswin|mingw/
+    # Any real Windows Ruby building its own extension natively -- almost
+    # always RubyInstaller-based these days. This used to additionally
+    # require !defined?(RubyInstaller), which was backwards: that check
+    # correctly distinguishes native-vs-cross-compile *inside* extconf.rb's
+    # own library-discovery logic, but here at the Rake task level it just
+    # meant every real RubyInstaller Ruby (the normal case) fell through to
+    # the cross-compile branch below instead, defining per-platform cross
+    # tasks for a build that was never cross-compiling in the first place --
+    # confirmed via CI: RubyInstaller was defined, and zero flags ever
+    # reached extconf.rb's invocation.
+    #
+    # No explicit --with-mysql-dir needed: extconf.rb's own dir_config/
+    # find_library fallback finds the MSYS2 mingw64 package (installed via
+    # pacman in build-windows.yml, same as the gemspec's
+    # msys2_mingw_dependencies) through gcc's own default library search
+    # path for the active MSYSTEM.
   else
     ext.cross_compile = true
     ext.cross_platform = ENV['CROSS_PLATFORMS'] ? ENV['CROSS_PLATFORMS'].split(':') : ['x64-mingw32', 'x64-mingw-ucrt']

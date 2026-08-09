@@ -131,7 +131,10 @@ elsif (mc = with_config('mysql-config') || Dir[GLOB].first)
   $libs = libs + " " + $libs
   rpath_dir = libs
 else
-  _, usr_local_lib = dir_config('mysql', '/usr/local')
+  # dir_config's third arg (ldefault) does NOT inherit the second (idefault)
+  # -- passing only one leaves usr_local_lib nil when no --with-mysql-*
+  # flag was given, which crashes find_library below (nil.split in mkmf).
+  _, usr_local_lib = dir_config('mysql', '/usr/local', '/usr/local')
 
   asplode("mysql client") unless find_library('mysqlclient', nil, usr_local_lib, "#{usr_local_lib}/mysql")
 

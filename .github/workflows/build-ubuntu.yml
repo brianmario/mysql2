@@ -42,10 +42,6 @@ jobs:
           - {os: ubuntu-22.04, ruby: '2.7', db: mariadb10.11}
           - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}
 
-          # TODO - Windows CI
-          # - {os: windows-2022, ruby: '3.2', db: mysql80}
-          # - {os: windows-2022, ruby: '2.7', db: mysql80}
-
       # On the fail-fast: true, it cancels all in-progress jobs
       # if any matrix job fails, which we don't want.
       fail-fast: false

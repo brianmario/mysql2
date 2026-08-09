@@ -131,7 +131,15 @@ elsif (mc = with_config('mysql-config') || Dir[GLOB].first)
   $libs = libs + " " + $libs
   rpath_dir = libs
 else
-  _, usr_local_lib = dir_config('mysql', '/usr/local')
+  # Not dir_config('mysql', '/usr/local', '/usr/local') here: dir_config
+  # memoizes its result per call, and on some mkmf versions (observed:
+  # Ruby 3.0's) the cache key is the bare target name "mysql", ignoring
+  # idefault/ldefault entirely -- so a second dir_config('mysql', ...) call
+  # here just returns the [nil, nil] already cached by the bare
+  # dir_config('mysql') above, silently ignoring these defaults and
+  # crashing find_library below (nil.split in mkmf) exactly as if they'd
+  # never been passed. Skip dir_config entirely for this fallback default.
+  usr_local_lib = '/usr/local'
 
   asplode("mysql client") unless find_library('mysqlclient', nil, usr_local_lib, "#{usr_local_lib}/mysql")
 
@@ -243,47 +251,39 @@ end
 ### Find MySQL Client on Windows, set RPATH to find the library at runtime
 
 if RUBY_PLATFORM =~ /mswin|mingw/ && !defined?(RubyInstaller)
-  # Build libmysql.a interface link library
+  # This branch only applies to cross-compiling a precompiled gem with
+  # rake-compiler-dock (see tasks/compile.rake and tasks/vendor_mysql.rake).
+  # A native Windows build under RubyInstaller takes the else branch below
+  # instead, same as every other platform.
   require 'rake'
 
-  # Build libmysql.a interface link library
-  # Use rake to rebuild only if these files change
-  deffile = File.expand_path('../../../support/libmysql.def', __FILE__)
-  libfile = File.expand_path(File.join(rpath_dir, 'libmysql.lib'))
-  file 'libmysql.a' => [deffile, libfile] do
-    when_writing 'building libmysql.a' do
-      # Ruby kindly shows us where dllwrap is, but that tool does more than we want.
-      # Maybe in the future Ruby could provide RbConfig::CONFIG['DLLTOOL'] directly.
-      dlltool = RbConfig::CONFIG['DLLWRAP'].gsub('dllwrap', 'dlltool')
-      sh dlltool, '--kill-at',
-         '--dllname', 'libmysql.dll',
-         '--output-lib', 'libmysql.a',
-         '--input-def', deffile, libfile
-    end
-  end
-
-  Rake::Task['libmysql.a'].invoke
-  $LOCAL_LIBS << ' ' << 'libmysql.a'
-
-  # Make sure the generated interface library works (if cross-compiling, trust without verifying)
+  # MSYS2's MariaDB Connector/C package (what tasks/vendor_mysql.rake vendors)
+  # already ships proper mingw .dll.a import libraries, unlike the old MySQL
+  # Connector/C package this used to link against -- no dlltool conversion
+  # from an MSVC-format .lib is needed here anymore, just the usual
+  # have_library check.
   unless RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
-    abort "-----\nCannot find libmysql.a\n-----" unless have_library('libmysql')
-    abort "-----\nCannot link to libmysql.a (my_init)\n-----" unless have_func('my_init')
+    # Trust without verifying when actually cross-compiling; only check when
+    # this is somehow being run on a real mswin/mingw host.
+    abort "-----\nCannot find mysqlclient\n-----" unless have_library('mysqlclient')
+    abort "-----\nCannot link to mysqlclient (my_init)\n-----" unless have_func('my_init')
   end
 
-  # Vendor libmysql.dll
+  # Vendor the runtime DLL so it loads without requiring a separate
+  # MSYS2/MariaDB install on the target machine. It lives in a sibling bin/
+  # directory next to rpath_dir's lib/, not alongside the .dll.a itself.
   vendordir = File.expand_path('../../../vendor/', __FILE__)
   directory vendordir
 
-  vendordll = File.join(vendordir, 'libmysql.dll')
-  dllfile = File.expand_path(File.join(rpath_dir, 'libmysql.dll'))
+  vendordll = File.join(vendordir, 'libmariadb.dll')
+  dllfile = File.expand_path(File.join(rpath_dir, '..', 'bin', 'libmariadb.dll'))
   file vendordll => [dllfile, vendordir] do
-    when_writing 'copying libmysql.dll' do
+    when_writing 'copying libmariadb.dll' do
       cp dllfile, vendordll
     end
   end
 
-  # Copy libmysql.dll to the local vendor directory by default
+  # Copy libmariadb.dll to the local vendor directory by default
   if arg_config('--no-vendor-libmysql')
     # Fine, don't.
     puts "--no-vendor-libmysql"

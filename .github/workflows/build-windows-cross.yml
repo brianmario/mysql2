@@ -1,0 +1,57 @@
+name: Build (Windows cross-compile)
+on:
+  workflow_call:
+jobs:
+  build:
+    name: windows-cross-compile
+    # rake-compiler-dock cross-compiles inside Docker, which the hosted
+    # Ubuntu runners have preinstalled -- no Windows runner needed to
+    # produce the precompiled x64-mingw32 / x64-mingw-ucrt gems.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true # rake-compiler-dock lives in the :development group, included by default
+      - run: sudo apt-get update && sudo apt-get install -y zstd
+      # Vendoring the MSYS2 MariaDB Connector/C package used to happen inside
+      # the ephemeral rake-compiler-dock container (see tasks/compile.rake),
+      # so it re-downloaded on every run with no way to cache across them.
+      # Do it here instead, on the host runner, before the container starts
+      # -- the checkout directory is what the container mounts as its
+      # working directory, so vendor/ populated here is already visible
+      # inside it. The cache key is a hash of tasks/vendor_mysql.rake, which
+      # is where CONNECTOR_VERSION and the download URLs live, so a version
+      # bump there automatically invalidates the cache.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            vendor/mingw64
+            vendor/ucrt64
+          key: mariadb-connector-msys2-${{ hashFiles('tasks/vendor_mysql.rake') }}
+      - run: bundle exec rake vendor:mysql:cross
+      # The mysql2 extension itself always compiles fresh here -- that's
+      # the point of this job. What's worth caching is everything else
+      # `bundle install` pulls in *inside* the container (rake,
+      # rake-compiler, bigdecimal, etc.) for each per-platform build --
+      # without this, that install (including compiling bigdecimal's own
+      # native extension) reran from scratch on every single CI run.
+      # tasks/compile.rake points bundler at vendor/bundle/<platform>
+      # specifically (separate per platform: bigdecimal's compiled
+      # extension isn't portable between the mingw32 and ucrt ABIs) --
+      # that path lives inside the checkout the container mounts, so it
+      # persists on the host afterward and is cacheable like any other
+      # directory here. Keyed on the Gemfile since this repo doesn't
+      # commit a Gemfile.lock.
+      - uses: actions/cache@v6
+        with:
+          path: vendor/bundle
+          key: windows-cross-bundle-${{ hashFiles('Gemfile') }}
+      - run: bundle exec rake gem:windows
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-precompiled-gems
+          path: pkg/*-x64-mingw*.gem
+          if-no-files-found: error

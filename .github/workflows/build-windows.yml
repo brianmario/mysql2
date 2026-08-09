@@ -26,7 +26,16 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
+          bundler-cache: false # need the MSYS2 package installed before 'bundle install' compiles the extension
+      # ruby/setup-ruby doesn't read the gemspec's msys2_mingw_dependencies
+      # metadata itself (that's a RubyInstaller-GUI-only convention) -- install
+      # the same package by hand so mariadb_config ends up on PATH. Without
+      # this, extconf.rb falls through to a fallback path that doesn't work
+      # reliably on Windows (observed: crashes outright on one Ruby/mkmf
+      # combination, silently succeeds via a different lookup on another).
+      - name: Install MariaDB Connector/C via MSYS2 pacman
+        run: ridk exec pacman -S --noconfirm --needed ${MINGW_PACKAGE_PREFIX}-libmariadbclient
+      - run: bundle install
       - name: Initialize and start MySQL
         run: |
           DATADIR="${RUNNER_TEMP}/mysql-data"

@@ -25,10 +25,36 @@ typedef struct mysql2_pending_stmt_close {
   struct mysql2_pending_stmt_close *next;
 } mysql2_pending_stmt_close;
 
+/* A result set (MYSQL_RES and/or the row-fetch state of a MYSQL_STMT) whose
+ * Ruby Result wrapper was freed while it was an abandoned, not-fully-drained
+ * stream (mysql_use_result(), or a server-side cursor opened for a streaming
+ * prepared statement). Actually releasing either one can require reading and
+ * discarding whatever rows are still queued on the wire
+ * (mysql_free_result()'s flush_use_result, or mysql_stmt_free_result()
+ * discarding an open cursor's outstanding rows) -- blocking network I/O,
+ * unsafe from a dfree callback that may run during a GC sweep for the same
+ * reason as mysql2_pending_stmt_close above. Populated only from Result's
+ * dfree callback, so must never touch a Ruby VALUE or call back into the
+ * VM. */
+typedef struct mysql2_pending_result_free {
+  MYSQL_RES *result; /* NULL if nothing to free at this level */
+  MYSQL_STMT *stmt;  /* NULL for plain (non-prepared) results */
+  struct mysql2_pending_result_free *next;
+} mysql2_pending_result_free;
+
 typedef struct {
   VALUE encoding;
   VALUE active_fiber; /* rb_fiber_current() or Qnil */
   VALUE prepared_statements;
+  /* The Mysql2::Result for the currently open streaming cursor (state ==
+   * MYSQL2_CLIENT_STREAMING), or Qnil. pending_result_frees only ever gets
+   * populated once GC has actually collected an abandoned streaming
+   * Result; if the app abandons a stream and issues another command
+   * before that happens, this is what lets mysql2_abandon_active_stream
+   * find and force-drain the still-live object right now, instead of
+   * sending the new command while the server still thinks a cursor is
+   * open. */
+  VALUE active_streaming_result;
   long server_version;
   int reconnect_enabled;
   unsigned int connect_timeout;
@@ -42,6 +68,8 @@ typedef struct {
   mysql2_client_state_t state;
   mysql2_pending_stmt_close *pending_stmt_closes;
   unsigned long pending_stmt_close_count; /* O(1) mirror of the list above, for Client#pending_prepared_statement_closes */
+  mysql2_pending_result_free *pending_result_frees;
+  unsigned long pending_result_free_count;
 } mysql_client_wrapper;
 
 void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result);
@@ -79,5 +107,40 @@ void mysql2_reap_pending_stmt_closes(mysql_client_wrapper *wrapper);
  * prunes prepared_statements, since this runs in ordinary Ruby context and
  * can safely touch both. */
 void mysql2_drop_pending_stmt_closes(mysql_client_wrapper *wrapper);
+
+/* Safe to call from a dfree callback (GC sweep context): only touches C
+ * memory owned by wrapper, never the Ruby VM, never blocks on I/O. */
+void mysql2_enqueue_pending_result_free(mysql_client_wrapper *wrapper, MYSQL_RES *result, MYSQL_STMT *stmt);
+
+/* Must only be called from ordinary Ruby-level code (has the GVL, not
+ * inside a GC sweep): actually frees queued result sets, which may block on
+ * network I/O to discard unread rows. Call before starting a new command on
+ * the connection, and right after a streaming result finishes or is
+ * abandoned. Must be called before mysql2_reap_pending_stmt_closes at any
+ * shared call site: a statement's outstanding result must be freed before
+ * the statement handle itself is closed. */
+void mysql2_reap_pending_result_frees(mysql_client_wrapper *wrapper);
+
+/* Unlike mysql2_drop_pending_stmt_closes, there is no drop-only counterpart
+ * for result frees: mysql_close() has no side effect that reclaims a
+ * MYSQL_RES's client-side row buffers (it only releases the server's
+ * prepared-statement handles), so skipping the free would leak that memory
+ * for the rest of the process. Client#close therefore calls
+ * mysql2_reap_pending_result_frees directly instead -- it's ordinary
+ * Ruby-level code, so the network I/O that may involve is fine there, same
+ * as at any other safe point. Only the dfree-reachable teardown in
+ * decr_mysql2_client (client.c) has no such option and must drop instead. */
+
+/* If the connection is still STREAMING because the previous streaming
+ * Result was abandoned (caller broke out of #each, or raised, without
+ * exhausting the cursor) rather than naturally exhausted or already
+ * collected by GC, force-drain and free it now, before a new command goes
+ * out. Ordinary-Ruby-level-only, like the reap functions above -- it calls
+ * into result.c and may hit the socket. No-op if there's no live Result to
+ * drain (already handled, or already queued via
+ * mysql2_enqueue_pending_result_free for mysql2_reap_pending_result_frees
+ * to pick up). Call right before sending any new command (query, prepare,
+ * execute, ping, statement close). */
+void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper);
 
 #endif

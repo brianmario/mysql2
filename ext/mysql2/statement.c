@@ -171,7 +171,12 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
       stmt_wrapper->client_wrapper->refcount++;
 
       /* We're about to prepare on this connection: a safe point to close
-       * out any statements that were GC'd while it was last busy. */
+       * out any statements that were GC'd while it was last busy, and to
+       * free any abandoned result sets left over from a stream that was
+       * dropped mid-iteration -- including one still live (not yet
+       * collected by GC), which the reap below alone wouldn't catch. */
+      mysql2_abandon_active_stream(stmt_wrapper->client_wrapper);
+      mysql2_reap_pending_result_frees(stmt_wrapper->client_wrapper);
       mysql2_reap_pending_stmt_closes(stmt_wrapper->client_wrapper);
     } else {
       stmt_wrapper->client_wrapper = NULL;
@@ -348,7 +353,15 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   GET_CLIENT(stmt_wrapper->client);
 
   /* We're about to issue a new command on this connection: a safe point to
-   * close out any statements that were GC'd while it was last busy. */
+   * close out any statements that were GC'd while it was last busy, and to
+   * free any abandoned result sets left over from a stream that was
+   * dropped mid-iteration -- including on this very statement handle, if
+   * it was previously executed as a stream and abandoned before being
+   * fully drained. That must happen before we touch stmt below again.
+   * mysql2_abandon_active_stream handles the still-live case (not yet
+   * collected by GC), which the reap below alone wouldn't catch. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
 
   conn_enc = rb_to_encoding(wrapper->encoding);
@@ -531,6 +544,18 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     }
   }
 
+  // Abandon/reap once more, right before the actual network write below: the
+  // bind setup above (rb_str_export_to_enc, rb_funcall for Time/DateTime/
+  // BigDecimal conversions, rb_hash_dup) can itself allocate, and under
+  // GC.stress (or just unlucky timing) that can be what triggers the GC
+  // sweep that abandons a *different* stream on this connection -- the
+  // earlier checks up top can't see that yet, and leaving it undrained here
+  // would desync the protocol once this command's bytes hit the wire ahead
+  // of the old stream's rows.
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
   // From here through mysql_stmt_result_metadata/mysql_stmt_store_result,
   // the connection is BUSY: a Statement freed elsewhere during this window
   // must not be allowed to write COM_STMT_CLOSE to this socket. See
@@ -554,6 +579,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     // no data and no error, so query was not a SELECT
+    mysql2_reap_pending_result_frees(wrapper);
     mysql2_reap_pending_stmt_closes(wrapper);
     return Qnil;
   }
@@ -569,6 +595,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     // The whole result set is buffered locally; free to reap and to run
     // another command right away.
     wrapper->state = MYSQL2_CLIENT_IDLE;
+    mysql2_reap_pending_result_frees(wrapper);
     mysql2_reap_pending_stmt_closes(wrapper);
   } else {
     // A cursor is now open on the server; leave the connection BUSY until
@@ -577,6 +604,12 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   }
 
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);
+
+  /* Track the open cursor so a later command can force-drain it if it's
+   * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */
+  if (is_streaming) {
+    wrapper->active_streaming_result = resultObj;
+  }
 
   rb_mysql_set_server_query_flags(wrapper->client, resultObj);
 
@@ -683,7 +716,14 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
 
       /* Ordinary Ruby-level call, not GC/dfree: a safe point to also close
        * out any other statements that were GC'd while the connection was
-       * last busy. */
+       * last busy. Abandon/reap pending result frees first: this statement
+       * itself may have an abandoned streaming result on it -- still live
+       * (mysql2_abandon_active_stream) or already queued
+       * (mysql2_reap_pending_result_frees) -- and that must be drained
+       * before nogvl_stmt_close below frees the same MYSQL_STMT* out from
+       * under it. */
+      mysql2_abandon_active_stream(wrapper);
+      mysql2_reap_pending_result_frees(wrapper);
       mysql2_reap_pending_stmt_closes(wrapper);
 
       stmt_wrapper->closed = 1;

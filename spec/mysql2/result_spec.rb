@@ -764,4 +764,98 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(test_result.server_flags[:no_good_index_used]).to eql(false)
     end
   end
+
+  context 'garbage collection ordering' do
+    # Regression coverage for the deferred pending-free queue (see
+    # mysql2_enqueue_pending_result_free / mysql2_reap_pending_result_frees
+    # in ext/mysql2/client.c, and rb_mysql_result_free_result in
+    # ext/mysql2/result.c). A streaming Result (:stream => true) that is
+    # abandoned mid-iteration -- the caller breaks out of #each, or simply
+    # never finishes reading it -- still holds an open cursor with unread
+    # rows on the wire when it becomes GC-eligible. Before this fix, the
+    # Result's GC free function called mysql_free_result/
+    # mysql_stmt_free_result directly, which for such a cursor may read and
+    # discard the remaining rows over the network (flush_use_result) --
+    # blocking I/O from a dfree callback that can run mid-GC-sweep, possibly
+    # while the same connection is mid protocol exchange for a completely
+    # unrelated command. See also the "garbage collection ordering" context
+    # in statement_spec.rb for the sibling statement-close hazard.
+    #
+    # A small, fast loopback connection doesn't reliably reproduce the
+    # network-corruption failure mode even without this fix: there just
+    # isn't much of a timing window to hit. These specs lean on GC.stress
+    # and a larger streamed row count to widen that window as far as
+    # practical, but they are regression coverage for the deferred-free
+    # bookkeeping (no crash, no corrupted results, queue drains to zero)
+    # rather than a guaranteed repro of the underlying race.
+
+    # A recursive CTE with several hundred rows, so breaking out of #each
+    # early genuinely leaves rows unread on the wire (the fixture table
+    # mysql2_test only ever has a single row).
+    let(:big_stream_sql) do
+      'WITH RECURSIVE seq AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM seq WHERE n < 500) SELECT n FROM seq'
+    end
+
+    it 'does not corrupt later queries when an abandoned streaming result is collected mid-stream' do
+      begin
+        GC.stress = true
+        30.times do |i|
+          result = @client.query(big_stream_sql, stream: true, cache_rows: false)
+          count = 0
+          result.each do |_row|
+            count += 1
+            break if count == 3
+          end
+          result = nil # rubocop:disable Lint/UselessAssignment
+
+          expect(@client.query("SELECT #{i} AS n").first['n']).to eq(i)
+        end
+      ensure
+        GC.stress = false
+      end
+    end
+
+    it 'does not corrupt later queries when an abandoned streaming prepared statement result is collected mid-stream' do
+      begin
+        GC.stress = true
+        30.times do |i|
+          stmt = @client.prepare(big_stream_sql)
+          result = stmt.execute(stream: true, cache_rows: false)
+          count = 0
+          result.each do |_row|
+            count += 1
+            break if count == 3
+          end
+          result = nil # rubocop:disable Lint/UselessAssignment
+          stmt = nil # rubocop:disable Lint/UselessAssignment
+
+          expect(@client.query("SELECT #{i} AS n").first['n']).to eq(i)
+        end
+      ensure
+        GC.stress = false
+      end
+    end
+
+    it 'drains #pending_result_frees to zero at the next safe point' do
+      # A plain GC.start right after dropping the reference doesn't reliably
+      # collect a Result that a C extension method (#first) just touched --
+      # conservative stack scanning can keep it artificially reachable for a
+      # while. GC.stress forces the issue on every subsequent allocation,
+      # same as the specs above.
+      begin
+        GC.stress = true
+        30.times do
+          result = @client.query(big_stream_sql, stream: true, cache_rows: false)
+          result.first
+          result = nil # rubocop:disable Lint/UselessAssignment
+        end
+      ensure
+        GC.stress = false
+      end
+
+      GC.start
+      @client.ping
+      expect(@client.pending_result_frees).to eq(0)
+    end
+  end
 end

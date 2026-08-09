@@ -243,6 +243,31 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     # rubocop:enable Lint/AmbiguousBlockAssociation
   end
 
+  it "should reap (not just drop) a pending abandoned streaming result when the client is closed" do
+    # Unlike a pending statement close, mysql_close() has no side effect that
+    # reclaims a MYSQL_RES's client-side row buffers -- see
+    # mysql2_reap_pending_result_frees vs mysql2_drop_pending_stmt_closes in
+    # ext/mysql2/client.c. #close must actually free a queued result, not
+    # just clear the bookkeeping, or that memory leaks for the rest of the
+    # process. This can't observe the leak directly from Ruby, but it does
+    # confirm #close runs the real (potentially blocking) free without
+    # erroring or hanging, with enough unread rows on the wire to matter.
+    client = new_client
+    sql = 'WITH RECURSIVE seq AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM seq WHERE n < 500) SELECT n FROM seq'
+    begin
+      GC.stress = true
+      result = client.query(sql, stream: true, cache_rows: false)
+      result.first
+      result = nil # rubocop:disable Lint/UselessAssignment
+    ensure
+      GC.stress = false
+    end
+    GC.start
+
+    expect { client.close }.to_not raise_error
+    expect(client.pending_result_frees).to eq(0)
+  end
+
   it "should not leave dangling connections after garbage collection" do
     run_gc
     # rubocop:disable Lint/AmbiguousBlockAssociation
@@ -568,12 +593,48 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end.to_not raise_error
     end
 
-    it "should not let you query again if iterating is not finished when streaming" do
+    it "should let you query again if the previous streaming result was abandoned (not fully iterated)" do
+      # Only fetch the first row and never touch the rest of the cursor.
+      # The next query must not raise "Commands out of sync" -- the client
+      # should force-drain the abandoned cursor itself, even though GC
+      # hasn't had a chance to collect the old Result yet.
       @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false).first
 
       expect do
         @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false)
-      end.to raise_exception(Mysql2::Error)
+      end.to_not raise_error
+    end
+
+    it "should let you query again after breaking out of #each on a streaming result early" do
+      # rubocop:disable Lint/UnreachableLoop
+      @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).each do |_row|
+        break
+      end
+      # rubocop:enable Lint/UnreachableLoop
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
+
+    it "should let you query again after an exception raised inside a streaming #each block" do
+      # rubocop:disable Lint/UnreachableLoop
+      expect do
+        @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).each do |_row|
+          raise "boom"
+        end
+      end.to raise_error("boom")
+      # rubocop:enable Lint/UnreachableLoop
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
+
+    it "should let you query again if a streaming result was abandoned and only collected by the GC" do
+      @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).first
+      run_gc
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
     end
 
     it "should only accept strings as the query parameter" do

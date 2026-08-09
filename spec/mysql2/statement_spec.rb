@@ -282,6 +282,26 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
         n += 1
       end
     end
+
+    it "should let you execute/query again after abandoning a prepared statement's streaming result" do
+      stmt = @client.prepare("SELECT 1 UNION SELECT 2 UNION SELECT 3")
+      stmt.execute(stream: true, cache_rows: false).first
+
+      expect do
+        stmt.execute(stream: true, cache_rows: false)
+      end.to_not raise_error
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
+
+    it "should let a plain query drain an abandoned prepared statement streaming result" do
+      stmt = @client.prepare("SELECT 1 UNION SELECT 2 UNION SELECT 3")
+      stmt.execute(stream: true, cache_rows: false).first
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3")
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
   end
 
   context "#each" do

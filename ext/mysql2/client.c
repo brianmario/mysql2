@@ -226,6 +226,7 @@ static void rb_mysql_client_mark(void * wrapper) {
     rb_gc_mark_movable(w->encoding);
     rb_gc_mark_movable(w->active_fiber);
     rb_gc_mark_movable(w->prepared_statements);
+    rb_gc_mark_movable(w->active_streaming_result);
   }
 }
 
@@ -246,6 +247,7 @@ static void rb_mysql_client_compact(void * wrapper) {
     rb_mysql2_gc_location(w->encoding);
     rb_mysql2_gc_location(w->active_fiber);
     rb_mysql2_gc_location(w->prepared_statements);
+    rb_mysql2_gc_location(w->active_streaming_result);
   }
 }
 
@@ -416,6 +418,64 @@ void mysql2_drop_pending_stmt_closes(mysql_client_wrapper *wrapper)
   }
 }
 
+void mysql2_enqueue_pending_result_free(mysql_client_wrapper *wrapper, MYSQL_RES *result, MYSQL_STMT *stmt)
+{
+  /* Deliberately plain malloc(), not Ruby's xmalloc(): see the identical
+   * note on mysql2_enqueue_pending_stmt_close above. */
+  mysql2_pending_result_free *node = malloc(sizeof(mysql2_pending_result_free));
+  if (!node) return; /* leaks the result set's client-side memory; nothing safe to do here */
+  node->result = result;
+  node->stmt = stmt;
+  node->next = wrapper->pending_result_frees;
+  wrapper->pending_result_frees = node;
+  wrapper->pending_result_free_count++;
+}
+
+static void *nogvl_stmt_free_result_raw(void *ptr) {
+  mysql_stmt_free_result((MYSQL_STMT *)ptr);
+  return NULL;
+}
+
+static void *nogvl_free_result_raw(void *ptr) {
+  mysql_free_result((MYSQL_RES *)ptr);
+  return NULL;
+}
+
+void mysql2_reap_pending_result_frees(mysql_client_wrapper *wrapper)
+{
+  mysql2_pending_result_free *node = wrapper->pending_result_frees;
+  wrapper->pending_result_frees = NULL;
+  wrapper->pending_result_free_count = 0;
+
+  while (node) {
+    mysql2_pending_result_free *next = node->next;
+
+    if (wrapper->initialized && !wrapper->closed && CONNECTED(wrapper)) {
+      /* Order matters: free the statement's outstanding result (which may
+       * discard unread cursor rows) before anything else touches that
+       * statement handle again. */
+      if (node->stmt) {
+        rb_thread_call_without_gvl(nogvl_stmt_free_result_raw, node->stmt, RUBY_UBF_IO, 0);
+      }
+      if (node->result) {
+        rb_thread_call_without_gvl(nogvl_free_result_raw, node->result, RUBY_UBF_IO, 0);
+      }
+    }
+
+    free(node);
+    node = next;
+  }
+}
+
+/* See client.h. */
+void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper)
+{
+  if (wrapper->state == MYSQL2_CLIENT_STREAMING && wrapper->active_streaming_result != Qnil) {
+    mysql2_result_force_free(wrapper->active_streaming_result);
+    wrapper->active_streaming_result = Qnil;
+  }
+}
+
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
@@ -475,6 +535,25 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
     wrapper->pending_stmt_close_count = 0;
   }
 
+  /* Same reasoning for any not-yet-drained result sets: mysql_close() below
+   * is about to invalidate the connection those MYSQL_RES/MYSQL_STMT
+   * pointers belong to, and this may itself be running during a GC sweep,
+   * so no network I/O and no VM calls -- just drop the list. This does leak
+   * the client-side MYSQL_RES memory, same tradeoff already accepted above
+   * for statement handles -- but only here, where we have no other choice.
+   * The ordinary-Ruby-level Client#close path below does not take this
+   * shortcut: see mysql2_reap_pending_result_frees at that call site. */
+  {
+    mysql2_pending_result_free *node = wrapper->pending_result_frees;
+    while (node) {
+      mysql2_pending_result_free *next = node->next;
+      free(node); /* plain free(): this too can run during a GC sweep */
+      node = next;
+    }
+    wrapper->pending_result_frees = NULL;
+    wrapper->pending_result_free_count = 0;
+  }
+
   nogvl_close(wrapper);
   xfree(wrapper->client);
   xfree(wrapper);
@@ -491,6 +570,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->encoding = Qnil;
   wrapper->active_fiber = Qnil;
   wrapper->prepared_statements = rb_hash_new();
+  wrapper->active_streaming_result = Qnil;
   wrapper->automatic_close = 1;
   wrapper->server_version = 0;
   wrapper->reconnect_enabled = 0;
@@ -503,6 +583,8 @@ static VALUE allocate(VALUE klass) {
   wrapper->state = MYSQL2_CLIENT_IDLE;
   wrapper->pending_stmt_closes = NULL;
   wrapper->pending_stmt_close_count = 0;
+  wrapper->pending_result_frees = NULL;
+  wrapper->pending_result_free_count = 0;
 
   return obj;
 }
@@ -683,7 +765,21 @@ static VALUE rb_mysql_client_close(VALUE self) {
   /* The connection is going away regardless of what mysql_close() below
    * does or doesn't send -- don't bother closing each queued statement
    * individually, just clear the bookkeeping so prepared_statements and
-   * pending_prepared_statement_closes don't report stale state afterward. */
+   * pending_prepared_statement_closes don't report stale state afterward.
+   *
+   * Not-yet-drained result sets are different: unlike a statement's server-
+   * side handle, mysql_close() below has no side effect that reclaims a
+   * MYSQL_RES's client-side row buffers, so dropping those without freeing
+   * them would leak that memory for the rest of the process. This runs as
+   * ordinary Ruby-level code (this method isn't reachable from a dfree
+   * callback), so it's safe to actually flush and free them here, same as
+   * at any other safe point -- just before the connection goes away
+   * instead of before the next command. mysql2_abandon_active_stream covers
+   * a stream that's abandoned but still live (not yet collected by GC),
+   * which the reap alone wouldn't catch -- same reasoning as at every other
+   * safe point, this one was just missing it. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
   mysql2_drop_pending_stmt_closes(wrapper);
 
   if (wrapper->client) {
@@ -802,6 +898,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     /* The whole result set is buffered locally; the connection is free to
      * run another command right away. */
     wrapper->state = MYSQL2_CLIENT_IDLE;
+    mysql2_reap_pending_result_frees(wrapper);
     mysql2_reap_pending_stmt_closes(wrapper);
   }
 
@@ -813,7 +910,10 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
       wrapper->state = MYSQL2_CLIENT_IDLE;
       rb_raise_mysql2_error(wrapper);
     }
-    /* no data and no error, so query was not a SELECT */
+    /* no data and no error, so query was not a SELECT -- e.g. :stream was
+     * requested for an INSERT/UPDATE. No cursor was actually opened, so
+     * don't leave the connection marked STREAMING. */
+    wrapper->state = MYSQL2_CLIENT_IDLE;
     return Qnil;
   }
 
@@ -822,6 +922,12 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
+
+  /* Track the open cursor so a later command can force-drain it if it's
+   * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */
+  if (is_streaming == Qtrue) {
+    wrapper->active_streaming_result = resultObj;
+  }
 
   rb_mysql_set_server_query_flags(wrapper->client, resultObj);
 
@@ -974,10 +1080,6 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   REQUIRE_CONNECTED(wrapper);
   args.mysql = wrapper->client;
 
-  /* We're about to issue a new command: this is a safe point to close out
-   * any statements that were GC'd while we were busy earlier. */
-  mysql2_reap_pending_stmt_closes(wrapper);
-
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   rb_ivar_set(self, intern_current_query_options, current);
@@ -990,6 +1092,23 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   args.wrapper = wrapper;
 
   rb_mysql_client_set_active_fiber(self, false);
+
+  /* We're about to issue a new command: this is a safe point to close out
+   * any statements that were GC'd while we were busy earlier, and to free
+   * any abandoned result sets left over from a stream that was dropped
+   * mid-iteration -- including one that hasn't been collected by GC yet,
+   * which the reap below alone wouldn't catch (mysql2_abandon_active_stream).
+   * Deliberately last, right before the actual network write below --
+   * rb_ivar_set/rb_str_export_to_enc above can themselves allocate, and
+   * under GC.stress (or just unlucky timing) that can be what triggers the
+   * GC sweep that abandons a stream, so reaping any earlier can still leave
+   * a fresh pending free undrained when we send. Must also run before the
+   * state assignment below: mysql2_abandon_active_stream only acts while
+   * state is still STREAMING. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
   wrapper->state = MYSQL2_CLIENT_QUERYING;
 
 #ifndef _WIN32
@@ -1353,7 +1472,12 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   rb_mysql_client_set_active_fiber(self, false);
 
   /* A low-traffic, frequently-called method; a good opportunistic safe
-   * point to close out statements that were GC'd while we were busy. */
+   * point to close out statements that were GC'd while we were busy, and to
+   * free any abandoned result sets -- mysql_ping() itself sends a command,
+   * so a still-live abandoned stream needs the same active drain as
+   * rb_mysql_query, not just the reap. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
 
   VALUE result = Qnil;
@@ -1707,6 +1831,7 @@ static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
 static VALUE rb_mysql_client_prepared_statements_read(VALUE self) {
   GET_CLIENT(self);
 
+  mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
 
   return rb_funcall(wrapper->prepared_statements, intern_values, 0);
@@ -1727,6 +1852,21 @@ static VALUE rb_mysql_client_pending_prepared_statement_closes(VALUE self) {
   GET_CLIENT(self);
 
   return ULONG2NUM(wrapper->pending_stmt_close_count);
+}
+
+/* call-seq:
+ *    client.pending_result_frees
+ *
+ * Returns the number of result sets (from a streaming query or streaming
+ * prepared statement) that were abandoned mid-iteration and garbage
+ * collected, and are therefore waiting for a safe point to actually
+ * discard their unread rows from the connection. Mirrors
+ * #pending_prepared_statement_closes; drains at the same safe points.
+ */
+static VALUE rb_mysql_client_pending_result_frees(VALUE self) {
+  GET_CLIENT(self);
+
+  return ULONG2NUM(wrapper->pending_result_free_count);
 }
 
 void init_mysql2_client(void) {
@@ -1778,6 +1918,7 @@ void init_mysql2_client(void) {
   rb_define_method(cMysql2Client, "prepare", rb_mysql_client_prepare_statement, 1);
   rb_define_method(cMysql2Client, "prepared_statements", rb_mysql_client_prepared_statements_read, 0);
   rb_define_method(cMysql2Client, "pending_prepared_statement_closes", rb_mysql_client_pending_prepared_statement_closes, 0);
+  rb_define_method(cMysql2Client, "pending_result_frees", rb_mysql_client_pending_result_frees, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);

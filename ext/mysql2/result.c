@@ -78,14 +78,46 @@ static void rb_mysql_result_mark(void * wrapper) {
   }
 }
 
-/* this may be called manually or during GC */
-static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
+/* this may be called manually or during GC.
+ *
+ * from_dfree_callback must be true when called from rb_mysql_result_free
+ * (the GC dfree callback, which may run during a GC sweep) and false from
+ * every other caller (ordinary Ruby-level code, which has the GVL and is
+ * not inside a GC sweep).
+ *
+ * The distinction matters because both mysql_stmt_free_result() and
+ * mysql_free_result() are documented to potentially read and discard any
+ * rows not yet fetched off the wire -- mysql_stmt_free_result() for an open
+ * server-side cursor, mysql_free_result() for a mysql_use_result() stream
+ * (its flush_use_result) -- i.e. blocking network I/O, not just freeing
+ * local memory. That's fine from ordinary Ruby code (same category as any
+ * other query), but unsafe from a dfree callback: it may run mid-GC-sweep,
+ * possibly while this same connection is mid protocol exchange for a
+ * completely different command (see mysql2_pending_stmt_close for the
+ * sibling hazard already fixed for statement handles). This can only
+ * happen for an abandoned streaming result (is_streaming &&
+ * !streamingComplete): a fully-buffered result (mysql_store_result /
+ * mysql_stmt_store_result) is already local, so freeing it never touches
+ * the network regardless of context. When it's both streaming, unfinished,
+ * and we're in a dfree callback, defer the actual free to the next safe
+ * point instead -- see mysql2_enqueue_pending_result_free /
+ * mysql2_reap_pending_result_frees in client.h/client.c. */
+static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper, int from_dfree_callback) {
+  int defer_free;
+
   if (!wrapper) return;
 
   if (wrapper->resultFreed != 1) {
+    defer_free = from_dfree_callback && wrapper->is_streaming && !wrapper->streamingComplete
+                 && wrapper->client_wrapper;
+
     if (wrapper->stmt_wrapper) {
       if (!wrapper->stmt_wrapper->closed) {
-        mysql_stmt_free_result(wrapper->stmt_wrapper->stmt);
+        if (defer_free) {
+          mysql2_enqueue_pending_result_free(wrapper->client_wrapper, NULL, wrapper->stmt_wrapper->stmt);
+        } else {
+          mysql_stmt_free_result(wrapper->stmt_wrapper->stmt);
+        }
 
         /* MySQL BUG? If the statement handle was previously used, and so
          * mysql_stmt_bind_result was called, and if that result set and bind buffers were freed,
@@ -93,7 +125,8 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
          * first result in mysql_stmt_execute. This will corrupt or crash the program.
          * By setting bind_result_done back to 0, we make MySQL think that a result set
          * has never been bound to this statement handle before to prevent the prefetch.
-         */
+         * This is just a plain C struct field write, safe to do eagerly even when the
+         * actual free above was deferred. */
         wrapper->stmt_wrapper->stmt->bind_result_done = 0;
       }
 
@@ -116,9 +149,19 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
       /* Clue that the next statement execute will need to allocate a new result buffer. */
       wrapper->result_buffers = NULL;
     }
-    /* FIXME: this may call flush_use_result, which can hit the socket */
-    /* For prepared statements, wrapper->result is the result metadata */
-    mysql_free_result(wrapper->result);
+
+    /* For prepared statements, wrapper->result is the result metadata
+     * (from mysql_stmt_result_metadata), which mysql_free_result() never
+     * blocks on regardless of streaming state -- only the plain-query
+     * mysql_use_result() case above actually needs deferring here, but the
+     * same defer_free check covers both, since a prepared-statement Result
+     * always has a non-NULL stmt_wrapper (handled above) and its metadata
+     * free is cheap either way. */
+    if (defer_free) {
+      mysql2_enqueue_pending_result_free(wrapper->client_wrapper, wrapper->result, NULL);
+    } else {
+      mysql_free_result(wrapper->result);
+    }
     wrapper->resultFreed = 1;
   }
 }
@@ -127,17 +170,24 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
 static void rb_mysql_result_free(void *ptr) {
   mysql2_result_wrapper *wrapper = ptr;
 
-  /* An abandoned streaming Result (caller broke out of #each, or raised,
-   * before exhausting the cursor) never reaches the streamingComplete=1
-   * reset in rb_mysql_result_each_. Without this, client_wrapper->state
-   * would be stuck STREAMING forever. This only writes a plain C field on
-   * a struct we own -- no VM calls -- so it's fine to do from a dfree
-   * callback, unlike the reap itself. */
+  /* Deliberately does NOT reset client_wrapper->state to IDLE here for an
+   * abandoned stream: the actual drain (what would make the connection
+   * genuinely idle again) may have just been deferred by the call below,
+   * not performed. It goes back to IDLE once mysql2_reap_pending_result_frees
+   * really runs the deferred free, at the next safe point.
+   *
+   * active_streaming_result is different: it must be cleared right here
+   * regardless, even though state stays STREAMING. This object is about to
+   * be reclaimed, and rb_mysql_client_mark/compact touch that field
+   * unconditionally -- leaving it pointing here would crash a later GC
+   * pass. Only one stream can be open at a time, so if this wrapper is
+   * still an unfinished stream, it's the one (if any) that
+   * active_streaming_result currently references. */
   if (wrapper->is_streaming && !wrapper->streamingComplete && wrapper->client_wrapper) {
-    wrapper->client_wrapper->state = MYSQL2_CLIENT_IDLE;
+    wrapper->client_wrapper->active_streaming_result = Qnil;
   }
 
-  rb_mysql_result_free_result(wrapper);
+  rb_mysql_result_free_result(wrapper, 1);
 
   // If the GC gets to client first it will be nil
   if (wrapper->client != Qnil) {
@@ -189,6 +239,23 @@ static const rb_data_type_t rb_mysql_result_type = {
   RUBY_TYPED_FREE_IMMEDIATELY,
 #endif
 };
+
+/* See result.h. Called from ordinary Ruby-level code (has the GVL, not a
+ * GC sweep), so unlike rb_mysql_result_free above it's fine to pass
+ * from_dfree_callback=0 to rb_mysql_result_free_result: for a streaming
+ * cursor that was abandoned mid-iteration but is still live (not yet
+ * collected by GC), this performs the real, blocking
+ * mysql_free_result()/mysql_stmt_free_result() call right now instead of
+ * deferring it, so the server and client agree the previous command is
+ * done before the next one goes out. */
+void mysql2_result_force_free(VALUE self) {
+  GET_RESULT(self);
+
+  if (wrapper->resultFreed) return;
+
+  rb_mysql_result_free_result(wrapper, 0);
+  wrapper->streamingComplete = 1;
+}
 
 /*
  * for small results, this won't hit the network, but there's no
@@ -1073,7 +1140,7 @@ static void rb_mysql_result_cache_metadata_and_free(VALUE self) {
   GET_RESULT(self);
   rb_mysql_result_fetch_fields(self);
   rb_mysql_result_fetch_field_types(self);
-  rb_mysql_result_free_result(wrapper);
+  rb_mysql_result_free_result(wrapper, 0);
 }
 
 static VALUE rb_mysql_result_free_(VALUE self) {
@@ -1120,6 +1187,8 @@ static VALUE rb_mysql_result_each_(VALUE self,
       // safe to reap here rather than waiting for the next command.
       if (wrapper->client_wrapper) {
         wrapper->client_wrapper->state = MYSQL2_CLIENT_IDLE;
+        wrapper->client_wrapper->active_streaming_result = Qnil;
+        mysql2_reap_pending_result_frees(wrapper->client_wrapper);
         mysql2_reap_pending_stmt_closes(wrapper->client_wrapper);
       }
 

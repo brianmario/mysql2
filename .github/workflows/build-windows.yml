@@ -18,6 +18,14 @@ jobs:
       fail-fast: false
     env:
       BUNDLE_WITHOUT: development
+      # Windows has no Unix domain socket equivalent, so new_socket_client
+      # (spec/spec_helper.rb) can't work here -- same reason the
+      # cross-version Linux job (build-cross-version.yml) sets this. Without
+      # it, the streaming-timeout spec that depends on a socket connection's
+      # smaller write buffer to reliably trigger net_write_timeout is
+      # platform-dependent luck instead: observed passing on windows-2025's
+      # runner image and failing on windows-2022's for the identical test.
+      MYSQL2_SPEC_NO_LOCAL_SOCKET: 1
     defaults:
       run:
         shell: bash

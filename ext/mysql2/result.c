@@ -126,6 +126,17 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
 /* this is called during GC */
 static void rb_mysql_result_free(void *ptr) {
   mysql2_result_wrapper *wrapper = ptr;
+
+  /* An abandoned streaming Result (caller broke out of #each, or raised,
+   * before exhausting the cursor) never reaches the streamingComplete=1
+   * reset in rb_mysql_result_each_. Without this, client_wrapper->state
+   * would be stuck STREAMING forever. This only writes a plain C field on
+   * a struct we own -- no VM calls -- so it's fine to do from a dfree
+   * callback, unlike the reap itself. */
+  if (wrapper->is_streaming && !wrapper->streamingComplete && wrapper->client_wrapper) {
+    wrapper->client_wrapper->state = MYSQL2_CLIENT_IDLE;
+  }
+
   rb_mysql_result_free_result(wrapper);
 
   // If the GC gets to client first it will be nil
@@ -982,6 +993,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   unsigned int i = 0;
   short int symbolizeKeys = 0;
   VALUE defaults;
+  VALUE fields;
 
   GET_RESULT(self);
 
@@ -999,17 +1011,24 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  if ((my_ulonglong)RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
+  /* See the identical guard in rb_mysql_result_fetch_field_types: keep a
+   * stack-local reference alive across the fill loop so conservative stack
+   * scanning finds this array too, independent of GC generation timing. */
+  fields = wrapper->fields;
+
+  if ((my_ulonglong)RARRAY_LEN(fields) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
       rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     }
   }
 
+  RB_GC_GUARD(fields);
   return wrapper->fields;
 }
 
 static VALUE rb_mysql_result_fetch_field_types(VALUE self) {
   unsigned int i = 0;
+  VALUE field_types;
 
   GET_RESULT(self);
 
@@ -1021,12 +1040,22 @@ static VALUE rb_mysql_result_fetch_field_types(VALUE self) {
     wrapper->fieldTypes = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  if ((my_ulonglong)RARRAY_LEN(wrapper->fieldTypes) != wrapper->numberOfFields) {
+  /* wrapper->fieldTypes lives on the C struct, not the Ruby stack: between
+   * this assignment and the loop below finishing, it's reachable only
+   * through wrapper, and each iteration allocates a String (a GC
+   * safepoint). Keep a stack-local reference alive across the whole loop
+   * so conservative stack scanning always finds it too, independent of
+   * when the next mark pass would otherwise notice it via wrapper -- under
+   * GC.stress a mark pass can land in that gap. See #1456. */
+  field_types = wrapper->fieldTypes;
+
+  if ((my_ulonglong)RARRAY_LEN(field_types) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
       rb_mysql_result_fetch_field_type(self, i);
     }
   }
 
+  RB_GC_GUARD(field_types);
   return wrapper->fieldTypes;
 }
 
@@ -1085,6 +1114,14 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
       rb_mysql_result_cache_metadata_and_free(self);
       wrapper->streamingComplete = 1;
+
+      // The cursor is exhausted: the connection is free to run another
+      // command. This runs from ordinary Ruby-level code (#each), so it's
+      // safe to reap here rather than waiting for the next command.
+      if (wrapper->client_wrapper) {
+        wrapper->client_wrapper->state = MYSQL2_CLIENT_IDLE;
+        mysql2_reap_pending_stmt_closes(wrapper->client_wrapper);
+      }
 
       // Check for errors, the connection might have gone out from under us
       // mysql_error returns an empty string if there is no error

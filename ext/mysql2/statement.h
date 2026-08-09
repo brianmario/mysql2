@@ -4,6 +4,7 @@
 typedef struct {
   VALUE client;
   MYSQL_STMT *stmt;
+  mysql_client_wrapper *client_wrapper;
   int refcount;
   int closed;
 } mysql_stmt_wrapper;

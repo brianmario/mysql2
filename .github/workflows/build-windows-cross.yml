@@ -15,7 +15,7 @@ jobs:
           ruby-version: '3.4'
           bundler-cache: true # rake-compiler-dock lives in the :development group, included by default
       - run: bundle exec rake gem:windows
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-precompiled-gems
           path: pkg/*-x64-mingw*.gem

@@ -37,6 +37,7 @@ jobs:
       # ruby/setup-ruby downloads doesn't include the ridk wrapper script.)
       - uses: ruby/setup-ruby-pkgs@v1
         with:
+          ruby-version: ${{ matrix.ruby }} # required even though setup-ruby already ran above
           mingw: libmariadbclient
       - run: bundle install
       - name: Initialize and start MySQL

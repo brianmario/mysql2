@@ -90,9 +90,17 @@ end
 desc "Build binary gems for Windows with rake-compiler-dock"
 task 'gem:windows' do
   require 'rake_compiler_dock'
+  # Separate container invocation: running sudo apt-get first, in the same
+  # script as the bundle/rake commands below, was observed to knock RVM's
+  # default-ruby selection off course for the rest of that script -- bundle
+  # and rake then ran under the container's bootstrap Ruby 2.5.3 instead,
+  # which has neither gem installed. A fresh invocation for just the apt
+  # step avoids that entirely.
   RakeCompilerDock.sh <<-EOT
     sudo apt-get update
     sudo apt-get install -y zstd
+  EOT
+  RakeCompilerDock.sh <<-EOT
     bundle install
     rake clean
     rm -f vendor/libmariadb.dll

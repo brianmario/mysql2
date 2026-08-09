@@ -30,6 +30,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end.to raise_error(Mysql2::Error::ConnectionError)
   end
 
+  it "should connect over a Unix socket" do
+    client = new_socket_client
+    expect(client.query("SELECT 1 AS one").first).to eq("one" => 1)
+  end
+
   it "should raise an exception on create for invalid encodings" do
     expect do
       new_client(encoding: "fake")

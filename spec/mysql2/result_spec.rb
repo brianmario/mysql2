@@ -355,7 +355,10 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should raise an exception if streaming ended due to a timeout" do
-      client = new_client(ssl_mode: 'disabled')
+      # A Unix socket is used deliberately: a TCP loopback connection's much
+      # larger write buffer means the server may never actually block on the
+      # write, so net_write_timeout below would never trigger.
+      client = new_socket_client
       client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
 
       # Insert enough records to force the result set into multiple reads

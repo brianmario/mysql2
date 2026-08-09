@@ -14,6 +14,21 @@ jobs:
         with:
           ruby-version: '3.4'
           bundler-cache: true # rake-compiler-dock lives in the :development group, included by default
+      - run: sudo apt-get update && sudo apt-get install -y zstd
+      # Vendoring the MSYS2 MariaDB Connector/C package used to happen inside
+      # the ephemeral rake-compiler-dock container (see tasks/compile.rake),
+      # so it re-downloaded on every run with no way to cache across them.
+      # Do it here instead, on the host runner, before the container starts
+      # -- the checkout directory is what the container mounts as its
+      # working directory, so vendor/ populated here is already visible
+      # inside it. The cache key is a hash of tasks/vendor_mysql.rake, which
+      # is where CONNECTOR_VERSION and the download URLs live, so a version
+      # bump there automatically invalidates the cache.
+      - uses: actions/cache@v6
+        with:
+          path: vendor
+          key: mariadb-connector-msys2-${{ hashFiles('tasks/vendor_mysql.rake') }}
+      - run: bundle exec rake vendor:mysql:cross
       - run: bundle exec rake gem:windows
       - uses: actions/upload-artifact@v7
         with:

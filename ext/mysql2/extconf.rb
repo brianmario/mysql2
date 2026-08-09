@@ -1,6 +1,8 @@
 require 'mkmf'
 require 'English'
 
+warn "DEBUG RUBY_PLATFORM=#{RUBY_PLATFORM.inspect} RubyInstaller_defined=#{defined?(RubyInstaller).inspect} ARGV=#{ARGV.inspect}"
+
 ### Some helper functions
 
 def asplode(lib)

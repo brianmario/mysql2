@@ -45,6 +45,18 @@ if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb11.4 ]]; then
   CHANGED_PASSWORD_BY_RECREATE=true
 fi
 
+# Install MariaDB 11.8 if DB=mariadb11.8
+if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb11.8 ]]; then
+  sudo bash ci/mariadb11.8.sh
+  CHANGED_PASSWORD_BY_RECREATE=true
+fi
+
+# Install MariaDB 12.3 if DB=mariadb12.3
+if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb12.3 ]]; then
+  sudo bash ci/mariadb12.3.sh
+  CHANGED_PASSWORD_BY_RECREATE=true
+fi
+
 # Install MySQL/MariaDB if OS=darwin
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
   brew update > /dev/null

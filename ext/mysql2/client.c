@@ -467,21 +467,6 @@ void mysql2_reap_pending_result_frees(mysql_client_wrapper *wrapper)
   }
 }
 
-/* See client.h: used by Client#close, which deliberately skips the
- * network round trips above -- the connection is going away regardless. */
-void mysql2_drop_pending_result_frees(mysql_client_wrapper *wrapper)
-{
-  mysql2_pending_result_free *node = wrapper->pending_result_frees;
-  wrapper->pending_result_frees = NULL;
-  wrapper->pending_result_free_count = 0;
-
-  while (node) {
-    mysql2_pending_result_free *next = node->next;
-    free(node);
-    node = next;
-  }
-}
-
 /* See client.h. */
 void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper)
 {
@@ -554,9 +539,10 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
    * is about to invalidate the connection those MYSQL_RES/MYSQL_STMT
    * pointers belong to, and this may itself be running during a GC sweep,
    * so no network I/O and no VM calls -- just drop the list. This does leak
-   * the client-side MYSQL_RES memory (see mysql2_drop_pending_result_frees
-   * in client.h), same tradeoff already accepted above for statement
-   * handles. */
+   * the client-side MYSQL_RES memory, same tradeoff already accepted above
+   * for statement handles -- but only here, where we have no other choice.
+   * The ordinary-Ruby-level Client#close path below does not take this
+   * shortcut: see mysql2_reap_pending_result_frees at that call site. */
   {
     mysql2_pending_result_free *node = wrapper->pending_result_frees;
     while (node) {
@@ -780,8 +766,20 @@ static VALUE rb_mysql_client_close(VALUE self) {
    * does or doesn't send -- don't bother closing each queued statement
    * individually, just clear the bookkeeping so prepared_statements and
    * pending_prepared_statement_closes don't report stale state afterward.
-   * Same reasoning for any not-yet-drained result sets. */
-  mysql2_drop_pending_result_frees(wrapper);
+   *
+   * Not-yet-drained result sets are different: unlike a statement's server-
+   * side handle, mysql_close() below has no side effect that reclaims a
+   * MYSQL_RES's client-side row buffers, so dropping those without freeing
+   * them would leak that memory for the rest of the process. This runs as
+   * ordinary Ruby-level code (this method isn't reachable from a dfree
+   * callback), so it's safe to actually flush and free them here, same as
+   * at any other safe point -- just before the connection goes away
+   * instead of before the next command. mysql2_abandon_active_stream covers
+   * a stream that's abandoned but still live (not yet collected by GC),
+   * which the reap alone wouldn't catch -- same reasoning as at every other
+   * safe point, this one was just missing it. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
   mysql2_drop_pending_stmt_closes(wrapper);
 
   if (wrapper->client) {

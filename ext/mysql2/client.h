@@ -121,14 +121,15 @@ void mysql2_enqueue_pending_result_free(mysql_client_wrapper *wrapper, MYSQL_RES
  * the statement handle itself is closed. */
 void mysql2_reap_pending_result_frees(mysql_client_wrapper *wrapper);
 
-/* Also ordinary-Ruby-level-only, like the reap above, but never attempts
- * mysql_free_result()/mysql_stmt_free_result(): for Client#close, where the
- * connection is about to go away regardless. This does leak the client-side
- * memory for any not-yet-drained result sets (unlike prepared statements,
- * MYSQL_RES buffers are not cleaned up as a side effect of mysql_close()) --
- * the same tradeoff already accepted by mysql2_drop_pending_stmt_closes for
- * statements that can't be closed server-side without a round trip. */
-void mysql2_drop_pending_result_frees(mysql_client_wrapper *wrapper);
+/* Unlike mysql2_drop_pending_stmt_closes, there is no drop-only counterpart
+ * for result frees: mysql_close() has no side effect that reclaims a
+ * MYSQL_RES's client-side row buffers (it only releases the server's
+ * prepared-statement handles), so skipping the free would leak that memory
+ * for the rest of the process. Client#close therefore calls
+ * mysql2_reap_pending_result_frees directly instead -- it's ordinary
+ * Ruby-level code, so the network I/O that may involve is fine there, same
+ * as at any other safe point. Only the dfree-reachable teardown in
+ * decr_mysql2_client (client.c) has no such option and must drop instead. */
 
 /* If the connection is still STREAMING because the previous streaming
  * Result was abandoned (caller broke out of #each, or raised, without

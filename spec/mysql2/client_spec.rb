@@ -243,6 +243,31 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     # rubocop:enable Lint/AmbiguousBlockAssociation
   end
 
+  it "should reap (not just drop) a pending abandoned streaming result when the client is closed" do
+    # Unlike a pending statement close, mysql_close() has no side effect that
+    # reclaims a MYSQL_RES's client-side row buffers -- see
+    # mysql2_reap_pending_result_frees vs mysql2_drop_pending_stmt_closes in
+    # ext/mysql2/client.c. #close must actually free a queued result, not
+    # just clear the bookkeeping, or that memory leaks for the rest of the
+    # process. This can't observe the leak directly from Ruby, but it does
+    # confirm #close runs the real (potentially blocking) free without
+    # erroring or hanging, with enough unread rows on the wire to matter.
+    client = new_client
+    sql = 'WITH RECURSIVE seq AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM seq WHERE n < 500) SELECT n FROM seq'
+    begin
+      GC.stress = true
+      result = client.query(sql, stream: true, cache_rows: false)
+      result.first
+      result = nil # rubocop:disable Lint/UselessAssignment
+    ensure
+      GC.stress = false
+    end
+    GC.start
+
+    expect { client.close }.to_not raise_error
+    expect(client.pending_result_frees).to eq(0)
+  end
+
   it "should not leave dangling connections after garbage collection" do
     run_gc
     # rubocop:disable Lint/AmbiguousBlockAssociation

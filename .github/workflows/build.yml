@@ -1,5 +1,13 @@
 name: Build
 on: [push, pull_request]
+
+# A newer push to the same pull request obsoletes whatever is still in
+# flight for it. Pushes to master are not cancelled -- every commit that
+# lands there should get a run of its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ubuntu:
     uses: ./.github/workflows/build-ubuntu.yml

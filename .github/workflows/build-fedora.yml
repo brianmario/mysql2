@@ -9,6 +9,7 @@ jobs:
     # Fedora isn't offered as a native runner OS -- these run inside a
     # container on the ubuntu-24.04 host instead.
     container: ${{ matrix.container }}
+    timeout-minutes: 30
     strategy:
       matrix:
         include:

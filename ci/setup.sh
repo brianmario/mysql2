@@ -61,11 +61,7 @@ fi
 if [[ x$OSTYPE =~ ^xdarwin ]]; then
   brew update > /dev/null
 
-  # Check available packages.
-  for KEYWORD in mysql mariadb; do
-    brew search "${KEYWORD}"
-  done
-
+  # Log which version we actually resolved to.
   brew info "$DB"
   brew install "$DB" zstd
   brew link "$DB" # explicitly activate in case of kegged LTS versions

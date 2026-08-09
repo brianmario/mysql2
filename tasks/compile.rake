@@ -42,7 +42,7 @@ Rake::ExtensionTask.new("mysql2", Mysql2::GEMSPEC) do |ext|
   It's recommended to use the exact same version to avoid potential issues.
 
   At the time of building this gem, the necessary DLL files were retrieved from:
-  #{vendor_mysql_url(spec.platform)}
+  #{vendor_mysql_url(spec.platform.to_s)}
 
   This gem *includes* vendor/libmariadb.dll with redistribution notice in vendor/README.
 

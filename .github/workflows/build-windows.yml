@@ -42,11 +42,17 @@ jobs:
           mingw: libmariadbclient
       # setup-ruby-pkgs installs the package but doesn't persist its bin/
       # directory (where mariadb_config.exe lives) onto PATH for later
-      # steps. extconf.rb's mysql_config-search fallback tolerates its
-      # absence differently across Ruby/mkmf versions (observed: crashes on
-      # Ruby 3.0's mkmf, silently finds the library some other way on 3.4's)
-      # -- add it explicitly so this doesn't depend on that.
-      - run: echo "${RI_DEVKIT}${MINGW_PREFIX}/bin" >> "$GITHUB_PATH"
+      # steps, and adding it to $GITHUB_PATH by hand didn't work either --
+      # RI_DEVKIT is a Windows-style path (backslashes) and MINGW_PREFIX is
+      # msys-style (forward slash), and the mixed-slash result silently
+      # never made it onto the runner's actual Path. Skip PATH entirely and
+      # point bundler straight at the mingw prefix instead -- extconf.rb's
+      # dir_config('mysql') branch (its very first check) takes this over
+      # any mysql_config search, so this also sidesteps extconf.rb's
+      # separate latent bug in that fallback path's dir_config defaults.
+      - run: |
+          MINGW_DIR="$(echo "$RI_DEVKIT" | tr '\\' '/')${MINGW_PREFIX}"
+          bundle config build.mysql2 -- --with-mysql-dir="$MINGW_DIR"
       - run: bundle install
       - name: Initialize and start MySQL
         run: |

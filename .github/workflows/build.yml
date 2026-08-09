@@ -9,16 +9,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Temporarily disabled while developing build-windows.yml, so CI runs only
-  # exercise Windows -- re-enable all of these before merging.
-  # ubuntu:
-  #   uses: ./.github/workflows/build-ubuntu.yml
-  # macos:
-  #   uses: ./.github/workflows/build-macos.yml
-  # fedora:
-  #   uses: ./.github/workflows/build-fedora.yml
-  # cross-version:
-  #   uses: ./.github/workflows/build-cross-version.yml
+  ubuntu:
+    uses: ./.github/workflows/build-ubuntu.yml
+  macos:
+    uses: ./.github/workflows/build-macos.yml
+  fedora:
+    uses: ./.github/workflows/build-fedora.yml
+  cross-version:
+    uses: ./.github/workflows/build-cross-version.yml
   windows:
     uses: ./.github/workflows/build-windows.yml
   windows-cross:

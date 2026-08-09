@@ -131,10 +131,15 @@ elsif (mc = with_config('mysql-config') || Dir[GLOB].first)
   $libs = libs + " " + $libs
   rpath_dir = libs
 else
-  # dir_config's third arg (ldefault) does NOT inherit the second (idefault)
-  # -- passing only one leaves usr_local_lib nil when no --with-mysql-*
-  # flag was given, which crashes find_library below (nil.split in mkmf).
-  _, usr_local_lib = dir_config('mysql', '/usr/local', '/usr/local')
+  # Not dir_config('mysql', '/usr/local', '/usr/local') here: dir_config
+  # memoizes its result per call, and on some mkmf versions (observed:
+  # Ruby 3.0's) the cache key is the bare target name "mysql", ignoring
+  # idefault/ldefault entirely -- so a second dir_config('mysql', ...) call
+  # here just returns the [nil, nil] already cached by the bare
+  # dir_config('mysql') above, silently ignoring these defaults and
+  # crashing find_library below (nil.split in mkmf) exactly as if they'd
+  # never been passed. Skip dir_config entirely for this fallback default.
+  usr_local_lib = '/usr/local'
 
   asplode("mysql client") unless find_library('mysqlclient', nil, usr_local_lib, "#{usr_local_lib}/mysql")
 

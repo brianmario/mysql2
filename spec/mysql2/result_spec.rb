@@ -1,4 +1,5 @@
 require 'spec_helper'
+require 'clocale'
 
 RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
   before(:example) do
@@ -485,6 +486,41 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     it "should return Float for a DOUBLE value" do
       expect(test_result['double_test']).to be_an_instance_of(Float)
       expect(test_result['double_test']).to eql(10.3)
+    end
+
+    context "under a locale that uses a comma as the decimal separator" do
+      before(:example) do
+        @original_locale = CLocale.setlocale(CLocale::LC_NUMERIC, nil)
+        begin
+          CLocale.setlocale(CLocale::LC_NUMERIC, "de_DE.UTF-8")
+        rescue RuntimeError
+          skip "de_DE.UTF-8 locale not installed on this system"
+        end
+      end
+
+      after(:example) do
+        CLocale.setlocale(CLocale::LC_NUMERIC, @original_locale) if @original_locale
+      end
+
+      it "should return the correct BigDecimal for a DECIMAL value between -1 and 1" do
+        result = @client.query("SELECT CAST(0.5 AS DECIMAL(10,2)) AS val")
+        expect(result.first['val']).to eql(BigDecimal("0.5"))
+      end
+
+      it "should return the correct BigDecimal for a zero DECIMAL value" do
+        result = @client.query("SELECT CAST(0.00 AS DECIMAL(10,2)) AS val")
+        expect(result.first['val']).to eql(BigDecimal("0.0"))
+      end
+
+      it "should return the correct Float for a FLOAT value" do
+        result = @client.query("SELECT CAST(2.7 AS FLOAT) AS val")
+        expect(result.first['val']).to eql(2.7)
+      end
+
+      it "should return the correct Float for a DOUBLE value" do
+        result = @client.query("SELECT CAST(2.7 AS DOUBLE) AS val")
+        expect(result.first['val']).to eql(2.7)
+      end
     end
 
     it "should return Time for a DATETIME value when within the supported range" do

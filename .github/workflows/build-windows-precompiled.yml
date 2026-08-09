@@ -51,9 +51,29 @@ jobs:
             "ALTER USER 'root'@'localhost' IDENTIFIED BY 'root'; CREATE DATABASE IF NOT EXISTS test;"
       - name: Smoke test the installed gem
         run: |
-          ruby -rmysql2 -e "
-            client = Mysql2::Client.new(host: '127.0.0.1', port: 3306, username: 'root', password: 'root', database: 'test')
-            result = client.query('SELECT 1 AS one').first
-            raise \"unexpected result: #{result.inspect}\" unless result == {'one' => 1}
-            puts \"OK: precompiled gem works, connected via #{Mysql2::Client.info[:version]}\"
-          "
+          cat > smoke_test.rb <<'RUBY'
+          require 'mysql2'
+
+          client = Mysql2::Client.new(host: '127.0.0.1', port: 3306, username: 'root', password: 'root', database: 'test')
+          result = client.query('SELECT 1 AS one').first
+          raise "unexpected result: #{result.inspect}" unless result == {'one' => 1}
+
+          client_info = Mysql2::Client.info
+          server_info = client.server_info
+
+          # This gem always vendors MariaDB Connector/C on Windows (see
+          # tasks/vendor_mysql.rake) -- the vendored DLL's presence and name
+          # is a deterministic way to confirm that, distinct from a MySQL
+          # Connector/C build (which would vendor libmysql.dll instead).
+          gem_dir = Gem.loaded_specs['mysql2'].gem_dir
+          library = if File.exist?(File.join(gem_dir, 'vendor', 'libmariadb.dll'))
+            'MariaDB Connector/C (vendor/libmariadb.dll)'
+          else
+            'unknown -- no vendor/libmariadb.dll found'
+          end
+
+          puts 'OK: precompiled gem works'
+          puts "  client library version: #{client_info[:version]} (header: #{client_info[:header_version]}, #{library})"
+          puts "  server version: #{server_info[:version]}"
+          RUBY
+          ruby smoke_test.rb

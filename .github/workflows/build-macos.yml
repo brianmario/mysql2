@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - {os: macos-latest, ruby: '4.0', db: mariadb@11.4, ssl: openssl@3}
+          - {os: macos-latest, ruby: '4.0', db: mariadb@11.8, ssl: openssl@3}
           - {os: macos-latest, ruby: '4.0', db: mysql@9.7, ssl: openssl@3}
           - {os: macos-latest, ruby: '4.0', db: mysql@8.4, ssl: openssl@3}
           - {os: macos-latest, ruby: '2.6', db: mysql@8.0, ssl: openssl@3}

@@ -395,13 +395,17 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       # window appears to depend on the platform/OpenSSL build (observed:
       # fires on macOS's stack, doesn't reproduce here on Linux's, even
       # though both are equally using TLS) -- accept either outcome here
-      # rather than assert a specific one.
+      # rather than assert a specific one. When it does fire, OpenSSL may
+      # intercept the abrupt close as a record-layer EOF before the MySQL
+      # protocol layer gets a chance to raise its own "Lost connection" --
+      # both are the same underlying event, just observed at a different
+      # layer, so accept either message too.
       begin
         res.each_with_index do |_, i|
           sleep 4 if i > 0 && i % 1000 == 0
         end
       rescue Mysql2::Error => e
-        expect(e.message).to match(/Lost connection/)
+        expect(e.message).to match(%r{Lost connection|TLS/SSL error})
       end
     end
   end

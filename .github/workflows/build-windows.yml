@@ -40,6 +40,13 @@ jobs:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: false # need the MSYS2 package installed before 'bundle install' compiles the extension
           mingw: libmariadbclient
+      # setup-ruby-pkgs installs the package but doesn't persist its bin/
+      # directory (where mariadb_config.exe lives) onto PATH for later
+      # steps. extconf.rb's mysql_config-search fallback tolerates its
+      # absence differently across Ruby/mkmf versions (observed: crashes on
+      # Ruby 3.0's mkmf, silently finds the library some other way on 3.4's)
+      # -- add it explicitly so this doesn't depend on that.
+      - run: echo "${RI_DEVKIT}${MINGW_PREFIX}/bin" >> "$GITHUB_PATH"
       - run: bundle install
       - name: Initialize and start MySQL
         run: |

@@ -90,20 +90,22 @@ end
 desc "Build binary gems for Windows with rake-compiler-dock"
 task 'gem:windows' do
   require 'rake_compiler_dock'
-  # Separate container invocation: running sudo apt-get first, in the same
-  # script as the bundle/rake commands below, was observed to knock RVM's
-  # default-ruby selection off course for the rest of that script -- bundle
-  # and rake then ran under the container's bootstrap Ruby 2.5.3 instead,
-  # which has neither gem installed. A fresh invocation for just the apt
-  # step avoids that entirely.
-  RakeCompilerDock.sh <<-EOT
-    sudo apt-get update
-    sudo apt-get install -y zstd
-  EOT
-  RakeCompilerDock.sh <<-EOT
-    bundle install
-    rake clean
-    rm -f vendor/libmariadb.dll
-    rake cross native gem CROSS_PLATFORMS=x64-mingw32:x64-mingw-ucrt
-  EOT
+  # rake-compiler-dock >= 1.0 uses a separate, platform-tagged Docker image
+  # per cross target (selected via the platform: kwarg below) rather than
+  # one universal image handling every CROSS_PLATFORMS entry -- the old
+  # `rake cross native gem CROSS_PLATFORMS=...` invocation doesn't define a
+  # 'cross' task under this version at all. Build each platform separately
+  # with the namespaced native:<platform> task instead.
+  %w[x64-mingw32 x64-mingw-ucrt].each do |platform|
+    RakeCompilerDock.sh(<<-EOT, platform: platform)
+      sudo apt-get update
+      sudo apt-get install -y zstd
+    EOT
+    RakeCompilerDock.sh(<<-EOT, platform: platform)
+      bundle install
+      rake clean
+      rm -f vendor/libmariadb.dll
+      rake native:#{platform} gem
+    EOT
+  end
 end

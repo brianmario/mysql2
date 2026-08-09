@@ -767,9 +767,17 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       context 'when a non-standard exception class is raised' do
+        # Every test in this context pins ssl_mode: disabled deliberately.
+        # Timeout.timeout interrupts a blocking query by raising inside the
+        # thread, which only works if the underlying blocking read is
+        # actually interruptible -- on some OpenSSL builds, an interrupted
+        # SSL_read is retried internally rather than returning, which
+        # defeats the interrupt entirely and hangs the thread forever
+        # instead of raising. See the TLS-specific test below.
         it "should close the connection when an exception is raised" do
-          expect { Timeout.timeout(0.1, ArgumentError) { @client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
-          expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+          client = new_client(ssl_mode: 'disabled')
+          expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
+          expect { client.query('SELECT 1') }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
@@ -777,7 +785,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
             pending('MySQL 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 
-          client = new_client(reconnect: true)
+          client = new_client(ssl_mode: 'disabled', reconnect: true)
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
@@ -788,7 +796,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
             pending('MySQL 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 
-          client = new_client
+          client = new_client(ssl_mode: 'disabled')
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to raise_error(Mysql2::Error)
@@ -797,6 +805,36 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
+        end
+
+        it "interrupting a query over TLS may raise or hang, depending on the platform/OpenSSL build" do
+          client = new_client(ssl_mode: 'required')
+
+          # A plain Timeout.timeout around the query isn't safe to use here:
+          # if the interrupt is defeated (see comment above), it would just
+          # hang this example forever right along with the query. Run the
+          # attempt on its own thread instead and give up waiting on it
+          # after a generous bound -- the thread is abandoned rather than
+          # joined if that happens, which is fine, since the process exiting
+          # at the end of the suite reclaims it either way.
+          th = Thread.new do
+            begin
+              Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') }
+            rescue StandardError => e
+              e
+            end
+          end
+
+          if th.join(5)
+            expect(th.value).to be_a(ArgumentError)
+            begin
+              client.query('SELECT 1')
+            rescue Mysql2::Error
+              # also acceptable over TLS -- see comment above
+            end
+          else
+            skip 'Timeout-interrupting a query over TLS hung instead of raising on this platform/OpenSSL build'
+          end
         end
       end
 

@@ -50,9 +50,18 @@ jobs:
       # dir_config('mysql') branch (its very first check) takes this over
       # any mysql_config search, so this also sidesteps extconf.rb's
       # separate latent bug in that fallback path's dir_config defaults.
+      #
+      # `bundle config build.mysql2 -- --with-mysql-dir=...` (tried first)
+      # writes BUNDLE_BUILD__MYSQL2 to .bundle/config -- but which config
+      # file (local vs. global) depends on bundler finding a Gemfile
+      # relative to cwd, one more thing to go sideways on a Windows/git-bash
+      # runner, and in practice the flag silently never reached extconf.rb.
+      # Since the value bundle config would have written is exactly that
+      # env var already, set it directly instead -- no file or directory
+      # resolution involved, just GITHUB_ENV, which every later step reads.
       - run: |
           MINGW_DIR="$(echo "$RI_DEVKIT" | tr '\\' '/')${MINGW_PREFIX}"
-          bundle config build.mysql2 -- --with-mysql-dir="$MINGW_DIR"
+          echo "BUNDLE_BUILD__MYSQL2=--with-mysql-dir=$MINGW_DIR" >> "$GITHUB_ENV"
       - run: bundle install
       - name: Initialize and start MySQL
         run: |

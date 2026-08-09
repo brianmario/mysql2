@@ -59,7 +59,7 @@ extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE cMysql2Result, cDateTime, cDate;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
-  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal,
+  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
   intern_query_options;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
@@ -739,6 +739,23 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   return rowVal;
 }
 
+/* Whether a MySQL DECIMAL wire value is zero: sign, digits, '.', digits,
+ * no exponent, so a value is zero iff every digit is '0'. Checked with a
+ * plain character scan rather than strtod(), which reads '.' according to
+ * the current LC_NUMERIC and misparses this otherwise-locale-independent
+ * string under any locale that uses ',' instead. */
+static int decimal_str_is_zero(const char *str) {
+  const char *p = str;
+
+  if (*p == '-' || *p == '+') p++;
+
+  for (; *p; p++) {
+    if (*p != '0' && *p != '.') return 0;
+  }
+
+  return 1;
+}
+
 static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const result_each_args *args)
 {
   VALUE rowVal;
@@ -818,7 +835,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_NEWDECIMAL: /* Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up) */
           if (fields[i].decimals == 0) {
             val = rb_cstr2inum(row[i], 10);
-          } else if (strtod(row[i], NULL) == 0.000000){
+          } else if (decimal_str_is_zero(row[i])) {
             val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, opt_decimal_zero);
           }else{
             val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, rb_str_new(row[i], fieldLengths[i]));
@@ -826,12 +843,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
         case MYSQL_TYPE_FLOAT:      /* FLOAT field */
         case MYSQL_TYPE_DOUBLE: {     /* DOUBLE or REAL field */
-          double column_to_double;
-          column_to_double = strtod(row[i], NULL);
-          if (column_to_double == 0.000000){
+          /* Kernel#Float() parses this locale-independently; strtod()
+           * would read '.' according to the current LC_NUMERIC. */
+          VALUE column_as_float = rb_funcall(rb_mKernel, intern_Float, 1, rb_str_new(row[i], fieldLengths[i]));
+          if (RFLOAT_VALUE(column_as_float) == 0.000000){
             val = opt_float_zero;
           }else{
-            val = rb_float_new(column_to_double);
+            val = column_as_float;
           }
           break;
         }
@@ -1327,6 +1345,7 @@ void init_mysql2_result(void) {
   intern_civil        = rb_intern("civil");
   intern_new_offset   = rb_intern("new_offset");
   intern_BigDecimal   = rb_intern("BigDecimal");
+  intern_Float        = rb_intern("Float");
   intern_query_options = rb_intern("@query_options");
 
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));

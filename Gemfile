@@ -25,6 +25,8 @@ group :test do
   gem 'rspec', '~> 3.2'
 
   gem 'rubocop'
+
+  gem 'clocale'
 end
 
 group :benchmarks, optional: true do

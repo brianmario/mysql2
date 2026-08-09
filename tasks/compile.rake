@@ -105,6 +105,7 @@ task 'gem:windows' do
       bundle install
       rake clean
       rm -f vendor/libmariadb.dll
+      rake vendor:mysql:cross
       rake native:#{platform} gem
     EOT
   end

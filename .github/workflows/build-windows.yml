@@ -62,6 +62,20 @@ jobs:
       # in ext/mysql2/extconf.rb, which lets find_library fall through to
       # gcc's own default mingw64 library search path -- the same path
       # windows-2025 already succeeds via without any flag.
+      #
+      # bundler-cache: false above means ruby/setup-ruby's own automatic
+      # gem caching never ran for this job -- do the same thing by hand.
+      # mysql2's own extension recompiling every run isn't a caching
+      # concern (that's the point of this job, and rake's own file-mtime
+      # tracking on `rake compile`/`rake spec` rebuilds it correctly
+      # regardless of whether bundle install itself had anything to do)
+      # -- this is just for everything else bundle install pulls in.
+      # Keyed on the Gemfile since this repo doesn't commit a Gemfile.lock.
+      - run: bundle config set --local path vendor/bundle
+      - uses: actions/cache@v6
+        with:
+          path: vendor/bundle
+          key: windows-bundle-${{ matrix.os }}-${{ matrix.ruby }}-${{ hashFiles('Gemfile') }}
       - run: bundle install
       - name: Initialize and start MySQL
         run: |

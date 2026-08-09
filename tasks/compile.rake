@@ -114,6 +114,7 @@ task 'gem:windows' do
       sudo apt-get install -y zstd
     EOT
     RakeCompilerDock.sh(<<-EOT, platform: platform)
+      export BUNDLE_PATH=vendor/bundle/#{platform}
       bundle install
       rake clean
       rm -f vendor/libmariadb.dll

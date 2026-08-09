@@ -41,7 +41,7 @@ end
 
 group :development do
   gem 'pry'
-  gem 'rake-compiler-dock', '~> 0.7.0'
+  gem 'rake-compiler-dock', '~> 1.12'
 end
 
 # On MRI Ruby >= 3.0, rubysl-rake causes the conflict on GitHub Actions.

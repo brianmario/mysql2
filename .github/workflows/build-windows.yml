@@ -23,21 +23,22 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
-      - uses: ruby/setup-ruby@v1
+      # setup-ruby-pkgs wraps the whole of ruby/setup-ruby itself (it isn't
+      # an add-on step to run alongside a separate setup-ruby step -- doing
+      # both fails, since its internal setup-ruby re-run collides trying to
+      # recreate the same msys64 symlink). Use it in place of setup-ruby so
+      # the mingw: package gets installed as part of that same setup.
+      #
+      # ruby/setup-ruby doesn't read the gemspec's msys2_mingw_dependencies
+      # metadata itself (that's a RubyInstaller-GUI-only convention) -- this
+      # installs the same package so mariadb_config ends up on PATH. Without
+      # it, extconf.rb falls through to a fallback path that doesn't work
+      # reliably on Windows (observed: crashes outright on one Ruby/mkmf
+      # combination, silently succeeds via a different lookup on another).
+      - uses: ruby/setup-ruby-pkgs@v1
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: false # need the MSYS2 package installed before 'bundle install' compiles the extension
-      # ruby/setup-ruby doesn't read the gemspec's msys2_mingw_dependencies
-      # metadata itself (that's a RubyInstaller-GUI-only convention) -- install
-      # the same package by hand so mariadb_config ends up on PATH. Without
-      # this, extconf.rb falls through to a fallback path that doesn't work
-      # reliably on Windows (observed: crashes outright on one Ruby/mkmf
-      # combination, silently succeeds via a different lookup on another).
-      # (Not `ridk exec pacman` directly: the minimal RubyInstaller archive
-      # ruby/setup-ruby downloads doesn't include the ridk wrapper script.)
-      - uses: ruby/setup-ruby-pkgs@v1
-        with:
-          ruby-version: ${{ matrix.ruby }} # required even though setup-ruby already ran above
           mingw: libmariadbclient
       - run: bundle install
       - name: Initialize and start MySQL

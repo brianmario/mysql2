@@ -33,8 +33,11 @@ jobs:
       # this, extconf.rb falls through to a fallback path that doesn't work
       # reliably on Windows (observed: crashes outright on one Ruby/mkmf
       # combination, silently succeeds via a different lookup on another).
-      - name: Install MariaDB Connector/C via MSYS2 pacman
-        run: ridk exec pacman -S --noconfirm --needed ${MINGW_PACKAGE_PREFIX}-libmariadbclient
+      # (Not `ridk exec pacman` directly: the minimal RubyInstaller archive
+      # ruby/setup-ruby downloads doesn't include the ridk wrapper script.)
+      - uses: ruby/setup-ruby-pkgs@v1
+        with:
+          mingw: libmariadbclient
       - run: bundle install
       - name: Initialize and start MySQL
         run: |

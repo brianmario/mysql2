@@ -91,7 +91,8 @@ desc "Build binary gems for Windows with rake-compiler-dock"
 task 'gem:windows' do
   require 'rake_compiler_dock'
   RakeCompilerDock.sh <<-EOT
-    which zstd || (sudo apt-get update && sudo apt-get install -y zstd)
+    sudo apt-get update
+    sudo apt-get install -y zstd
     bundle install
     rake clean
     rm -f vendor/libmariadb.dll

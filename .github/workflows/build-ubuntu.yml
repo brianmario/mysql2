@@ -1,0 +1,64 @@
+name: Build (Ubuntu)
+on:
+  workflow_call:
+jobs:
+  build:
+    name: >-
+      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Ruby 3.x / 4.x on Ubuntu 24.04 LTS
+          - {os: ubuntu-24.04, ruby: 'head', db: mysql97}
+          - {os: ubuntu-24.04, ruby: '4.0', db: mysql97}
+          - {os: ubuntu-24.04, ruby: '4.0', db: mysql84}
+          - {os: ubuntu-24.04, ruby: '3.4', db: mysql84}
+
+          # Ruby 3.x on Ubuntu 22.04 LTS
+          - {os: ubuntu-22.04, ruby: '3.4', db: mysql80}
+          - {os: ubuntu-22.04, ruby: '3.3', db: mysql80}
+          - {os: ubuntu-22.04, ruby: '3.2', db: mysql80}
+          - {os: ubuntu-22.04, ruby: '3.1', db: mysql80}
+          - {os: ubuntu-22.04, ruby: '3.0', db: mysql80}
+
+          # Ruby 2.x on Ubuntu 22.04 LTS
+          - {os: ubuntu-22.04, ruby: '2.7', db: mysql80}
+
+          # MySQL 5.7 packages stopped after Ubuntu 18.04 Bionic
+          # - {os: ubuntu-18.04, ruby: '2.7', db: mysql57}
+
+          # MariaDB LTS versions
+          # db: ci/setup.sh installs the specified packages
+
+          - {os: ubuntu-24.04, ruby: '4.0', db: mariadb12.3}
+          - {os: ubuntu-24.04, ruby: '3.4', db: mariadb12.3}
+          - {os: ubuntu-24.04, ruby: '4.0', db: mariadb11.8}
+          - {os: ubuntu-24.04, ruby: '3.4', db: mariadb11.8}
+          - {os: ubuntu-24.04, ruby: '4.0', db: mariadb11.4}
+          - {os: ubuntu-24.04, ruby: '3.4', db: mariadb11.4}
+          - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.11}
+          - {os: ubuntu-22.04, ruby: '2.7', db: mariadb10.11}
+          - {os: ubuntu-22.04, ruby: '3.0', db: mariadb10.6}
+
+          # TODO - Windows CI
+          # - {os: windows-2022, ruby: '3.2', db: mysql80}
+          # - {os: windows-2022, ruby: '2.7', db: mysql80}
+
+      # On the fail-fast: true, it cancels all in-progress jobs
+      # if any matrix job fails, which we don't want.
+      fail-fast: false
+    env:
+      BUNDLE_WITHOUT: development
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
+      - run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
+      - run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
+      - run: bash ci/setup.sh
+      # Set the verbose option in the Makefile to print compiling command lines.
+      - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
+      - run: bundle exec rake spec

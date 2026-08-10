@@ -526,6 +526,62 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       expect(test_result['enum_test']).to eql('val1')
     end
 
+    context "zero and partial-zero dates" do
+      before do
+        @client.query("SET SESSION sql_mode = ''")
+        @client.query("DROP TABLE IF EXISTS mysql2_zero_dates")
+        @client.query("CREATE TABLE mysql2_zero_dates (d DATE, dt DATETIME, ts_test TIMESTAMP NULL)")
+        @client.query("INSERT INTO mysql2_zero_dates VALUES ('0000-00-00', '0000-00-00 00:00:00', '0000-00-00 00:00:00')")
+      end
+
+      after do
+        @client.query("DROP TABLE IF EXISTS mysql2_zero_dates")
+      end
+
+      it "returns nil for zero dates over the binary protocol, matching the text protocol" do
+        text_row = @client.query("SELECT * FROM mysql2_zero_dates").first
+        stmt_row = @client.prepare("SELECT * FROM mysql2_zero_dates").execute.first
+        expect(text_row).to eql("d" => nil, "dt" => nil, "ts_test" => nil)
+        expect(stmt_row).to eql(text_row)
+      end
+
+      it "raises Mysql2::Error for partial-zero DATETIME values over both protocols" do
+        @client.query("UPDATE mysql2_zero_dates SET dt = '1972-00-27 00:00:00'")
+        expect { @client.query("SELECT dt FROM mysql2_zero_dates").to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'dt': 1972-00-27 00:00:00/)
+        expect { @client.prepare("SELECT dt FROM mysql2_zero_dates").execute.to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'dt': 1972-00-27 00:00:00/)
+        # The binary path reports the same (aliased) field name the text path does.
+        expect { @client.prepare("SELECT dt AS aliased_dt FROM mysql2_zero_dates").execute.to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'aliased_dt'/)
+      end
+
+      it "raises Mysql2::Error for partial-zero DATE values over both protocols" do
+        @client.query("UPDATE mysql2_zero_dates SET d = '1972-00-27'")
+        expect { @client.query("SELECT d FROM mysql2_zero_dates").to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'd': 1972-00-27/)
+        expect { @client.prepare("SELECT d FROM mysql2_zero_dates").execute.to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'd': 1972-00-27/)
+      end
+
+      it "keeps both protocols identical for invalid-but-storable dates under ALLOW_INVALID_DATES" do
+        @client.query("SET SESSION sql_mode = 'ALLOW_INVALID_DATES'")
+        @client.query("UPDATE mysql2_zero_dates SET d = '2004-04-31', dt = '2004-04-31 12:00:00'")
+        # DATE: Date.new rejects the invalid civil date on both paths. Matched
+        # as ArgumentError/"invalid date" rather than Date::Error, which is
+        # Ruby 3.0+ only; it subclasses ArgumentError and carries the same
+        # message, so this is exact on 3.x and still correct on 2.6.
+        expect { @client.query("SELECT d FROM mysql2_zero_dates").to_a }.to \
+          raise_error(ArgumentError, /invalid date/)
+        expect { @client.prepare("SELECT d FROM mysql2_zero_dates").execute.to_a }.to \
+          raise_error(ArgumentError, /invalid date/)
+        # DATETIME: Time normalizes the overflow identically on both paths.
+        text_val = @client.query("SELECT dt FROM mysql2_zero_dates").first["dt"]
+        stmt_val = @client.prepare("SELECT dt FROM mysql2_zero_dates").execute.first["dt"]
+        expect(stmt_val).to eql(text_val)
+      end
+    end
+
     it "should raise an error given an invalid DATETIME" do
       server_info = @client.server_info
       if server_info[:version].include?('MariaDB') || server_info[:id] < 80000

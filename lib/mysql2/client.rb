@@ -76,10 +76,10 @@ module Mysql2
       user         = opts[:username] || opts[:user]
       pass         = opts[:password] || opts[:pass]
       host         = opts[:host] || opts[:hostname]
-      tls_sni_name = opts[:tls_sni_name]
       port         = opts[:port]
       database     = opts[:database] || opts[:dbname] || opts[:db]
       socket       = opts[:socket] || opts[:sock]
+      tls_sni_name = opts[:tls_sni_name]
 
       # Correct the data types before passing these values down to the C level
       user = user.to_s unless user.nil?
@@ -87,8 +87,8 @@ module Mysql2
       host = host.to_s unless host.nil?
       port = port.to_i unless port.nil?
       database = database.to_s unless database.nil?
-      tls_sni_name = tls_sni_name.to_s unless tls_sni_name.nil?
       socket = socket.to_s unless socket.nil?
+      tls_sni_name = tls_sni_name.to_s unless tls_sni_name.nil?
       conn_attrs = parse_connect_attrs(opts[:connect_attrs])
 
       connect user, pass, host, port, database, socket, flags, conn_attrs, tls_sni_name

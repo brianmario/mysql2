@@ -1427,11 +1427,19 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     client.query('SELECT 1')
   end
 
-  it "should accept the tls_sni_name option, warning rather than raising if unsupported" do
-    expect do
-      client = new_client(tls_sni_name: 'db.example.com')
-      client.query('SELECT 1')
-    end.not_to raise_error
+  if Mysql2::Client::TLS_SNI_SUPPORTED
+    it "should accept the tls_sni_name option" do
+      expect do
+        client = new_client(tls_sni_name: 'db.example.com')
+        client.query('SELECT 1')
+      end.not_to raise_error
+    end
+  else
+    it "should raise when the tls_sni_name option is unsupported" do
+      expect do
+        new_client(tls_sni_name: 'db.example.com')
+      end.to raise_error(Mysql2::Error, /tls_sni_name/)
+    end
   end
 
   it "should respond to #encoding" do

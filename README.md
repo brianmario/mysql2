@@ -352,8 +352,9 @@ Mysql2::Client.new(
   )
 ```
 
-This requires MySQL client library 8.1 or higher; on older client libraries
-and all versions of MariaDB, the option is ignored with a warning.
+This requires MySQL client library 8.1 or higher. On older client libraries
+and all versions of MariaDB, passing this option raises `Mysql2::Error`
+rather than silently connecting without it.
 
 ### Secure auth
 

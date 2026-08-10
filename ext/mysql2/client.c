@@ -723,12 +723,7 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
 #ifdef HAVE_CONST_MYSQL_OPT_TLS_SNI_SERVERNAME
     mysql_options(wrapper->client, MYSQL_OPT_TLS_SNI_SERVERNAME, sni_hostname);
 #else
-    /* MYSQL_OPT_TLS_SNI_SERVERNAME was added in MySQL 8.1. MariaDB
-     * Connector/C has no equivalent option -- the MariaDB server itself
-     * has no TLS SNI support (MDEV-10658 has been open, unresolved, since
-     * 2016). Warn rather than raise, since failing to set TLS SNI is not
-     * fatal to the connection itself. */
-    rb_warn("Your mysql client library does not support tls_sni_name (needs MySQL 8.1+); ignoring it");
+    rb_raise(cMysql2Error, "tls_sni_name is not available, you may need a newer MySQL client library (added in MySQL 8.1; not supported on MariaDB)");
 #endif
   }
 
@@ -2166,6 +2161,12 @@ void init_mysql2_client(void) {
 #endif
 #ifndef HAVE_CONST_SSL_MODE_VERIFY_IDENTITY
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_IDENTITY"), INT2NUM(0));
+#endif
+
+#ifdef HAVE_CONST_MYSQL_OPT_TLS_SNI_SERVERNAME
+  rb_const_set(cMysql2Client, rb_intern("TLS_SNI_SUPPORTED"), Qtrue);
+#else
+  rb_const_set(cMysql2Client, rb_intern("TLS_SNI_SUPPORTED"), Qfalse);
 #endif
 }
 

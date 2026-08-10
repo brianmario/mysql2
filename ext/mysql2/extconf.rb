@@ -176,7 +176,7 @@ have_const('SERVER_QUERY_WAS_SLOW', mysql_h)
 have_const('MYSQL_OPTION_MULTI_STATEMENTS_ON', mysql_h)
 have_const('MYSQL_OPTION_MULTI_STATEMENTS_OFF', mysql_h)
 have_const('MYSQL_OPT_GET_SERVER_PUBLIC_KEY', mysql_h)
-have_const('MYSQL_OPT_TLS_SNI_SERVERNAME', mysql_h) # MySQL 8.1+; not in MySQL 8.0, which is still supported
+have_const('MYSQL_OPT_TLS_SNI_SERVERNAME', mysql_h) # MySQL >= 8.1, not MariaDB
 
 # my_bool is replaced by C99 bool in MySQL 8.0, but we want
 # to retain compatibility with the typedef in earlier MySQLs.

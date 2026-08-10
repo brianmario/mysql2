@@ -719,15 +719,6 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
   rb_hash_foreach(conn_attrs, opt_connect_attr_add_i, (VALUE)wrapper);
 #endif
 
-  /* Like the other mysql_options() calls in this function (connect attrs,
-   * SSL settings elsewhere in this file), this is set on wrapper->client --
-   * the same handle that persists for the connection's whole lifetime,
-   * including across libmysqlclient's own internal reconnects
-   * (MYSQL_OPT_RECONNECT / Client#reconnect=). It does not need to go
-   * through the args struct: args only carries values passed directly as
-   * mysql_real_connect() arguments, not mysql_options()-configured state,
-   * and mysql_options() settings are not re-specified on each (re)connect
-   * attempt -- they stay attached to the handle. */
   if (sni_hostname != NULL) {
 #ifdef HAVE_CONST_MYSQL_OPT_TLS_SNI_SERVERNAME
     mysql_options(wrapper->client, MYSQL_OPT_TLS_SNI_SERVERNAME, sni_hostname);

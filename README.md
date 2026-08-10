@@ -353,7 +353,7 @@ Mysql2::Client.new(
 ```
 
 This requires MySQL client library 8.1 or higher; on older client libraries
-the option is ignored with a warning.
+and all versions of MariaDB, the option is ignored with a warning.
 
 ### Secure auth
 

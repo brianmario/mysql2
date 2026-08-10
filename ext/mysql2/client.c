@@ -696,9 +696,10 @@ static int opt_connect_attr_add_i(VALUE key, VALUE value, VALUE arg)
 }
 #endif
 
-static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags, VALUE conn_attrs) {
+static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VALUE port, VALUE database, VALUE socket, VALUE flags, VALUE conn_attrs, VALUE tls_sni_name) {
   struct nogvl_connect_args args;
   time_t start_time, end_time, elapsed_time, connect_timeout;
+  const char *sni_hostname;
   VALUE rv;
   GET_CLIENT(self);
 
@@ -711,10 +712,20 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
   args.mysql       = wrapper->client;
   args.client_flag = NUM2ULONG(flags);
 
+  sni_hostname     = NIL_P(tls_sni_name) ? NULL : StringValueCStr(tls_sni_name);
+
 #ifdef CLIENT_CONNECT_ATTRS
   mysql_options(wrapper->client, MYSQL_OPT_CONNECT_ATTR_RESET, 0);
   rb_hash_foreach(conn_attrs, opt_connect_attr_add_i, (VALUE)wrapper);
 #endif
+
+  if (sni_hostname != NULL) {
+#ifdef HAVE_CONST_MYSQL_OPT_TLS_SNI_SERVERNAME
+    mysql_options(wrapper->client, MYSQL_OPT_TLS_SNI_SERVERNAME, sni_hostname);
+#else
+    rb_raise(cMysql2Error, "tls_sni_name is not available, you may need a newer MySQL client library (added in MySQL 8.1; not supported on MariaDB)");
+#endif
+  }
 
   if (wrapper->connect_timeout)
     time(&start_time);
@@ -1951,7 +1962,7 @@ void init_mysql2_client(void) {
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
   rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
-  rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 8);
+  rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 9);
   rb_define_private_method(cMysql2Client, "_query", rb_mysql_query, 2);
 
   sym_id              = ID2SYM(rb_intern("id"));
@@ -2150,6 +2161,12 @@ void init_mysql2_client(void) {
 #endif
 #ifndef HAVE_CONST_SSL_MODE_VERIFY_IDENTITY
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_VERIFY_IDENTITY"), INT2NUM(0));
+#endif
+
+#ifdef HAVE_CONST_MYSQL_OPT_TLS_SNI_SERVERNAME
+  rb_const_set(cMysql2Client, rb_intern("TLS_SNI_SUPPORTED"), Qtrue);
+#else
+  rb_const_set(cMysql2Client, rb_intern("TLS_SNI_SUPPORTED"), Qfalse);
 #endif
 }
 

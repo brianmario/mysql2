@@ -23,7 +23,7 @@ Lint/MissingSuper:
 # Offense count: 2
 # Configuration parameters: AllowedMethods, AllowedPatterns, CountRepeatedAttributes.
 Metrics/AbcSize:
-  Max: 89
+  Max: 92
 
 # Offense count: 35
 # Configuration parameters: CountComments, CountAsOne, AllowedMethods, AllowedPatterns.
@@ -39,22 +39,22 @@ Metrics/BlockNesting:
 # Offense count: 1
 # Configuration parameters: CountComments, CountAsOne.
 Metrics/ClassLength:
-  Max: 141
+  Max: 143
 
 # Offense count: 3
 # Configuration parameters: AllowedMethods, AllowedPatterns.
 Metrics/CyclomaticComplexity:
-  Max: 32
+  Max: 33
 
 # Offense count: 6
 # Configuration parameters: CountComments, CountAsOne, AllowedMethods, AllowedPatterns.
 Metrics/MethodLength:
-  Max: 52
+  Max: 54
 
 # Offense count: 2
 # Configuration parameters: AllowedMethods, AllowedPatterns.
 Metrics/PerceivedComplexity:
-  Max: 30
+  Max: 31
 
 # Offense count: 2
 # Configuration parameters: ForbiddenDelimiters.

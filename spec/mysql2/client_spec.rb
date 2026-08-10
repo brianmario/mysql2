@@ -177,10 +177,10 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     # 'preferred' or 'verify_ca' are only in MySQL 5.6.36+, 5.7.11+, 8.0+
-    version = Mysql2::Client.info
+    version = Mysql2::Client.info[:id]
     ssl_modes = case version
     when 50636...50700, 50711...50800, 80000...90000
-      %i[disabled preferred required verifa_ca verify_identity]
+      %i[disabled preferred required verify_ca verify_identity]
     else
       %i[disabled required verify_identity]
     end

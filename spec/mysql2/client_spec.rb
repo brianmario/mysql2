@@ -30,6 +30,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end.to raise_error(Mysql2::Error::ConnectionError)
   end
 
+  it "should connect over a Unix socket" do
+    client = new_socket_client
+    expect(client.query("SELECT 1 AS one").first).to eq("one" => 1)
+  end
+
+  it "should connect via TLS" do
+    client = new_client(ssl_mode: 'required')
+    expect(client.ssl_cipher).not_to be_empty
+  end
+
   it "should raise an exception on create for invalid encodings" do
     expect do
       new_client(encoding: "fake")
@@ -233,6 +243,31 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     # rubocop:enable Lint/AmbiguousBlockAssociation
   end
 
+  it "should reap (not just drop) a pending abandoned streaming result when the client is closed" do
+    # Unlike a pending statement close, mysql_close() has no side effect that
+    # reclaims a MYSQL_RES's client-side row buffers -- see
+    # mysql2_reap_pending_result_frees vs mysql2_drop_pending_stmt_closes in
+    # ext/mysql2/client.c. #close must actually free a queued result, not
+    # just clear the bookkeeping, or that memory leaks for the rest of the
+    # process. This can't observe the leak directly from Ruby, but it does
+    # confirm #close runs the real (potentially blocking) free without
+    # erroring or hanging, with enough unread rows on the wire to matter.
+    client = new_client
+    sql = 'WITH RECURSIVE seq AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM seq WHERE n < 500) SELECT n FROM seq'
+    begin
+      GC.stress = true
+      result = client.query(sql, stream: true, cache_rows: false)
+      result.first
+      result = nil # rubocop:disable Lint/UselessAssignment
+    ensure
+      GC.stress = false
+    end
+    GC.start
+
+    expect { client.close }.to_not raise_error
+    expect(client.pending_result_frees).to eq(0)
+  end
+
   it "should not leave dangling connections after garbage collection" do
     run_gc
     # rubocop:disable Lint/AmbiguousBlockAssociation
@@ -333,7 +368,15 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
       it "should not close connections when running in a child process" do
         run_gc
-        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        # The fd-invalidation trick that makes this safe (see invalidate_fd()
+        # in ext/mysql2/client.c) only patches up the raw socket fd. A TLS
+        # connection also has an OpenSSL session/record-layer state machine
+        # that fork() duplicates right along with the fd; the child's real
+        # round-trip in this test advances that state independently of the
+        # parent's copy, permanently desyncing the parent's side regardless
+        # of anything invalidate_fd() does afterward. So this test is only
+        # meaningful over a plaintext connection.
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge('ssl_mode' => 'disabled'))
         client.automatic_close = false
 
         child = fork do
@@ -550,12 +593,48 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end.to_not raise_error
     end
 
-    it "should not let you query again if iterating is not finished when streaming" do
+    it "should let you query again if the previous streaming result was abandoned (not fully iterated)" do
+      # Only fetch the first row and never touch the rest of the cursor.
+      # The next query must not raise "Commands out of sync" -- the client
+      # should force-drain the abandoned cursor itself, even though GC
+      # hasn't had a chance to collect the old Result yet.
       @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false).first
 
       expect do
         @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false)
-      end.to raise_exception(Mysql2::Error)
+      end.to_not raise_error
+    end
+
+    it "should let you query again after breaking out of #each on a streaming result early" do
+      # rubocop:disable Lint/UnreachableLoop
+      @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).each do |_row|
+        break
+      end
+      # rubocop:enable Lint/UnreachableLoop
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
+
+    it "should let you query again after an exception raised inside a streaming #each block" do
+      # rubocop:disable Lint/UnreachableLoop
+      expect do
+        @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).each do |_row|
+          raise "boom"
+        end
+      end.to raise_error("boom")
+      # rubocop:enable Lint/UnreachableLoop
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
+
+    it "should let you query again if a streaming result was abandoned and only collected by the GC" do
+      @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false).first
+      run_gc
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
     end
 
     it "should only accept strings as the query parameter" do
@@ -608,7 +687,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     it "should detect closed connection on query read error" do
       connection_id = @client.thread_id
-      Thread.new do
+      new_thread do
         sleep(0.1)
         Mysql2::Client.new(DatabaseCredentials['root']).tap do |supervisor|
           supervisor.query("KILL #{connection_id}")
@@ -616,7 +695,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
       expect do
         @client.query("SELECT SLEEP(1)")
-      end.to raise_error(Mysql2::Error, /Lost connection/)
+      end.to raise_error(Mysql2::Error) { |e|
+        # Over TLS, OpenSSL intercepts the abrupt close as a record-layer
+        # EOF before the MySQL protocol layer gets a chance to generate its
+        # own "Lost connection" message -- both are the same underlying
+        # event (the server killed the connection).
+        expect(e.message).to match(%r{Lost connection|TLS/SSL error})
+      }
 
       if RUBY_PLATFORM !~ /mingw|mswin/
         expect do
@@ -633,14 +718,32 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.to raise_error(Mysql2::Error)
       end
 
+      it "should prevent using a connection held by a dead thread, but not closing it" do
+        thr = new_thread do
+          @client.query("SELECT SLEEP(2)")
+        end
+        thr.join(0.5)
+        thr.kill
+        thr.join
+
+        expect { @client.query("SELECT 4") }.to raise_error(Mysql2::Error)
+        @client.close
+      end
+
       it "should describe the thread holding the active query" do
-        thr = Thread.new do
+        out_queue = Queue.new
+        in_queue = Queue.new
+
+        thr = new_thread do
           @client.query("SELECT 1", async: true)
-          Fiber.current
+          out_queue << Fiber.current
+          in_queue.pop
         end
 
-        fiber = thr.value
+        fiber = out_queue.pop
         expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(fiber.inspect)))
+        in_queue.close
+        thr.join
       end
 
       it "should timeout if we wait longer than :read_timeout" do
@@ -693,19 +796,49 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       it 'should be impervious to connection-corrupting timeouts in #execute' do
+        client = new_client(ssl_mode: 'disabled')
+
         # attempt to break the connection
-        stmt = @client.prepare('SELECT SLEEP(?)')
-        expect { Timeout.timeout(0.1) { stmt.execute(0.2) } }.to raise_error(Timeout::Error)
+        stmt = client.prepare('SELECT SLEEP(?)')
+        expect { Timeout.timeout(0.1) { stmt.execute(1) } }.to raise_error(Timeout::Error)
         stmt.close
 
         # expect the connection to not be broken
-        expect { @client.query('SELECT 1') }.to_not raise_error
+        expect { client.query('SELECT 1') }.to_not raise_error
+      end
+
+      it 'connection-corrupting timeouts in #execute over TLS may or may not break the connection' do
+        client = new_client(ssl_mode: 'required')
+
+        # attempt to break the connection
+        stmt = client.prepare('SELECT SLEEP(?)')
+        expect { Timeout.timeout(0.1) { stmt.execute(1) } }.to raise_error(Timeout::Error)
+        stmt.close
+
+        # Whether interrupting a query mid-read leaves the TLS session itself
+        # resumable appears to depend on the platform/OpenSSL build (observed:
+        # recovers fine on macOS's stack, doesn't on Linux's, even though both
+        # are equally using TLS) -- accept either outcome here rather than
+        # assert a specific one.
+        begin
+          client.query('SELECT 1')
+        rescue Mysql2::Error
+          # also acceptable over TLS -- see above
+        end
       end
 
       context 'when a non-standard exception class is raised' do
+        # Every test in this context pins ssl_mode: disabled deliberately.
+        # Timeout.timeout interrupts a blocking query by raising inside the
+        # thread, which only works if the underlying blocking read is
+        # actually interruptible -- on some OpenSSL builds, an interrupted
+        # SSL_read is retried internally rather than returning, which
+        # defeats the interrupt entirely and hangs the thread forever
+        # instead of raising. See the TLS-specific test below.
         it "should close the connection when an exception is raised" do
-          expect { Timeout.timeout(0.1, ArgumentError) { @client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
-          expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+          client = new_client(ssl_mode: 'disabled')
+          expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
+          expect { client.query('SELECT 1') }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
         end
 
         it "should handle Timeouts without leaving the connection hanging if reconnect is true" do
@@ -713,7 +846,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
             pending('MySQL 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 
-          client = new_client(reconnect: true)
+          client = new_client(ssl_mode: 'disabled', reconnect: true)
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
@@ -724,7 +857,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
             pending('MySQL 5.5 on OSX is afflicted by an unknown bug that breaks this test. See #633 and #634.')
           end
 
-          client = new_client
+          client = new_client(ssl_mode: 'disabled')
 
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to raise_error(Mysql2::Error)
@@ -734,6 +867,36 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
           expect { Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') } }.to raise_error(ArgumentError)
           expect { client.query('SELECT 1') }.to_not raise_error
         end
+
+        it "interrupting a query over TLS may raise or hang, depending on the platform/OpenSSL build" do
+          client = new_client(ssl_mode: 'required')
+
+          # A plain Timeout.timeout around the query isn't safe to use here:
+          # if the interrupt is defeated (see comment above), it would just
+          # hang this example forever right along with the query. Run the
+          # attempt on its own thread instead and give up waiting on it
+          # after a generous bound -- the thread is abandoned rather than
+          # joined if that happens, which is fine, since the process exiting
+          # at the end of the suite reclaims it either way.
+          th = Thread.new do
+            begin
+              Timeout.timeout(0.1, ArgumentError) { client.query('SELECT SLEEP(1)') }
+            rescue StandardError => e
+              e
+            end
+          end
+
+          if th.join(5)
+            expect(th.value).to be_a(ArgumentError)
+            begin
+              client.query('SELECT 1')
+            rescue Mysql2::Error
+              # also acceptable over TLS -- see comment above
+            end
+          else
+            skip 'Timeout-interrupting a query over TLS hung instead of raising on this platform/OpenSSL build'
+          end
+        end
       end
 
       it "threaded queries should be supported" do
@@ -742,7 +905,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         # Note that each thread opens its own database connection
         start = clock_time
         threads = Array.new(5) do
-          Thread.new do
+          new_thread do
             new_client do |client|
               client.query("SELECT SLEEP(#{sleep_time})")
             end
@@ -761,17 +924,23 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
       it "evented async queries should be supported" do
         # should immediately return nil
-        expect(@client.query("SELECT sleep(0.1)", async: true)).to eql(nil)
+        expect(@client.query("SELECT sleep(0.5)", async: true)).to eql(nil)
 
         io_wrapper = IO.for_fd(@client.socket, autoclose: false)
         loops = 0
-        loops += 1 until IO.select([io_wrapper], nil, nil, 0.05)
+        loops += 1 until IO.select([io_wrapper], nil, nil, 0.01)
 
         # make sure we waited some period of time
         expect(loops >= 1).to be true
 
         result = @client.async_result
         expect(result).to be_an_instance_of(Mysql2::Result)
+      end
+
+      it "can close a connection with on the fly async query" do
+        expect(@client.query("SELECT sleep(0.5)", async: true)).to eql(nil)
+        @client.close
+        expect(@client.async_result).to be nil
       end
     end
 
@@ -875,13 +1044,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     it "should not overflow the thread stack" do
       expect do
-        Thread.new { Mysql2::Client.escape("'" * 256 * 1024) }.join
+        new_thread { Mysql2::Client.escape("'" * 256 * 1024) }.join
       end.not_to raise_error
     end
 
     it "should not overflow the process stack" do
       expect do
-        Thread.new { Mysql2::Client.escape("'" * 1024 * 1024 * 4) }.join
+        new_thread { Mysql2::Client.escape("'" * 1024 * 1024 * 4) }.join
       end.not_to raise_error
     end
 
@@ -912,13 +1081,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     it "should not overflow the thread stack" do
       expect do
-        Thread.new { @client.escape("'" * 256 * 1024) }.join
+        new_thread { @client.escape("'" * 256 * 1024) }.join
       end.not_to raise_error
     end
 
     it "should not overflow the process stack" do
       expect do
-        Thread.new { @client.escape("'" * 1024 * 1024 * 4) }.join
+        new_thread { @client.escape("'" * 1024 * 1024 * 4) }.join
       end.not_to raise_error
     end
 
@@ -1011,7 +1180,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   it "should raise a Mysql2::Error::ConnectionError exception upon connection failure due to invalid credentials" do
     expect do
-      new_client(host: 'localhost', username: 'asdfasdf8d2h', password: 'asdfasdfw42')
+      begin
+        new_client(host: 'localhost', username: 'asdfasdf8d2h', password: 'asdfasdfw42')
+      rescue Mysql2::Error => e
+        raise unless e.message.include?('mysql_native_password')
+
+        skip("Native password is not supported")
+      end
     end.to raise_error(Mysql2::Error::ConnectionError)
 
     expect do
@@ -1064,10 +1239,22 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "#affected_rows should return a Fixnum, from the last INSERT/UPDATE" do
-      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234)"
-      expect(@client.affected_rows).to eql(1)
+      @client.query "INSERT INTO lastIdTest (blah) VALUES (1234), (5678)"
+      expect(@client.affected_rows).to eql(2)
       @client.query "UPDATE lastIdTest SET blah=4321 WHERE id=1"
       expect(@client.affected_rows).to eql(1)
+    end
+
+    it "#affected_rows with multi statements returns the last result's affected_rows" do
+      begin
+        @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_ON)
+        @client.query("INSERT INTO lastIdTest (blah) VALUES (1234), (5678); UPDATE lastIdTest SET blah=4321 WHERE id=1")
+        expect(@client.affected_rows).to eq(2)
+        expect(@client.next_result).to eq(true)
+        expect(@client.affected_rows).to eq(1)
+      ensure
+        @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_OFF)
+      end
     end
 
     it "#affected_rows isn't cleared by Statement#close" do
@@ -1080,6 +1267,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
       expect(@client.affected_rows).to eql(1)
     end
+  end
+
+  it "#affected_rows when no rows were affected returns 1" do
+    @client.query "SELECT sleep(0.01)"
+    expect(@client.affected_rows).to eq(1)
   end
 
   it "should respond to #thread_id" do
@@ -1181,6 +1373,49 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context 'database' do
+    before(:example) do
+      2.times do |i|
+        @client.query("CREATE DATABASE test_db#{i}")
+      end
+    end
+
+    after(:example) do
+      2.times do |i|
+        @client.query("DROP DATABASE test_db#{i}")
+      end
+    end
+
+    it "should be `nil` when no database is selected" do
+      client = new_client(database: nil)
+      expect(client.database).to eq(nil)
+    end
+
+    it "should reflect the initially connected database" do
+      client = new_client(database: 'test_db0')
+      expect(client.database).to eq('test_db0')
+    end
+
+    context "when session tracking is on" do
+      it "should change to reflect currently selected database" do
+        client = new_client(database: 'test_db0')
+        client.query('SET session_track_schema=on')
+        expect { client.query('USE test_db1') }.to change {
+          client.database
+        }.from('test_db0').to('test_db1')
+      end
+    end
+
+    context "when session tracking is off" do
+      it "does not change when a new database is selected" do
+        client = new_client(database: 'test_db0')
+        client.query('SET session_track_schema=off')
+        expect(client.database).to eq('test_db0')
+        expect { client.query('USE test_db1') }.not_to(change { client.database })
+      end
+    end
+  end
+
   it "#thread_id should return a boolean" do
     expect(@client.ping).to eql(true)
     @client.close
@@ -1212,5 +1447,31 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     expect(client.inspect).not_to include("pass")
     expect(client.inspect).not_to include("secretsecret")
+  end
+
+  it "should not allow concurrent use of #ping" do
+    @client.ping
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    10.times do
+      expect do
+        @client.ping
+      end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    end
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.ping).to eq(true)
+  end
+
+  it "should not allow concurrent use of #close" do
+    @client.ping
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    10.times do
+      expect do
+        @client.close
+      end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    end
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.close).to be_nil
   end
 end

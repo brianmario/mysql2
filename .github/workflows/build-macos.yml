@@ -1,0 +1,35 @@
+name: Build (macOS)
+on:
+  workflow_call:
+jobs:
+  build:
+    name: >-
+      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - {os: macos-latest, ruby: '4.0', db: mariadb@11.8, ssl: openssl@3}
+          - {os: macos-latest, ruby: '4.0', db: mysql@9.7, ssl: openssl@3}
+          - {os: macos-latest, ruby: '4.0', db: mysql@8.4, ssl: openssl@3}
+          - {os: macos-latest, ruby: '2.6', db: mysql@8.0, ssl: openssl@3}
+      fail-fast: false
+    env:
+      BUNDLE_WITHOUT: development
+      # reduce MacOS CI time, don't need to clean a runtime that isn't saved
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
+      - run: sudo echo "127.0.0.1 mysql2gem.example.com" | sudo tee -a /etc/hosts
+      - run: echo 'DB=${{ matrix.db }}' >> $GITHUB_ENV
+      - run: bash ci/setup.sh
+      # Set the verbose option in the Makefile to print compiling command lines.
+      - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
+      - run: echo "rake_spec_opts=--with-openssl-dir=$(brew --prefix ${{ matrix.ssl }})" >> $GITHUB_ENV
+      - run: bundle exec rake spec -- $rake_spec_opts

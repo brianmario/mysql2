@@ -13,12 +13,20 @@ gem 'rake-compiler', '~> 1.2.0'
 gem 'irb', require: false
 
 group :test do
-  gem 'eventmachine' unless RUBY_PLATFORM =~ /mswin|mingw/
+  unless RUBY_PLATFORM =~ /mswin|mingw/
+    if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('4.0')
+      # Ruby 4.0 removed Data_Wrap_Struct, breaking eventmachine 1.2.7's
+      # fastfilereader ext; use git master until a fix is released.
+      gem 'eventmachine', github: 'eventmachine/eventmachine'
+    else
+      gem 'eventmachine'
+    end
+  end
   gem 'rspec', '~> 3.2'
 
-  # https://github.com/bbatsov/rubocop/pull/4789
-  # 1.51 is the last version supporting Ruby 2.6
-  gem 'rubocop', '>= 1.30.1', '< 1.51' if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('2.6')
+  gem 'rubocop'
+
+  gem 'clocale'
 end
 
 group :benchmarks, optional: true do
@@ -33,7 +41,7 @@ end
 
 group :development do
   gem 'pry'
-  gem 'rake-compiler-dock', '~> 0.7.0'
+  gem 'rake-compiler-dock', '~> 1.12'
 end
 
 # On MRI Ruby >= 3.0, rubysl-rake causes the conflict on GitHub Actions.

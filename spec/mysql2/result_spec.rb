@@ -1,6 +1,7 @@
 require 'spec_helper'
+require 'clocale'
 
-RSpec.describe Mysql2::Result do
+RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
   before(:example) do
     @result = @client.query "SELECT 1"
   end
@@ -20,6 +21,104 @@ RSpec.describe Mysql2::Result do
 
   it "should respond to #free" do
     expect(@result).to respond_to(:free)
+  end
+
+  it "should raise when iterating a result freed before being fully cached" do
+    result = @client.query "SELECT 1"
+    result.free
+    expect { result.each.to_a }.to raise_error(Mysql2::Error, "Result set has already been freed")
+  end
+
+  it "should raise when iterating a freed cache_rows: false result instead of replaying nil rows" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2", cache_rows: false
+    result.each { |_| }
+    result.free
+    expect { result.to_a }.to raise_error(Mysql2::Error, "Result set has already been freed")
+  end
+
+  it "should raise when iterating a streaming result freed before completion" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2", stream: true, cache_rows: false
+    result.free
+    expect { result.each { |_| } }.to raise_error(Mysql2::Error, "Result set has already been freed")
+  end
+
+  it "should stop iterating cleanly when the result is freed inside the block" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2 UNION SELECT 3"
+    seen = []
+    result.each do |row|
+      seen << row
+      result.free
+    end
+    expect(seen).to eql([{ "a" => 1 }])
+  end
+
+  it "should still replay cached rows after the result is freed" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2"
+    rows = result.to_a # fully cached; C result auto-freed here
+    result.free
+    expect(result.to_a).to eql(rows)
+  end
+
+  it "should tolerate free inside the block for materialized prepared-statement results" do
+    # Non-streaming statement results are fully materialized (and their C
+    # result freed) during #execute, so iteration replays the cache and an
+    # in-block free is a harmless no-op.
+    result = @client.prepare("SELECT 1 AS a UNION SELECT 2 UNION SELECT 3").execute
+    seen = []
+    result.each do |row|
+      seen << row
+      result.free
+    end
+    expect(seen).to eql([{ "a" => 1 }, { "a" => 2 }, { "a" => 3 }])
+  end
+
+  it "should stop a streaming prepared-statement iteration cleanly when freed inside the block" do
+    result = @client.prepare("SELECT 1 AS a UNION SELECT 2 UNION SELECT 3").execute(stream: true, cache_rows: false)
+    seen = []
+    result.each do |row|
+      seen << row
+      result.free
+    end
+    expect(seen).to eql([{ "a" => 1 }])
+  end
+
+  it "should keep the streaming-specific error for re-iterating a completed stream" do
+    result = @client.query "SELECT 1 AS a UNION SELECT 2", stream: true
+    result.each { |_| }
+    expect { result.each { |_| } }.to raise_error(Mysql2::Error, /streaming is true.*to reiterate you must requery/)
+  end
+
+  it "should keep field_types valid across GC and compaction" do
+    result = @client.query "SELECT 1 AS a, 'x' AS b"
+    before_types = result.field_types.dup
+    GC.start
+    GC.verify_compaction_references(expand_heap: true, toward: :empty) if GC.respond_to?(:verify_compaction_references) && RUBY_VERSION >= "3.2"
+    expect(result.field_types).to eql(before_types)
+  end
+
+  it "should keep field_types valid when GC runs during the first call" do
+    # The array is stored on the C struct before the fill loop runs, and that
+    # loop allocates a String per column, so a GC inside it can collect the
+    # still-unmarked array between the store and the rb_ary_store that follows.
+    # That window is a write into a freed slot, and it is inside the very first
+    # #field_types call -- the spec above only covers a stale read on a later
+    # one. Ordinary GC is enough here; compaction is not part of the mechanism.
+    # Reproduction from @jeremy (#1453). Three fresh results give three
+    # independent first-call windows: whether the dying array temporary is
+    # conservatively pinned on the C stack is compiler/layout luck, so one
+    # window could theoretically survive unpatched where another aborts.
+    3.times do
+      result = @client.query "SELECT 1 AS a, 'x' AS b, 2.5 AS c, NOW() AS d"
+      begin
+        GC.stress = true
+        types = result.field_types # first-ever call on this Result
+      ensure
+        GC.stress = false
+      end
+      expect(types).to be_an_instance_of(Array)
+      expect(types.length).to eql(4)
+      expect(types).to all(be_an_instance_of(String))
+    end
   end
 
   it "should raise a Mysql2::Error exception upon a bad query" do
@@ -121,6 +220,27 @@ RSpec.describe Mysql2::Result do
         expect(f).to be_frozen
       end
     end
+
+    it "should keep fields and field_types accessible for exhausted empty results" do
+      result = @client.query("SELECT 1 AS only_col WHERE 1 = 0")
+      expect(result.each.to_a).to eql([])
+      expect(result.fields).to eql(["only_col"])
+      expect(result.field_types.length).to eql(1)
+    end
+
+    it "should keep fields and field_types accessible for exhausted empty streaming results" do
+      result = @client.query("SELECT 1 AS only_col WHERE 1 = 0", stream: true, cache_rows: false)
+      expect(result.each.to_a).to eql([])
+      expect(result.fields).to eql(["only_col"])
+      expect(result.field_types.length).to eql(1)
+    end
+
+    it "should keep fields and field_types accessible after free" do
+      result = @client.query("SELECT 1 AS only_col WHERE 1 = 0")
+      result.free
+      expect(result.fields).to eql(["only_col"])
+      expect(result.field_types.length).to eql(1)
+    end
   end
 
   context "#field_types" do
@@ -199,9 +319,7 @@ RSpec.describe Mysql2::Result do
       expect(result.field_types).to eql(expected_types)
     end
 
-    it "should return json type on mysql 8.0" do
-      next unless /8.\d+.\d+/ =~ @client.server_info[:version]
-
+    it "should return json type" do
       result = @client.query("SELECT JSON_OBJECT('key', 'value')")
       expect(result.field_types).to eql(['json'])
     end
@@ -238,16 +356,20 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should raise an exception if streaming ended due to a timeout" do
-      @client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
+      # A Unix socket is used deliberately: a TCP loopback connection's much
+      # larger write buffer means the server may never actually block on the
+      # write, so net_write_timeout below would never trigger.
+      client = new_socket_client
+      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
 
       # Insert enough records to force the result set into multiple reads
       # (the BINARY type is used simply because it forces full width results)
       10000.times do |i|
-        @client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
       end
 
-      @client.query "SET net_write_timeout = 1"
-      res = @client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
+      client.query "SET net_write_timeout = 1"
+      res = client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
 
       expect do
         res.each_with_index do |_, i|
@@ -255,6 +377,37 @@ RSpec.describe Mysql2::Result do
           sleep 4 if i > 0 && i % 1000 == 0
         end
       end.to raise_error(Mysql2::Error, /Lost connection/)
+    end
+
+    it "streaming ended due to a timeout over TLS may or may not raise an exception" do
+      client = new_client(ssl_mode: 'required')
+      client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
+
+      # Insert enough records to force the result set into multiple reads
+      # (the BINARY type is used simply because it forces full width results)
+      10000.times do |i|
+        client.query "INSERT INTO streamingTest (val) VALUES ('Foo #{i}')"
+      end
+
+      client.query "SET net_write_timeout = 1"
+      res = client.query "SELECT * FROM streamingTest", stream: true, cache_rows: false
+
+      # Whether net_write_timeout's forced disconnect surfaces within this
+      # window appears to depend on the platform/OpenSSL build (observed:
+      # fires on macOS's stack, doesn't reproduce here on Linux's, even
+      # though both are equally using TLS) -- accept either outcome here
+      # rather than assert a specific one. When it does fire, OpenSSL may
+      # intercept the abrupt close as a record-layer EOF before the MySQL
+      # protocol layer gets a chance to raise its own "Lost connection" --
+      # both are the same underlying event, just observed at a different
+      # layer, so accept either message too.
+      begin
+        res.each_with_index do |_, i|
+          sleep 4 if i > 0 && i % 1000 == 0
+        end
+      rescue Mysql2::Error => e
+        expect(e.message).to match(%r{Lost connection|TLS/SSL error})
+      end
     end
   end
 
@@ -370,6 +523,41 @@ RSpec.describe Mysql2::Result do
       expect(test_result['double_test']).to eql(10.3)
     end
 
+    context "under a locale that uses a comma as the decimal separator" do
+      before(:example) do
+        @original_locale = CLocale.setlocale(CLocale::LC_NUMERIC, nil)
+        begin
+          CLocale.setlocale(CLocale::LC_NUMERIC, "de_DE.UTF-8")
+        rescue RuntimeError
+          skip "de_DE.UTF-8 locale not installed on this system"
+        end
+      end
+
+      after(:example) do
+        CLocale.setlocale(CLocale::LC_NUMERIC, @original_locale) if @original_locale
+      end
+
+      it "should return the correct BigDecimal for a DECIMAL value between -1 and 1" do
+        result = @client.query("SELECT CAST(0.5 AS DECIMAL(10,2)) AS val")
+        expect(result.first['val']).to eql(BigDecimal("0.5"))
+      end
+
+      it "should return the correct BigDecimal for a zero DECIMAL value" do
+        result = @client.query("SELECT CAST(0.00 AS DECIMAL(10,2)) AS val")
+        expect(result.first['val']).to eql(BigDecimal("0.0"))
+      end
+
+      it "should return the correct Float for a FLOAT value" do
+        result = @client.query("SELECT CAST(2.7 AS FLOAT) AS val")
+        expect(result.first['val']).to eql(2.7)
+      end
+
+      it "should return the correct Float for a DOUBLE value" do
+        result = @client.query("SELECT CAST(2.7 AS DOUBLE) AS val")
+        expect(result.first['val']).to eql(2.7)
+      end
+    end
+
     it "should return Time for a DATETIME value when within the supported range" do
       expect(test_result['date_time_test']).to be_an_instance_of(Time)
       expect(test_result['date_time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
@@ -390,6 +578,51 @@ RSpec.describe Mysql2::Result do
       expect(test_result['timestamp_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2010-04-04 11:44:00')
     end
 
+    it "should parse DATETIME values identically to the sscanf path across fractional widths" do
+      # Each literal is cast to the DATETIME(N) that actually puts N fractional
+      # digits on the wire. Casting everything to DATETIME(6) would not do:
+      # the server normalises '...56.5' to '...56.500000', so the short forms
+      # would never reach the parser at all. The cast: false read pins that
+      # premise, so if the server ever stopped emitting these widths the test
+      # fails rather than quietly stopping testing them.
+      # Microseconds are left-aligned: ".5" is 500000, not 5.
+      [
+        ['2026-07-28 12:34:56',        'DATETIME',    0],
+        ['2026-07-28 12:34:56.5',      'DATETIME(1)', 500_000],
+        ['2026-07-28 12:34:56.05',     'DATETIME(2)', 50_000],
+        ['2026-07-28 12:34:56.123',    'DATETIME(3)', 123_000],
+        ['2026-07-28 12:34:56.000001', 'DATETIME(6)', 1],
+        ['2026-07-28 12:34:56.123456', 'DATETIME(6)', 123_456],
+        ['1000-01-01 00:00:00.999999', 'DATETIME(6)', 999_999],
+      ].each do |literal, type, usec|
+        sql = "SELECT CAST('#{literal}' AS #{type}) AS t"
+
+        raw = @client.query(sql, cast: false).first['t']
+        expect(raw).to eql(literal), "#{type}: parser was handed #{raw.inspect}, not #{literal.inspect}"
+
+        row = @client.query(sql, database_timezone: :utc).first['t']
+        expect(row).to be_an_instance_of(Time)
+        expect(row.usec).to eql(usec), "#{literal}: expected usec #{usec}, got #{row.usec}"
+        expect(row.strftime('%Y-%m-%d %H:%M:%S')).to eql(literal[0, 19])
+        expect(row.utc_offset).to eql(0)
+      end
+    end
+
+    it "should return nil for a zero DATETIME, as the sscanf path did" do
+      # A zero date is canonical in shape, so it is accepted by the fast parser
+      # rather than handed to the fallback. It must still come back as nil.
+      expect(@client.query("SELECT CAST('0000-00-00 00:00:00' AS DATETIME) AS t").first['t']).to be_nil
+    end
+
+    it "should parse DATE values identically to the sscanf path" do
+      # 1000-01-01 and 9999-12-31 are MySQL's DATE range edges.
+      ['2026-07-28', '1000-01-01', '9999-12-31'].each do |literal|
+        row = @client.query("SELECT CAST('#{literal}' AS DATE) AS d").first['d']
+        expect(row).to be_an_instance_of(Date)
+        expect(row.strftime('%Y-%m-%d')).to eql(literal)
+      end
+    end
+
     it "should return Time for a TIME value" do
       expect(test_result['time_test']).to be_an_instance_of(Time)
       expect(test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2000-01-01 11:44:00')
@@ -406,7 +639,8 @@ RSpec.describe Mysql2::Result do
     end
 
     it "should raise an error given an invalid DATETIME" do
-      if @client.info[:version] < "8.0"
+      server_info = @client.server_info
+      if server_info[:version].include?('MariaDB') || server_info[:id] < 80000
         expect { @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each }.to \
           raise_error(Mysql2::Error, "Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
       else
@@ -573,6 +807,100 @@ RSpec.describe Mysql2::Result do
     end
     it "should set a definitive value for no_good_index_used" do
       expect(test_result.server_flags[:no_good_index_used]).to eql(false)
+    end
+  end
+
+  context 'garbage collection ordering' do
+    # Regression coverage for the deferred pending-free queue (see
+    # mysql2_enqueue_pending_result_free / mysql2_reap_pending_result_frees
+    # in ext/mysql2/client.c, and rb_mysql_result_free_result in
+    # ext/mysql2/result.c). A streaming Result (:stream => true) that is
+    # abandoned mid-iteration -- the caller breaks out of #each, or simply
+    # never finishes reading it -- still holds an open cursor with unread
+    # rows on the wire when it becomes GC-eligible. Before this fix, the
+    # Result's GC free function called mysql_free_result/
+    # mysql_stmt_free_result directly, which for such a cursor may read and
+    # discard the remaining rows over the network (flush_use_result) --
+    # blocking I/O from a dfree callback that can run mid-GC-sweep, possibly
+    # while the same connection is mid protocol exchange for a completely
+    # unrelated command. See also the "garbage collection ordering" context
+    # in statement_spec.rb for the sibling statement-close hazard.
+    #
+    # A small, fast loopback connection doesn't reliably reproduce the
+    # network-corruption failure mode even without this fix: there just
+    # isn't much of a timing window to hit. These specs lean on GC.stress
+    # and a larger streamed row count to widen that window as far as
+    # practical, but they are regression coverage for the deferred-free
+    # bookkeeping (no crash, no corrupted results, queue drains to zero)
+    # rather than a guaranteed repro of the underlying race.
+
+    # A recursive CTE with several hundred rows, so breaking out of #each
+    # early genuinely leaves rows unread on the wire (the fixture table
+    # mysql2_test only ever has a single row).
+    let(:big_stream_sql) do
+      'WITH RECURSIVE seq AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM seq WHERE n < 500) SELECT n FROM seq'
+    end
+
+    it 'does not corrupt later queries when an abandoned streaming result is collected mid-stream' do
+      begin
+        GC.stress = true
+        30.times do |i|
+          result = @client.query(big_stream_sql, stream: true, cache_rows: false)
+          count = 0
+          result.each do |_row|
+            count += 1
+            break if count == 3
+          end
+          result = nil # rubocop:disable Lint/UselessAssignment
+
+          expect(@client.query("SELECT #{i} AS n").first['n']).to eq(i)
+        end
+      ensure
+        GC.stress = false
+      end
+    end
+
+    it 'does not corrupt later queries when an abandoned streaming prepared statement result is collected mid-stream' do
+      begin
+        GC.stress = true
+        30.times do |i|
+          stmt = @client.prepare(big_stream_sql)
+          result = stmt.execute(stream: true, cache_rows: false)
+          count = 0
+          result.each do |_row|
+            count += 1
+            break if count == 3
+          end
+          result = nil # rubocop:disable Lint/UselessAssignment
+          stmt = nil # rubocop:disable Lint/UselessAssignment
+
+          expect(@client.query("SELECT #{i} AS n").first['n']).to eq(i)
+        end
+      ensure
+        GC.stress = false
+      end
+    end
+
+    it 'drains #pending_result_frees to zero at the next safe point' do
+      # A plain GC.start right after dropping the reference doesn't reliably
+      # collect a Result that a C extension method (#first) just touched --
+      # conservative stack scanning can keep it artificially reachable for a
+      # while. GC.stress forces the issue on every subsequent allocation,
+      # same as the specs above.
+      begin
+        GC.stress = true
+        30.times do
+          result = @client.query(big_stream_sql, stream: true, cache_rows: false)
+          result.first
+          result = nil # rubocop:disable Lint/UselessAssignment
+        end
+      ensure
+        GC.stress = false
+      end
+
+      GC.start
+      @client.ping
+      expect(@client.pending_result_frees).to eq(0)
     end
   end
 end

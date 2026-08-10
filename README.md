@@ -1,10 +1,9 @@
 # Mysql2 - A modern, simple and very fast MySQL library for Ruby - binding to libmysql
 
-GitHub Actions
 [![GitHub Actions Status: Build](https://github.com/brianmario/mysql2/actions/workflows/build.yml/badge.svg)](https://github.com/brianmario/mysql2/actions/workflows/build.yml)
-[![GitHub Actions Status: Container](https://github.com/brianmario/mysql2/actions/workflows/container.yml/badge.svg)](https://github.com/brianmario/mysql2/actions/workflows/container.yml)
-Appveyor CI
-[![Appveyor CI Status](https://ci.appveyor.com/api/projects/status/github/sodabrew/mysql2)](https://ci.appveyor.com/project/sodabrew/mysql2)
+[![GitHub Actions Status: Ubuntu](https://github.com/brianmario/mysql2/actions/workflows/build-ubuntu.yml/badge.svg)](https://github.com/brianmario/mysql2/actions/workflows/build-ubuntu.yml)
+[![GitHub Actions Status: macOS](https://github.com/brianmario/mysql2/actions/workflows/build-macos.yml/badge.svg)](https://github.com/brianmario/mysql2/actions/workflows/build-macos.yml)
+[![GitHub Actions Status: Fedora](https://github.com/brianmario/mysql2/actions/workflows/build-fedora.yml/badge.svg)](https://github.com/brianmario/mysql2/actions/workflows/build-fedora.yml)
 
 The Mysql2 gem is meant to serve the extremely common use-case of connecting, querying and iterating on results.
 Some database libraries out there serve as direct 1:1 mappings of the already complex C APIs available.
@@ -90,7 +89,8 @@ find the particular package. The most common issue we see is a user who has
 the library file `libmysqlclient.so` but is missing the header file `mysql.h`
 -- double check that you have the _-dev_ packages installed.
 
-### Mac OS X
+### macOS
+<a name="mac-os-x"></a>
 
 You may use Homebrew, MacPorts, or a native MySQL installer package. The most
 common paths will be automatically searched. If you want to select a specific
@@ -102,15 +102,15 @@ If you have not done so already, you will need to install the XCode select tools
 Later versions of MacOS no longer distribute a linkable OpenSSL library. It is
 common to use Homebrew or MacPorts to install OpenSSL. Make sure that both the
 Ruby runtime and MySQL client libraries are compiled with the same OpenSSL
-family, 1.0 or 1.1 or 3.0, since only one can be loaded at runtime.
+family, 3.x, since only one can be loaded at runtime.
 
 ``` sh
-$ brew install openssl@1.1 zstd
-$ gem install mysql2 -- --with-openssl-dir=$(brew --prefix openssl@1.1)
+$ brew install openssl@3 zstd
+$ gem install mysql2 -- --with-openssl-dir=$(brew --prefix openssl@3)
 
 or
 
-$ sudo port install openssl11
+$ sudo port install openssl3
 ```
 
 Since most Ruby projects use Bundler, you can set build options in the Bundler
@@ -118,7 +118,7 @@ config rather than manually installing a global mysql2 gem. This example shows
 how to set build arguments with [Bundler config](https://bundler.io/man/bundle-config.1.html):
 
 ``` sh
-$ bundle config --local build.mysql2 -- --with-openssl-dir=$(brew --prefix openssl@1.1)
+$ bundle config --local build.mysql2 -- --with-openssl-dir=$(brew --prefix openssl@3)
 ```
 
 Another helpful trick is to use the same OpenSSL library that your Ruby was
@@ -137,19 +137,22 @@ to the mysql2 build process.
 ### Windows
 
 Make sure that you have Ruby and the DevKit compilers installed. We recommend
-the [Ruby Installer](http://rubyinstaller.org) distribution.
+the [Ruby Installer](https://rubyinstaller.org) distribution.
 
-By default, the mysql2 gem will download and use MySQL Connector/C from
-mysql.com. If you prefer to use a local installation of Connector/C, add the
-flag `--with-mysql-dir=c:/mysql-connector-c-x-y-z` (_this path may use forward slashes_).
+By default, the precompiled mysql2 gem for Windows vendors MariaDB Connector/C,
+built from the same MSYS2 mingw-w64 package a native Windows build installs via
+`pacman` (see the gemspec's `msys2_mingw_dependencies`). If you prefer to use a
+local installation of Connector/C, add the flag
+`--with-mysql-dir=c:/path/to/connector-c` (_this path may use forward slashes_).
 
-By default, the `libmysql.dll` library will be copied into the mysql2 gem
+By default, the `libmariadb.dll` library will be copied into the mysql2 gem
 directory. To prevent this, add the flag `--no-vendor-libmysql`. The mysql2 gem
-will search for `libmysql.dll` in the following paths, in order:
+will search for `libmariadb.dll` in the following paths, in order:
 
-* Environment variable `RUBY_MYSQL2_LIBMYSQL_DLL=C:\path\to\libmysql.dll`
-  (_note the Windows-style backslashes_).
-* In the mysql2 gem's own directory `vendor/libmysql.dll`
+* Environment variable `RUBY_MYSQL2_LIBMARIADB_DLL=C:\path\to\libmariadb.dll`
+  (_note the Windows-style backslashes_). The older `RUBY_MYSQL2_LIBMYSQL_DLL`
+  name is still read as a fallback.
+* In the mysql2 gem's own directory `vendor/libmariadb.dll`
 * In the system's default library search paths.
 
 ## Usage
@@ -159,7 +162,7 @@ Connect to a database:
 ``` ruby
 # this takes a hash of options, almost all of which map directly
 # to the familiar database.yml in rails
-# See http://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/Mysql2Adapter.html
+# See https://api.rubyonrails.org/classes/ActiveRecord/ConnectionAdapters/Mysql2Adapter.html
 client = Mysql2::Client.new(:host => "localhost", :username => "root")
 ```
 
@@ -227,7 +230,7 @@ question marks in the statement. Query options can be passed as keyword argument
 to the execute method.
 
 Be sure to read about the known limitations of prepared statements at
-[https://dev.mysql.com/doc/refman/5.6/en/c-api-prepared-statement-problems.html](https://dev.mysql.com/doc/refman/5.6/en/c-api-prepared-statement-problems.html)
+[https://dev.mysql.com/doc/c-api/9.7/en/c-api-prepared-statement-problems.html](https://dev.mysql.com/doc/c-api/9.7/en/c-api-prepared-statement-problems.html)
 
 ``` ruby
 statement = @client.prepare("SELECT * FROM users WHERE login_count = ?")
@@ -603,7 +606,7 @@ There are a few things that need to be kept in mind while using streaming:
 * `:cache_rows` is ignored currently. (if you want to use `:cache_rows` you probably don't want to be using `:stream`)
 * You must fetch all rows in the result set of your query before you can make new queries. (i.e. with `Mysql2::Result#each`)
 
-Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: [http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html](http://dev.mysql.com/doc/refman/5.0/en/mysql-use-result.html).
+Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: [https://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html](https://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html).
 
 ### Lazy Everything
 
@@ -622,17 +625,15 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 ## Compatibility
 
-This gem is tested with the following Ruby versions on Linux and Mac OS X:
+This gem is tested with the following Ruby versions on Linux and macOS:
 
-* Ruby MRI 2.0 through 2.7 (all versions to date)
-* Ruby MRI 3.0, 3.1, 3.2 (all versions to date)
-* Rubinius 2.x and 3.x do work but may fail under some workloads
+* Ruby MRI 2.7, 3.0, 3.1, 3.2, 3.3, 3.4, 4.0
 
 This gem is tested with the following MySQL and MariaDB versions:
 
-* MySQL 5.5, 5.6, 5.7, 8.0
+* MySQL 8.0, 8.4, 9.7
 * MySQL Connector/C 6.0, 6.1, 8.0 (primarily on Windows)
-* MariaDB 5.5, 10.x, with a focus on 10.6 LTS and 10.11 LTS
+* MariaDB 10.6, 10.11, 11.4
 * MariaDB Connector/C 2.x, 3.x
 
 ### Ruby on Rails / Active Record
@@ -723,12 +724,12 @@ though.
 ## Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude
-* [Yury Korolev](http://github.com/yury) - for TONS of help testing the Active Record adapter
-* [Aaron Patterson](http://github.com/tenderlove) - tons of contributions, suggestions and general badassness
-* [Mike Perham](http://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
-* [Aaron Stone](http://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support
+* [Yury Korolev](https://github.com/yury) - for TONS of help testing the Active Record adapter
+* [Aaron Patterson](https://github.com/tenderlove) - tons of contributions, suggestions and general badassness
+* [Mike Perham](https://github.com/mperham) - Async Active Record adapter (uses Fibers and EventMachine)
+* [Aaron Stone](https://github.com/sodabrew) - additional client settings, local files, microsecond time, maintenance support
 * [Kouhei Ueno](https://github.com/nyaxt) - for the original work on Prepared Statements way back in 2012
-* [John Cant](http://github.com/johncant) - polishing and updating Prepared Statements support
-* [Justin Case](http://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
-* [Tamir Duberstein](http://github.com/tamird) - for help with timeouts and all around updates and cleanups
-* [Jun Aruga](http://github.com/junaruga) - for migrating CI tests to GitHub Actions and other improvements
+* [John Cant](https://github.com/johncant) - polishing and updating Prepared Statements support
+* [Justin Case](https://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
+* [Tamir Duberstein](https://github.com/tamird) - for help with timeouts and all around updates and cleanups
+* [Jun Aruga](https://github.com/junaruga) - for migrating CI tests to GitHub Actions and other improvements

@@ -1,0 +1,36 @@
+name: Build (Fedora)
+on:
+  workflow_call:
+jobs:
+  build:
+    name: >-
+      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
+    runs-on: ${{ matrix.os }}
+    # Fedora isn't offered as a native runner OS -- these run inside a
+    # container on the ubuntu-24.04 host instead.
+    container: ${{ matrix.container }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          # ci/fedora.sh does the distro-side setup that ci/setup.sh does
+          # for the native-runner build, including installing Ruby itself
+          # via dnf: ruby/setup-ruby's prebuilt binary can't find its own
+          # shared libraries when dropped into a still-bare container
+          # (nothing's been dnf-installed yet at that point in the job), so
+          # these rows test whatever Ruby version Fedora currently packages
+          # rather than a chosen version.
+          - {os: ubuntu-24.04, ruby: 'system', db: 'fedora:latest', container: {image: 'fedora:latest', options: '--cap-add=SYS_PTRACE --security-opt seccomp=unconfined --add-host=mysql2gem.example.com:127.0.0.1'}}
+          - {os: ubuntu-24.04, ruby: 'system', db: 'fedora:rawhide', container: {image: 'fedora:rawhide', options: '--cap-add=SYS_PTRACE --security-opt seccomp=unconfined'}, ssl_cert_dir: '/tmp/mysql2', ssl_cert_host: 'localhost'}
+      fail-fast: false
+    env:
+      BUNDLE_WITHOUT: development
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          echo "TEST_RUBY_MYSQL2_SSL_CERT_DIR=${{ matrix.ssl_cert_dir || '' }}" >> $GITHUB_ENV
+          echo "TEST_RUBY_MYSQL2_SSL_CERT_HOST=${{ matrix.ssl_cert_host || '' }}" >> $GITHUB_ENV
+      - run: bash ci/fedora.sh
+      # Set the verbose option in the Makefile to print compiling command lines.
+      - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
+      - run: bundle exec rake spec

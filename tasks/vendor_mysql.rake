@@ -1,58 +1,80 @@
 require 'rake/clean'
 require 'rake/extensioncompiler'
 
-CONNECTOR_VERSION = "6.1.11".freeze # NOTE: Track the upstream version from time to time
+# MariaDB Connector/C no longer publishes prebuilt Windows binaries through
+# any public, unauthenticated URL (only source archives via
+# downloads.mariadb.org's REST API; the prebuilt .msi installers live on
+# dlm.mariadb.com, which requires a paid Enterprise customer token). Vendor
+# the same MSYS2 mingw-w64 package instead -- prebuilt specifically for the
+# mingw-w64/UCRT64 toolchains rake-compiler-dock cross-compiles against,
+# with stable public URLs, and already what a native Windows build pulls in
+# via pacman (see build-windows.yml / the gemspec's msys2_mingw_dependencies).
+#
+# NOTE: Track the upstream package version from time to time.
+CONNECTOR_VERSION = "3.4.9-1".freeze
 
-def vendor_mysql_platform(platform = nil)
-  platform ||= RUBY_PLATFORM
-  platform =~ /x64/ ? "winx64" : "win32"
+MSYS2_MIRROR = "https://mirror.msys2.org".freeze
+
+# Maps a rake-compiler-dock cross platform to the MSYS2 tree that provides a
+# prebuilt mingw-w64 MariaDB Connector/C for it. Both are 64-bit; they differ
+# in C runtime (traditional msvcrt vs. UCRT, matching Ruby's own platform
+# split at RubyInstaller's UCRT migration around Ruby 3.1).
+MSYS2_TREES = {
+  'x64-mingw32'    => { subtree: 'mingw64', pkg_prefix: 'mingw-w64-x86_64', dir: 'mingw64' },
+  'x64-mingw-ucrt' => { subtree: 'ucrt64', pkg_prefix: 'mingw-w64-ucrt-x86_64', dir: 'ucrt64' },
+}.freeze
+
+def vendor_mysql_tree(platform)
+  MSYS2_TREES.fetch(platform) do
+    raise "No MSYS2 tree known for cross platform #{platform.inspect} -- add one to MSYS2_TREES in tasks/vendor_mysql.rake"
+  end
 end
 
-def vendor_mysql_dir(*args)
-  "mysql-connector-c-#{CONNECTOR_VERSION}-#{vendor_mysql_platform(*args)}"
+# The directory prefix inside the extracted package, and what compile.rake
+# passes as --with-mysql-dir.
+def vendor_mysql_dir(platform)
+  vendor_mysql_tree(platform)[:dir]
 end
 
-def vendor_mysql_zip(*args)
-  "#{vendor_mysql_dir(*args)}.zip"
+def vendor_mysql_pkg(platform)
+  "#{vendor_mysql_tree(platform)[:pkg_prefix]}-libmariadbclient-#{CONNECTOR_VERSION}-any.pkg.tar.zst"
 end
 
-def vendor_mysql_url(*args)
-  "http://cdn.mysql.com/Downloads/Connector-C/#{vendor_mysql_zip(*args)}"
+def vendor_mysql_url(platform)
+  "#{MSYS2_MIRROR}/mingw/#{vendor_mysql_tree(platform)[:subtree]}/#{vendor_mysql_pkg(platform)}"
 end
 
 # vendor:mysql
 task "vendor:mysql:cross" do
-  # When cross-compiling, grab both 32 and 64 bit connectors
-  Rake::Task['vendor:mysql'].invoke('x86')
-  Rake::Task['vendor:mysql'].invoke('x64')
+  Rake::Task['vendor:mysql'].invoke('x64-mingw32')
+  Rake::Task['vendor:mysql'].invoke('x64-mingw-ucrt')
 end
 
 task "vendor:mysql", [:platform] do |_t, args|
-  puts "vendor:mysql for #{vendor_mysql_dir(args[:platform])}"
+  platform = args[:platform]
+  puts "vendor:mysql for #{platform} (MSYS2 #{vendor_mysql_tree(platform)[:subtree]})"
 
-  # download mysql library and headers
+  # download MariaDB Connector/C library and headers
   directory "vendor"
 
-  file "vendor/#{vendor_mysql_zip(args[:platform])}" => ["vendor"] do |t|
-    url = vendor_mysql_url(args[:platform])
+  pkg_file = "vendor/#{vendor_mysql_pkg(platform)}"
+  file pkg_file => ["vendor"] do |t|
+    url = vendor_mysql_url(platform)
     when_writing "downloading #{t.name}" do
       cd "vendor" do
-        sh "curl", "-C", "-", "-O", url do |ok|
-          sh "wget", "-c", url unless ok
-        end
+        sh "curl", "-fL", "-o", File.basename(t.name), url
       end
     end
   end
 
-  file "vendor/#{vendor_mysql_dir(args[:platform])}/include/mysql.h" => ["vendor/#{vendor_mysql_zip(args[:platform])}"] do |t|
+  file "vendor/#{vendor_mysql_dir(platform)}/include/mysql/mysql.h" => [pkg_file] do |t|
     full_file = File.expand_path(t.prerequisites.last)
     when_writing "creating #{t.name}" do
       cd "vendor" do
-        sh "unzip", "-uq", full_file,
-           "#{vendor_mysql_dir(args[:platform])}/bin/**",
-           "#{vendor_mysql_dir(args[:platform])}/include/**",
-           "#{vendor_mysql_dir(args[:platform])}/lib/**",
-           "#{vendor_mysql_dir(args[:platform])}/README" # contains the license info
+        # MSYS2 packages are zstd-compressed tarballs; extract only the
+        # payload tree (bin/include/lib/share -- skips the pacman control
+        # files like .PKGINFO/.BUILDINFO/.MTREE at the archive root).
+        sh "sh", "-c", "zstd -dc #{full_file.inspect} | tar -x #{vendor_mysql_dir(platform)}/bin #{vendor_mysql_dir(platform)}/include #{vendor_mysql_dir(platform)}/lib #{vendor_mysql_dir(platform)}/share/licenses"
       end
       # update file timestamp to avoid Rake performing this extraction again.
       touch t.name
@@ -60,8 +82,8 @@ task "vendor:mysql", [:platform] do |_t, args|
   end
 
   # clobber expanded packages
-  CLOBBER.include("vendor/#{vendor_mysql_dir(args[:platform])}")
+  CLOBBER.include("vendor/#{vendor_mysql_dir(platform)}")
 
-  Rake::Task["vendor/#{vendor_mysql_dir(args[:platform])}/include/mysql.h"].invoke
+  Rake::Task["vendor/#{vendor_mysql_dir(platform)}/include/mysql/mysql.h"].invoke
   Rake::Task["vendor:mysql"].reenable # allow task to be invoked again (with another platform)
 end

@@ -59,7 +59,7 @@ extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE cMysql2Result, cDateTime, cDate;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
-  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal,
+  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
   intern_query_options;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
@@ -70,6 +70,7 @@ static void rb_mysql_result_mark(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_gc_mark_movable(w->fields);
+    rb_gc_mark_movable(w->fieldTypes);
     rb_gc_mark_movable(w->rows);
     rb_gc_mark_movable(w->encoding);
     rb_gc_mark_movable(w->client);
@@ -77,14 +78,46 @@ static void rb_mysql_result_mark(void * wrapper) {
   }
 }
 
-/* this may be called manually or during GC */
-static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
+/* this may be called manually or during GC.
+ *
+ * from_dfree_callback must be true when called from rb_mysql_result_free
+ * (the GC dfree callback, which may run during a GC sweep) and false from
+ * every other caller (ordinary Ruby-level code, which has the GVL and is
+ * not inside a GC sweep).
+ *
+ * The distinction matters because both mysql_stmt_free_result() and
+ * mysql_free_result() are documented to potentially read and discard any
+ * rows not yet fetched off the wire -- mysql_stmt_free_result() for an open
+ * server-side cursor, mysql_free_result() for a mysql_use_result() stream
+ * (its flush_use_result) -- i.e. blocking network I/O, not just freeing
+ * local memory. That's fine from ordinary Ruby code (same category as any
+ * other query), but unsafe from a dfree callback: it may run mid-GC-sweep,
+ * possibly while this same connection is mid protocol exchange for a
+ * completely different command (see mysql2_pending_stmt_close for the
+ * sibling hazard already fixed for statement handles). This can only
+ * happen for an abandoned streaming result (is_streaming &&
+ * !streamingComplete): a fully-buffered result (mysql_store_result /
+ * mysql_stmt_store_result) is already local, so freeing it never touches
+ * the network regardless of context. When it's both streaming, unfinished,
+ * and we're in a dfree callback, defer the actual free to the next safe
+ * point instead -- see mysql2_enqueue_pending_result_free /
+ * mysql2_reap_pending_result_frees in client.h/client.c. */
+static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper, int from_dfree_callback) {
+  int defer_free;
+
   if (!wrapper) return;
 
   if (wrapper->resultFreed != 1) {
+    defer_free = from_dfree_callback && wrapper->is_streaming && !wrapper->streamingComplete
+                 && wrapper->client_wrapper;
+
     if (wrapper->stmt_wrapper) {
       if (!wrapper->stmt_wrapper->closed) {
-        mysql_stmt_free_result(wrapper->stmt_wrapper->stmt);
+        if (defer_free) {
+          mysql2_enqueue_pending_result_free(wrapper->client_wrapper, NULL, wrapper->stmt_wrapper->stmt);
+        } else {
+          mysql_stmt_free_result(wrapper->stmt_wrapper->stmt);
+        }
 
         /* MySQL BUG? If the statement handle was previously used, and so
          * mysql_stmt_bind_result was called, and if that result set and bind buffers were freed,
@@ -92,7 +125,8 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
          * first result in mysql_stmt_execute. This will corrupt or crash the program.
          * By setting bind_result_done back to 0, we make MySQL think that a result set
          * has never been bound to this statement handle before to prevent the prefetch.
-         */
+         * This is just a plain C struct field write, safe to do eagerly even when the
+         * actual free above was deferred. */
         wrapper->stmt_wrapper->stmt->bind_result_done = 0;
       }
 
@@ -114,10 +148,21 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
       }
       /* Clue that the next statement execute will need to allocate a new result buffer. */
       wrapper->result_buffers = NULL;
+      wrapper->result_buffers_bound = 0;
     }
-    /* FIXME: this may call flush_use_result, which can hit the socket */
-    /* For prepared statements, wrapper->result is the result metadata */
-    mysql_free_result(wrapper->result);
+
+    /* For prepared statements, wrapper->result is the result metadata
+     * (from mysql_stmt_result_metadata), which mysql_free_result() never
+     * blocks on regardless of streaming state -- only the plain-query
+     * mysql_use_result() case above actually needs deferring here, but the
+     * same defer_free check covers both, since a prepared-statement Result
+     * always has a non-NULL stmt_wrapper (handled above) and its metadata
+     * free is cheap either way. */
+    if (defer_free) {
+      mysql2_enqueue_pending_result_free(wrapper->client_wrapper, wrapper->result, NULL);
+    } else {
+      mysql_free_result(wrapper->result);
+    }
     wrapper->resultFreed = 1;
   }
 }
@@ -125,7 +170,25 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper) {
 /* this is called during GC */
 static void rb_mysql_result_free(void *ptr) {
   mysql2_result_wrapper *wrapper = ptr;
-  rb_mysql_result_free_result(wrapper);
+
+  /* Deliberately does NOT reset client_wrapper->state to IDLE here for an
+   * abandoned stream: the actual drain (what would make the connection
+   * genuinely idle again) may have just been deferred by the call below,
+   * not performed. It goes back to IDLE once mysql2_reap_pending_result_frees
+   * really runs the deferred free, at the next safe point.
+   *
+   * active_streaming_result is different: it must be cleared right here
+   * regardless, even though state stays STREAMING. This object is about to
+   * be reclaimed, and rb_mysql_client_mark/compact touch that field
+   * unconditionally -- leaving it pointing here would crash a later GC
+   * pass. Only one stream can be open at a time, so if this wrapper is
+   * still an unfinished stream, it's the one (if any) that
+   * active_streaming_result currently references. */
+  if (wrapper->is_streaming && !wrapper->streamingComplete && wrapper->client_wrapper) {
+    wrapper->client_wrapper->active_streaming_result = Qnil;
+  }
+
+  rb_mysql_result_free_result(wrapper, 1);
 
   // If the GC gets to client first it will be nil
   if (wrapper->client != Qnil) {
@@ -152,6 +215,7 @@ static void rb_mysql_result_compact(void * wrapper) {
   mysql2_result_wrapper * w = wrapper;
   if (w) {
     rb_mysql2_gc_location(w->fields);
+    rb_mysql2_gc_location(w->fieldTypes);
     rb_mysql2_gc_location(w->rows);
     rb_mysql2_gc_location(w->encoding);
     rb_mysql2_gc_location(w->client);
@@ -177,10 +241,21 @@ static const rb_data_type_t rb_mysql_result_type = {
 #endif
 };
 
-static VALUE rb_mysql_result_free_(VALUE self) {
+/* See result.h. Called from ordinary Ruby-level code (has the GVL, not a
+ * GC sweep), so unlike rb_mysql_result_free above it's fine to pass
+ * from_dfree_callback=0 to rb_mysql_result_free_result: for a streaming
+ * cursor that was abandoned mid-iteration but is still live (not yet
+ * collected by GC), this performs the real, blocking
+ * mysql_free_result()/mysql_stmt_free_result() call right now instead of
+ * deferring it, so the server and client agree the previous command is
+ * done before the next one goes out. */
+void mysql2_result_force_free(VALUE self) {
   GET_RESULT(self);
-  rb_mysql_result_free_result(wrapper);
-  return Qnil;
+
+  if (wrapper->resultFreed) return;
+
+  rb_mysql_result_free_result(wrapper, 0);
+  wrapper->streamingComplete = 1;
 }
 
 /*
@@ -238,6 +313,18 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
   }
 
   return rb_field;
+}
+
+static int rb_mariadb_json_type(const MYSQL_FIELD *field) {
+#if defined(MARIADB_PACKAGE_VERSION)
+    MARIADB_CONST_STRING field_attr;
+
+    if (!mariadb_field_attr(&field_attr, field,
+                            MARIADB_FIELD_ATTR_FORMAT_NAME)) {
+      return field_attr.length == 4 && !memcmp(field_attr.str, "json", 4);
+    }
+#endif
+    return 0;
 }
 
 static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
@@ -305,11 +392,14 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
           Handle precision similar to this line from mysql's code:
           https://github.com/mysql/mysql-server/blob/ea7d2e2d16ac03afdd9cb72a972a95981107bf51/sql/field.cc#L2246
         */
-        precision = field->length - (field->decimals > 0 ? 2 : 1);
+        // DECIMAL's max precision is 65 digits, so this narrowing is safe for any field the server actually sent.
+        precision = (int)(field->length - (field->decimals > 0 ? 2 : 1));
         rb_field_type = rb_sprintf("decimal(%d,%d)", precision, field->decimals);
         break;
       case MYSQL_TYPE_STRING:       // char[]
-        if (field->flags & ENUM_FLAG) {
+        if (rb_mariadb_json_type(field)) {
+          rb_field_type = rb_str_new_cstr("json");
+        } else if (field->flags & ENUM_FLAG) {
           rb_field_type = rb_str_new_cstr("enum");
         } else if (field->flags & SET_FLAG) {
           rb_field_type = rb_str_new_cstr("set");
@@ -324,17 +414,27 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
       case MYSQL_TYPE_VAR_STRING:   // char[]
         if (field->charsetnr == MYSQL2_BINARY_CHARSET) {
           rb_field_type = rb_sprintf("varbinary(%ld)", field->length);
+        } else if (rb_mariadb_json_type(field)) {
+          rb_field_type = rb_str_new_cstr("json");
         } else {
           rb_field_type = rb_sprintf("varchar(%ld)", field->length / MYSQL2_MAX_BYTES_PER_CHAR);
         }
         break;
       case MYSQL_TYPE_VARCHAR:      // char[]
+        if (rb_mariadb_json_type(field)) {
+          rb_field_type = rb_str_new_cstr("json");
+          break;
+        }
         rb_field_type = rb_sprintf("varchar(%ld)", field->length / MYSQL2_MAX_BYTES_PER_CHAR);
         break;
       case MYSQL_TYPE_TINY_BLOB:    // char[]
         rb_field_type = rb_str_new_cstr("tinyblob");
         break;
       case MYSQL_TYPE_BLOB:         // char[]
+        if (rb_mariadb_json_type(field)) {
+          rb_field_type = rb_str_new_cstr("json");
+          break;
+        }
         if (field->charsetnr == MYSQL2_BINARY_CHARSET) {
           switch(field->length) {
             case 255:
@@ -433,6 +533,60 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
     }
   }
   return val;
+}
+
+/* Read exactly n decimal digits. Returns 0 (leaving *out untouched) on any
+ * non-digit, so callers fall back to the general parser. */
+static inline int mysql2_read_uint(const char *p, int n, unsigned int *out) {
+  unsigned int v = 0;
+  int i;
+  for (i = 0; i < n; i++) {
+    unsigned char d = (unsigned char)(p[i] - '0');
+    if (d > 9) return 0;
+    v = v * 10 + d;
+  }
+  *out = v;
+  return 1;
+}
+
+/* Fast path for the canonical wire format the server sends:
+ * YYYY-MM-DD HH:MM:SS[.ffffff]. Fractional digits are left-aligned, so ".5"
+ * is 500000 microseconds -- the same interpretation msec_char_to_uint gives
+ * the sscanf output. Anything not matching exactly returns 0 and the caller
+ * falls back to sscanf, preserving the original semantics for unusual input. */
+static int mysql2_parse_datetime(const char *s, unsigned long len,
+                                 unsigned int *year, unsigned int *month, unsigned int *day,
+                                 unsigned int *hour, unsigned int *min, unsigned int *sec,
+                                 unsigned int *msec) {
+  unsigned int frac = 0;
+
+  if (len < 19 || len > 26) return 0;
+  if (s[4] != '-' || s[7] != '-' || s[10] != ' ' || s[13] != ':' || s[16] != ':') return 0;
+  if (!mysql2_read_uint(s, 4, year) || !mysql2_read_uint(s + 5, 2, month) ||
+      !mysql2_read_uint(s + 8, 2, day) || !mysql2_read_uint(s + 11, 2, hour) ||
+      !mysql2_read_uint(s + 14, 2, min) || !mysql2_read_uint(s + 17, 2, sec)) return 0;
+
+  if (len > 19) {
+    unsigned long i;
+    unsigned int scale = 100000;
+    if (s[19] != '.' || len == 20) return 0;
+    for (i = 20; i < len; i++) {
+      unsigned char d = (unsigned char)(s[i] - '0');
+      if (d > 9) return 0;
+      frac += d * scale;
+      scale /= 10;
+    }
+  }
+  *msec = frac;
+  return 1;
+}
+
+/* Fast path for the canonical DATE wire format YYYY-MM-DD. */
+static int mysql2_parse_date(const char *s, unsigned long len,
+                             unsigned int *year, unsigned int *month, unsigned int *day) {
+  if (len != 10 || s[4] != '-' || s[7] != '-') return 0;
+  return mysql2_read_uint(s, 4, year) && mysql2_read_uint(s + 5, 2, month) &&
+         mysql2_read_uint(s + 8, 2, day);
 }
 
 /* Interpret microseconds digits left-aligned in fixed-width field.
@@ -534,6 +688,13 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   rb_encoding *conn_enc;
   GET_RESULT(self);
 
+  /* The result can be freed from inside the iteration block; end the
+   * iteration instead of touching freed statement buffers. Checked before
+   * anything else so no code below has to reason about freed state. */
+  if (wrapper->resultFreed) {
+    return Qnil;
+  }
+
   default_internal_enc = rb_default_internal_encoding();
   conn_enc = rb_to_encoding(wrapper->encoding);
 
@@ -544,15 +705,34 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   if (args->asArray) {
     rowVal = rb_ary_new2(wrapper->numberOfFields);
   } else {
+#ifdef HAVE_RB_HASH_NEW_CAPA
+    rowVal = rb_hash_new_capa(wrapper->numberOfFields);
+#else
     rowVal = rb_hash_new();
+#endif
   }
 
   if (wrapper->result_buffers == NULL) {
     rb_mysql_result_alloc_result_buffers(self, fields);
   }
 
-  if (mysql_stmt_bind_result(wrapper->stmt_wrapper->stmt, wrapper->result_buffers)) {
-    rb_raise_mysql2_stmt_error(wrapper->stmt_wrapper);
+  /* Bind once per result set rather than once per row. The buffers are
+   * allocated exactly once (rb_mysql_result_alloc_result_buffers returns early
+   * when they exist) and are never resized -- a buffer too short for a value
+   * raises on MYSQL_DATA_TRUNCATED rather than reallocating -- and they are
+   * only released by rb_mysql_result_free_result, which nulls the pointer and
+   * clears this flag. So the addresses registered here stay valid for every
+   * subsequent mysql_stmt_fetch on this result. Re-binding per row copied the
+   * whole MYSQL_BIND array into the statement each time for no gain.
+   *
+   * Binding is tracked separately from allocation so that a failed bind is
+   * still retried on a later fetch, exactly as it was when the bind ran on
+   * every row. */
+  if (!wrapper->result_buffers_bound) {
+    if (mysql_stmt_bind_result(wrapper->stmt_wrapper->stmt, wrapper->result_buffers)) {
+      rb_raise_mysql2_stmt_error(wrapper->stmt_wrapper);
+    }
+    wrapper->result_buffers_bound = 1;
   }
 
   {
@@ -635,7 +815,16 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         case MYSQL_TYPE_DATE:         // MYSQL_TIME
         case MYSQL_TYPE_NEWDATE:      // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          val = rb_funcall(cDate, intern_new, 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
+          /* Mirror the text-protocol semantics for zero and partial-zero
+           * dates: all-zero is nil, partial-zero raises Mysql2::Error. */
+          if (ts->year + ts->month + ts->day == 0) {
+            val = Qnil;
+          } else if (ts->month < 1 || ts->day < 1) {
+            rb_raise(cMysql2Error, "Invalid date in field '%.*s': %04u-%02u-%02u",
+                     (int)fields[i].name_length, fields[i].name, ts->year, ts->month, ts->day);
+          } else {
+            val = rb_funcall(cDate, intern_new, 3, INT2NUM(ts->year), INT2NUM(ts->month), INT2NUM(ts->day));
+          }
           break;
         case MYSQL_TYPE_TIME:         // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
@@ -654,6 +843,17 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
           ts = (MYSQL_TIME*)result_buffer->buffer;
           seconds = (ts->year*31557600ULL) + (ts->month*2592000ULL) + (ts->day*86400ULL) + (ts->hour*3600ULL) + (ts->minute*60ULL) + ts->second;
+
+          /* Mirror the text-protocol semantics for zero and partial-zero
+           * datetimes (the text path computes the same seconds value and
+           * returns nil when it is 0, raises when month or day is 0). */
+          if (seconds == 0) {
+            val = Qnil;
+            break;
+          } else if (ts->month < 1 || ts->day < 1) {
+            rb_raise(cMysql2Error, "Invalid date in field '%.*s': %04u-%02u-%02u %02u:%02u:%02u",
+                     (int)fields[i].name_length, fields[i].name, ts->year, ts->month, ts->day, ts->hour, ts->minute, ts->second);
+          }
 
           if (seconds < MYSQL2_MIN_TIME || seconds > MYSQL2_MAX_TIME) { // use DateTime instead
             VALUE offset = INT2NUM(0);
@@ -712,6 +912,23 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   return rowVal;
 }
 
+/* Whether a MySQL DECIMAL wire value is zero: sign, digits, '.', digits,
+ * no exponent, so a value is zero iff every digit is '0'. Checked with a
+ * plain character scan rather than strtod(), which reads '.' according to
+ * the current LC_NUMERIC and misparses this otherwise-locale-independent
+ * string under any locale that uses ',' instead. */
+static int decimal_str_is_zero(const char *str) {
+  const char *p = str;
+
+  if (*p == '-' || *p == '+') p++;
+
+  for (; *p; p++) {
+    if (*p != '0' && *p != '.') return 0;
+  }
+
+  return 1;
+}
+
 static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const result_each_args *args)
 {
   VALUE rowVal;
@@ -722,6 +939,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   rb_encoding *default_internal_enc;
   rb_encoding *conn_enc;
   GET_RESULT(self);
+
+  /* The result can be freed from inside the iteration block; end the
+   * iteration instead of dereferencing the freed MYSQL_RES. Checked before
+   * anything else so no code below has to reason about freed state. */
+  if (wrapper->resultFreed) {
+    return Qnil;
+  }
 
   default_internal_enc = rb_default_internal_encoding();
   conn_enc = rb_to_encoding(wrapper->encoding);
@@ -739,7 +963,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   if (args->asArray) {
     rowVal = rb_ary_new2(wrapper->numberOfFields);
   } else {
+    /* Pre-size to the column count so a row with more than the default
+     * number of entries does not have to rehash while being built. */
+#ifdef HAVE_RB_HASH_NEW_CAPA
+    rowVal = rb_hash_new_capa(wrapper->numberOfFields);
+#else
     rowVal = rb_hash_new();
+#endif
   }
   fieldLengths = mysql_fetch_lengths(wrapper->result);
 
@@ -784,7 +1014,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_NEWDECIMAL: /* Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up) */
           if (fields[i].decimals == 0) {
             val = rb_cstr2inum(row[i], 10);
-          } else if (strtod(row[i], NULL) == 0.000000){
+          } else if (decimal_str_is_zero(row[i])) {
             val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, opt_decimal_zero);
           }else{
             val = rb_funcall(rb_mKernel, intern_BigDecimal, 1, rb_str_new(row[i], fieldLengths[i]));
@@ -792,12 +1022,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
         case MYSQL_TYPE_FLOAT:      /* FLOAT field */
         case MYSQL_TYPE_DOUBLE: {     /* DOUBLE or REAL field */
-          double column_to_double;
-          column_to_double = strtod(row[i], NULL);
-          if (column_to_double == 0.000000){
+          /* Kernel#Float() parses this locale-independently; strtod()
+           * would read '.' according to the current LC_NUMERIC. */
+          VALUE column_as_float = rb_funcall(rb_mKernel, intern_Float, 1, rb_str_new(row[i], fieldLengths[i]));
+          if (RFLOAT_VALUE(column_as_float) == 0.000000){
             val = opt_float_zero;
           }else{
-            val = rb_float_new(column_to_double);
+            val = column_as_float;
           }
           break;
         }
@@ -825,14 +1056,19 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_TIMESTAMP:  /* TIMESTAMP field */
         case MYSQL_TYPE_DATETIME: { /* DATETIME field */
           int tokens;
+          int parsed_msec = 0;
           unsigned int year=0, month=0, day=0, hour=0, min=0, sec=0, msec=0;
           char msec_char[7] = {'0','0','0','0','0','0','\0'};
           uint64_t seconds;
 
-          tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6s", &year, &month, &day, &hour, &min, &sec, msec_char);
-          if (tokens < 6) { /* msec might be empty */
-            val = Qnil;
-            break;
+          if (mysql2_parse_datetime(row[i], fieldLengths[i], &year, &month, &day, &hour, &min, &sec, &msec)) {
+            parsed_msec = 1;
+          } else {
+            tokens = sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6s", &year, &month, &day, &hour, &min, &sec, msec_char);
+            if (tokens < 6) { /* msec might be empty */
+              val = Qnil;
+              break;
+            }
           }
           seconds = (year*31557600ULL) + (month*2592000ULL) + (day*86400ULL) + (hour*3600ULL) + (min*60ULL) + sec;
 
@@ -858,7 +1094,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
                   }
                 }
               } else {
-                msec = msec_char_to_uint(msec_char, sizeof(msec_char));
+                if (!parsed_msec) {
+                  msec = msec_char_to_uint(msec_char, sizeof(msec_char));
+                }
                 val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
                 if (!NIL_P(args->app_timezone)) {
                   if (args->app_timezone == intern_local) {
@@ -876,10 +1114,12 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_NEWDATE: {  /* Newer const used > 5.0 */
           int tokens;
           unsigned int year=0, month=0, day=0;
-          tokens = sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
-          if (tokens < 3) {
-            val = Qnil;
-            break;
+          if (!mysql2_parse_date(row[i], fieldLengths[i], &year, &month, &day)) {
+            tokens = sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
+            if (tokens < 3) {
+              val = Qnil;
+              break;
+            }
           }
           if (year+month+day == 0) {
             val = Qnil;
@@ -929,6 +1169,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   unsigned int i = 0;
   short int symbolizeKeys = 0;
   VALUE defaults;
+  VALUE fields;
 
   GET_RESULT(self);
 
@@ -939,36 +1180,81 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   }
 
   if (wrapper->fields == Qnil) {
+    if (wrapper->resultFreed) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  if ((my_ulonglong)RARRAY_LEN(wrapper->fields) != wrapper->numberOfFields) {
+  /* See the identical guard in rb_mysql_result_fetch_field_types: keep a
+   * stack-local reference alive across the fill loop so conservative stack
+   * scanning finds this array too, independent of GC generation timing. */
+  fields = wrapper->fields;
+
+  if ((my_ulonglong)RARRAY_LEN(fields) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
       rb_mysql_result_fetch_field(self, i, symbolizeKeys);
     }
   }
 
+  RB_GC_GUARD(fields);
   return wrapper->fields;
 }
 
 static VALUE rb_mysql_result_fetch_field_types(VALUE self) {
   unsigned int i = 0;
+  VALUE field_types;
 
   GET_RESULT(self);
 
   if (wrapper->fieldTypes == Qnil) {
+    if (wrapper->resultFreed) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fieldTypes = rb_ary_new2(wrapper->numberOfFields);
   }
 
-  if ((my_ulonglong)RARRAY_LEN(wrapper->fieldTypes) != wrapper->numberOfFields) {
+  /* wrapper->fieldTypes lives on the C struct, not the Ruby stack: between
+   * this assignment and the loop below finishing, it's reachable only
+   * through wrapper, and each iteration allocates a String (a GC
+   * safepoint). Keep a stack-local reference alive across the whole loop
+   * so conservative stack scanning always finds it too, independent of
+   * when the next mark pass would otherwise notice it via wrapper -- under
+   * GC.stress a mark pass can land in that gap. See #1456. */
+  field_types = wrapper->fieldTypes;
+
+  if ((my_ulonglong)RARRAY_LEN(field_types) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
       rb_mysql_result_fetch_field_type(self, i);
     }
   }
 
+  RB_GC_GUARD(field_types);
   return wrapper->fieldTypes;
+}
+
+/* Cache the fields and fieldTypes metadata, then free the C result set.
+ * Caching must happen while the result set is still valid: it keeps #fields
+ * and #field_types accessible after the free. Field names not already cached
+ * by row fetching (e.g. for 0-row results) are cached according to the query
+ * options (such as symbolize_keys); fieldTypes is never populated by row
+ * fetching.
+ * See: https://github.com/brianmario/mysql2/issues/1426
+ *
+ * Must not be called from the GC free path (rb_mysql_result_free), which
+ * cannot call back into Ruby. */
+static void rb_mysql_result_cache_metadata_and_free(VALUE self) {
+  GET_RESULT(self);
+  rb_mysql_result_fetch_fields(self);
+  rb_mysql_result_fetch_field_types(self);
+  rb_mysql_result_free_result(wrapper, 0);
+}
+
+static VALUE rb_mysql_result_free_(VALUE self) {
+  rb_mysql_result_cache_metadata_and_free(self);
+  return Qnil;
 }
 
 static VALUE rb_mysql_result_each_(VALUE self,
@@ -1002,8 +1288,18 @@ static VALUE rb_mysql_result_each_(VALUE self,
         }
       } while(row != Qnil);
 
-      rb_mysql_result_free_result(wrapper);
+      rb_mysql_result_cache_metadata_and_free(self);
       wrapper->streamingComplete = 1;
+
+      // The cursor is exhausted: the connection is free to run another
+      // command. This runs from ordinary Ruby-level code (#each), so it's
+      // safe to reap here rather than waiting for the next command.
+      if (wrapper->client_wrapper) {
+        wrapper->client_wrapper->state = MYSQL2_CLIENT_IDLE;
+        wrapper->client_wrapper->active_streaming_result = Qnil;
+        mysql2_reap_pending_result_frees(wrapper->client_wrapper);
+        mysql2_reap_pending_stmt_closes(wrapper->client_wrapper);
+      }
 
       // Check for errors, the connection might have gone out from under us
       // mysql_error returns an empty string if there is no error
@@ -1041,7 +1337,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
         if (row == Qnil) {
           /* we don't need the mysql C dataset around anymore, peace it */
           if (args->cacheRows) {
-            rb_mysql_result_free_result(wrapper);
+            rb_mysql_result_cache_metadata_and_free(self);
           }
           return Qnil;
         }
@@ -1052,7 +1348,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
       }
       if (wrapper->lastRowProcessed == wrapper->numberOfRows && args->cacheRows) {
         /* we don't need the mysql C dataset around anymore, peace it */
-        rb_mysql_result_free_result(wrapper);
+        rb_mysql_result_cache_metadata_and_free(self);
       }
     }
   }
@@ -1104,6 +1400,21 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     rb_warn(":cast is forced for prepared statements");
   }
 
+  /* A freed result can only be re-iterated from the fully cached rows array
+   * (or raise the streaming-specific error below when a completed stream is
+   * re-iterated); anything else would dereference the freed MYSQL_RES. The
+   * rows-length check matters: with cache_rows: false the rows array stays
+   * empty even after a full iteration, and replaying it would yield nil
+   * rows. */
+  if (wrapper->resultFreed) {
+    int replayable = cacheRows && wrapper->rows != Qnil &&
+                     wrapper->lastRowProcessed == wrapper->numberOfRows &&
+                     (my_ulonglong)RARRAY_LEN(wrapper->rows) == wrapper->numberOfRows;
+    if (wrapper->is_streaming ? !wrapper->streamingComplete : !replayable) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
+  }
+
   dbTz = rb_hash_aref(opts, sym_database_timezone);
   if (dbTz == sym_local) {
     db_timezone = intern_local;
@@ -1127,14 +1438,17 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (wrapper->rows == Qnil && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt_wrapper ? mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt) : mysql_num_rows(wrapper->result);
-    wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+    /* Only reserve room for every row when the rows will actually be kept.
+     * With cache_rows: false nothing is ever stored in this array, so the
+     * reservation is dead weight proportional to the result size. */
+    wrapper->rows = cacheRows ? rb_ary_new2(wrapper->numberOfRows) : rb_ary_new();
   } else if (wrapper->rows && !cacheRows) {
     if (wrapper->resultFreed) {
       rb_raise(cMysql2Error, "Result set has already been freed");
     }
     mysql_data_seek(wrapper->result, 0);
     wrapper->lastRowProcessed = 0;
-    wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+    wrapper->rows = rb_ary_new();
   }
 
   // Backward compat
@@ -1201,6 +1515,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->client_wrapper = DATA_PTR(client);
   wrapper->client_wrapper->refcount++;
   wrapper->result_buffers = NULL;
+  wrapper->result_buffers_bound = 0;
   wrapper->is_null = NULL;
   wrapper->error = NULL;
   wrapper->length = NULL;
@@ -1224,7 +1539,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   return obj;
 }
 
-void init_mysql2_result() {
+void init_mysql2_result(void) {
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   rb_global_variable(&cDate);
   cDateTime = rb_const_get(rb_cObject, rb_intern("DateTime"));
@@ -1250,6 +1565,7 @@ void init_mysql2_result() {
   intern_civil        = rb_intern("civil");
   intern_new_offset   = rb_intern("new_offset");
   intern_BigDecimal   = rb_intern("BigDecimal");
+  intern_Float        = rb_intern("Float");
   intern_query_options = rb_intern("@query_options");
 
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));

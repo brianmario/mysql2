@@ -3,7 +3,7 @@
 VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
 
 /* Ruby Extension initializer */
-void Init_mysql2() {
+void Init_mysql2(void) {
   mMysql2 = rb_define_module("Mysql2");
   rb_global_variable(&mMysql2);
 

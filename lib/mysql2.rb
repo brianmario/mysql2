@@ -1,22 +1,24 @@
 require 'date'
 require 'bigdecimal'
 
-# Load libmysql.dll before requiring mysql2/mysql2.so
+# Load libmariadb.dll before requiring mysql2/mysql2.so
 # This gives a chance to be flexible about the load path
 # Or to bomb out with a clear error message instead of a linker crash
 if RUBY_PLATFORM =~ /mswin|mingw/
-  dll_path = if ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
-    # If this environment variable is set, it overrides any other paths
+  dll_path = if ENV['RUBY_MYSQL2_LIBMARIADB_DLL'] || ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
+    # If either environment variable is set, it overrides any other paths.
+    # RUBY_MYSQL2_LIBMYSQL_DLL is the older name, kept for compatibility with
+    # anyone already setting it; RUBY_MYSQL2_LIBMARIADB_DLL takes priority.
     # The user is advised to use backslashes not forward slashes
-    ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
-  elsif File.exist?(File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__)))
-    # Use vendor/libmysql.dll if it exists, convert slashes for Win32 LoadLibrary
-    File.expand_path('../vendor/libmysql.dll', File.dirname(__FILE__))
+    ENV['RUBY_MYSQL2_LIBMARIADB_DLL'] || ENV['RUBY_MYSQL2_LIBMYSQL_DLL']
+  elsif File.exist?(File.expand_path('../vendor/libmariadb.dll', File.dirname(__FILE__)))
+    # Use vendor/libmariadb.dll if it exists, convert slashes for Win32 LoadLibrary
+    File.expand_path('../vendor/libmariadb.dll', File.dirname(__FILE__))
   elsif defined?(RubyInstaller)
     # RubyInstaller-2.4+ native build doesn't need DLL preloading
   else
     # This will use default / system library paths
-    'libmysql.dll'
+    'libmariadb.dll'
   end
 
   if dll_path
@@ -26,7 +28,7 @@ if RUBY_PLATFORM =~ /mswin|mingw/
       kernel32['LoadLibraryW'], [Fiddle::TYPE_VOIDP], Fiddle::TYPE_INT,
     )
     if load_library.call(dll_path.encode('utf-16le')).zero?
-      abort "Failed to load libmysql.dll from #{dll_path}"
+      abort "Failed to load libmariadb.dll from #{dll_path}"
     end
   end
 end

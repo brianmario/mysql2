@@ -1,0 +1,60 @@
+name: Build (cross-version)
+on:
+  workflow_call:
+jobs:
+  # Every entry in the other Build workflows installs a client library from
+  # the same version-track as the server it talks to, so a difference in
+  # observed behavior (e.g. #1465's Client#database nil-vs-"") can't tell
+  # us whether the client or the server changed -- both moved together
+  # every time. These rows isolate that: install one version's client
+  # library only (no local server), and point it at a *different* version's
+  # server running as an independent `services:` container.
+  build:
+    name: >-
+      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
+    runs-on: ${{ matrix.os }}
+    services: ${{ matrix.services }}
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb11.8-client_mariadb12.3-server', client_only: mariadb11.8, services: {mariadb: {image: 'mariadb:12.3', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb12.3-client_mariadb11.8-server', client_only: mariadb12.3, services: {mariadb: {image: 'mariadb:11.8', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mysql84-client_mysql97-server', client_only: mysql84, services: {mysql: {image: 'mysql:9.7', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mysql97-client_mysql84-server', client_only: mysql97, services: {mysql: {image: 'mysql:8.4', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+      fail-fast: false
+    env:
+      BUNDLE_WITHOUT: development
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      # matrix.client_only names which existing ci/<db>.sh script to reuse
+      # in client-only mode (installs the client library, skips the server).
+      - run: sudo CLIENT_ONLY=1 bash ci/${{ matrix.client_only }}.sh
+      # Point spec/configuration.yml straight at the `services:` container
+      # instead of a local socket -- the Rake task that normally generates
+      # this file from the .example only runs if it doesn't already exist,
+      # so writing it here beats it to it.
+      - run: |
+          cat > spec/configuration.yml <<'YAML'
+          root:
+            host: 127.0.0.1
+            username: root
+            password:
+            database: test
+            ssl_mode: required
+          user:
+            host: 127.0.0.1
+            username: root
+            password:
+            database: test
+            ssl_mode: required
+          YAML
+      - run: echo "MAKEFLAGS=V=1" >> $GITHUB_ENV
+      # No local server: the client library is installed standalone and
+      # points at a `services:` container, so there's no Unix socket to test.
+      - run: echo "MYSQL2_SPEC_NO_LOCAL_SOCKET=1" >> $GITHUB_ENV
+      - run: bundle exec rake spec

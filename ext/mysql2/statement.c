@@ -4,7 +4,7 @@ extern VALUE mMysql2, cMysql2Error;
 static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year,
-  intern_query_options;
+  intern_query_options, intern_mul, intern_truncate;
 
 #ifndef NEW_TYPEDDATA_WRAPPER
 #define TypedData_Get_Struct(obj, type, ignore, sval) Data_Get_Struct(obj, type, sval)
@@ -75,7 +75,27 @@ void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
   stmt_wrapper->refcount--;
 
   if (stmt_wrapper->refcount == 0) {
-    nogvl_stmt_close(stmt_wrapper);
+    /* This runs as a Ruby dfree callback, which may fire during a GC sweep.
+     * At that point calling back into the VM (rb_hash_delete, rb_funcall,
+     * allocating a Ruby object) or blocking on network I/O
+     * (mysql_stmt_close, which sends COM_STMT_CLOSE) is unsafe: the socket
+     * may currently be mid-command for a *different* statement or query on
+     * this same Client, on this thread or another one that released the
+     * GVL to block in libmysqlclient. Hand the raw MYSQL_STMT off to the
+     * Client's pending-close queue instead; mysql2_reap_pending_stmt_closes
+     * drains it later from ordinary Ruby-level code, once the connection
+     * is confirmed idle.
+     *
+     * If the GC got to the Client first, client_wrapper is NULL and there
+     * is nothing left to notify -- the connection (and every prepared
+     * statement on it, server-side) is already gone.
+     */
+    if (stmt_wrapper->client_wrapper && stmt_wrapper->stmt) {
+      mysql2_enqueue_pending_stmt_close(stmt_wrapper->client_wrapper, stmt_wrapper->stmt,
+                                         (uintptr_t)stmt_wrapper);
+    }
+
+    decr_mysql2_client(stmt_wrapper->client_wrapper);
     xfree(stmt_wrapper);
   }
 }
@@ -140,10 +160,27 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   rb_stmt = Data_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, rb_mysql_stmt_mark, rb_mysql_stmt_free, stmt_wrapper);
 #endif
   {
-    stmt_wrapper->client = rb_client;
     stmt_wrapper->refcount = 1;
     stmt_wrapper->closed = 0;
     stmt_wrapper->stmt = NULL;
+
+    /* Keep a handle to the Client to ensure it doesn't get garbage collected first */
+    stmt_wrapper->client = rb_client;
+    if (rb_client != Qnil) {
+      stmt_wrapper->client_wrapper = DATA_PTR(rb_client);
+      stmt_wrapper->client_wrapper->refcount++;
+
+      /* We're about to prepare on this connection: a safe point to close
+       * out any statements that were GC'd while it was last busy, and to
+       * free any abandoned result sets left over from a stream that was
+       * dropped mid-iteration -- including one still live (not yet
+       * collected by GC), which the reap below alone wouldn't catch. */
+      mysql2_abandon_active_stream(stmt_wrapper->client_wrapper);
+      mysql2_reap_pending_result_frees(stmt_wrapper->client_wrapper);
+      mysql2_reap_pending_stmt_closes(stmt_wrapper->client_wrapper);
+    } else {
+      stmt_wrapper->client_wrapper = NULL;
+    }
   }
 
   // instantiate stmt
@@ -170,12 +207,24 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     args.stmt = stmt_wrapper->stmt;
     // ensure the string is in the encoding the connection is expecting
     args.sql = rb_str_export_to_enc(sql, conn_enc);
-    args.sql_ptr = RSTRING_PTR(sql);
-    args.sql_len = RSTRING_LEN(sql);
+    args.sql_ptr = RSTRING_PTR(args.sql);
+    args.sql_len = RSTRING_LEN(args.sql);
 
     if ((VALUE)rb_thread_call_without_gvl(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
+  }
+
+  // Stash a reference to this statement handle into the Client to prevent
+  // premature garbage collection.
+  //
+  // A statement can either be free explicitly or when the client object is
+  // torn down. Freeing a statement handle at any other time causes protocol
+  // traffic that might happen while the connection state is set for another
+  // operation.
+  {
+    GET_CLIENT(rb_client);
+    rb_hash_aset(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper), rb_stmt);
   }
 
   return rb_stmt;
@@ -303,6 +352,18 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   GET_STATEMENT(self);
   GET_CLIENT(stmt_wrapper->client);
 
+  /* We're about to issue a new command on this connection: a safe point to
+   * close out any statements that were GC'd while it was last busy, and to
+   * free any abandoned result sets left over from a stream that was
+   * dropped mid-iteration -- including on this very statement handle, if
+   * it was previously executed as a stream and abandoned before being
+   * fully drained. That must happen before we touch stmt below again.
+   * mysql2_abandon_active_stream handles the still-live case (not yet
+   * collected by GC), which the reap below alone wouldn't catch. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
   conn_enc = rb_to_encoding(wrapper->encoding);
 
   stmt = stmt_wrapper->stmt;
@@ -395,7 +456,11 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
             if (CLASS_OF(argv[i]) == rb_cTime) {
               t.second_part = FIX2INT(rb_funcall(rb_time, intern_usec, 0));
             } else if (CLASS_OF(argv[i]) == cDateTime) {
-              t.second_part = NUM2DBL(rb_funcall(rb_time, intern_sec_fraction, 0)) * 1000000;
+              // sec_fraction is an exact Rational; keep the multiply in
+              // Rational-space and only truncate to an integer at the end,
+              // so no floating-point error can creep into the microseconds.
+              VALUE usec = rb_funcall(rb_funcall(rb_time, intern_sec_fraction, 0), intern_mul, 1, INT2FIX(1000000));
+              t.second_part = NUM2ULONG(rb_funcall(usec, intern_truncate, 0));
             }
 
             t.second = FIX2INT(rb_funcall(rb_time, intern_sec, 0));
@@ -479,8 +544,27 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     }
   }
 
+  // Abandon/reap once more, right before the actual network write below: the
+  // bind setup above (rb_str_export_to_enc, rb_funcall for Time/DateTime/
+  // BigDecimal conversions, rb_hash_dup) can itself allocate, and under
+  // GC.stress (or just unlucky timing) that can be what triggers the GC
+  // sweep that abandons a *different* stream on this connection -- the
+  // earlier checks up top can't see that yet, and leaving it undrained here
+  // would desync the protocol once this command's bytes hit the wire ahead
+  // of the old stream's rows.
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
+  // From here through mysql_stmt_result_metadata/mysql_stmt_store_result,
+  // the connection is BUSY: a Statement freed elsewhere during this window
+  // must not be allowed to write COM_STMT_CLOSE to this socket. See
+  // mysql2_enqueue_pending_stmt_close / mysql2_reap_pending_stmt_closes.
+  wrapper->state = MYSQL2_CLIENT_QUERYING;
+
   if ((VALUE)rb_thread_call_without_gvl(nogvl_stmt_execute, stmt, RUBY_UBF_IO, 0) == Qfalse) {
     FREE_BINDS;
+    wrapper->state = MYSQL2_CLIENT_IDLE;
     rb_raise_mysql2_stmt_error(stmt_wrapper);
   }
 
@@ -488,12 +572,15 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
   metadata = mysql_stmt_result_metadata(stmt);
   if (metadata == NULL) {
+    wrapper->state = MYSQL2_CLIENT_IDLE;
     if (mysql_stmt_errno(stmt) != 0) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
       wrapper->active_fiber = Qnil;
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     // no data and no error, so query was not a SELECT
+    mysql2_reap_pending_result_frees(wrapper);
+    mysql2_reap_pending_stmt_closes(wrapper);
     return Qnil;
   }
 
@@ -501,12 +588,28 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     // receive the whole result set from the server
     if (mysql_stmt_store_result(stmt)) {
       mysql_free_result(metadata);
+      wrapper->state = MYSQL2_CLIENT_IDLE;
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     wrapper->active_fiber = Qnil;
+    // The whole result set is buffered locally; free to reap and to run
+    // another command right away.
+    wrapper->state = MYSQL2_CLIENT_IDLE;
+    mysql2_reap_pending_result_frees(wrapper);
+    mysql2_reap_pending_stmt_closes(wrapper);
+  } else {
+    // A cursor is now open on the server; leave the connection BUSY until
+    // the Result finishes (or abandons) streaming rows -- see result.c.
+    wrapper->state = MYSQL2_CLIENT_STREAMING;
   }
 
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);
+
+  /* Track the open cursor so a later command can force-drain it if it's
+   * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */
+  if (is_streaming) {
+    wrapper->active_streaming_result = resultObj;
+  }
 
   rb_mysql_set_server_query_flags(wrapper->client, resultObj);
 
@@ -609,7 +712,22 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
   RAW_GET_STATEMENT(self);
 
   if (!stmt_wrapper->closed) {
+      GET_CLIENT(stmt_wrapper->client);
+
+      /* Ordinary Ruby-level call, not GC/dfree: a safe point to also close
+       * out any other statements that were GC'd while the connection was
+       * last busy. Abandon/reap pending result frees first: this statement
+       * itself may have an abandoned streaming result on it -- still live
+       * (mysql2_abandon_active_stream) or already queued
+       * (mysql2_reap_pending_result_frees) -- and that must be drained
+       * before nogvl_stmt_close below frees the same MYSQL_STMT* out from
+       * under it. */
+      mysql2_abandon_active_stream(wrapper);
+      mysql2_reap_pending_result_frees(wrapper);
+      mysql2_reap_pending_stmt_closes(wrapper);
+
       stmt_wrapper->closed = 1;
+      rb_hash_delete(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper));
       rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
   }
 
@@ -627,7 +745,7 @@ static VALUE rb_mysql_stmt_closed_p(VALUE self) {
   return stmt_wrapper->closed ? Qtrue : Qfalse;
 }
 
-void init_mysql2_statement() {
+void init_mysql2_statement(void) {
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   rb_global_variable(&cDate);
 
@@ -656,6 +774,8 @@ void init_mysql2_statement() {
   intern_each = rb_intern("each");
 
   intern_sec_fraction = rb_intern("sec_fraction");
+  intern_mul = rb_intern("*");
+  intern_truncate = rb_intern("truncate");
   intern_usec = rb_intern("usec");
   intern_sec = rb_intern("sec");
   intern_min = rb_intern("min");

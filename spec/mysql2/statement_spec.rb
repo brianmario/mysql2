@@ -71,10 +71,18 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(rows).to eq([{ "1" => 1 }])
   end
 
+  it "should keep fields and field_types accessible for exhausted empty results" do
+    statement = @client.prepare 'SELECT 1 AS only_col WHERE 1 = 0'
+    result = statement.execute
+    expect(result.to_a).to eql([])
+    expect(result.fields).to eql(["only_col"])
+    expect(result.field_types.length).to eql(1)
+  end
+
   it "should handle booleans" do
     stmt = @client.prepare('SELECT ? AS `true`, ? AS `false`')
     result = stmt.execute(true, false)
-    expect(result.to_a).to eq(['true' => 1, 'false' => 0])
+    expect(result.to_a).to eq([{ 'true' => 1, 'false' => 0 }])
   end
 
   it "should handle bignum but in int64_t" do
@@ -82,7 +90,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     int64_max = (1 << 63) - 1
     int64_min = -(1 << 63)
     result = stmt.execute(int64_max, int64_min)
-    expect(result.to_a).to eq(['max' => int64_max, 'min' => int64_min])
+    expect(result.to_a).to eq([{ 'max' => int64_max, 'min' => int64_min }])
   end
 
   it "should handle bignum but beyond int64_t" do
@@ -94,7 +102,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     int64_min2 = -(1 << 64) + 1
     int64_min3 = -0xC000000000000000
     result = stmt.execute(int64_max1, int64_max2, int64_max3, int64_min1, int64_min2, int64_min3)
-    expect(result.to_a).to eq(['max1' => int64_max1, 'max2' => int64_max2, 'max3' => int64_max3, 'min1' => int64_min1, 'min2' => int64_min2, 'min3' => int64_min3])
+    expect(result.to_a).to eq([{ 'max1' => int64_max1, 'max2' => int64_max2, 'max3' => int64_max3, 'min1' => int64_min1, 'min2' => int64_min2, 'min3' => int64_min3 }])
   end
 
   it "should accept keyword arguments on statement execute" do
@@ -274,6 +282,26 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
         n += 1
       end
     end
+
+    it "should let you execute/query again after abandoning a prepared statement's streaming result" do
+      stmt = @client.prepare("SELECT 1 UNION SELECT 2 UNION SELECT 3")
+      stmt.execute(stream: true, cache_rows: false).first
+
+      expect do
+        stmt.execute(stream: true, cache_rows: false)
+      end.to_not raise_error
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3", stream: true, cache_rows: false)
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
+
+    it "should let a plain query drain an abandoned prepared statement streaming result" do
+      stmt = @client.prepare("SELECT 1 UNION SELECT 2 UNION SELECT 3")
+      stmt.execute(stream: true, cache_rows: false).first
+
+      result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3")
+      expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
+    end
   end
 
   context "#each" do
@@ -285,6 +313,23 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       @result.each do |row|
         expect(row).to be_an_instance_of(Hash)
       end
+    end
+
+    it "should return every row of a multi-row result" do
+      # The result buffers are bound on the first fetch and reused for the rest
+      # of the result set, so a binding that went stale would show up as wrong
+      # or repeated values from the second row onward, not on the first.
+      result = @client.prepare("SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4").execute
+      expect(result.to_a).to eq([{ 'n' => 1 }, { 'n' => 2 }, { 'n' => 3 }, { 'n' => 4 }])
+    end
+
+    it "should return wide variable-width columns correctly on every row" do
+      # Variable-width buffers are sized once, from fields[i].max_length. A row
+      # fetched into a stale or too-short buffer would be truncated or wrong
+      # here, where the value is far larger than any inline buffer.
+      expected = ['a' * 60_000, 'b' * 60_000]
+      result = @client.prepare("SELECT REPEAT('a', 60000) AS v UNION ALL SELECT REPEAT('b', 60000)").execute
+      expect(result.to_a.map { |row| row['v'] }).to eq(expected)
     end
 
     it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
@@ -481,8 +526,65 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       expect(test_result['enum_test']).to eql('val1')
     end
 
+    context "zero and partial-zero dates" do
+      before do
+        @client.query("SET SESSION sql_mode = ''")
+        @client.query("DROP TABLE IF EXISTS mysql2_zero_dates")
+        @client.query("CREATE TABLE mysql2_zero_dates (d DATE, dt DATETIME, ts_test TIMESTAMP NULL)")
+        @client.query("INSERT INTO mysql2_zero_dates VALUES ('0000-00-00', '0000-00-00 00:00:00', '0000-00-00 00:00:00')")
+      end
+
+      after do
+        @client.query("DROP TABLE IF EXISTS mysql2_zero_dates")
+      end
+
+      it "returns nil for zero dates over the binary protocol, matching the text protocol" do
+        text_row = @client.query("SELECT * FROM mysql2_zero_dates").first
+        stmt_row = @client.prepare("SELECT * FROM mysql2_zero_dates").execute.first
+        expect(text_row).to eql("d" => nil, "dt" => nil, "ts_test" => nil)
+        expect(stmt_row).to eql(text_row)
+      end
+
+      it "raises Mysql2::Error for partial-zero DATETIME values over both protocols" do
+        @client.query("UPDATE mysql2_zero_dates SET dt = '1972-00-27 00:00:00'")
+        expect { @client.query("SELECT dt FROM mysql2_zero_dates").to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'dt': 1972-00-27 00:00:00/)
+        expect { @client.prepare("SELECT dt FROM mysql2_zero_dates").execute.to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'dt': 1972-00-27 00:00:00/)
+        # The binary path reports the same (aliased) field name the text path does.
+        expect { @client.prepare("SELECT dt AS aliased_dt FROM mysql2_zero_dates").execute.to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'aliased_dt'/)
+      end
+
+      it "raises Mysql2::Error for partial-zero DATE values over both protocols" do
+        @client.query("UPDATE mysql2_zero_dates SET d = '1972-00-27'")
+        expect { @client.query("SELECT d FROM mysql2_zero_dates").to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'd': 1972-00-27/)
+        expect { @client.prepare("SELECT d FROM mysql2_zero_dates").execute.to_a }.to \
+          raise_error(Mysql2::Error, /Invalid date in field 'd': 1972-00-27/)
+      end
+
+      it "keeps both protocols identical for invalid-but-storable dates under ALLOW_INVALID_DATES" do
+        @client.query("SET SESSION sql_mode = 'ALLOW_INVALID_DATES'")
+        @client.query("UPDATE mysql2_zero_dates SET d = '2004-04-31', dt = '2004-04-31 12:00:00'")
+        # DATE: Date.new rejects the invalid civil date on both paths. Matched
+        # as ArgumentError/"invalid date" rather than Date::Error, which is
+        # Ruby 3.0+ only; it subclasses ArgumentError and carries the same
+        # message, so this is exact on 3.x and still correct on 2.6.
+        expect { @client.query("SELECT d FROM mysql2_zero_dates").to_a }.to \
+          raise_error(ArgumentError, /invalid date/)
+        expect { @client.prepare("SELECT d FROM mysql2_zero_dates").execute.to_a }.to \
+          raise_error(ArgumentError, /invalid date/)
+        # DATETIME: Time normalizes the overflow identically on both paths.
+        text_val = @client.query("SELECT dt FROM mysql2_zero_dates").first["dt"]
+        stmt_val = @client.prepare("SELECT dt FROM mysql2_zero_dates").execute.first["dt"]
+        expect(stmt_val).to eql(text_val)
+      end
+    end
+
     it "should raise an error given an invalid DATETIME" do
-      if @client.info[:version] < "8.0"
+      server_info = @client.server_info
+      if server_info[:version].include?('MariaDB') || server_info[:id] < 80000
         expect { @client.query("SELECT CAST('1972-00-27 00:00:00' AS DATETIME) as bad_datetime").each }.to \
           raise_error(Mysql2::Error, "Invalid date in field 'bad_datetime': 1972-00-27 00:00:00")
       else
@@ -729,6 +831,57 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
         expect { stmt.close }.to_not raise_error
         expect(stmt).to be_closed
       end
+    end
+  end
+
+  context 'garbage collection ordering' do
+    # Regression coverage for the deferred pending-close queue (see
+    # decr_mysql2_stmt / mysql2_reap_pending_stmt_closes in
+    # ext/mysql2/{client,statement}.c). Before that fix, a Statement's GC
+    # free function sent COM_STMT_CLOSE straight onto the wire even while
+    # the connection was mid protocol exchange for something else,
+    # corrupting whatever command was actually in flight and producing
+    # "commands out of sync" (#1043) or wrong results.
+
+    it 'does not corrupt results when a stale prepared statement is collected between executes' do
+      begin
+        GC.stress = true
+        50.times do |i|
+          want = i.odd? ? 1 : nil
+          found = nil
+          @client.prepare('SELECT 1 AS FOUND WHERE 1 = ?').execute(i.odd? ? 1 : 0).each do |row|
+            found = row['FOUND']
+          end
+          expect(found).to eq(want)
+        end
+      ensure
+        GC.stress = false
+      end
+    end
+
+    it 'does not corrupt a streaming read when a stale statement on the same client is collected mid-stream' do
+      # Not held onto past this point, so it becomes GC-eligible once
+      # nothing else references it.
+      stale = @client.prepare('SELECT 1')
+      stale.execute.each { |_| }
+      stale = nil # rubocop:disable Lint/UselessAssignment
+
+      result = @client.query('SELECT 1 AS a UNION SELECT 2 AS a UNION SELECT 3 AS a', stream: true)
+      rows = []
+      begin
+        GC.stress = true
+        result.each { |row| rows << row['a'] }
+      ensure
+        GC.stress = false
+      end
+      expect(rows).to eq([1, 2, 3])
+    end
+
+    it 'drains #pending_prepared_statement_closes to zero at the next safe point' do
+      30.times { @client.prepare('SELECT 1').execute }
+      GC.start
+      @client.ping
+      expect(@client.pending_prepared_statement_closes).to eq(0)
     end
   end
 end

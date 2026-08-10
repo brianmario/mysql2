@@ -1,11 +1,13 @@
 root:
-  host: localhost
+  host: 127.0.0.1
   username: root
   password:
   database: test
+  ssl_mode: required
 
 user:
-  host: localhost
+  host: 127.0.0.1
   username: LOCALUSERNAME
   password:
   database: mysql2_test
+  ssl_mode: required

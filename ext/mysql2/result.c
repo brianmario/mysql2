@@ -705,7 +705,11 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   if (args->asArray) {
     rowVal = rb_ary_new2(wrapper->numberOfFields);
   } else {
+#ifdef HAVE_RB_HASH_NEW_CAPA
+    rowVal = rb_hash_new_capa(wrapper->numberOfFields);
+#else
     rowVal = rb_hash_new();
+#endif
   }
 
   if (wrapper->result_buffers == NULL) {
@@ -939,7 +943,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   if (args->asArray) {
     rowVal = rb_ary_new2(wrapper->numberOfFields);
   } else {
+    /* Pre-size to the column count so a row with more than the default
+     * number of entries does not have to rehash while being built. */
+#ifdef HAVE_RB_HASH_NEW_CAPA
+    rowVal = rb_hash_new_capa(wrapper->numberOfFields);
+#else
     rowVal = rb_hash_new();
+#endif
   }
   fieldLengths = mysql_fetch_lengths(wrapper->result);
 
@@ -1408,14 +1418,17 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   if (wrapper->rows == Qnil && !wrapper->is_streaming) {
     wrapper->numberOfRows = wrapper->stmt_wrapper ? mysql_stmt_num_rows(wrapper->stmt_wrapper->stmt) : mysql_num_rows(wrapper->result);
-    wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+    /* Only reserve room for every row when the rows will actually be kept.
+     * With cache_rows: false nothing is ever stored in this array, so the
+     * reservation is dead weight proportional to the result size. */
+    wrapper->rows = cacheRows ? rb_ary_new2(wrapper->numberOfRows) : rb_ary_new();
   } else if (wrapper->rows && !cacheRows) {
     if (wrapper->resultFreed) {
       rb_raise(cMysql2Error, "Result set has already been freed");
     }
     mysql_data_seek(wrapper->result, 0);
     wrapper->lastRowProcessed = 0;
-    wrapper->rows = rb_ary_new2(wrapper->numberOfRows);
+    wrapper->rows = rb_ary_new();
   }
 
   // Backward compat

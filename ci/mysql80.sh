@@ -5,11 +5,24 @@ set -eux
 apt-get purge -qq '^mysql*' '^libmysql*'
 rm -fr /etc/mysql
 rm -fr /var/lib/mysql
-apt-key add support/5072E1F5.asc # old signing key
-apt-key add support/3A79BD29.asc # 8.0.28 and higher
-apt-key add support/B7B3B788A8D3785C.asc # 8.1 and higher
-# Verify the repository as add-apt-repository does not.
-wget -q --spider http://repo.mysql.com/apt/ubuntu/dists/$(lsb_release -cs)/mysql-8.0
-add-apt-repository 'http://repo.mysql.com/apt/ubuntu mysql-8.0'
+
+RELEASE=$(lsb_release -cs)
+COMPONENT=mysql-8.0
+
+# Verify the component exists, as apt-get update only warns when it is missing.
+wget -q --spider "https://repo.mysql.com/apt/ubuntu/dists/$RELEASE/$COMPONENT"
+
+install -d -m 0755 /etc/apt/keyrings
+install -m 0644 support/B7B3B788A8D3785C.asc /etc/apt/keyrings/mysql-keyring.asc
+
+tee <<- EOF > /etc/apt/sources.list.d/mysql.sources
+	X-Repolib-Name: MySQL
+	Types: deb
+	URIs: https://repo.mysql.com/apt/ubuntu
+	Suites: $RELEASE
+	Components: $COMPONENT
+	Signed-By: /etc/apt/keyrings/mysql-keyring.asc
+EOF
+
 apt-get update -qq
 apt-get install -qq mysql-server libmysqlclient-dev

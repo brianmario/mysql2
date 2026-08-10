@@ -29,6 +29,7 @@ typedef struct {
   mysql_stmt_wrapper *stmt_wrapper;
   mysql_client_wrapper *client_wrapper;
   /* statement result bind buffers */
+  char result_buffers_bound;
   MYSQL_BIND *result_buffers;
   my_bool *is_null;
   my_bool *error;

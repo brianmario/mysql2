@@ -703,25 +703,41 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
   VALUE rv;
   GET_CLIENT(self);
 
-  args.host         = NIL_P(host)     ? NULL : StringValueCStr(host);
-  args.unix_socket  = NIL_P(socket)   ? NULL : StringValueCStr(socket);
-  args.port         = NIL_P(port)     ? 0    : NUM2INT(port);
-  args.user         = NIL_P(user)     ? NULL : StringValueCStr(user);
-  args.passwd       = NIL_P(pass)     ? NULL : StringValueCStr(pass);
-  args.db           = NIL_P(database) ? NULL : StringValueCStr(database);
-  args.mysql        = wrapper->client;
-  args.client_flag   = NUM2ULONG(flags);
+  args.host        = NIL_P(host)     ? NULL : StringValueCStr(host);
+  args.unix_socket = NIL_P(socket)   ? NULL : StringValueCStr(socket);
+  args.port        = NIL_P(port)     ? 0    : NUM2INT(port);
+  args.user        = NIL_P(user)     ? NULL : StringValueCStr(user);
+  args.passwd      = NIL_P(pass)     ? NULL : StringValueCStr(pass);
+  args.db          = NIL_P(database) ? NULL : StringValueCStr(database);
+  args.mysql       = wrapper->client;
+  args.client_flag = NUM2ULONG(flags);
 
-  sni_hostname      = NIL_P(tls_sni_name) ? NULL : StringValueCStr(tls_sni_name);
+  sni_hostname     = NIL_P(tls_sni_name) ? NULL : StringValueCStr(tls_sni_name);
 
 #ifdef CLIENT_CONNECT_ATTRS
   mysql_options(wrapper->client, MYSQL_OPT_CONNECT_ATTR_RESET, 0);
   rb_hash_foreach(conn_attrs, opt_connect_attr_add_i, (VALUE)wrapper);
 #endif
 
-  if(sni_hostname != NULL) {
-    /* Set the TLS SNI name if provided */
+  /* Like the other mysql_options() calls in this function (connect attrs,
+   * SSL settings elsewhere in this file), this is set on wrapper->client --
+   * the same handle that persists for the connection's whole lifetime,
+   * including across libmysqlclient's own internal reconnects
+   * (MYSQL_OPT_RECONNECT / Client#reconnect=). It does not need to go
+   * through the args struct: args only carries values passed directly as
+   * mysql_real_connect() arguments, not mysql_options()-configured state,
+   * and mysql_options() settings are not re-specified on each (re)connect
+   * attempt -- they stay attached to the handle. */
+  if (sni_hostname != NULL) {
+#ifdef HAVE_CONST_MYSQL_OPT_TLS_SNI_SERVERNAME
     mysql_options(wrapper->client, MYSQL_OPT_TLS_SNI_SERVERNAME, sni_hostname);
+#else
+    /* MYSQL_OPT_TLS_SNI_SERVERNAME was added in MySQL 8.1; MySQL 8.0 is
+     * still supported and does not have it, and it is unconfirmed whether
+     * any MariaDB Connector/C version does either. Warn rather than raise,
+     * since failing to set TLS SNI is not fatal to the connection itself. */
+    rb_warn("Your mysql client library does not support tls_sni_name (needs MySQL 8.1+); ignoring it");
+#endif
   }
 
   if (wrapper->connect_timeout)

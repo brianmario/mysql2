@@ -342,6 +342,19 @@ information about SSL/TLS in MariaDB, see
 [https://mariadb.com/kb/en/securing-connections-for-client-and-server/](https://mariadb.com/kb/en/securing-connections-for-client-and-server/)
 and [https://mariadb.com/kb/en/mysql_optionsv/#tls-options](https://mariadb.com/kb/en/mysql_optionsv/#tls-options)
 
+To set the TLS Server Name Indication (SNI) hostname sent during the TLS
+handshake, e.g. when connecting through a proxy that routes by hostname:
+
+``` ruby
+Mysql2::Client.new(
+  # ...options as above...,
+  :tls_sni_name => 'db.example.com',
+  )
+```
+
+This requires MySQL client library 8.1 or higher; on older client libraries
+the option is ignored with a warning.
+
 ### Secure auth
 
 Starting with MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).

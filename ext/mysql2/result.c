@@ -338,6 +338,42 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
   return rb_field;
 }
 
+/* Materialize every field name into wrapper->fields at once, honoring the
+ * given symbolize_keys. Array mode calls this once per result set, on the
+ * first fetched row, before converting any of that row's values.
+ *
+ * The first-row, before-any-values timing is load-bearing, not just a fast
+ * path: #fields on an abandoned streaming result (force-freed by the next
+ * query, skipping rb_mysql_result_cache_metadata_and_free) can only return
+ * names already materialized, and a per-each :symbolize_keys caches names
+ * first-call-wins. Filling the whole array here preserves both.
+ *
+ * Fills run ascending from 0, as in the per-cell hash path, so
+ * RARRAY_LEN == numberOfFields exactly when every name is cached -- the
+ * same done-check rb_mysql_result_fetch_fields uses -- and a raise
+ * mid-fill is healed by the next row's call.
+ *
+ * The caller must ensure wrapper->fields is allocated and the result is not
+ * freed. */
+static void rb_mysql_result_materialize_field_names(VALUE self, int symbolize_keys) {
+  unsigned int i;
+  VALUE fields;
+  GET_RESULT(self);
+
+  /* See the identical guard in rb_mysql_result_fetch_fields: keep a
+   * stack-local reference alive across the fill loop so conservative stack
+   * scanning finds the array too, independent of GC generation timing. */
+  fields = wrapper->fields;
+
+  if ((my_ulonglong)RARRAY_LEN(fields) != wrapper->numberOfFields) {
+    for (i = 0; i < wrapper->numberOfFields; i++) {
+      rb_mysql_result_fetch_field(self, i, symbolize_keys);
+    }
+  }
+
+  RB_GC_GUARD(fields);
+}
+
 static int rb_mariadb_json_type(const MYSQL_FIELD *field) {
 #if defined(MARIADB_PACKAGE_VERSION)
     MARIADB_CONST_STRING field_attr;
@@ -886,8 +922,16 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     }
   }
 
+  /* Placed after the fetch above rather than with the wrapper->fields
+   * allocation so an empty result set stays untouched, exactly as it was
+   * when the (never-entered) cell loop did the materializing. */
+  if (args->asArray) {
+    rb_mysql_result_materialize_field_names(self, args->symbolizeKeys);
+  }
+
   for (i = 0; i < wrapper->numberOfFields; i++) {
-    VALUE field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+    /* Hash keys only; array-mode names were batch-materialized above. */
+    VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
     VALUE val = Qnil;
     MYSQL_TIME *ts;
 
@@ -1102,6 +1146,10 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
   if (args->asArray) {
+    /* This runs after the NULL-row check above, so it materializes on the
+     * first fetched row and an empty result set stays untouched, exactly
+     * as it was when the (never-entered) cell loop did the materializing. */
+    rb_mysql_result_materialize_field_names(self, args->symbolizeKeys);
     rowVal = rb_ary_new2(wrapper->numberOfFields);
   } else {
     /* Pre-size to the column count so a row with more than the default
@@ -1115,7 +1163,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   fieldLengths = mysql_fetch_lengths(wrapper->result);
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
-    VALUE field = rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+    /* Hash keys only; array-mode names were batch-materialized above. */
+    VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
     if (row[i]) {
       VALUE val = Qnil;
       enum enum_field_types type = fields[i].type;

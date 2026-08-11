@@ -11,6 +11,7 @@ module Mysql2
         database_timezone: :local,   # timezone Mysql2 will assume datetime objects are stored in
         application_timezone: nil,   # timezone Mysql2 will convert to before handing the object back to the caller
         cache_rows: true,            # tells Mysql2 to use its internal row cache for results
+        rows_per_gvl_yield: 8192,    # buffered rows to materialize between GVL yields; 0 disables yielding
         connect_flags: REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | CONNECT_ATTRS,
         cast: true,
         default_file: nil,

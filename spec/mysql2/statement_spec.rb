@@ -225,6 +225,15 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(result.length).to eq(1)
   end
 
+  it "should warn that cache_rows is forced on every #each, not only the first" do
+    statement = @client.prepare 'SELECT 1'
+    result = nil
+    expect { result = statement.execute(cache_rows: false) }.to output(/:cache_rows is forced for prepared statements/).to_stderr
+    2.times do
+      expect { result.each { |_| } }.to output(/:cache_rows is forced for prepared statements/).to_stderr
+    end
+  end
+
   context "utf8_db" do
     before(:example) do
       @client.query("DROP DATABASE IF EXISTS test_mysql2_stmt_utf8")

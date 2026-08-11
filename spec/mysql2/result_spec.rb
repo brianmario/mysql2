@@ -1118,6 +1118,175 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "string value encodings across character sets" do
+    # Exercises the per-process charsetnr -> Ruby encoding index cache and the
+    # per-Result connection-encoding cache in ext/mysql2/result.c.
+    # `SET character_set_results = NULL` stops the server from converting
+    # result values to the connection's character set, so every field below
+    # arrives tagged with its own charsetnr -- including collation ids above
+    # 255 (utf8mb4_ja_0900_as_cs is id 303), which only resolve because the
+    # cache is sized to the full mapping table rather than one byte.
+    #
+    # The 0900 collations are MySQL 8.0+ only. MariaDB cannot pin the >255
+    # slots at all: its only collation ids above 255 (the uca1400 family,
+    # ids 2304+) lie beyond the mapping table entirely and take the
+    # connection-encoding fallback, so that column is skipped there.
+    let(:server_supports_0900_collations) do
+      server_info = @client.server_info
+      !server_info[:version].include?('MariaDB') && server_info[:id] >= 80000
+    end
+
+    let(:charset_matrix_sql) do
+      fields = [
+        "_utf8mb4 0x68C3A96C6C6F AS utf8mb4_val",
+        "CONVERT(_utf8mb4 0x68C3A96C6C6F USING latin1) AS latin1_val",
+        "CONVERT('abc' USING latin2) AS latin2_val",
+        "CONVERT('abc' USING greek) AS greek_val",
+        "CONVERT('abc' USING koi8r) AS koi8r_val",
+        "CONVERT('abc' USING ascii) AS ascii_val",
+        "CONVERT(_utf8mb4 0xE38182 USING sjis) AS sjis_val",
+        "CONVERT(_utf8mb4 0xE38182 USING cp932) AS cp932_val",
+        "CONVERT('abc' USING big5) AS big5_val",
+        "CONVERT('abc' USING gb2312) AS gb2312_val",
+        "UNHEX('DEADBEEF') AS binary_val",
+        "CONVERT('abc' USING dec8) AS dec8_val",
+      ]
+      fields << "_utf8mb4 0xE38182 COLLATE utf8mb4_ja_0900_as_cs AS ja_collation_val" \
+        if server_supports_0900_collations
+      "SELECT #{fields.join(', ')}"
+    end
+
+    # Expected bytes and encoding per field. dec8 (charsetnr 3) has no entry
+    # in the mapping table, so it falls back to the connection's encoding.
+    let(:charset_matrix_expected) do
+      {
+        'utf8mb4_val' => ["h\xC3\xA9llo", Encoding::UTF_8],
+        'latin1_val'  => ["h\xE9llo", Encoding::ISO_8859_1],
+        'latin2_val'  => ['abc', Encoding::ISO_8859_2],
+        'greek_val'   => ['abc', Encoding::ISO_8859_7],
+        'koi8r_val'   => ['abc', Encoding::KOI8_R],
+        'ascii_val'   => ['abc', Encoding::US_ASCII],
+        'sjis_val'    => ["\x82\xA0", Encoding::Shift_JIS],
+        'cp932_val'   => ["\x82\xA0", Encoding::Windows_31J],
+        'big5_val'    => ['abc', Encoding::Big5],
+        'gb2312_val'  => ['abc', Encoding::GB2312],
+        'binary_val'  => ["\xDE\xAD\xBE\xEF", Encoding::BINARY],
+        'dec8_val'    => ['abc', Encoding::UTF_8],
+      }.tap do |expected|
+        expected['ja_collation_val'] = ["\xE3\x81\x82", Encoding::UTF_8] if server_supports_0900_collations
+      end
+    end
+
+    def expect_charset_matrix_row(row)
+      expect(row.keys).to match_array(charset_matrix_expected.keys)
+      row.each do |name, value|
+        bytes, encoding = charset_matrix_expected[name]
+        expect(value.encoding).to eql(encoding), "#{name}: expected #{encoding}, got #{value.encoding}"
+        expect(value.b).to eql(bytes.b), "#{name}: expected #{bytes.b.inspect}, got #{value.b.inspect}"
+      end
+    end
+
+    it "tags each field with its own character set, consistently across repeated queries" do
+      with_internal_encoding nil do
+        @client.query("SET character_set_results = NULL")
+        2.times do
+          expect_charset_matrix_row(@client.query(charset_matrix_sql).first)
+        end
+      end
+    end
+
+    it "converts every non-binary field to Encoding.default_internal when set" do
+      with_internal_encoding Encoding::UTF_8 do
+        @client.query("SET character_set_results = NULL")
+        row = @client.query(charset_matrix_sql).first
+        row.each do |name, value|
+          expected = name == 'binary_val' ? Encoding::BINARY : Encoding::UTF_8
+          expect(value.encoding).to eql(expected), "#{name}: expected #{expected}, got #{value.encoding}"
+        end
+        expect(row['latin1_val']).to eql("héllo")
+        expect(row['sjis_val']).to eql("あ")
+      end
+    end
+
+    it "applies the same encodings through the prepared statement path" do
+      with_internal_encoding nil do
+        @client.query("SET character_set_results = NULL")
+        stmt = @client.prepare(charset_matrix_sql)
+        2.times do
+          expect_charset_matrix_row(stmt.execute.first)
+        end
+      end
+    end
+
+    it "applies the same encodings while streaming" do
+      with_internal_encoding nil do
+        @client.query("SET character_set_results = NULL")
+        rows = @client.query(charset_matrix_sql, stream: true, cache_rows: false).to_a
+        expect(rows.length).to eql(1)
+        expect_charset_matrix_row(rows.first)
+      end
+    end
+
+    context "for table columns of differing character sets" do
+      before(:example) do
+        @client.query(
+          "CREATE TEMPORARY TABLE mysql2_enc_matrix_test (" \
+          "utf8mb4_col VARCHAR(20) CHARACTER SET utf8mb4, " \
+          "latin1_col VARCHAR(20) CHARACTER SET latin1, " \
+          "blob_col BLOB)",
+        )
+        @client.query("INSERT INTO mysql2_enc_matrix_test VALUES ('héllo', 'héllo', UNHEX('DEADBEEF'))")
+        @client.query("SET character_set_results = NULL")
+      end
+
+      it "tags each column with its column character set if Encoding.default_internal is nil" do
+        with_internal_encoding nil do
+          row = @client.query("SELECT * FROM mysql2_enc_matrix_test").first
+          expect(row['utf8mb4_col']).to eql("héllo")
+          expect(row['utf8mb4_col'].encoding).to eql(Encoding::UTF_8)
+          expect(row['latin1_col'].b).to eql("h\xE9llo".b)
+          expect(row['latin1_col'].encoding).to eql(Encoding::ISO_8859_1)
+          expect(row['blob_col'].encoding).to eql(Encoding::BINARY)
+        end
+      end
+
+      it "converts text columns but not blobs to Encoding.default_internal" do
+        with_internal_encoding Encoding::UTF_8 do
+          row = @client.query("SELECT * FROM mysql2_enc_matrix_test").first
+          expect(row['utf8mb4_col']).to eql("héllo")
+          expect(row['latin1_col']).to eql("héllo")
+          expect(row['latin1_col'].encoding).to eql(Encoding::UTF_8)
+          expect(row['blob_col'].encoding).to eql(Encoding::BINARY)
+        end
+      end
+    end
+
+    it "captures Encoding.default_internal at each #each call, not per row" do
+      # Deliberate behavior pin: Encoding.default_internal is read once at
+      # #each entry (per call) instead of once per row. Changing it from
+      # inside the iteration block no longer affects later rows of that same
+      # call; the next #each call observes the new value.
+      with_internal_encoding nil do
+        result = @client.query("SELECT 'a' AS s UNION ALL SELECT 'b' UNION ALL SELECT 'c'", cache_rows: false)
+
+        first_pass = []
+        result.each do |row|
+          first_pass << row['s'].encoding
+          old_verbose = $VERBOSE
+          $VERBOSE = nil
+          Encoding.default_internal = Encoding::ISO_8859_1
+          $VERBOSE = old_verbose
+        end
+        expect(first_pass).to eql([Encoding::UTF_8] * 3)
+
+        # cache_rows: false forces the second #each to re-materialize rows
+        # from the C result set, capturing the new default_internal.
+        second_pass = result.map { |row| row['s'].encoding }
+        expect(second_pass).to eql([Encoding::ISO_8859_1] * 3)
+      end
+    end
+  end
+
   context "server flags" do
     let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY null_test DESC LIMIT 1") }
 

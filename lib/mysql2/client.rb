@@ -144,7 +144,16 @@ module Mysql2
       end
     end
 
-    def query(sql, options = {})
+    # Shared frozen default for the options argument, so the no-options case
+    # skips allocating a fresh empty hash per call. The merge itself is
+    # unchanged: it still produces the per-query snapshot the C extension
+    # retains as @current_query_options, and explicit-but-invalid arguments
+    # like nil or false still raise TypeError from Hash#merge as they
+    # always have.
+    EMPTY_QUERY_OPTIONS = {}.freeze
+    private_constant :EMPTY_QUERY_OPTIONS
+
+    def query(sql, options = EMPTY_QUERY_OPTIONS)
       Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_NEVER) do
         _query(sql, @query_options.merge(options))
       end

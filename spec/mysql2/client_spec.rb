@@ -670,6 +670,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(@client.query_options[:something]).to be_nil
     end
 
+    it "should raise TypeError when options are explicitly nil or false" do
+      expect { @client.query "SELECT 1", nil }.to raise_error(TypeError, 'no implicit conversion of nil into Hash')
+      expect { @client.query "SELECT 1", false }.to raise_error(TypeError, 'no implicit conversion of false into Hash')
+    end
+
     it "should return results as a hash by default" do
       expect(@client.query("SELECT 1").first).to be_an_instance_of(Hash)
     end
@@ -721,6 +726,19 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         expect do
           @client.query("SELECT 1")
         end.to raise_error(Mysql2::Error)
+      end
+
+      it "should not let query_options mutations affect an already-issued async query" do
+        @client.query_options[:async] = true
+        @client.query("SELECT 1 AS one")
+
+        # Neither mutation may leak into the issued query's snapshot:
+        # :stream would switch async_result to streaming delivery, and
+        # :symbolize_keys would change how its rows are built.
+        @client.query_options[:stream] = true
+        @client.query_options[:symbolize_keys] = true
+
+        expect(@client.async_result.first).to eql('one' => 1)
       end
 
       it "should prevent using a connection held by a dead thread, but not closing it" do
@@ -970,6 +988,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         expect(@multi_client.store_result.first).to eql('set_2' => 2)
 
         expect(@multi_client.next_result).to be false
+      end
+
+      it "should not let query_options mutations affect an already-issued query's later result sets" do
+        expect(@multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'").first).to eql('set_1' => 1)
+
+        # Must not leak into the remaining result sets' snapshot.
+        @multi_client.query_options[:symbolize_keys] = true
+
+        expect(@multi_client.next_result).to be true
+        expect(@multi_client.store_result.first).to eql('set_2' => 2)
       end
 
       it "does not interfere with other statements" do

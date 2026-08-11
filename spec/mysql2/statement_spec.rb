@@ -385,6 +385,69 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       stmt = @client.prepare("INSERT INTO mysql2_test () VALUES ()")
       expect(stmt.fields).to eql(nil)
     end
+
+    context "on results iterated in array mode" do
+      # Array rows never contain field names, so names are batch-materialized
+      # on the first fetched row instead of fetched per cell. These pin that
+      # Result#fields behaves exactly as it did with the per-cell
+      # materialization over the binary protocol, including after an abandoned
+      # stream is force-freed by the next query.
+      #
+      # Integer-only columns: streaming prepared statements size their result
+      # buffers from fields[i].max_length, which is 0 for var-length columns
+      # without mysql_stmt_store_result -- a pre-existing limitation unrelated
+      # to field names.
+      let(:sql) { "SELECT 1 AS a, 10 AS b UNION SELECT 2, 20 UNION SELECT 3, 30" }
+
+      it "should return field names after iteration" do
+        result = @client.prepare(sql).execute(as: :array)
+        result.to_a
+        expect(result.fields).to eql(%w[a b])
+      end
+
+      it "should honor symbolize_keys in fields" do
+        result = @client.prepare(sql).execute(as: :array, symbolize_keys: true)
+        result.to_a
+        expect(result.fields).to eql(%i[a b])
+      end
+
+      it "should keep fields accessible for exhausted empty results" do
+        result = @client.prepare("SELECT 1 AS a WHERE 1 = 0").execute(as: :array)
+        expect(result.to_a).to eql([])
+        expect(result.fields).to eql(["a"])
+      end
+
+      it "should keep fields accessible after an abandoned stream is force-freed by the next query" do
+        # The next query force-frees the abandoned stream without the
+        # natural-completion metadata caching, so the names materialized by
+        # the first fetched row are the only copy left.
+        result = @client.prepare(sql).execute(as: :array, stream: true, cache_rows: false)
+        result.each { |_| break } # rubocop:disable Lint/UnreachableLoop
+        @client.query("SELECT 1")
+        expect(result.fields).to eql(%w[a b])
+      end
+
+      it "should keep raising for a never-iterated stream force-freed by the next query" do
+        # No row was ever fetched, so no names were materialized to survive
+        # the force-free.
+        result = @client.prepare(sql).execute(as: :array, stream: true, cache_rows: false)
+        @client.query("SELECT 1")
+        expect { result.fields }.to raise_error(Mysql2::Error, "Result set has already been freed")
+      end
+
+      it "should honor symbolize_keys in fields after a force-freed abandoned stream" do
+        result = @client.prepare(sql).execute(as: :array, symbolize_keys: true, stream: true, cache_rows: false)
+        result.each { |_| break } # rubocop:disable Lint/UnreachableLoop
+        @client.query("SELECT 1")
+        expect(result.fields).to eql(%i[a b])
+      end
+
+      it "should keep fields accessible for exhausted empty streaming results" do
+        result = @client.prepare("SELECT 1 AS a WHERE 1 = 0").execute(as: :array, stream: true, cache_rows: false)
+        expect(result.each.to_a).to eql([])
+        expect(result.fields).to eql(["a"])
+      end
+    end
   end
 
   context "row data type mapping" do

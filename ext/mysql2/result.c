@@ -58,12 +58,23 @@ static int mysql2_enc_index_cache[MYSQL2_CHARSETNR_SIZE];
   mysql2_result_wrapper *wrapper; \
   TypedData_Get_Struct(self, mysql2_result_wrapper, &rb_mysql_result_type, wrapper);
 
+/* How much per-cell casting #each performs, parsed from the :cast option:
+ * false/nil is MYSQL2_CAST_NONE, :fast is MYSQL2_CAST_FAST, and any other
+ * truthy value -- not just true -- is MYSQL2_CAST_ALL, so an unrecognized
+ * value keeps meaning full casting (as every truthy value always has)
+ * instead of silently opting into partial casting. */
+typedef enum {
+  MYSQL2_CAST_NONE = 0, /* cast: false -- every non-NULL value is a raw String */
+  MYSQL2_CAST_ALL  = 1, /* cast: true -- full type casting */
+  MYSQL2_CAST_FAST = 2  /* cast: :fast -- cast cheap types; defer expensive ones as Strings */
+} mysql2_cast_mode;
+
 typedef struct {
   int symbolizeKeys;
   int asArray;
   int castBool;
   int cacheRows;
-  int cast;
+  mysql2_cast_mode cast;
   int streaming;
   unsigned long rowsPerGvlYield;
   ID db_timezone;
@@ -83,7 +94,7 @@ static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_o
   intern_query_options;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
-  sym_cache_rows, sym_cast, sym_stream, sym_name, sym_rows_per_gvl_yield,
+  sym_cache_rows, sym_cast, sym_fast, sym_stream, sym_name, sym_rows_per_gvl_yield,
   sym_no_good_index_used, sym_no_index_used, sym_query_was_slow;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
@@ -1209,7 +1220,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
    * byte-identical with just fewer branches per cell. Runs entirely with the
    * GVL held (the only nogvl region in this function is the streaming row
    * fetch above). */
-  if (!args->cast) {
+  if (args->cast == MYSQL2_CAST_NONE) {
     for (i = 0; i < wrapper->numberOfFields; i++) {
       /* Hash keys only; array-mode names were batch-materialized above. */
       VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
@@ -1254,6 +1265,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
             val = *row[i] != '0' ? Qtrue : Qfalse;
             break;
           }
+          /* Deliberate fallthrough into the integer cases: cast: true and
+           * cast: :fast share this dispatch, so :cast_booleans still wins
+           * for TINYINT(1) under both, and any other TINYINT is an Integer. */
         case MYSQL_TYPE_SHORT:      /* SMALLINT field */
         case MYSQL_TYPE_LONG:       /* INTEGER field */
         case MYSQL_TYPE_INT24:      /* MEDIUMINT field */
@@ -1263,6 +1277,17 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
         case MYSQL_TYPE_DECIMAL:    /* DECIMAL or NUMERIC field */
         case MYSQL_TYPE_NEWDECIMAL: /* Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up) */
+          /* cast: :fast defers BigDecimal construction to the caller: the
+           * raw wire bytes as a String, tagged exactly like the
+           * MYSQL2_CAST_NONE loop above tags them. Scale-0 DECIMALs (an
+           * Integer under cast: true) stay Strings too -- the mode is a
+           * per-type contract, not a per-value one. The same deferral
+           * repeats in the temporal cases below. */
+          if (args->cast == MYSQL2_CAST_FAST) {
+            val = rb_str_new(row[i], fieldLengths[i]);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+            break;
+          }
           if (fields[i].decimals == 0) {
             val = rb_cstr2inum(row[i], 10);
           } else if (decimal_str_is_zero(row[i])) {
@@ -1288,6 +1313,12 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           unsigned int hour=0, min=0, sec=0, msec=0;
           char msec_char[7] = {'0','0','0','0','0','0','\0'};
 
+          if (args->cast == MYSQL2_CAST_FAST) {
+            val = rb_str_new(row[i], fieldLengths[i]);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+            break;
+          }
+
           tokens = sscanf(row[i], "%2u:%2u:%2u.%6s", &hour, &min, &sec, msec_char);
           if (tokens < 3) {
             val = Qnil;
@@ -1311,6 +1342,12 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           unsigned int year=0, month=0, day=0, hour=0, min=0, sec=0, msec=0;
           char msec_char[7] = {'0','0','0','0','0','0','\0'};
           uint64_t seconds;
+
+          if (args->cast == MYSQL2_CAST_FAST) {
+            val = rb_str_new(row[i], fieldLengths[i]);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+            break;
+          }
 
           if (mysql2_parse_datetime(row[i], fieldLengths[i], &year, &month, &day, &hour, &min, &sec, &msec)) {
             parsed_msec = 1;
@@ -1381,6 +1418,11 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_NEWDATE: {  /* Newer const used > 5.0 */
           int tokens;
           unsigned int year=0, month=0, day=0;
+          if (args->cast == MYSQL2_CAST_FAST) {
+            val = rb_str_new(row[i], fieldLengths[i]);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+            break;
+          }
           if (!mysql2_parse_date(row[i], fieldLengths[i], &year, &month, &day)) {
             tokens = sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
             if (tokens < 3) {
@@ -1643,7 +1685,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
   VALUE opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone;
-  int symbolizeKeys, asArray, castBool, cacheRows, cast;
+  int symbolizeKeys, asArray, castBool, cacheRows;
+  mysql2_cast_mode cast;
   int warnDbTimezone, perEachOpts;
   unsigned long rowsPerGvlYield;
 
@@ -1672,7 +1715,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     db_timezone     = wrapper->each_opts.db_timezone;
     app_timezone    = wrapper->each_opts.app_timezone;
   } else {
-    VALUE dbTz, appTz, rowsPerGvlYieldOpt;
+    VALUE dbTz, appTz, rowsPerGvlYieldOpt, castOpt;
     VALUE defaults = rb_ivar_get(self, intern_query_options);
     Check_Type(defaults, T_HASH);
 
@@ -1682,7 +1725,17 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     asArray       = rb_hash_aref(opts, sym_as) == sym_array;
     castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
     cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
-    cast          = RTEST(rb_hash_aref(opts, sym_cast));
+
+    /* See mysql2_cast_mode: only the exact symbol :fast selects partial
+     * casting; any other truthy value stays full casting. */
+    castOpt = rb_hash_aref(opts, sym_cast);
+    if (castOpt == sym_fast) {
+      cast = MYSQL2_CAST_FAST;
+    } else if (RTEST(castOpt)) {
+      cast = MYSQL2_CAST_ALL;
+    } else {
+      cast = MYSQL2_CAST_NONE;
+    }
 
     /* :rows_per_gvl_yield -- 0 disables yielding; nil uses the default. */
     rowsPerGvlYield = MYSQL2_ROWS_PER_GVL_YIELD_DEFAULT;
@@ -1748,7 +1801,10 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     cacheRows = 1;
   }
 
-  if (wrapper->stmt_wrapper && !cast) {
+  /* The binary-protocol row fetch (rb_mysql_result_fetch_row_stmt) always
+   * fully casts; the existing warning already reads as "any non-true :cast
+   * is overridden here", so cast: :fast reuses it verbatim. */
+  if (wrapper->stmt_wrapper && cast != MYSQL2_CAST_ALL) {
     rb_warn(":cast is forced for prepared statements");
   }
 
@@ -1982,6 +2038,7 @@ void init_mysql2_result(void) {
   sym_cache_rows     = ID2SYM(rb_intern("cache_rows"));
   sym_rows_per_gvl_yield = ID2SYM(rb_intern("rows_per_gvl_yield"));
   sym_cast           = ID2SYM(rb_intern("cast"));
+  sym_fast           = ID2SYM(rb_intern("fast"));
   sym_stream         = ID2SYM(rb_intern("stream"));
   sym_name           = ID2SYM(rb_intern("name"));
   sym_no_good_index_used = ID2SYM(rb_intern("no_good_index_used"));

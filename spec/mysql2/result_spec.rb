@@ -1489,6 +1489,257 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "cast: :fast partially-cast rows" do
+    # Pins the text-protocol cast: :fast mode in rb_mysql_result_fetch_row
+    # (ext/mysql2/result.c) column by column:
+    #
+    # - Cast exactly as cast: true does: NULL, the integer family
+    #   (TINYINT/SMALLINT/MEDIUMINT/INT/BIGINT/YEAR, signed and unsigned,
+    #   ZEROFILL included), FLOAT/DOUBLE (via the same locale-independent
+    #   Kernel#Float mechanism), BIT, and TINYINT(1)/BIT(1) booleans when
+    #   :cast_booleans is on.
+    # - Deferred as Strings of the wire bytes, tagged by
+    #   mysql2_set_field_string_encoding exactly as cast: false tags them:
+    #   DECIMAL/NEWDECIMAL (scale-0 included, an Integer under cast: true),
+    #   DATE, DATETIME, TIMESTAMP, TIME.
+    # - Everything else (text, blobs, enum, set, ...) is a String under
+    #   cast: true already and is byte- and encoding-identical here.
+    #
+    # Expected values are literals -- bytes and encoding both -- rather than
+    # derived from another code path at runtime.
+    before(:example) do
+      @client.query %[
+        CREATE TEMPORARY TABLE mysql2_cast_fast_test (
+          row_id TINYINT NOT NULL,
+          bigint_min_col BIGINT,
+          bigint_umax_col BIGINT UNSIGNED,
+          int_zerofill_col INT UNSIGNED ZEROFILL,
+          decimal_col DECIMAL(10,3),
+          decimal_scale0_col DECIMAL(10,0),
+          float_col FLOAT(10,3),
+          double_col DOUBLE,
+          date_col DATE,
+          datetime_col DATETIME(6),
+          timestamp_col TIMESTAMP(6) NULL,
+          time_col TIME,
+          year_col YEAR,
+          bit_col BIT(64),
+          single_bit_col BIT(1),
+          tiny1_col TINYINT(1),
+          varchar_utf8_col VARCHAR(32) CHARACTER SET utf8mb4,
+          varchar_latin1_col VARCHAR(32) CHARACTER SET latin1,
+          blob_col BLOB,
+          varbinary_col VARBINARY(20)
+        )
+      ]
+      @client.query %[
+        INSERT INTO mysql2_cast_fast_test VALUES
+          (1, -9223372036854775808, 18446744073709551615, 10, 10.3, 42,
+           10.3, 10.3, '2010-04-04', '2010-04-04 11:44:00.123456',
+           '2010-04-04 11:44:00.123456', '-838:59:59', 2009, b'101', b'1', 1,
+           'héllo ☃', 'héllo', _binary X'00DEADBEEF00FF', _binary X'760062'),
+          (2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+           NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+          (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+           NULL, NULL, NULL, NULL, NULL, '', '', '', '')
+      ]
+    end
+
+    let(:fast_select) { "SELECT * FROM mysql2_cast_fast_test ORDER BY row_id" }
+
+    let(:column_names) do
+      %w[
+        row_id bigint_min_col bigint_umax_col int_zerofill_col decimal_col decimal_scale0_col
+        float_col double_col date_col datetime_col timestamp_col time_col year_col bit_col
+        single_bit_col tiny1_col varchar_utf8_col varchar_latin1_col blob_col varbinary_col
+      ]
+    end
+
+    # Column name => expectation, in column order. A two-element [bytes,
+    # encoding] Array expects a String; nil expects nil; anything else is
+    # compared with eql (class-sensitive, so 10 never passes for "10" or
+    # 10.0). Row 1 exercises BIGINT boundaries (LLONG_MIN/ULLONG_MAX),
+    # ZEROFILL padding, scale-0 DECIMAL, fractional and extreme temporals,
+    # BIT with embedded NULs, and multibyte text; row 2 is NULL in every
+    # non-key column; row 3 pins zero-length strings as distinct from NULL.
+    let(:expected_rows) do
+      [
+        {
+          'row_id'             => 1,
+          'bigint_min_col'     => -9_223_372_036_854_775_808,
+          'bigint_umax_col'    => 18_446_744_073_709_551_615,
+          'int_zerofill_col'   => 10,
+          'decimal_col'        => ["10.300", Encoding::BINARY],
+          'decimal_scale0_col' => ["42", Encoding::BINARY],
+          'float_col'          => 10.3,
+          'double_col'         => 10.3,
+          'date_col'           => ["2010-04-04", Encoding::BINARY],
+          'datetime_col'       => ["2010-04-04 11:44:00.123456", Encoding::BINARY],
+          'timestamp_col'      => ["2010-04-04 11:44:00.123456", Encoding::BINARY],
+          'time_col'           => ["-838:59:59", Encoding::BINARY],
+          'year_col'           => 2009,
+          'bit_col'            => ["\x00\x00\x00\x00\x00\x00\x00\x05", Encoding::BINARY],
+          'single_bit_col'     => ["\x01", Encoding::BINARY],
+          'tiny1_col'          => 1,
+          'varchar_utf8_col'   => ["héllo ☃", Encoding::UTF_8],
+          'varchar_latin1_col' => ["héllo", Encoding::UTF_8],
+          'blob_col'           => ["\x00\xDE\xAD\xBE\xEF\x00\xFF", Encoding::BINARY],
+          'varbinary_col'      => ["v\x00b", Encoding::BINARY],
+        },
+        {
+          'row_id' => 2,
+          'bigint_min_col' => nil, 'bigint_umax_col' => nil, 'int_zerofill_col' => nil,
+          'decimal_col' => nil, 'decimal_scale0_col' => nil, 'float_col' => nil,
+          'double_col' => nil, 'date_col' => nil, 'datetime_col' => nil,
+          'timestamp_col' => nil, 'time_col' => nil, 'year_col' => nil,
+          'bit_col' => nil, 'single_bit_col' => nil, 'tiny1_col' => nil,
+          'varchar_utf8_col' => nil, 'varchar_latin1_col' => nil,
+          'blob_col' => nil, 'varbinary_col' => nil,
+        },
+        {
+          'row_id' => 3,
+          'bigint_min_col' => nil, 'bigint_umax_col' => nil, 'int_zerofill_col' => nil,
+          'decimal_col' => nil, 'decimal_scale0_col' => nil, 'float_col' => nil,
+          'double_col' => nil, 'date_col' => nil, 'datetime_col' => nil,
+          'timestamp_col' => nil, 'time_col' => nil, 'year_col' => nil,
+          'bit_col' => nil, 'single_bit_col' => nil, 'tiny1_col' => nil,
+          'varchar_utf8_col' => ["", Encoding::UTF_8],
+          'varchar_latin1_col' => ["", Encoding::UTF_8],
+          'blob_col' => ["", Encoding::BINARY],
+          'varbinary_col' => ["", Encoding::BINARY],
+        },
+      ]
+    end
+
+    def expect_fast_row(row, expected, keys)
+      expect(row.keys).to eql(keys) if row.is_a?(Hash)
+      expected.each_with_index do |(name, expectation), i|
+        value = row.is_a?(Hash) ? row[keys[i]] : row[i]
+        case expectation
+        when nil
+          expect(value).to be_nil, "#{name}: expected nil, got #{value.inspect}"
+        when Array
+          bytes, encoding = expectation
+          expect(value).to be_an_instance_of(String), "#{name}: expected a String, got #{value.class}"
+          expect(value.encoding).to eql(encoding), "#{name}: expected #{encoding}, got #{value.encoding}"
+          expect(value.b).to eql(bytes.b), "#{name}: expected #{bytes.b.inspect}, got #{value.b.inspect}"
+        else
+          expect(value).to eql(expectation), "#{name}: expected #{expectation.inspect}, got #{value.inspect} (#{value.class})"
+        end
+      end
+    end
+
+    def expect_fast_rows(rows, keys)
+      expect(rows.length).to eql(expected_rows.length)
+      rows.zip(expected_rows) { |row, expected| expect_fast_row(row, expected, keys) }
+    end
+
+    [false, true].each do |stream|
+      variant = "stream: #{stream}"
+
+      it "casts cheap types and defers expensive ones in hash rows (#{variant})" do
+        rows = @client.query(fast_select, cast: :fast, stream: stream, cache_rows: !stream).to_a
+        expect_fast_rows(rows, column_names)
+      end
+
+      it "casts cheap types and defers expensive ones in array rows (#{variant})" do
+        result = @client.query(fast_select, cast: :fast, as: :array, stream: stream, cache_rows: !stream)
+        expect_fast_rows(result.to_a, column_names)
+        expect(result.fields).to eql(column_names)
+      end
+    end
+
+    it "re-materializes identical rows when re-iterating with cache_rows: false" do
+      result = @client.query(fast_select, cast: :fast, cache_rows: false)
+      2.times { expect_fast_rows(result.to_a, column_names) }
+    end
+
+    it "works as a per-each option the same way cast: false does" do
+      result = @client.query(fast_select, cache_rows: false)
+      rows = []
+      result.each(cast: :fast) { |row| rows << row }
+      expect_fast_rows(rows, column_names)
+    end
+
+    it "casts TINYINT(1) and BIT(1) as booleans when :cast_booleans is enabled" do
+      row = @client.query(fast_select, cast: :fast, cast_booleans: true).first
+      expect(row['tiny1_col']).to be true
+      expect(row['single_bit_col']).to be true
+      # The other cheap and deferred columns are unaffected.
+      expect(row['bigint_min_col']).to eql(-9_223_372_036_854_775_808)
+      expect(row['decimal_col']).to eql("10.300")
+    end
+
+    it "does not treat unrecognized truthy :cast values as :fast" do
+      row = @client.query(fast_select, cast: :bogus).first
+      expect(row['decimal_col']).to eql(BigDecimal("10.3"))
+      expect(row['date_col']).to eql(Date.new(2010, 4, 4))
+    end
+
+    context "under a locale that uses a comma as the decimal separator" do
+      before(:example) do
+        @original_locale = CLocale.setlocale(CLocale::LC_NUMERIC, nil)
+        begin
+          CLocale.setlocale(CLocale::LC_NUMERIC, "de_DE.UTF-8")
+        rescue RuntimeError
+          skip "de_DE.UTF-8 locale not installed on this system"
+        end
+      end
+
+      after(:example) do
+        CLocale.setlocale(CLocale::LC_NUMERIC, @original_locale) if @original_locale
+      end
+
+      it "still parses FLOAT and DOUBLE locale-independently" do
+        row = @client.query("SELECT CAST(2.7 AS FLOAT) AS f, CAST(2.7 AS DOUBLE) AS d", cast: :fast).first
+        expect(row['f']).to eql(2.7)
+        expect(row['d']).to eql(2.7)
+      end
+    end
+
+    it "keeps per-field charsetnr tagging when the server does not convert results" do
+      @client.query("SET character_set_results = NULL")
+      row = @client.query(fast_select, cast: :fast).first
+      expect(row['varchar_latin1_col'].encoding).to eql(Encoding::ISO_8859_1)
+      expect(row['varchar_latin1_col'].b).to eql("h\xE9llo".b)
+      expect(row['decimal_col'].encoding).to eql(Encoding::BINARY)
+      expect(row['date_col'].encoding).to eql(Encoding::BINARY)
+    end
+
+    it "applies Encoding.default_internal to deferred strings exactly as cast: false does" do
+      with_internal_encoding Encoding::UTF_8 do
+        row = @client.query(fast_select, cast: :fast).first
+        # Temporal fields carry BINARY_FLAG + charsetnr 63 and never transcode...
+        expect(row['date_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['datetime_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['time_col'].encoding).to eql(Encoding::BINARY)
+        # ...while DECIMAL (charsetnr 63 without BINARY_FLAG) does,
+        expect(row['decimal_col']).to eql("10.300")
+        expect(row['decimal_col'].encoding).to eql(Encoding::UTF_8)
+        # ...and BIT stays untagged raw bytes, exactly as under cast: true.
+        expect(row['bit_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['bit_col'].b).to eql("\x00\x00\x00\x00\x00\x00\x00\x05".b)
+      end
+    end
+
+    it "keeps #fields available after an abandoned cast: :fast stream is force-freed" do
+      result = @client.query(fast_select, cast: :fast, as: :array, stream: true, cache_rows: false)
+      result.each { |_| break } # rubocop:disable Lint/UnreachableLoop
+      @client.query("SELECT 1") # force-frees the abandoned stream
+      expect(result.fields).to eql(column_names)
+    end
+
+    it "does not fast-path prepared statements: cast: :fast still warns and fully casts" do
+      statement = @client.prepare("SELECT decimal_col, date_col, bigint_min_col FROM mysql2_cast_fast_test WHERE row_id = 1")
+      row = nil
+      expect { row = statement.execute(cast: :fast).first }
+        .to output(/:cast is forced for prepared statements/).to_stderr
+      expect(row['decimal_col']).to eql(BigDecimal("10.3"))
+      expect(row['date_col']).to eql(Date.new(2010, 4, 4))
+      expect(row['bigint_min_col']).to eql(-9_223_372_036_854_775_808)
+    end
+  end
+
   context "server flags" do
     let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY null_test DESC LIMIT 1") }
 

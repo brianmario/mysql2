@@ -576,6 +576,22 @@ do_mysql               0.520000   0.010000   0.530000 (  0.574619)
 
 Although Mysql2 performs reasonably well at retrieving uncasted data, it (currently) is not as fast as the Mysql gem.  In spite of this small disadvantage, Mysql2 still sports a friendlier interface and doesn't block the entire ruby process when querying.
 
+### Partial casting
+
+Between `:cast => true` and `:cast => false` sits `:cast => :fast`: cheap conversions still happen in C, while the expensive ones are skipped and their values returned as encoding-tagged Strings of the raw wire bytes.
+
+* Cast, exactly as `:cast => true` does: `NULL` (`nil`), the integer types (TINYINT through BIGINT, YEAR), FLOAT/DOUBLE, BIT, and TINYINT(1)/BIT(1) booleans when `:cast_booleans` is enabled.
+* Returned as Strings, exactly as `:cast => false` returns them: DECIMAL, DATE, DATETIME, TIMESTAMP, and TIME -- the types whose casting dominates the cost of materializing a row (BigDecimal, Date, and Time construction).
+* Everything else (CHAR/VARCHAR/TEXT, blobs, ENUM, SET, JSON, ...) is already a String and is identical to `:cast => true`.
+
+``` ruby
+result = client.query("SELECT * FROM table", :cast => :fast)
+```
+
+This is for callers that consume mysql2 results directly -- raw-mysql2 pipelines, ETL jobs, and applications that do their own value parsing -- where DECIMAL and temporal columns are often passed through or parsed lazily, and paying BigDecimal/Time construction for every cell up front is waste. Your code must be prepared to receive Strings for those columns. Note that Active Record does not use this option.
+
+Any `:cast` value other than the exact symbol `:fast` (or `false`/`nil`) keeps meaning full casting. Prepared statement results are always fully cast, as with `:cast => false`.
+
 ### Async
 
 NOTE: Not supported on Windows.

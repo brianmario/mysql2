@@ -334,36 +334,19 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
 }
 
 /* Materialize every field name into wrapper->fields at once, honoring the
- * given symbolize_keys.
+ * given symbolize_keys. Array mode calls this once per result set, on the
+ * first fetched row, before converting any of that row's values.
  *
- * Array-mode rows never consult field names during value conversion, so the
- * per-cell rb_mysql_result_fetch_field call the hash path makes is pure
- * overhead there: (rows x columns) calls to produce names that are read
- * (columns) times at most. But those per-cell calls were also what populated
- * wrapper->fields as a side effect, and #fields leans on that in two ways:
+ * The first-row, before-any-values timing is load-bearing, not just a fast
+ * path: #fields on an abandoned streaming result (force-freed by the next
+ * query, skipping rb_mysql_result_cache_metadata_and_free) can only return
+ * names already materialized, and a per-each :symbolize_keys caches names
+ * first-call-wins. Filling the whole array here preserves both.
  *
- * - An abandoned streaming result is force-freed by the next query
- *   (mysql2_result_force_free) without the natural-completion metadata
- *   caching that rb_mysql_result_cache_metadata_and_free performs, so
- *   whatever was materialized during iteration is the only copy of the
- *   names that survives. Master materialized all of them on the first row
- *   (per-cell, ascending); #fields after a force-free depends on it.
- * - #each accepts a per-call :symbolize_keys that can differ from the
- *   query options #fields reads, and the per-cell calls cached names under
- *   the per-each setting. First-each wins; this keeps that.
- *
- * So the array path calls this once per result set, on the first fetched
- * row, before any of that row's values are converted -- same coverage and
- * symbolization as master's per-cell calls, minus the redundant re-fetches.
- * Later parcels rely on the ordering guarantee that names are fully
- * materialized before any value conversion happens.
- *
- * All fills run ascending from 0, here and in the per-cell hash path, so
- * RARRAY_LEN == numberOfFields iff every name is cached; this is the same
- * done-check rb_mysql_result_fetch_fields uses. It also makes the
- * materialization all-or-nothing: a raise mid-fill is healed by the next
- * row's call, and array mode can no longer leave the partially-filled
- * wrapper->fields that a mid-row raise left behind on master.
+ * Fills run ascending from 0, as in the per-cell hash path, so
+ * RARRAY_LEN == numberOfFields exactly when every name is cached -- the
+ * same done-check rb_mysql_result_fetch_fields uses -- and a raise
+ * mid-fill is healed by the next row's call.
  *
  * The caller must ensure wrapper->fields is allocated and the result is not
  * freed. */

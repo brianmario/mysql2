@@ -15,7 +15,7 @@ wget -q --spider "https://repo.mysql.com/apt/ubuntu/dists/$RELEASE/$COMPONENT"
 install -d -m 0755 /etc/apt/keyrings
 install -m 0644 support/B7B3B788A8D3785C.asc /etc/apt/keyrings/mysql-keyring.asc
 
-tee <<- EOF > /etc/apt/sources.list.d/mysql.sources
+tee /etc/apt/sources.list.d/mysql.sources <<- EOF
 	X-Repolib-Name: MySQL
 	Types: deb
 	URIs: https://repo.mysql.com/apt/ubuntu

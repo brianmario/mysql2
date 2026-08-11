@@ -1,5 +1,7 @@
 #include <mysql2_ext.h>
 
+#include <limits.h>
+
 #include "mysql_enc_to_ruby.h"
 #define MYSQL2_CHARSETNR_SIZE (sizeof(mysql2_mysql_enc_to_rb)/sizeof(mysql2_mysql_enc_to_rb[0]))
 
@@ -673,6 +675,53 @@ static unsigned int msec_char_to_uint(char *msec_char, size_t len)
   return (unsigned int)strtoul(msec_char, NULL, 10);
 }
 
+/* Fast path for casting integer columns, in the spirit of trilogy's
+ * ll_from_buf/ull_from_buf. Every value an integer column can hold fits in
+ * long long / unsigned long long, so accumulate the magnitude directly
+ * instead of paying for rb_cstr2inum's base handling and Bignum machinery.
+ *
+ * Anything unexpected -- a non-digit, an empty string, or a magnitude that
+ * would overflow unsigned long long -- falls back to rb_cstr2inum, preserving
+ * the original semantics rather than trusting the wire format.
+ *
+ * The negative boundary needs care: the magnitude of LLONG_MIN is
+ * LLONG_MAX + 1, so casting it to long long before negating is undefined
+ * behavior. Return LL2NUM(LLONG_MIN) for exactly that magnitude and never
+ * negate it as a signed value. */
+static VALUE mysql2_cast_integer(const char *str, unsigned long len) {
+  unsigned long long mag = 0;
+  unsigned long i = 0;
+  int negative = 0;
+
+  if (len == 0) return rb_cstr2inum(str, 10);
+
+  if (str[0] == '-') {
+    negative = 1;
+    i = 1;
+  }
+
+  if (i == len) return rb_cstr2inum(str, 10);
+
+  for (; i < len; i++) {
+    unsigned char digit = (unsigned char)(str[i] - '0');
+    if (digit > 9) return rb_cstr2inum(str, 10);
+    if (mag > (ULLONG_MAX - digit) / 10) return rb_cstr2inum(str, 10);
+    mag = mag * 10 + digit;
+  }
+
+  if (negative) {
+    if (mag <= (unsigned long long)LLONG_MAX) {
+      return LL2NUM(-(long long)mag);
+    } else if (mag == (unsigned long long)LLONG_MAX + 1) {
+      return LL2NUM(LLONG_MIN);
+    } else {
+      return rb_cstr2inum(str, 10);
+    }
+  } else {
+    return ULL2NUM(mag);
+  }
+}
+
 static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields) {
   unsigned int i;
   GET_RESULT(self);
@@ -1097,7 +1146,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_INT24:      /* MEDIUMINT field */
         case MYSQL_TYPE_LONGLONG:   /* BIGINT field */
         case MYSQL_TYPE_YEAR:       /* YEAR field */
-          val = rb_cstr2inum(row[i], 10);
+          val = mysql2_cast_integer(row[i], fieldLengths[i]);
           break;
         case MYSQL_TYPE_DECIMAL:    /* DECIMAL or NUMERIC field */
         case MYSQL_TYPE_NEWDECIMAL: /* Precision math DECIMAL or NUMERIC field (MySQL 5.0.3 and up) */

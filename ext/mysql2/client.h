@@ -72,8 +72,6 @@ typedef struct {
   unsigned long pending_result_free_count;
 } mysql_client_wrapper;
 
-void rb_mysql_set_server_query_flags(MYSQL *client, VALUE result);
-
 extern const rb_data_type_t rb_mysql_client_type;
 
 #ifdef NEW_TYPEDDATA_WRAPPER

@@ -19,6 +19,9 @@ typedef struct {
   VALUE client;
   VALUE encoding;
   VALUE statement;
+  /* Memoized #server_flags Hash, Qnil until first access. Marked (and
+   * compacted) alongside the other VALUEs above. */
+  VALUE server_flags;
   my_ulonglong numberOfFields;
   my_ulonglong numberOfRows;
   unsigned long lastRowProcessed;
@@ -28,6 +31,10 @@ typedef struct {
   MYSQL_RES *result;
   mysql_stmt_wrapper *stmt_wrapper;
   mysql_client_wrapper *client_wrapper;
+  /* Connection server status captured at Result creation, so #server_flags
+   * can be built lazily without reading (possibly since-changed) live
+   * connection state. */
+  unsigned int server_status;
   /* statement result bind buffers */
   char result_buffers_bound;
   MYSQL_BIND *result_buffers;

@@ -768,6 +768,18 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context 'server_flags' do
+    it "reflects the result's own execute, not later commands on the connection" do
+      full_scan = @client.prepare('SELECT * FROM mysql2_test').execute
+      # Move the connection's live status on to a query that touches no table
+      # before reading the first result's flags.
+      no_scan = @client.prepare('SELECT 1').execute
+
+      expect(full_scan.server_flags).to eql(no_good_index_used: false, no_index_used: true, query_was_slow: false)
+      expect(no_scan.server_flags[:no_index_used]).to eql(false)
+    end
+  end
+
   context 'affected_rows' do
     before(:example) do
       @client.query 'USE test'

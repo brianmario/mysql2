@@ -879,6 +879,53 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     it "should set a definitive value for no_good_index_used" do
       expect(test_result.server_flags[:no_good_index_used]).to eql(false)
     end
+
+    it "returns the same hash object on every call" do
+      expect(test_result.server_flags).to equal(test_result.server_flags)
+    end
+
+    it "is available on a frozen Result, even when frozen before first access" do
+      test_result.freeze
+      expect(test_result.server_flags).to eql(no_good_index_used: false, no_index_used: true, query_was_slow: false)
+    end
+
+    it "returns the same hash object after the Result is frozen" do
+      flags = test_result.server_flags
+      test_result.freeze
+      expect(test_result.server_flags).to equal(flags)
+    end
+
+    it "is available after the result is fully iterated" do
+      test_result.to_a
+      expect(test_result.server_flags).to eql(no_good_index_used: false, no_index_used: true, query_was_slow: false)
+    end
+
+    it "is available after the result is freed" do
+      test_result.free
+      expect(test_result.server_flags).to eql(no_good_index_used: false, no_index_used: true, query_was_slow: false)
+    end
+
+    context "with multiple result sets" do
+      before(:example) do
+        @multi_client = new_client(flags: Mysql2::Client::MULTI_STATEMENTS)
+      end
+
+      it "reflects each result's own query, including results from store_result" do
+        # First statement touches no table (no_index_used false); second is a
+        # full scan (no_index_used true).
+        first = @multi_client.query("SELECT 1 AS a; SELECT * FROM mysql2_test")
+        expect(@multi_client.next_result).to be true
+        second = @multi_client.store_result
+        expect(@multi_client.next_result).to be false
+
+        # Deliberately read the first result's flags only after the connection
+        # has moved on to the second result: an implementation that read live
+        # connection status at call time would leak the second statement's
+        # full-scan flag into the first result here.
+        expect(first.server_flags[:no_index_used]).to eql(false)
+        expect(second.server_flags).to eql(no_good_index_used: false, no_index_used: true, query_was_slow: false)
+      end
+    end
   end
 
   context 'garbage collection ordering' do

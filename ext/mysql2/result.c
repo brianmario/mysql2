@@ -64,7 +64,8 @@ static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_o
   intern_query_options;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
-  sym_cache_rows, sym_cast, sym_stream, sym_name, sym_rows_per_gvl_yield;
+  sym_cache_rows, sym_cast, sym_stream, sym_name, sym_rows_per_gvl_yield,
+  sym_no_good_index_used, sym_no_index_used, sym_query_was_slow;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
@@ -76,6 +77,7 @@ static void rb_mysql_result_mark(void * wrapper) {
     rb_gc_mark_movable(w->encoding);
     rb_gc_mark_movable(w->client);
     rb_gc_mark_movable(w->statement);
+    rb_gc_mark_movable(w->server_flags);
   }
 }
 
@@ -221,6 +223,7 @@ static void rb_mysql_result_compact(void * wrapper) {
     rb_mysql2_gc_location(w->encoding);
     rb_mysql2_gc_location(w->client);
     rb_mysql2_gc_location(w->statement);
+    rb_mysql2_gc_location(w->server_flags);
   }
 }
 #endif
@@ -1604,6 +1607,53 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   return rb_mysql_result_each_(self, fetch_row_func, &args);
 }
 
+/* call-seq:
+ *    result.server_flags # => Hash
+ *
+ * Returns the server status flags for the query that produced this result:
+ * +:no_good_index_used+, +:no_index_used+, and +:query_was_slow+. Flags the
+ * client library doesn't define at compile time are +nil+.
+ *
+ * Built on first access from the connection status captured when the result
+ * was created, then memoized -- so it reflects this result's own query even
+ * if the connection has run others since, and remains available after #free.
+ */
+#define flag_to_bool(f) ((wrapper->server_status & f) ? Qtrue : Qfalse)
+static VALUE rb_mysql_result_server_flags(VALUE self) {
+  GET_RESULT(self);
+
+  if (NIL_P(wrapper->server_flags)) {
+    VALUE server_flags = rb_hash_new();
+
+#ifdef HAVE_CONST_SERVER_QUERY_NO_GOOD_INDEX_USED
+    rb_hash_aset(server_flags, sym_no_good_index_used, flag_to_bool(SERVER_QUERY_NO_GOOD_INDEX_USED));
+#else
+    rb_hash_aset(server_flags, sym_no_good_index_used, Qnil);
+#endif
+
+#ifdef HAVE_CONST_SERVER_QUERY_NO_INDEX_USED
+    rb_hash_aset(server_flags, sym_no_index_used, flag_to_bool(SERVER_QUERY_NO_INDEX_USED));
+#else
+    rb_hash_aset(server_flags, sym_no_index_used, Qnil);
+#endif
+
+#ifdef HAVE_CONST_SERVER_QUERY_WAS_SLOW
+    rb_hash_aset(server_flags, sym_query_was_slow, flag_to_bool(SERVER_QUERY_WAS_SLOW));
+#else
+    rb_hash_aset(server_flags, sym_query_was_slow, Qnil);
+#endif
+
+    /* Memoize in the wrapper struct, marked from rb_mysql_result_mark: a
+     * plain C field write, so it works even on a frozen Result (an ivar set
+     * would raise FrozenError), and later calls return this same Hash object
+     * (mutations included), as the eager version did. */
+    wrapper->server_flags = server_flags;
+  }
+
+  return wrapper->server_flags;
+}
+#undef flag_to_bool
+
 static VALUE rb_mysql_result_count(VALUE self) {
   GET_RESULT(self);
 
@@ -1643,11 +1693,17 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->fields = Qnil;
   wrapper->fieldTypes = Qnil;
   wrapper->rows = Qnil;
+  wrapper->server_flags = Qnil;
   wrapper->encoding = encoding;
   wrapper->streamingComplete = 0;
   wrapper->client = client;
   wrapper->client_wrapper = DATA_PTR(client);
   wrapper->client_wrapper->refcount++;
+  /* Capture the connection's server status now, while it still reflects the
+   * query that produced this result, so #server_flags can be built lazily.
+   * A plain uint copy: cannot raise, per the post-streaming-registration
+   * lifecycle rules in client.c/statement.c. */
+  wrapper->server_status = wrapper->client_wrapper->client->server_status;
   wrapper->result_buffers = NULL;
   wrapper->result_buffers_bound = 0;
   wrapper->is_null = NULL;
@@ -1688,6 +1744,7 @@ void init_mysql2_result(void) {
   rb_define_method(cMysql2Result, "field_types", rb_mysql_result_fetch_field_types, 0);
   rb_define_method(cMysql2Result, "free", rb_mysql_result_free_, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
+  rb_define_method(cMysql2Result, "server_flags", rb_mysql_result_server_flags, 0);
   rb_define_alias(cMysql2Result, "size", "count");
 
   intern_new          = rb_intern("new");
@@ -1715,6 +1772,9 @@ void init_mysql2_result(void) {
   sym_cast           = ID2SYM(rb_intern("cast"));
   sym_stream         = ID2SYM(rb_intern("stream"));
   sym_name           = ID2SYM(rb_intern("name"));
+  sym_no_good_index_used = ID2SYM(rb_intern("no_good_index_used"));
+  sym_no_index_used      = ID2SYM(rb_intern("no_index_used"));
+  sym_query_was_slow     = ID2SYM(rb_intern("query_was_slow"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); /*never GC */

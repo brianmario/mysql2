@@ -8,6 +8,9 @@ rm -fr /var/lib/mysql
 RELEASE=$(lsb_release -cs)
 VERSION=11.4
 
+install -d -m 0755 /etc/apt/keyrings
+install -m 0644 support/C74CD1D8.asc /etc/apt/keyrings/mariadb-keyring.asc
+
 tee <<- EOF > /etc/apt/sources.list.d/mariadb.sources
 	X-Repolib-Name: MariaDB
 	Types: deb
@@ -18,6 +21,5 @@ tee <<- EOF > /etc/apt/sources.list.d/mariadb.sources
 	Signed-By: /etc/apt/keyrings/mariadb-keyring.asc
 EOF
 
-cp support/C74CD1D8.asc /etc/apt/keyrings/mariadb-keyring.asc
 apt update
 apt install -y -o Dpkg::Options::='--force-confnew' mariadb-server libmariadb-dev

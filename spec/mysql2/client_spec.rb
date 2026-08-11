@@ -1028,6 +1028,41 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.not_to raise_error
       end
 
+      # Regression coverage for #807 / #962 / #1033: #next_result calls
+      # mysql_next_result() directly, which can make a real blocking network
+      # read when the next statement in the batch isn't ready yet. Unlike
+      # the initial query (see do_query/wait_for_fd in client.c), this read
+      # is neither GVL-released nor interruptible.
+      it "should not hold the GVL while #next_result waits on a slow next statement" do
+        @multi_client.query("SELECT 1 AS a; SELECT SLEEP(1) AS b")
+
+        ticks = 0
+        stop = false
+        counter = new_thread do
+          until stop
+            ticks += 1
+            sleep 0.01
+          end
+        end
+
+        @multi_client.next_result
+        stop = true
+        counter.join
+
+        # ~100 ticks in 1s if the GVL was free to schedule the counter
+        # thread; the bug holds the GVL for the entire wait, so ticks stays
+        # at (or near) 0.
+        expect(ticks).to be > 50
+      end
+
+      it "should be interruptible via Thread#raise while #next_result waits on a slow next statement" do
+        @multi_client.query("SELECT 1 AS a; SELECT SLEEP(2) AS b")
+
+        expect do
+          Timeout.timeout(0.3) { @multi_client.next_result }
+        end.to raise_error(Timeout::Error)
+      end
+
       it "#more_results? should work" do
         @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'")
         expect(@multi_client.more_results?).to be true

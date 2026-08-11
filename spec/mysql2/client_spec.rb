@@ -176,11 +176,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       new_client(option_overrides)
     end
 
-    # 'preferred' or 'verify_ca' are only in MySQL 5.6.36+, 5.7.11+, 8.0+
-    version = Mysql2::Client.info
+    # 'preferred' or 'verify_ca' are only in MySQL 5.6.36+, 5.7.11+, 8.0+.
+    # The upper bound stops at 100000 (not left unbounded) because MariaDB's
+    # client version numbering starts there (10.x = 100000+, 11.x = 110000+,
+    # 12.x = 120000+) and MariaDB has never implemented the 5-value ssl_mode
+    # API this branch is testing -- see FULL_SSL_MODE_SUPPORT in extconf.rb
+    # and rb_set_ssl_mode_option's own version >= 100000 MariaDB check.
+    version = Mysql2::Client.info[:id]
     ssl_modes = case version
-    when 50636...50700, 50711...50800, 80000...90000
-      %i[disabled preferred required verifa_ca verify_identity]
+    when 50636...50700, 50711...50800, 80000...100000
+      %i[disabled preferred required verify_ca verify_identity]
     else
       %i[disabled required verify_identity]
     end

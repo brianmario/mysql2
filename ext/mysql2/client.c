@@ -1256,7 +1256,7 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       break;
 #endif
 
-#ifdef HAVE_MYSQL_DEFAULT_AUTH
+#ifdef HAVE_CONST_MYSQL_DEFAULT_AUTH
     case MYSQL_DEFAULT_AUTH:
       charval = (const char *)StringValueCStr(value);
       retval  = charval;
@@ -1793,7 +1793,7 @@ static VALUE set_get_server_public_key(VALUE self, VALUE value) {
 }
 
 static VALUE set_default_auth(VALUE self, VALUE value) {
-#ifdef HAVE_MYSQL_DEFAULT_AUTH
+#ifdef HAVE_CONST_MYSQL_DEFAULT_AUTH
   return _mysql_client_options(self, MYSQL_DEFAULT_AUTH, value);
 #else
   rb_raise(cMysql2Error, "pluggable authentication is not available, you may need a newer MySQL client library");

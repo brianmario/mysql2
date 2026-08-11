@@ -1199,6 +1199,38 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   }
   fieldLengths = mysql_fetch_lengths(wrapper->result);
 
+  /* cast: false wants every non-NULL value as a raw String with the right
+   * encoding, so the per-cell type dispatch below is pure overhead for it.
+   * This loop is the cast: false arm of the general loop with the dispatch
+   * hoisted out; everything else is kept cell-for-cell identical -- the same
+   * length-based rb_str_new (embedded NULs intact), the same
+   * mysql2_set_field_string_encoding, the same MYSQL_TYPE_NULL and NULL-cell
+   * handling, and the same key-before-value evaluation order -- so rows are
+   * byte-identical with just fewer branches per cell. Runs entirely with the
+   * GVL held (the only nogvl region in this function is the streaming row
+   * fetch above). */
+  if (!args->cast) {
+    for (i = 0; i < wrapper->numberOfFields; i++) {
+      /* Hash keys only; array-mode names were batch-materialized above. */
+      VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+      VALUE val;
+
+      if (row[i] && fields[i].type != MYSQL_TYPE_NULL) {
+        val = rb_str_new(row[i], fieldLengths[i]);
+        val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+      } else {
+        val = Qnil;
+      }
+
+      if (args->asArray) {
+        rb_ary_push(rowVal, val);
+      } else {
+        rb_hash_aset(rowVal, field, val);
+      }
+    }
+    return rowVal;
+  }
+
   for (i = 0; i < wrapper->numberOfFields; i++) {
     /* Hash keys only; array-mode names were batch-materialized above. */
     VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
@@ -1206,15 +1238,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
       VALUE val = Qnil;
       enum enum_field_types type = fields[i].type;
 
-      if (!args->cast) {
-        if (type == MYSQL_TYPE_NULL) {
-          val = Qnil;
-        } else {
-          val = rb_str_new(row[i], fieldLengths[i]);
-          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
-        }
-      } else {
-        switch(type) {
+      switch(type) {
         case MYSQL_TYPE_NULL:       /* NULL-type field */
           val = Qnil;
           break;
@@ -1390,7 +1414,6 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           val = rb_str_new(row[i], fieldLengths[i]);
           val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
           break;
-        }
       }
       if (args->asArray) {
         rb_ary_push(rowVal, val);

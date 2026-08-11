@@ -1287,6 +1287,208 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "cast: false raw string rows" do
+    # Pins the text-protocol cast: false fast path in rb_mysql_result_fetch_row
+    # (ext/mysql2/result.c) to the exact output of the casting loop's raw-string
+    # arm it replaced: every non-NULL value is a String of the wire bytes,
+    # length-based (embedded NULs intact), tagged by
+    # mysql2_set_field_string_encoding; every NULL is nil. Expected values are
+    # written as literals -- bytes and encoding both -- rather than derived
+    # from another code path at runtime.
+    #
+    # Encoding notes, verified against the casting path's raw-string arm on
+    # this server: numeric fields (INT/BIGINT/DECIMAL/FLOAT/YEAR/TINYINT/BIT)
+    # arrive with charsetnr 63 but no BINARY_FLAG, so they are tagged BINARY
+    # via the charsetnr mapping and (unlike BINARY_FLAG fields) do transcode
+    # under Encoding.default_internal. Temporal fields and the true binary
+    # columns (BLOB/VARBINARY) carry BINARY_FLAG + charsetnr 63 and stay
+    # BINARY unconditionally. latin1 text arrives converted to the connection
+    # charset (utf8mb4) unless character_set_results is disabled.
+    before(:example) do
+      @client.query %[
+        CREATE TEMPORARY TABLE mysql2_cast_false_test (
+          row_id TINYINT NOT NULL,
+          int_min_col INT,
+          bigint_umax_col BIGINT UNSIGNED,
+          decimal_col DECIMAL(10,3),
+          float_col FLOAT(10,3),
+          date_col DATE,
+          datetime_col DATETIME(6),
+          time_col TIME,
+          year_col YEAR,
+          bit_col BIT(64),
+          tiny1_col TINYINT(1),
+          varchar_utf8_col VARCHAR(32) CHARACTER SET utf8mb4,
+          varchar_latin1_col VARCHAR(32) CHARACTER SET latin1,
+          blob_col BLOB,
+          varbinary_col VARBINARY(20)
+        )
+      ]
+      @client.query %[
+        INSERT INTO mysql2_cast_false_test VALUES
+          (1, -2147483648, 18446744073709551615, 10.3, 10.3, '2010-04-04',
+           '2010-04-04 11:44:00.123456', '-838:59:59', 2009, b'101', 1,
+           'héllo ☃', 'héllo', _binary X'00DEADBEEF00FF', _binary X'760062'),
+          (2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+           NULL, NULL, NULL, NULL),
+          (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+           '', '', '', '')
+      ]
+    end
+
+    let(:parity_select) { "SELECT * FROM mysql2_cast_false_test ORDER BY row_id" }
+
+    let(:column_names) do
+      %w[
+        row_id int_min_col bigint_umax_col decimal_col float_col date_col datetime_col time_col
+        year_col bit_col tiny1_col varchar_utf8_col varchar_latin1_col blob_col varbinary_col
+      ]
+    end
+
+    # Column name => [bytes, encoding] for values, nil for NULLs, in column
+    # order. Row 1 exercises boundary numerics, fractional and extreme
+    # temporals, embedded NUL bytes, and multibyte text; row 2 is NULL in
+    # every non-key column; row 3 pins zero-length strings as distinct from
+    # NULL.
+    let(:expected_rows) do
+      [
+        {
+          'row_id'             => ["1", Encoding::BINARY],
+          'int_min_col'        => ["-2147483648", Encoding::BINARY],
+          'bigint_umax_col'    => ["18446744073709551615", Encoding::BINARY],
+          'decimal_col'        => ["10.300", Encoding::BINARY],
+          'float_col'          => ["10.300", Encoding::BINARY],
+          'date_col'           => ["2010-04-04", Encoding::BINARY],
+          'datetime_col'       => ["2010-04-04 11:44:00.123456", Encoding::BINARY],
+          'time_col'           => ["-838:59:59", Encoding::BINARY],
+          'year_col'           => ["2009", Encoding::BINARY],
+          'bit_col'            => ["\x00\x00\x00\x00\x00\x00\x00\x05", Encoding::BINARY],
+          'tiny1_col'          => ["1", Encoding::BINARY],
+          'varchar_utf8_col'   => ["héllo ☃", Encoding::UTF_8],
+          'varchar_latin1_col' => ["héllo", Encoding::UTF_8],
+          'blob_col'           => ["\x00\xDE\xAD\xBE\xEF\x00\xFF", Encoding::BINARY],
+          'varbinary_col'      => ["v\x00b", Encoding::BINARY],
+        },
+        {
+          'row_id' => ["2", Encoding::BINARY],
+          'int_min_col' => nil, 'bigint_umax_col' => nil, 'decimal_col' => nil,
+          'float_col' => nil, 'date_col' => nil, 'datetime_col' => nil,
+          'time_col' => nil, 'year_col' => nil, 'bit_col' => nil,
+          'tiny1_col' => nil, 'varchar_utf8_col' => nil,
+          'varchar_latin1_col' => nil, 'blob_col' => nil, 'varbinary_col' => nil,
+        },
+        {
+          'row_id' => ["3", Encoding::BINARY],
+          'int_min_col' => nil, 'bigint_umax_col' => nil, 'decimal_col' => nil,
+          'float_col' => nil, 'date_col' => nil, 'datetime_col' => nil,
+          'time_col' => nil, 'year_col' => nil, 'bit_col' => nil,
+          'tiny1_col' => nil,
+          'varchar_utf8_col' => ["", Encoding::UTF_8],
+          'varchar_latin1_col' => ["", Encoding::UTF_8],
+          'blob_col' => ["", Encoding::BINARY],
+          'varbinary_col' => ["", Encoding::BINARY],
+        },
+      ]
+    end
+
+    def expect_raw_row(row, expected, keys)
+      expect(row.keys).to eql(keys) if row.is_a?(Hash)
+      expected.each_with_index do |(name, expectation), i|
+        value = row.is_a?(Hash) ? row[keys[i]] : row[i]
+        if expectation.nil?
+          expect(value).to be_nil, "#{name}: expected nil, got #{value.inspect}"
+        else
+          bytes, encoding = expectation
+          expect(value).to be_an_instance_of(String), "#{name}: expected a String, got #{value.class}"
+          expect(value.encoding).to eql(encoding), "#{name}: expected #{encoding}, got #{value.encoding}"
+          expect(value.b).to eql(bytes.b), "#{name}: expected #{bytes.b.inspect}, got #{value.b.inspect}"
+        end
+      end
+    end
+
+    def expect_raw_rows(rows, keys)
+      expect(rows.length).to eql(expected_rows.length)
+      rows.zip(expected_rows) { |row, expected| expect_raw_row(row, expected, keys) }
+    end
+
+    [false, true].each do |stream|
+      [false, true].each do |symbolize|
+        variant = "stream: #{stream}, symbolize_keys: #{symbolize}"
+
+        it "returns raw strings and nils in hash rows (#{variant})" do
+          rows = @client.query(parity_select, cast: false, stream: stream, cache_rows: !stream, symbolize_keys: symbolize).to_a
+          keys = symbolize ? column_names.map(&:to_sym) : column_names
+          expect_raw_rows(rows, keys)
+        end
+
+        it "returns raw strings and nils in array rows (#{variant})" do
+          result = @client.query(parity_select, cast: false, as: :array, stream: stream, cache_rows: !stream, symbolize_keys: symbolize)
+          expect_raw_rows(result.to_a, column_names)
+          expect(result.fields).to eql(symbolize ? column_names.map(&:to_sym) : column_names)
+        end
+      end
+    end
+
+    it "re-materializes identical rows when re-iterating with cache_rows: false" do
+      result = @client.query(parity_select, cast: false, cache_rows: false)
+      2.times { expect_raw_rows(result.to_a, column_names) }
+    end
+
+    it "preserves embedded NUL bytes: a strlen-based copy would truncate these" do
+      row = @client.query(parity_select, cast: false).first
+      expect(row['bit_col'].b).to eql("\x00\x00\x00\x00\x00\x00\x00\x05".b)
+      expect(row['varbinary_col'].b).to eql("v\x00b".b)
+      expect(row['blob_col'].bytesize).to eql(7)
+    end
+
+    it "keeps per-field charsetnr tagging when the server does not convert results" do
+      @client.query("SET character_set_results = NULL")
+      row = @client.query(parity_select, cast: false).first
+      expect(row['varchar_latin1_col'].encoding).to eql(Encoding::ISO_8859_1)
+      expect(row['varchar_latin1_col'].b).to eql("h\xE9llo".b)
+      expect(row['varchar_utf8_col']).to eql("héllo ☃")
+      expect(row['blob_col'].encoding).to eql(Encoding::BINARY)
+    end
+
+    it "applies Encoding.default_internal exactly as the casting path's raw strings do" do
+      with_internal_encoding Encoding::UTF_8 do
+        row = @client.query(parity_select, cast: false).first
+        # BINARY_FLAG + charsetnr 63 fields never transcode...
+        expect(row['blob_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['blob_col'].b).to eql("\x00\xDE\xAD\xBE\xEF\x00\xFF".b)
+        expect(row['varbinary_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['date_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['datetime_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['time_col'].encoding).to eql(Encoding::BINARY)
+        # ...while charsetnr-63-without-BINARY_FLAG numerics do,
+        expect(row['int_min_col']).to eql("-2147483648")
+        expect(row['int_min_col'].encoding).to eql(Encoding::UTF_8)
+        expect(row['bit_col']).to eql("\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0005")
+        expect(row['bit_col'].encoding).to eql(Encoding::UTF_8)
+        # ...as does text (already converted to utf8mb4 by the server).
+        expect(row['varchar_latin1_col']).to eql("héllo")
+        expect(row['varchar_latin1_col'].encoding).to eql(Encoding::UTF_8)
+      end
+    end
+
+    it "keeps #fields available after an abandoned cast: false stream is force-freed" do
+      result = @client.query(parity_select, cast: false, as: :array, stream: true, cache_rows: false)
+      result.each { |_| break } # rubocop:disable Lint/UnreachableLoop
+      @client.query("SELECT 1") # force-frees the abandoned stream
+      expect(result.fields).to eql(column_names)
+    end
+
+    it "does not fast-path prepared statements: cast: false still warns and fully casts" do
+      statement = @client.prepare("SELECT int_min_col, date_col, varchar_utf8_col FROM mysql2_cast_false_test WHERE row_id = 1")
+      row = nil
+      expect { row = statement.execute(cast: false).first }
+        .to output(/:cast is forced for prepared statements/).to_stderr
+      expect(row['int_min_col']).to eql(-2147483648)
+      expect(row['date_col']).to eql(Date.new(2010, 4, 4))
+      expect(row['varchar_utf8_col']).to eql("héllo ☃")
+    end
+  end
+
   context "server flags" do
     let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY null_test DESC LIMIT 1") }
 

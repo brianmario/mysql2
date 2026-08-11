@@ -526,6 +526,112 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(test_result['year_test']).to eql(2009)
     end
 
+    context "casting integer columns" do
+      before do
+        @client.query <<-SQL
+          CREATE TEMPORARY TABLE mysql2_int_cast_test (
+            tiny_int TINYINT, tiny_uint TINYINT UNSIGNED,
+            small_int SMALLINT, small_uint SMALLINT UNSIGNED,
+            medium_int MEDIUMINT, medium_uint MEDIUMINT UNSIGNED,
+            int_col INT, uint_col INT UNSIGNED,
+            big_int BIGINT, big_uint BIGINT UNSIGNED,
+            year_col YEAR
+          )
+        SQL
+      end
+
+      def roundtrip(column, value, **query_options)
+        @client.query "DELETE FROM mysql2_int_cast_test"
+        @client.query "INSERT INTO mysql2_int_cast_test (#{column}) VALUES (#{value})"
+        @client.query("SELECT #{column} AS v FROM mysql2_int_cast_test", **query_options).first['v']
+      end
+
+      boundaries = {
+        'tiny_int'    => [-128, -1, 0, 1, 127],
+        'tiny_uint'   => [0, 255],
+        'small_int'   => [-32_768, 32_767],
+        'small_uint'  => [0, 65_535],
+        'medium_int'  => [-8_388_608, 8_388_607],
+        'medium_uint' => [0, 16_777_215],
+        'int_col'     => [-2_147_483_648, 2_147_483_647],
+        'uint_col'    => [0, 4_294_967_295],
+        'big_int'     => [-9_223_372_036_854_775_808, -9_223_372_036_854_775_807,
+                          9_223_372_036_854_775_806, 9_223_372_036_854_775_807,],
+        'big_uint'    => [0, 9_223_372_036_854_775_807, 9_223_372_036_854_775_808,
+                          18_446_744_073_709_551_614, 18_446_744_073_709_551_615,],
+        'year_col'    => [1901, 2000, 2155],
+      }.freeze
+
+      it "returns exact Integers at every signed and unsigned column boundary" do
+        boundaries.each do |column, values|
+          values.each do |value|
+            returned = roundtrip(column, value)
+            expect(returned).to be_an_instance_of(Integer)
+            expect(returned).to eql(value)
+          end
+        end
+      end
+
+      it "matches Ruby integer values across every power-of-ten boundary" do
+        signed_range = -9_223_372_036_854_775_808..9_223_372_036_854_775_807
+        signed = []
+        unsigned = [18_446_744_073_709_551_614, 18_446_744_073_709_551_615]
+        (0..19).each do |k|
+          power = 10**k
+          [power - 1, power, power + 1].each do |v|
+            signed.push(v, -v) if signed_range.cover?(v)
+            unsigned.push(v) if v <= 18_446_744_073_709_551_615
+          end
+        end
+        signed = signed.uniq.sort
+        unsigned = unsigned.uniq.sort
+
+        @client.query "INSERT INTO mysql2_int_cast_test (big_int) VALUES #{signed.map { |v| "(#{v})" }.join(',')}"
+        returned = @client.query("SELECT big_int AS v FROM mysql2_int_cast_test ORDER BY v").map { |row| row['v'] }
+        expect(returned).to eql(signed)
+
+        @client.query "DELETE FROM mysql2_int_cast_test"
+        @client.query "INSERT INTO mysql2_int_cast_test (big_uint) VALUES #{unsigned.map { |v| "(#{v})" }.join(',')}"
+        returned = @client.query("SELECT big_uint AS v FROM mysql2_int_cast_test ORDER BY v").map { |row| row['v'] }
+        expect(returned).to eql(unsigned)
+      end
+
+      it "returns exact boundary values when streaming" do
+        expect(roundtrip('big_int', -9_223_372_036_854_775_808, stream: true, cache_rows: false)) \
+          .to eql(-9_223_372_036_854_775_808)
+        expect(roundtrip('big_uint', 18_446_744_073_709_551_615, stream: true, cache_rows: false)) \
+          .to eql(18_446_744_073_709_551_615)
+      end
+
+      it "returns boundary values as Strings when :cast is false" do
+        expect(roundtrip('big_int', -9_223_372_036_854_775_808, cast: false)).to eql("-9223372036854775808")
+        expect(roundtrip('big_uint', 18_446_744_073_709_551_615, cast: false)).to eql("18446744073709551615")
+      end
+
+      it "returns exact boundary values from prepared statements" do
+        @client.query "INSERT INTO mysql2_int_cast_test (big_int, big_uint) VALUES " \
+                      "(-9223372036854775808, 18446744073709551615)"
+        row = @client.prepare("SELECT big_int, big_uint FROM mysql2_int_cast_test").execute.first
+        expect(row['big_int']).to eql(-9_223_372_036_854_775_808)
+        expect(row['big_uint']).to eql(18_446_744_073_709_551_615)
+      end
+
+      it "casts DECIMAL(65,0) values beyond 64-bit range to Integer" do
+        [10**65 - 1, -(10**65 - 1), 123_456_789_012_345_678_901, -123_456_789_012_345_678_901].each do |value|
+          returned = @client.query("SELECT CAST('#{value}' AS DECIMAL(65,0)) AS v").first['v']
+          expect(returned).to be_an_instance_of(Integer)
+          expect(returned).to eql(value)
+        end
+      end
+
+      it "returns exact values for ZEROFILL columns despite leading zeros" do
+        @client.query "CREATE TEMPORARY TABLE mysql2_zerofill_test (zf INT ZEROFILL)"
+        @client.query "INSERT INTO mysql2_zerofill_test (zf) VALUES (42), (4294967295)"
+        returned = @client.query("SELECT zf FROM mysql2_zerofill_test ORDER BY zf").map { |row| row['zf'] }
+        expect(returned).to eql([42, 4_294_967_295])
+      end
+    end
+
     it "should return BigDecimal for a DECIMAL value" do
       expect(test_result['decimal_test']).to be_an_instance_of(BigDecimal)
       expect(test_result['decimal_test']).to eql(10.3)

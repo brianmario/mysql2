@@ -611,8 +611,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     wrapper->active_streaming_result = resultObj;
   }
 
-  rb_mysql_set_server_query_flags(wrapper->client, resultObj);
-
   if (!is_streaming) {
     // cache all result
     rb_funcall(resultObj, intern_each, 0);

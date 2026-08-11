@@ -535,6 +535,57 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
   return val;
 }
 
+#ifdef HAVE_RB_TIME_TIMESPEC_NEW
+#include <limits.h>
+#include <time.h>
+
+/* days_from_civil: proleptic Gregorian civil date -> days since 1970-01-01.
+ * Howard Hinnant's public-domain algorithm (http://howardhinnant.github.io/date_algorithms.html). */
+static inline int64_t mysql2_days_from_civil(int64_t y, unsigned int m, unsigned int d) {
+  int64_t era;
+  unsigned int yoe, doy, doe;
+  y -= m <= 2;
+  era = (y >= 0 ? y : y - 399) / 400;
+  yoe = (unsigned int)(y - era * 400);
+  doy = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + d - 1;
+  doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + (int64_t)doe - 719468;
+}
+
+/* Time construction for :utc results, equivalent to
+ * Time.utc(year, month, day, hour, min, sec, usec) but without the varargs
+ * dispatch and per-argument boxing of a 7-argument rb_funcall.
+ *
+ * INT_MAX - 1 is rb_time_timespec_new's documented sentinel for "ts is in UTC"
+ * (INT_MAX means local time) -- see ruby/internal/intern/time.h.
+ *
+ * Returns Qnil when the value cannot be built this way, so the caller falls
+ * back to the funcall path: an epoch outside time_t (32-bit time_t platforms,
+ * for dates beyond 1901-2038) or an out-of-range subsecond. On 64-bit time_t
+ * the narrowing check folds away at compile time. */
+static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int day,
+                             unsigned int hour, unsigned int min, unsigned int sec,
+                             unsigned long usec) {
+  struct timespec ts;
+  const int64_t secs = mysql2_days_from_civil((int64_t)year, month, day) * 86400LL
+                       + hour * 3600 + min * 60 + sec;
+  const time_t narrowed = (time_t)secs;
+
+  if ((int64_t)narrowed != secs) return Qnil;
+  if (usec >= 1000000UL) return Qnil;
+
+  ts.tv_sec = narrowed;
+  ts.tv_nsec = (long)(usec * 1000UL);
+  return rb_time_timespec_new(&ts, INT_MAX - 1);
+}
+
+/* The fast path applies only to :utc, and only to wall-clock components the
+ * generic Time.utc would itself accept -- it raises on out-of-range values,
+ * where plain epoch arithmetic would silently wrap them. */
+#define MYSQL2_UTC_FAST_PATH_OK(tz, hour, min, sec) \
+  ((tz) == intern_utc && (hour) < 24 && (min) < 60 && (sec) < 60)
+#endif
+
 /* Read exactly n decimal digits. Returns 0 (leaving *out untouched) on any
  * non-digit, so callers fall back to the general parser. */
 static inline int mysql2_read_uint(const char *p, int n, unsigned int *out) {
@@ -1097,12 +1148,28 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
                 if (!parsed_msec) {
                   msec = msec_char_to_uint(msec_char, sizeof(msec_char));
                 }
-                val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
-                if (!NIL_P(args->app_timezone)) {
+#ifdef HAVE_RB_TIME_TIMESPEC_NEW
+                /* month/day lower bounds were validated above; the upper bounds
+                 * keep a corrupt value from producing a silently-wrong epoch
+                 * instead of the ArgumentError Time.utc would raise. */
+                if (MYSQL2_UTC_FAST_PATH_OK(args->db_timezone, hour, min, sec) && month <= 12 && day <= 31) {
+                  val = mysql2_utc_time(year, month, day, hour, min, sec, msec);
+                }
+                if (!NIL_P(val)) {
+                  /* Already UTC, so app_timezone :utc needs no conversion. */
                   if (args->app_timezone == intern_local) {
                     val = rb_funcall(val, intern_localtime, 0);
-                  } else { /* utc */
-                    val = rb_funcall(val, intern_utc, 0);
+                  }
+                } else
+#endif
+                {
+                  val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
+                  if (!NIL_P(args->app_timezone)) {
+                    if (args->app_timezone == intern_local) {
+                      val = rb_funcall(val, intern_localtime, 0);
+                    } else { /* utc */
+                      val = rb_funcall(val, intern_utc, 0);
+                    }
                   }
                 }
               }

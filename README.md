@@ -810,6 +810,38 @@ automatically when you run rake (or explicitly `rake spec/configuration.yml`).
 For a normal installation on a Mac, you most likely do not need to do anything,
 though.
 
+## I'm running an older version of Rails and need a back-ported feature
+
+Some Rails versions are pinned to specific release lines of mysql2
+that are no longer maintained. Applications using such older versions
+of Rails may find themselves trying to upgrade mysql2 gem to support
+a newer version of MySQL or MariaDB that is beyond the required
+version for the app's Rails gem.
+
+Requests for specific features, bug fixes, or database engine
+compatibility backports cannot be honored.
+
+An EOL Rails or Ruby version isn't receiving security patches either,
+and the whole works becomes impossible to test in CI over time as CI
+services prune older versions from their runtime environments.
+
+### Fork dependencies
+
+Fork Rails at the needed version branch, and repoint its bundled mysql2
+adapter at the newer gem version. For example, to use Rails 3.2 with a
+newer mysql2 gem:
+
+1. Fork Rails and set the needed version branch as the default, e.g.
+   [`3-2-stable`](https://github.com/rails/rails/tree/3-2-stable).
+2. Edit
+   [`mysql2_adapter.rb`](https://github.com/rails/rails/blob/3-2-stable/activerecord/lib/active_record/connection_adapters/mysql2_adapter.rb#L1-L6)
+   and change the `gem 'mysql2', '~> 0.3.10'` line to the needed version
+   constraint.
+3. Point the Gemfile at the fork instead of the `rails` gem, using
+   [Bundler's git source](https://bundler.io/guides/git.html).
+4. Test the combination in the specific dev, test, and production
+   environment that is needed.
+
 ## Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude

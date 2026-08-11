@@ -218,6 +218,76 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
         result.each.to_a
       end.to raise_exception(Mysql2::Error)
     end
+
+    context "when iterated repeatedly" do
+      def collect_rows(result, **overrides)
+        [].tap { |rows| result.each(**overrides) { |row| rows << row } }
+      end
+
+      it "should replay identical row objects when cache_rows is enabled" do
+        result = @client.query "SELECT 1 AS a UNION SELECT 2"
+        first = collect_rows(result)
+        second = collect_rows(result)
+        expect(second).to eql(first)
+        expect(second.map(&:object_id)).to eql(first.map(&:object_id))
+      end
+
+      it "should build fresh row objects each time when cache_rows is disabled" do
+        result = @client.query "SELECT 1 AS a UNION SELECT 2", cache_rows: false
+        first = collect_rows(result)
+        second = collect_rows(result)
+        expect(second).to eql(first)
+        expect(second.map(&:object_id)).not_to eql(first.map(&:object_id))
+      end
+
+      it "should apply the original query options to a plain #each after a per-each override" do
+        result = @client.query "SELECT 1 AS a", cache_rows: false
+        expect(collect_rows(result)).to eql([{ "a" => 1 }])
+        expect(collect_rows(result, as: :array)).to eql([[1]])
+        expect(collect_rows(result, cast: false)).to eql([{ "a" => "1" }])
+        expect(collect_rows(result)).to eql([{ "a" => 1 }])
+      end
+
+      it "should apply the original query options to a plain #each when a per-each override came first" do
+        result = @client.query "SELECT 1 AS a", cache_rows: false
+        expect(collect_rows(result, as: :array)).to eql([[1]])
+        expect(collect_rows(result)).to eql([{ "a" => 1 }])
+      end
+
+      it "should keep the key style chosen by the first iteration regardless of later overrides" do
+        # Field-name VALUEs are cached per result by the first iteration
+        # (rb_mysql_result_fetch_field), so a later per-each :symbolize_keys
+        # override never re-keys rows: the first iteration's key style wins.
+        # Longstanding upstream behavior, pinned so the parsed-options cache
+        # cannot change it in either direction.
+        result = @client.query "SELECT 1 AS a", cache_rows: false
+        expect(collect_rows(result)).to eql([{ "a" => 1 }])
+        expect(collect_rows(result, symbolize_keys: true)).to eql([{ "a" => 1 }])
+
+        result = @client.query "SELECT 1 AS a", cache_rows: false
+        expect(collect_rows(result, symbolize_keys: true)).to eql([{ a: 1 }])
+        expect(collect_rows(result)).to eql([{ a: 1 }])
+      end
+
+      it "should replay cached rows built with the original options even when a later #each passes overrides" do
+        result = @client.query "SELECT 1 AS a"
+        expect(collect_rows(result)).to eql([{ "a" => 1 }])
+        expect(collect_rows(result, symbolize_keys: true)).to eql([{ "a" => 1 }])
+      end
+
+      it "should reject a negative :rows_per_gvl_yield on every #each, not just the first" do
+        result = @client.query "SELECT 1", rows_per_gvl_yield: -1
+        2.times do
+          expect { result.each { |_| } }.to raise_error(Mysql2::Error, /rows_per_gvl_yield/)
+        end
+      end
+
+      it "should reject a negative per-each :rows_per_gvl_yield even after a successful plain #each" do
+        result = @client.query "SELECT 1"
+        result.each { |_| }
+        expect { result.each(rows_per_gvl_yield: -1) { |_| } }.to raise_error(Mysql2::Error, /rows_per_gvl_yield/)
+      end
+    end
   end
 
   context "#fields" do

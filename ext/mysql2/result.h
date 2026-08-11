@@ -12,6 +12,30 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
  * see mysql2_abandon_active_stream in client.c. No-op if already freed. */
 void mysql2_result_force_free(VALUE self);
 
+/* Parsed form of the stored @query_options hash, filled in by the first
+ * argument-less #each and reused by later argument-less calls so they skip
+ * the per-call hash lookups. Plain C scalars and static symbol IDs only --
+ * nothing here is a heap VALUE, so no GC marking is needed. A call that
+ * passes per-each options neither reads nor writes this cache.
+ *
+ * cacheRows and cast are stored as parsed, before the prepared-statement
+ * forcing in #each, so the warnings and forcing replay identically on every
+ * call whether the parse was cached or not. warnDbTimezone records that the
+ * invalid-:database_timezone warning must be re-issued (each warns every
+ * call, and the warning point is after the freed-result guard). */
+typedef struct {
+  int parsed;
+  int symbolizeKeys;
+  int asArray;
+  int castBool;
+  int cacheRows;
+  int cast;
+  int warnDbTimezone;
+  unsigned long rowsPerGvlYield;
+  ID db_timezone;
+  ID app_timezone; /* Qnil when no conversion applies, as in result_each_args */
+} mysql2_each_opts_cache;
+
 typedef struct {
   VALUE fields;
   VALUE fieldTypes;
@@ -41,6 +65,7 @@ typedef struct {
   my_bool *is_null;
   my_bool *error;
   unsigned long *length;
+  mysql2_each_opts_cache each_opts;
 } mysql2_result_wrapper;
 
 #endif

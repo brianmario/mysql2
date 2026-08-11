@@ -1532,11 +1532,11 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
-  VALUE defaults, opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
-  ID db_timezone, app_timezone, dbTz, appTz;
+  VALUE opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
+  ID db_timezone, app_timezone;
   int symbolizeKeys, asArray, castBool, cacheRows, cast;
+  int warnDbTimezone, perEachOpts;
   unsigned long rowsPerGvlYield;
-  VALUE rowsPerGvlYieldOpt;
 
   GET_RESULT(self);
 
@@ -1544,32 +1544,90 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     rb_raise(cMysql2Error, "Statement handle already closed");
   }
 
-  defaults = rb_ivar_get(self, intern_query_options);
-  Check_Type(defaults, T_HASH);
-
   // A block can be passed to this method, but since we don't call the block directly from C,
   // we don't need to capture it into a variable here with the "&" scan arg.
-  if (rb_scan_args(argc, argv, "01", &opts) == 1) {
-    opts = rb_funcall(defaults, intern_merge, 1, opts);
+  perEachOpts = rb_scan_args(argc, argv, "01", &opts) == 1;
+
+  if (!perEachOpts && wrapper->each_opts.parsed) {
+    /* Argument-less #each over the already-parsed @query_options: reuse the
+     * parse. Warnings are deliberately not part of the cache -- their
+     * conditions are recomputed from the cached (pre-forcing) values below,
+     * so they fire on every call exactly as an uncached parse would. */
+    symbolizeKeys   = wrapper->each_opts.symbolizeKeys;
+    asArray         = wrapper->each_opts.asArray;
+    castBool        = wrapper->each_opts.castBool;
+    cacheRows       = wrapper->each_opts.cacheRows;
+    cast            = wrapper->each_opts.cast;
+    warnDbTimezone  = wrapper->each_opts.warnDbTimezone;
+    rowsPerGvlYield = wrapper->each_opts.rowsPerGvlYield;
+    db_timezone     = wrapper->each_opts.db_timezone;
+    app_timezone    = wrapper->each_opts.app_timezone;
   } else {
-    opts = defaults;
-  }
+    VALUE dbTz, appTz, rowsPerGvlYieldOpt;
+    VALUE defaults = rb_ivar_get(self, intern_query_options);
+    Check_Type(defaults, T_HASH);
 
-  symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
-  asArray       = rb_hash_aref(opts, sym_as) == sym_array;
-  castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
-  cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
-  cast          = RTEST(rb_hash_aref(opts, sym_cast));
+    opts = perEachOpts ? rb_funcall(defaults, intern_merge, 1, opts) : defaults;
 
-  /* :rows_per_gvl_yield -- 0 disables yielding; nil uses the default. */
-  rowsPerGvlYield = MYSQL2_ROWS_PER_GVL_YIELD_DEFAULT;
-  rowsPerGvlYieldOpt = rb_hash_aref(opts, sym_rows_per_gvl_yield);
-  if (!NIL_P(rowsPerGvlYieldOpt)) {
-    long requested = NUM2LONG(rowsPerGvlYieldOpt);
-    if (requested < 0) {
-      rb_raise(cMysql2Error, ":rows_per_gvl_yield must not be negative");
+    symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
+    asArray       = rb_hash_aref(opts, sym_as) == sym_array;
+    castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
+    cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
+    cast          = RTEST(rb_hash_aref(opts, sym_cast));
+
+    /* :rows_per_gvl_yield -- 0 disables yielding; nil uses the default. */
+    rowsPerGvlYield = MYSQL2_ROWS_PER_GVL_YIELD_DEFAULT;
+    rowsPerGvlYieldOpt = rb_hash_aref(opts, sym_rows_per_gvl_yield);
+    if (!NIL_P(rowsPerGvlYieldOpt)) {
+      long requested = NUM2LONG(rowsPerGvlYieldOpt);
+      if (requested < 0) {
+        rb_raise(cMysql2Error, ":rows_per_gvl_yield must not be negative");
+      }
+      rowsPerGvlYield = (unsigned long)requested;
     }
-    rowsPerGvlYield = (unsigned long)requested;
+
+    /* The timezone lookups are hoisted from their historical spot below the
+     * freed-result guard so a complete parse exists to cache; the lookups
+     * themselves are side-effect free, and the invalid-:database_timezone
+     * warning is deferred (warnDbTimezone) to its historical point, after
+     * that guard. */
+    dbTz = rb_hash_aref(opts, sym_database_timezone);
+    warnDbTimezone = 0;
+    if (dbTz == sym_local) {
+      db_timezone = intern_local;
+    } else if (dbTz == sym_utc) {
+      db_timezone = intern_utc;
+    } else {
+      warnDbTimezone = !NIL_P(dbTz);
+      db_timezone = intern_local;
+    }
+
+    appTz = rb_hash_aref(opts, sym_application_timezone);
+    if (appTz == sym_local) {
+      app_timezone = intern_local;
+    } else if (appTz == sym_utc) {
+      app_timezone = intern_utc;
+    } else {
+      app_timezone = Qnil;
+    }
+
+    if (!perEachOpts) {
+      /* Nothing above raised, so this parse of @query_options is complete
+       * and can serve every later argument-less call. An invalid
+       * :rows_per_gvl_yield raises before this point, leaving the cache
+       * unset so the next call re-parses and re-raises just as an uncached
+       * one would. */
+      wrapper->each_opts.symbolizeKeys   = symbolizeKeys;
+      wrapper->each_opts.asArray         = asArray;
+      wrapper->each_opts.castBool        = castBool;
+      wrapper->each_opts.cacheRows       = cacheRows;
+      wrapper->each_opts.cast            = cast;
+      wrapper->each_opts.warnDbTimezone  = warnDbTimezone;
+      wrapper->each_opts.rowsPerGvlYield = rowsPerGvlYield;
+      wrapper->each_opts.db_timezone     = db_timezone;
+      wrapper->each_opts.app_timezone    = app_timezone;
+      wrapper->each_opts.parsed          = 1;
+    }
   }
 
   if (wrapper->is_streaming && cacheRows) {
@@ -1600,25 +1658,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     }
   }
 
-  dbTz = rb_hash_aref(opts, sym_database_timezone);
-  if (dbTz == sym_local) {
-    db_timezone = intern_local;
-  } else if (dbTz == sym_utc) {
-    db_timezone = intern_utc;
-  } else {
-    if (!NIL_P(dbTz)) {
-      rb_warn(":database_timezone option must be :utc or :local - defaulting to :local");
-    }
-    db_timezone = intern_local;
-  }
-
-  appTz = rb_hash_aref(opts, sym_application_timezone);
-  if (appTz == sym_local) {
-    app_timezone = intern_local;
-  } else if (appTz == sym_utc) {
-    app_timezone = intern_utc;
-  } else {
-    app_timezone = Qnil;
+  if (warnDbTimezone) {
+    rb_warn(":database_timezone option must be :utc or :local - defaulting to :local");
   }
 
   if (wrapper->rows == Qnil && !wrapper->is_streaming) {
@@ -1758,6 +1799,10 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->is_null = NULL;
   wrapper->error = NULL;
   wrapper->length = NULL;
+  /* Plain assignment only: nothing in this function may raise (post-#1463
+   * streaming lifecycle). The parse itself happens in the first
+   * argument-less #each. */
+  wrapper->each_opts.parsed = 0;
 
   /* Keep a handle to the Statement to ensure it doesn't get garbage collected first */
   wrapper->statement = statement;

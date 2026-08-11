@@ -812,6 +812,53 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "with the :force_encoding execute option" do
+    # 0x68C3A96C6C6F is "héllo" in UTF-8.
+    let(:sql) { "SELECT _utf8mb4 0x68C3A96C6C6F AS utf8_val, UNHEX('DEADBEEF') AS binary_val" }
+
+    it "retags string values with the forced encoding, bytes unchanged" do
+      row = @client.prepare(sql).execute(force_encoding: 'ISO-8859-1').first
+      expect(row['utf8_val'].encoding).to eql(Encoding::ISO_8859_1)
+      expect(row['utf8_val'].bytes).to eql("h\xC3\xA9llo".bytes)
+    end
+
+    it "accepts an Encoding object and retags BLOB/binary values too" do
+      row = @client.prepare(sql).execute(force_encoding: Encoding::UTF_8).first
+      expect(row['binary_val'].encoding).to eql(Encoding::UTF_8)
+      expect(row['binary_val'].bytes).to eql([0xDE, 0xAD, 0xBE, 0xEF])
+    end
+
+    it "combines with bind parameters and leaves NULL and non-string values alone" do
+      row = @client.prepare("SELECT ? AS str_val, NULL AS null_val, 1 AS int_val").execute("abc", force_encoding: 'binary').first
+      expect(row['str_val'].encoding).to eql(Encoding::BINARY)
+      expect(row['null_val']).to be_nil
+      expect(row['int_val']).to eql(1)
+    end
+
+    it "passes through streaming execution" do
+      # Streaming prepared statements cannot return string values at all,
+      # with or without this option: statement streaming skips
+      # mysql_stmt_store_result, leaving max_length 0, and string fetches
+      # die with MYSQL_DATA_TRUNCATED ("IMPLBUG..."). So there is nothing to
+      # retag here; pin that the option at least threads through the
+      # streaming execute path unharmed.
+      rows = @client.prepare("SELECT 1 UNION SELECT 2").execute(stream: true, cache_rows: false, as: :array, force_encoding: 'binary').to_a
+      expect(rows).to eql([[1], [2]])
+    end
+
+    it "raises for an unknown encoding name before the statement executes" do
+      @client.query("CREATE TEMPORARY TABLE mysql2_stmt_force_encoding_probe (id INT)")
+      stmt = @client.prepare("INSERT INTO mysql2_stmt_force_encoding_probe VALUES (1)")
+      expect { stmt.execute(force_encoding: 'not-an-encoding') }
+        .to raise_error(ArgumentError, /unknown encoding name.*not-an-encoding/)
+      # Nothing hit the wire: the INSERT never ran, and both the connection
+      # and the statement are still usable.
+      expect(@client.query("SELECT COUNT(*) AS n FROM mysql2_stmt_force_encoding_probe").first['n']).to eql(0)
+      stmt.execute
+      expect(@client.query("SELECT COUNT(*) AS n FROM mysql2_stmt_force_encoding_probe").first['n']).to eql(1)
+    end
+  end
+
   context 'last_id' do
     before(:example) do
       @client.query 'USE test'

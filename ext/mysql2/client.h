@@ -66,6 +66,14 @@ typedef struct {
   uint64_t affected_rows;
   MYSQL *client;
   mysql2_client_state_t state;
+  /* The pid that established this connection (set on every successful
+   * connect). Compared against getpid() when the wrapper is garbage
+   * collected: a mismatch means this process inherited the connection
+   * across a fork() without reconnecting, so its copy of the connection's
+   * protocol/TLS state can't be trusted -- see decr_mysql2_client. Plain
+   * int, not pid_t, so this header doesn't need a POSIX-only typedef --
+   * only ever compared on the #ifndef _WIN32 path anyway. */
+  int connect_pid;
   mysql2_pending_stmt_close *pending_stmt_closes;
   unsigned long pending_stmt_close_count; /* O(1) mirror of the list above, for Client#pending_prepared_statement_closes */
   mysql2_pending_result_free *pending_result_frees;

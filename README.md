@@ -273,7 +273,7 @@ Mysql2::Client.new(
   :port,
   :database,
   :socket = '/path/to/mysql.sock',
-  :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | MULTI_STATEMENTS,
+  :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | ..., # not exhaustive, see "Flags option parsing" below
   :encoding = 'utf8mb4',
   :read_timeout = seconds,
   :write_timeout = seconds,

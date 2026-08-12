@@ -1735,16 +1735,39 @@ static VALUE rb_mysql_client_store_result(VALUE self)
 {
   MYSQL_RES * result;
   VALUE resultObj;
-  VALUE current;
+  VALUE current, is_streaming;
   GET_CLIENT(self);
 
-  result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+  /* Honor :stream on later result sets of a multi-statement query the same
+   * way async_result already does for the first one -- previously this
+   * always called mysql_store_result regardless, silently buffering every
+   * result set after the first even when the original query asked to
+   * stream them (see #600). */
+  is_streaming = rb_hash_aref(rb_ivar_get(self, intern_current_query_options), sym_stream);
+  if (is_streaming == Qtrue) {
+    result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
+    /* A cursor is now open; leave the connection BUSY until the Result
+     * finishes (or abandons) streaming rows -- see result.c. */
+    wrapper->state = MYSQL2_CLIENT_STREAMING;
+  } else {
+    result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+    /* The whole result set is buffered locally; the connection is free to
+     * run another command right away. */
+    wrapper->state = MYSQL2_CLIENT_IDLE;
+    mysql2_reap_pending_result_frees(wrapper);
+    mysql2_reap_pending_stmt_closes(wrapper);
+  }
 
   if (result == NULL) {
     if (mysql_errno(wrapper->client) != 0) {
+      wrapper->state = MYSQL2_CLIENT_IDLE;
       rb_raise_mysql2_error(wrapper);
     }
-    /* no data and no error, so query was not a SELECT */
+    /* no data and no error, so this statement in the batch was not a SELECT
+     * -- e.g. :stream was requested but this particular result set wasn't
+     * one. No cursor was actually opened, so don't leave the connection
+     * marked STREAMING. */
+    wrapper->state = MYSQL2_CLIENT_IDLE;
     return Qnil;
   }
 
@@ -1753,6 +1776,12 @@ static VALUE rb_mysql_client_store_result(VALUE self)
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
   resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
+
+  /* Track the open cursor so a later command can force-drain it if it's
+   * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */
+  if (is_streaming == Qtrue) {
+    wrapper->active_streaming_result = resultObj;
+  }
 
   return resultObj;
 }

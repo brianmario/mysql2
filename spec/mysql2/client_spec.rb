@@ -275,6 +275,8 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   it "should not leave dangling connections after garbage collection" do
     run_gc
+    baseline_threads_connected = @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+
     # rubocop:disable Lint/AmbiguousBlockAssociation
     expect do
       expect do
@@ -286,6 +288,21 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       }.by(10)
 
       run_gc
+
+      # decr_mysql2_client's mysql_close() happens synchronously as part of
+      # the GC sweep above, but the server noticing the closed sockets and
+      # updating its own Threads_connected count is a separate, genuinely
+      # async step on the server's side -- run_gc's fixed sleep is enough
+      # margin most of the time, but not a guarantee under CI load. Poll
+      # instead of trusting a single fixed wait.
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+      loop do
+        current = @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+        break if current <= baseline_threads_connected
+        break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+        sleep 0.1
+      end
     end.to_not change {
       @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
         @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a

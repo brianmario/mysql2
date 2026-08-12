@@ -267,7 +267,7 @@ const rb_data_type_t rb_mysql_client_type = {
 #endif
 };
 
-static VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
+VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   VALUE rb_error_msg = rb_str_new2(mysql_error(wrapper->client));
   VALUE rb_sql_state = rb_str_new2(mysql_sqlstate(wrapper->client));
   VALUE e;

@@ -1630,10 +1630,11 @@ static VALUE rb_mysql_result_each_(VALUE self,
       }
 
       // Check for errors, the connection might have gone out from under us
-      // mysql_error returns an empty string if there is no error
+      // (e.g. KILL QUERY from another session). mysql_error returns an
+      // empty string if there is no error.
       errstr = mysql_error(wrapper->client_wrapper->client);
       if (errstr[0]) {
-        rb_raise(cMysql2Error, "%s", errstr);
+        rb_raise_mysql2_error(wrapper->client_wrapper);
       }
     } else {
       rb_raise(cMysql2Error, "You have already fetched all the rows for this query and streaming is true. (to reiterate you must requery).");

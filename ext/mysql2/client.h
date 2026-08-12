@@ -87,6 +87,13 @@ extern const rb_data_type_t rb_mysql_client_type;
 void init_mysql2_client(void);
 void decr_mysql2_client(mysql_client_wrapper *wrapper);
 
+/* Raises a Mysql2::Error built from the client's current mysql_error()/
+ * mysql_errno()/mysql_sqlstate() -- the only correct way to surface a
+ * server/connection error with error_number and sql_state populated.
+ * Never construct a Mysql2::Error via a plain rb_raise(cMysql2Error, ...)
+ * instead of this: doing so silently leaves error_number and sql_state nil. */
+VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper);
+
 /* Safe to call from a dfree callback (GC sweep context): only touches C
  * memory owned by wrapper, never the Ruby VM. */
 void mysql2_enqueue_pending_stmt_close(mysql_client_wrapper *wrapper, MYSQL_STMT *stmt, uintptr_t wrapper_key);

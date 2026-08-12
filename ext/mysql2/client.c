@@ -1750,6 +1750,12 @@ static VALUE get_automatic_close(VALUE self) {
  * collected. To avoid "Aborted connection" errors on the server, explicitly
  * call +close+ when the connection is no longer needed.
  *
+ * This protects a plaintext connection across fork(). A TLS connection's
+ * OpenSSL session state is a separate, per-process copy that fork()
+ * duplicates rather than shares, and desyncs between parent and child the
+ * moment either side performs a real query, regardless of this setting --
+ * see the README for the full mechanism and the ssl_mode workaround.
+ *
  * @see http://dev.mysql.com/doc/en/communication-errors.html
  */
 static VALUE set_automatic_close(VALUE self, VALUE value) {

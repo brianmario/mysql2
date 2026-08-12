@@ -494,6 +494,8 @@ By default (`automatic_close` is `true`), a `Client` garbage collected in a proc
 Mysql2::Client.new(:automatic_close => false)
 ```
 
+`automatic_close = false` only keeps a **plaintext** connection alive across `fork()`. A TLS connection carries OpenSSL session state -- record-layer sequence numbers -- that `fork()` duplicates as two independent copies, one per process, each believing it alone owns the connection. The moment either side performs a real query, that side's sequence counters advance on the server and in its own copy, but not in the other side's now-stale copy; the next query from the stale side is rejected by the server (`Aborted_clients` increments, and the client sees `Mysql2::Error::ConnectionError: Lost connection to MySQL server during query`). Nothing client-side can repair a TLS session that has already desynced this way. Connect with `:ssl_mode => :disabled` if your application depends on sharing a connection across `fork()`.
+
 ## Cascading config
 
 The default config hash is at:

@@ -572,6 +572,30 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
         expect(e.message).to match(%r{Lost connection|TLS/SSL error})
       end
     end
+
+    it "should populate error_number and sql_state when streaming is interrupted" do
+      # Regression coverage for #1275: the streaming-completion error check
+      # in result.c used to raise a plain Mysql2::Error with only a message,
+      # instead of going through the same helper every other error site
+      # uses to also populate error_number/sql_state.
+      killer = new_client
+      tid = @client.thread_id
+
+      result = @client.query(
+        "SELECT x.column_name, y.table_name FROM information_schema.columns x " \
+        "CROSS JOIN information_schema.tables y",
+        stream: true, cache_rows: false,
+      )
+
+      expect do
+        result.each_with_index do |_row, i|
+          killer.query("KILL QUERY #{tid}") if i == 0
+        end
+      end.to raise_error(Mysql2::Error) { |e|
+        expect(e.error_number).to eq(1317) # ER_QUERY_INTERRUPTED
+        expect(e.sql_state).to eq("70100")
+      }
+    end
   end
 
   context "row data type mapping" do

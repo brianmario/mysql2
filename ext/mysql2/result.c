@@ -1631,10 +1631,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
       // Check for errors, the connection might have gone out from under us
       // (e.g. KILL QUERY from another session). mysql_error returns an
-      // empty string if there is no error. Route through
-      // rb_raise_mysql2_error rather than a plain rb_raise: that's the only
-      // path that populates error_number/sql_state on the raised
-      // Mysql2::Error, same as every other error site in this gem.
+      // empty string if there is no error.
       errstr = mysql_error(wrapper->client_wrapper->client);
       if (errstr[0]) {
         rb_raise_mysql2_error(wrapper->client_wrapper);

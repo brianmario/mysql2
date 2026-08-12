@@ -574,10 +574,6 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should populate error_number and sql_state when streaming is interrupted" do
-      # Regression coverage for #1275: the streaming-completion error check
-      # in result.c used to raise a plain Mysql2::Error with only a message,
-      # instead of going through the same helper every other error site
-      # uses to also populate error_number/sql_state.
       killer = new_client
       tid = @client.thread_id
 

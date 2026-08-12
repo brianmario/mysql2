@@ -461,17 +461,17 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
       child = fork do
         read.close
-        write.puts client.query('SELECT 1').first.inspect
-        write.puts client.ping.inspect
-        write.puts client.prepare('SELECT 1').execute.first.inspect
+        write.puts client.query('SELECT 1').first['1']
+        write.puts client.ping
+        write.puts client.prepare('SELECT 1').execute.first['1']
         write.close
       end
       write.close
 
       Process.wait(child)
-      expect(read.gets).to eq(%({"1"=>1}\n))
+      expect(read.gets).to eq("1\n")
       expect(read.gets).to eq("true\n")
-      expect(read.gets).to eq(%({"1"=>1}\n))
+      expect(read.gets).to eq("1\n")
       read.close
       client.close
     end

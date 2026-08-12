@@ -4,16 +4,19 @@ on:
 jobs:
   build:
     name: >-
-      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}
+      ${{ matrix.os }} ruby ${{ matrix.ruby }} ${{ matrix.db }}${{ matrix.allow_failure && ' (allow failure)' || '' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    # allow_failure entries track something that moves outside this repository,
+    # so their failures are informational and must not block unrelated PRs.
+    continue-on-error: ${{ matrix.allow_failure || false }}
     strategy:
       matrix:
         include:
           # Ruby 4.x on Ubuntu 26.04 LTS
           # db: mysql-innovation tracks the newest MySQL innovation release, not an LTS.
-          - {os: ubuntu-26.04, ruby: '4.0', db: mysql-innovation}
-          - {os: ubuntu-26.04, ruby: 'head', db: mysql97}
+          - {os: ubuntu-26.04, ruby: '4.0', db: mysql-innovation, allow_failure: true}
+          - {os: ubuntu-26.04, ruby: 'head', db: mysql97, allow_failure: true}
 
           # Ruby 3.x / 4.x on Ubuntu 24.04 LTS
           - {os: ubuntu-24.04, ruby: '4.0', db: mysql97}

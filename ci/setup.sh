@@ -27,6 +27,12 @@ if [[ -n ${DB-} && x$DB =~ ^xmysql97 ]]; then
   CHANGED_PASSWORD_SHA2=true
 fi
 
+# Install the newest MySQL innovation release if DB=mysql-innovation
+if [[ -n ${DB-} && x$DB =~ ^xmysql-innovation ]]; then
+  sudo bash ci/mysql-innovation.sh
+  CHANGED_PASSWORD_SHA2=true
+fi
+
 # Install MariaDB 10.6 if DB=mariadb10.6
 if [[ -n ${GITHUB_ACTIONS-} && -n ${DB-} && x$DB =~ ^xmariadb10.6 ]]; then
   sudo bash ci/mariadb106.sh

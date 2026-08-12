@@ -1404,6 +1404,35 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     it "should return the database switched to" do
       expect(@client.select_db("test_selectdb_1")).to eq("test_selectdb_1")
     end
+
+    it "should switch databases correctly under GC.stress with a name past Ruby's embedded-string threshold" do
+      # Regression coverage for #822: rb_mysql_client_select_db extracts a
+      # raw C pointer from the `db` String argument (StringValueCStr) and
+      # hands it to nogvl_select_db with the GVL released, without an
+      # RB_GC_GUARD -- the same hazard fixed elsewhere in this file (see
+      # #1504). Names at or past MRI's embedded-string length (23 bytes on
+      # 64-bit builds) move to a separately allocated buffer, which is what
+      # a premature GC could free out from under the still-in-use pointer;
+      # shorter, embedded names don't have a separate buffer to free, which
+      # is why this was so hard to pin down originally. A freshly allocated,
+      # unfrozen String is used each iteration so nothing else roots it.
+      long_name = "test_selectdb_stress_#{'x' * 10}"
+      @client.query("DROP DATABASE IF EXISTS #{long_name}")
+      @client.query("CREATE DATABASE #{long_name}")
+
+      begin
+        GC.stress = true
+        20.times do
+          name = long_name.dup
+          @client.select_db(name)
+          expect(@client.query("SELECT DATABASE() AS d").first["d"]).to eq(long_name)
+        end
+      ensure
+        GC.stress = false
+        @client.query("USE test")
+        @client.query("DROP DATABASE IF EXISTS #{long_name}")
+      end
+    end
   end
 
   context 'database' do

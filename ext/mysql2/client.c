@@ -1473,6 +1473,11 @@ static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
   if (rb_thread_call_without_gvl(nogvl_select_db, &args, RUBY_UBF_IO, 0) == Qfalse)
     rb_raise_mysql2_error(wrapper);
 
+  /* This originates as a Ruby VALUE, but we're using its C pointer
+   * directly -- keep the VALUE live on the stack so GC can't collect it
+   * while we drop the GVL to make a MySQL API call. */
+  (void)RB_GC_GUARD(db);
+
   return db;
 }
 

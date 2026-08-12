@@ -363,6 +363,30 @@ When secure_auth is enabled, the server will refuse a connection if the account 
 The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
 To bypass this restriction in the client, pass the option `:secure_auth => false` to Mysql2::Client.new().
 
+### Fork safety and `automatic_close`
+
+By default (`automatic_close = true`), a `Client` closes its connection when
+garbage collected. Set `:automatic_close => false` (or `client.automatic_close
+= false`) to leave the connection open instead -- the classic reason is a
+pre-forking app server that opens a connection before `fork()` and wants the
+parent to go on using it after a forked child's copy of the same `Client` is
+garbage collected.
+
+This only works for a **plaintext** connection. A TLS connection's OpenSSL
+session state -- record-layer sequence numbers -- is duplicated by `fork()`
+right along with the socket, as two independent copies that both believe they
+alone own the connection. If the child performs any real query on its copy,
+that advances the encryption sequence counters on the server and in the
+child's copy, but not in the parent's now-desynced copy; the parent's next
+query on that connection will be encrypted with stale sequence numbers, and
+the server will reject it and drop the connection (`Aborted_clients` +1,
+`Mysql2::Error::ConnectionError: Lost connection to MySQL server during
+query` on the client's next attempt). `automatic_close = false` and
+`invalidate_fd()` (the fd-redirection this relies on) only ever touch file
+descriptors, not TLS session state, so there is no client-side fix for this --
+if you rely on `automatic_close = false` surviving a `fork()`, connect with
+`:ssl_mode => :disabled`.
+
 ### Flags option parsing
 
 The `:flags` parameter accepts an integer, a string, or an array. The integer

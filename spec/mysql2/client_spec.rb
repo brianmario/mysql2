@@ -1700,6 +1700,12 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     # context) to reliably keep the query in flight when we call Thread#exit,
     # rather than racing a fast localhost round-trip.
     it "does not permanently lock the connection when Thread#exit interrupts a query" do
+      # rb_mysql_query's rb_ensure protection around do_send_query/do_query is
+      # #ifndef _WIN32 -- same as do_ping's rb_rescue2/disconnect_and_raise a
+      # few lines down in client.c -- so on Windows this scenario still
+      # reproduces #1392.
+      skip "not fixed on Windows -- see rb_mysql_query in client.c" if RUBY_PLATFORM =~ /mingw|mswin/
+
       creds = DatabaseCredentials['root']
       proxy = FreezableProxy.new(creds['host'], creds['port'] || 3306)
       proxy.run

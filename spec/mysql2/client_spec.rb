@@ -1,4 +1,5 @@
 require 'spec_helper'
+require 'socket'
 
 RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   let(:performance_schema_enabled) do
@@ -1557,5 +1558,139 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
     expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
     expect(@client.close).to be_nil
+  end
+
+  context "#ping interrupted mid-flight" do
+    # Regression coverage for #777: mysql_ping() has no non-blocking
+    # variant, so it's a plain blocking call wrapped in
+    # rb_thread_call_without_gvl. If a Thread#raise (e.g. a request-timeout
+    # watchdog like Phusion Passenger's) lands while it's in flight, the
+    # code after the blocking call -- which clears wrapper->active_fiber --
+    # never runs. Every other caller of this Client is then permanently
+    # locked out with "This connection is in use by: <dead fiber>", even
+    # long after the interrupted thread is gone, because only #close (not
+    # #ping or #query) can recover from a dead active_fiber.
+    #
+    # A tiny TCP pass-through proxy lets us freeze the server's response to
+    # #ping on command, giving Thread#raise a real blocking window to land
+    # in -- something a real, fast localhost round-trip can't reliably
+    # provide.
+    class FreezableProxy
+      def initialize(real_host, real_port)
+        @server = TCPServer.new('127.0.0.1', 0)
+        @real_host = real_host
+        @real_port = real_port
+        @frozen = false
+        @mutex = Mutex.new
+        @threads = []
+      end
+
+      def port
+        @server.addr[1]
+      end
+
+      def freeze!
+        @mutex.synchronize { @frozen = true }
+      end
+
+      def unfreeze!
+        @mutex.synchronize { @frozen = false }
+      end
+
+      def frozen?
+        @mutex.synchronize { @frozen }
+      end
+
+      def run
+        @threads << Thread.new do
+          loop do
+            client_sock = @server.accept
+            @threads << Thread.new(client_sock) { |cs| handle(cs) }
+          end
+        end
+      end
+
+      def handle(client_sock)
+        upstream = TCPSocket.new(@real_host, @real_port)
+        [
+          Thread.new { pump(client_sock, upstream) },
+          Thread.new { pump(upstream, client_sock) },
+        ].each { |t| @threads << t }.each(&:join)
+      ensure
+        begin
+          client_sock.close
+        rescue StandardError
+          nil
+        end
+        begin
+          upstream.close
+        rescue StandardError
+          nil
+        end
+      end
+
+      def pump(src, dst)
+        loop do
+          data = src.readpartial(4096)
+          sleep 0.01 while frozen?
+          dst.write(data)
+        end
+      rescue IOError, Errno::ECONNRESET
+        nil
+      end
+
+      def shutdown
+        @threads.each(&:kill)
+        @server.close
+      rescue IOError
+        nil
+      end
+    end
+
+    class SimulatedWatchdogInterrupt < StandardError; end
+
+    it "does not permanently lock the connection when #ping is interrupted" do
+      creds = DatabaseCredentials['root']
+      proxy = FreezableProxy.new(creds['host'], creds['port'] || 3306)
+      proxy.run
+      sleep 0.1 # let the accept loop start
+
+      client = new_client('host' => '127.0.0.1', 'port' => proxy.port)
+
+      begin
+        proxy.freeze!
+        # Not new_thread: this thread is expected to die from the raise
+        # below, and Thread#join re-raises a dead thread's exception on
+        # every call -- including the after(:example) hook's cleanup join
+        # on every tracked thread, which would fail the example a second
+        # time after we've already handled it here.
+        thread = Thread.new { client.ping }
+        thread.report_on_exception = false
+        thread.join(0.3) # ping is now blocked inside the frozen read
+
+        thread.raise(SimulatedWatchdogInterrupt)
+        sleep 0.2
+        proxy.unfreeze! # let the blocked read resolve so the pending raise can land
+
+        expect { thread.join(5) }.to raise_error(SimulatedWatchdogInterrupt)
+
+        # The interrupted ping must not leave the connection permanently
+        # marked busy -- a normal, actionable connection error (or a clean
+        # false/true) is fine, but "This connection is in use by" (a dead
+        # fiber, forever) is not.
+        begin
+          client.ping
+        rescue Mysql2::Error => e
+          expect(e.message).not_to match(/This connection is in use by/)
+        end
+      ensure
+        begin
+          client.close
+        rescue StandardError
+          nil
+        end
+        proxy.shutdown
+      end
+    end
   end
 end

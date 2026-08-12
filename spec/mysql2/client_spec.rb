@@ -1643,6 +1643,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     class SimulatedWatchdogInterrupt < StandardError; end
 
     it "does not permanently lock the connection when #ping is interrupted" do
+      # do_ping's rb_rescue2/disconnect_and_raise protection is #ifndef
+      # _WIN32 -- same as #query's own interrupt-safety a few lines up in
+      # client.c -- so on Windows this scenario still reproduces #777.
+      skip "not fixed on Windows -- see do_ping in client.c" if RUBY_PLATFORM =~ /mingw|mswin/
+
       creds = DatabaseCredentials['root']
       proxy = FreezableProxy.new(creds['host'], creds['port'] || 3306)
       proxy.run

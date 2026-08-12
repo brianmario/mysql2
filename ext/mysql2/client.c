@@ -541,10 +541,14 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
       mysql2_warn_forked_without_reconnect(wrapper, "be garbage collected");
     }
 
-    /* TODO: add an option to control close-across-forks because some users have
-     * complained about log noise on the server side and were not running code
-     * that expected to inherit a connection to a child process.
-     */
+    /* TODO: automatic_close: false unconditionally takes the invalidate_fd
+     * path below even when this process never forked at all -- if
+     * connect_pid still matches (no fork happened), a real mysql_close()
+     * would be safe and wouldn't leave the connection to linger on the
+     * server side until it times out, which is the log noise some users
+     * have reported. Worth an option, or just using forked_without_reconnect
+     * instead of automatic_close here, so the real close is only skipped
+     * when a fork() actually happened. */
     if (!wrapper->automatic_close || forked_without_reconnect) {
       /* The client is being garbage collected while connected. Prevent
        * mysql_close() from sending a mysql-QUIT or from calling shutdown() on

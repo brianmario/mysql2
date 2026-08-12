@@ -467,6 +467,33 @@ Yields:
 next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
 ```
 
+### Fork safety
+
+A `Client`'s connection is not safe to use from a process that inherited it across `fork()` without reconnecting: the child shares the same underlying TCP socket as the parent, but its copy of the connection's protocol/TLS state is independent and unsynchronized, so using it can desync the connection or corrupt whatever the parent is doing with it.
+
+mysql2 detects this automatically by recording the pid that established the connection and comparing it against the current pid. If a `Client` is garbage collected, queried, pinged, prepared, or executed from a different process than the one that connected it, mysql2 prints a `[WARN]` to stderr and, for garbage collection, takes care not to send a real close over the shared socket. This warning is silent when `automatic_close` has been explicitly set to `false` -- see below.
+
+If you want a hard, catchable error instead of a warning, call `client.verify_not_forked!` explicitly (for example, right after a `fork()` you know just happened):
+
+``` ruby
+Process.fork do
+  begin
+    client.verify_not_forked!
+  rescue Mysql2::Error::ForkSafetyError
+    client.close
+    client = Mysql2::Client.new(...)
+  end
+end
+```
+
+mysql2 never calls `verify_not_forked!` itself; it only ever warns automatically.
+
+By default (`automatic_close` is `true`), a `Client` garbage collected in a process that didn't establish its connection will not send a real close to avoid interrupting the owning process's connection. Setting `automatic_close` to `false` opts out of automatic closing entirely -- useful if your application intentionally shares a `Client` across a `fork()` and serializes access to it (for example, closing it explicitly in the child before or after use):
+
+``` ruby
+Mysql2::Client.new(:automatic_close => false)
+```
+
 ## Cascading config
 
 The default config hash is at:

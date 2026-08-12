@@ -1050,9 +1050,12 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         counter.join
 
         # ~100 ticks in 1s if the GVL was free to schedule the counter
-        # thread; the bug holds the GVL for the entire wait, so ticks stays
-        # at (or near) 0.
-        expect(ticks).to be > 50
+        # thread on an idle machine; the bug holds the GVL for the entire
+        # wait, so ticks stays at exactly 0. GitHub's macOS runners are
+        # slow/oversubscribed enough to only deliver ~18-24 in practice
+        # (observed in CI), so the threshold has real margin above 0
+        # without assuming a well-scheduled machine.
+        expect(ticks).to be > 5
       end
 
       it "should be interruptible via Thread#raise while #next_result waits on a slow next statement" do

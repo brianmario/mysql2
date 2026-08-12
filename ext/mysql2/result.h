@@ -46,6 +46,11 @@ typedef struct {
   /* Memoized #server_flags Hash, Qnil until first access. Marked (and
    * compacted) alongside the other VALUEs above. */
   VALUE server_flags;
+  /* The connection's encoding, unwrapped once at Result creation.
+   * wrapper->encoding is fixed at connect time (Client#initialize always
+   * runs charset_name=), so this never goes stale; caching it avoids a
+   * rb_to_encoding() call per row fetch. */
+  rb_encoding *conn_enc;
   my_ulonglong numberOfFields;
   my_ulonglong numberOfRows;
   unsigned long lastRowProcessed;

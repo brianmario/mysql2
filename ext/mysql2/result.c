@@ -7,6 +7,19 @@
 
 static rb_encoding *binaryEncoding;
 
+/* Per-process cache of MySQL charsetnr -> Ruby encoding index, indexed by
+ * charsetnr - 1 to mirror mysql2_mysql_enc_to_rb. Both sides of the mapping
+ * are fixed for the life of the process -- the table is compiled in, and a
+ * Ruby encoding's index never changes once assigned -- so entries are computed
+ * once and never invalidated. Slot values are offset by +1 (0 is the "not yet
+ * cached" sentinel) so that encoding index 0, ASCII-8BIT, remains cacheable;
+ * -1 caches "this charsetnr has no table mapping", whose fallback (the
+ * connection's encoding) is applied per result at use time, never cached.
+ *
+ * Concurrent writers can only race to store the same deterministic value in
+ * an int slot, which is benign everywhere Ruby's GVL-based threading runs. */
+static int mysql2_enc_index_cache[MYSQL2_CHARSETNR_SIZE];
+
 /* on 64bit platforms we can handle dates way outside 2038-01-19T03:14:07
  *
  * (9999*31557600) + (12*2592000) + (31*86400) + (11*3600) + (59*60) + 59
@@ -56,6 +69,10 @@ typedef struct {
   ID db_timezone;
   ID app_timezone;
   int block_given; /* boolean */
+  /* Encoding.default_internal, captured once per #each call rather than once
+   * per row. Changing it mid-iteration therefore no longer affects later rows
+   * of that same call; the next #each call observes the new value. */
+  rb_encoding *default_internal_enc;
 } result_each_args;
 
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
@@ -312,7 +329,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
   if (rb_field == Qnil) {
     MYSQL_FIELD *field = NULL;
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
-    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+    rb_encoding *conn_enc = wrapper->conn_enc;
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
@@ -399,7 +416,7 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
   if (rb_field_type == Qnil) {
     MYSQL_FIELD *field = NULL;
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
-    rb_encoding *conn_enc = rb_to_encoding(wrapper->encoding);
+    rb_encoding *conn_enc = wrapper->conn_enc;
     int precision;
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
@@ -572,15 +589,33 @@ static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_e
     /* MySQL 4.x may not provide an encoding, binary will get the bytes through */
     rb_enc_associate(val, binaryEncoding);
   } else {
-    /* lookup the encoding configured on this field */
-    const char *enc_name;
-    int enc_index;
+    /* lookup the encoding configured on this field, consulting the
+     * per-process charsetnr cache before the name-based lookup */
+    int enc_index = -1;
 
-    enc_name = (field.charsetnr-1 < MYSQL2_CHARSETNR_SIZE) ? mysql2_mysql_enc_to_rb[field.charsetnr-1] : NULL;
+    if (field.charsetnr >= 1 && field.charsetnr <= MYSQL2_CHARSETNR_SIZE) {
+      const int cached = mysql2_enc_index_cache[field.charsetnr - 1];
 
-    if (enc_name != NULL) {
+      if (cached > 0) {
+        enc_index = cached - 1;
+      } else if (cached == 0) {
+        /* not yet cached: do the name-based lookup once and store it */
+        const char *enc_name = mysql2_mysql_enc_to_rb[field.charsetnr - 1];
+
+        if (enc_name != NULL) {
+          enc_index = rb_enc_find_index(enc_name);
+          if (enc_index >= 0) {
+            mysql2_enc_index_cache[field.charsetnr - 1] = enc_index + 1;
+          }
+        } else {
+          mysql2_enc_index_cache[field.charsetnr - 1] = -1;
+        }
+      }
+      /* cached < 0: known to have no table mapping; fall through to conn_enc */
+    }
+
+    if (enc_index >= 0) {
       /* use the field encoding we were able to match */
-      enc_index = rb_enc_find_index(enc_name);
       rb_enc_set_index(val, enc_index);
     } else {
       /* otherwise fall-back to the connection's encoding */
@@ -852,8 +887,9 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     return Qnil;
   }
 
-  default_internal_enc = rb_default_internal_encoding();
-  conn_enc = rb_to_encoding(wrapper->encoding);
+  /* Cached at #each entry / Result creation to avoid per-row lookups. */
+  default_internal_enc = args->default_internal_enc;
+  conn_enc = wrapper->conn_enc;
 
   if (wrapper->fields == Qnil) {
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
@@ -1123,8 +1159,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
     return Qnil;
   }
 
-  default_internal_enc = rb_default_internal_encoding();
-  conn_enc = rb_to_encoding(wrapper->encoding);
+  /* Cached at #each entry / Result creation to avoid per-row lookups. */
+  default_internal_enc = args->default_internal_enc;
+  conn_enc = wrapper->conn_enc;
 
   ptr = wrapper->result;
   /* See the note above nogvl_fetch_row. A streaming result reads from the
@@ -1736,6 +1773,9 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   args.db_timezone = db_timezone;
   args.app_timezone = app_timezone;
   args.block_given = rb_block_given_p();
+  /* Captured once per #each call; see the field's comment in
+   * result_each_args. */
+  args.default_internal_enc = rb_default_internal_encoding();
 
   if (wrapper->stmt_wrapper) {
     fetch_row_func = rb_mysql_result_fetch_row_stmt;
@@ -1834,6 +1874,12 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->rows = Qnil;
   wrapper->server_flags = Qnil;
   wrapper->encoding = encoding;
+  /* encoding is always the client's Encoding instance (set unconditionally by
+   * Client#initialize via charset_name=, before any query can produce a
+   * Result), so rb_to_encoding is a plain data unwrap here: no coercion, no
+   * allocation, and -- required in this function, which must not raise between
+   * taking ownership of r and returning -- no exception path. */
+  wrapper->conn_enc = rb_to_encoding(encoding);
   wrapper->streamingComplete = 0;
   wrapper->client = client;
   wrapper->client_wrapper = DATA_PTR(client);

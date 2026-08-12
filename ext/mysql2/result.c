@@ -95,7 +95,8 @@ static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_o
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
   sym_cache_rows, sym_cast, sym_fast, sym_stream, sym_name, sym_rows_per_gvl_yield,
-  sym_no_good_index_used, sym_no_index_used, sym_query_was_slow;
+  sym_no_good_index_used, sym_no_index_used, sym_query_was_slow,
+  sym_force_encoding;
 
 /* Mark any VALUEs that are only referenced in C, so the GC won't get them. */
 static void rb_mysql_result_mark(void * wrapper) {
@@ -592,7 +593,26 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
   return rb_field_type;
 }
 
-static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc) {
+/* See result.h. Runs at the query/execute entry points, never per row. */
+void mysql2_canonicalize_force_encoding(VALUE opts) {
+  VALUE requested = rb_hash_aref(opts, sym_force_encoding);
+
+  if (!NIL_P(requested)) {
+    rb_hash_aset(opts, sym_force_encoding, rb_enc_from_encoding(rb_to_encoding(requested)));
+  }
+}
+
+static VALUE mysql2_set_field_string_encoding(VALUE val, MYSQL_FIELD field, rb_encoding *default_internal_enc, rb_encoding *conn_enc, rb_encoding *forced_enc) {
+  /* :force_encoding retags the value with the caller's chosen encoding --
+   * bytes unchanged, no transcoding. Force means force: it overrides the
+   * binary branch below (BLOB/BINARY columns get retagged too) and skips
+   * the default_internal conversion. Returning before the charsetnr cache
+   * is consulted also keeps the forced path from ever touching it. */
+  if (forced_enc) {
+    rb_enc_associate(val, forced_enc);
+    return val;
+  }
+
   /* if binary flag is set, respect its wishes */
   if (field.flags & BINARY_FLAG && field.charsetnr == MYSQL2_BINARY_CHARSET) {
     rb_enc_associate(val, binaryEncoding);
@@ -1120,7 +1140,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         case MYSQL_TYPE_GEOMETRY:     // char[]
         default:
           val = rb_str_new(result_buffer->buffer, *(result_buffer->length));
-          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
           break;
       }
     }
@@ -1228,7 +1248,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
 
       if (row[i] && fields[i].type != MYSQL_TYPE_NULL) {
         val = rb_str_new(row[i], fieldLengths[i]);
-        val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+        val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
       } else {
         val = Qnil;
       }
@@ -1285,7 +1305,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
            * repeats in the temporal cases below. */
           if (args->cast == MYSQL2_CAST_FAST) {
             val = rb_str_new(row[i], fieldLengths[i]);
-            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
             break;
           }
           if (fields[i].decimals == 0) {
@@ -1315,7 +1335,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
 
           if (args->cast == MYSQL2_CAST_FAST) {
             val = rb_str_new(row[i], fieldLengths[i]);
-            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
             break;
           }
 
@@ -1345,7 +1365,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
 
           if (args->cast == MYSQL2_CAST_FAST) {
             val = rb_str_new(row[i], fieldLengths[i]);
-            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
             break;
           }
 
@@ -1420,7 +1440,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           unsigned int year=0, month=0, day=0;
           if (args->cast == MYSQL2_CAST_FAST) {
             val = rb_str_new(row[i], fieldLengths[i]);
-            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+            val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
             break;
           }
           if (!mysql2_parse_date(row[i], fieldLengths[i], &year, &month, &day)) {
@@ -1454,7 +1474,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         case MYSQL_TYPE_GEOMETRY:   /* Spatial fielda */
         default:
           val = rb_str_new(row[i], fieldLengths[i]);
-          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc);
+          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
           break;
       }
       if (args->asArray) {
@@ -1699,6 +1719,17 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   // A block can be passed to this method, but since we don't call the block directly from C,
   // we don't need to capture it into a variable here with the "&" scan arg.
   perEachOpts = rb_scan_args(argc, argv, "01", &opts) == 1;
+
+  /* :force_encoding is resolved when the query/execute command is issued
+   * and is fixed for the life of the Result: non-streaming
+   * Statement#execute materializes every row by calling #each itself, so
+   * a value passed here could never be honored consistently. Reject it
+   * outright rather than silently ignoring it. (The merged defaults
+   * below legitimately carry the query-time value; only the per-#each
+   * hash is checked.) */
+  if (perEachOpts && RB_TYPE_P(opts, T_HASH) && rb_hash_lookup2(opts, sym_force_encoding, Qundef) != Qundef) {
+    rb_raise(cMysql2Error, ":force_encoding is a query option and cannot be set on Result#each");
+  }
 
   if (!perEachOpts && wrapper->each_opts.parsed) {
     /* Argument-less #each over the already-parsed @query_options: reuse the
@@ -1994,6 +2025,15 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
    * should be processed here. */
   wrapper->is_streaming = (rb_hash_aref(options, sym_stream) == Qtrue ? 1 : 0);
 
+  /* :force_encoding was canonicalized to an Encoding object at the
+   * query/execute entry point (mysql2_canonicalize_force_encoding), so
+   * rb_to_encoding here is a plain data unwrap with no exception path --
+   * required in this function, see conn_enc above. */
+  {
+    VALUE forced = rb_hash_aref(options, sym_force_encoding);
+    wrapper->forced_enc = NIL_P(forced) ? NULL : rb_to_encoding(forced);
+  }
+
   return obj;
 }
 
@@ -2044,6 +2084,7 @@ void init_mysql2_result(void) {
   sym_no_good_index_used = ID2SYM(rb_intern("no_good_index_used"));
   sym_no_index_used      = ID2SYM(rb_intern("no_index_used"));
   sym_query_was_slow     = ID2SYM(rb_intern("query_was_slow"));
+  sym_force_encoding = ID2SYM(rb_intern("force_encoding"));
 
   opt_decimal_zero = rb_str_new2("0.0");
   rb_global_variable(&opt_decimal_zero); /*never GC */

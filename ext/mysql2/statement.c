@@ -378,6 +378,26 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     }
   }
 
+  // Duplicate the options hash, merge! extra opts, put the copy into the
+  // Result object. Deliberately ahead of the bind buffer setup below:
+  // canonicalizing :force_encoding raises for invalid values, and raising
+  // here -- before any bind buffers are xmalloc'd and before anything is
+  // written to the wire -- leaks nothing and leaves the connection
+  // untouched and reusable. Nothing downstream of the execute may raise
+  // for this option; rb_mysql_result_to_obj in particular must not.
+  current = rb_hash_dup(rb_ivar_get(stmt_wrapper->client, intern_query_options));
+  (void)RB_GC_GUARD(current);
+  Check_Type(current, T_HASH);
+
+  // Merge in hash opts/keyword arguments
+  if (!NIL_P(opts)) {
+    rb_funcall(current, intern_merge_bang, 1, opts);
+  }
+
+  mysql2_canonicalize_force_encoding(current);
+
+  is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
+
   // setup any bind variables in the query
   if (bind_count > 0) {
     // Scratch space for string encoding exports, allocate on the stack
@@ -510,18 +530,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
   }
-
-  // Duplicate the options hash, merge! extra opts, put the copy into the Result object
-  current = rb_hash_dup(rb_ivar_get(stmt_wrapper->client, intern_query_options));
-  (void)RB_GC_GUARD(current);
-  Check_Type(current, T_HASH);
-
-  // Merge in hash opts/keyword arguments
-  if (!NIL_P(opts)) {
-    rb_funcall(current, intern_merge_bang, 1, opts);
-  }
-
-  is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
 
   // From stmt_execute to mysql_stmt_result_metadata to stmt_store_result, no
   // Ruby API calls are allowed so that GC is not invoked. If the connection is

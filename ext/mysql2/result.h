@@ -4,6 +4,18 @@
 void init_mysql2_result(void);
 VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement);
 
+/* Resolve a :force_encoding query option (an Encoding object or an encoding
+ * name) to its Encoding object, in place in the given options hash, raising
+ * ArgumentError/TypeError for invalid values. Called at the query/execute
+ * entry points (client.c, statement.c) BEFORE the command is sent, for two
+ * reasons: rb_mysql_result_to_obj must not raise between taking ownership of
+ * the MYSQL_RES and returning (the streaming lifecycle depends on it), so
+ * validation cannot wait until then; and raising pre-send leaves the
+ * connection untouched and immediately reusable. Storing the resolved
+ * Encoding back into the per-query options snapshot also insulates the
+ * Result from later mutation of the value the caller passed. */
+void mysql2_canonicalize_force_encoding(VALUE opts);
+
 /* Force-free a Result's underlying MYSQL_RES/MYSQL_STMT result right now,
  * from ordinary Ruby-level code (not a dfree callback) -- so this performs
  * the real mysql_free_result()/mysql_stmt_free_result() call directly
@@ -51,6 +63,12 @@ typedef struct {
    * runs charset_name=), so this never goes stale; caching it avoids a
    * rb_to_encoding() call per row fetch. */
   rb_encoding *conn_enc;
+  /* The :force_encoding query option, unwrapped once at Result creation;
+   * NULL when the option wasn't given. When set, string values are retagged
+   * with this encoding -- bytes unchanged -- instead of taking the
+   * per-charset lookup, the binary branch, or the default_internal
+   * conversion. */
+  rb_encoding *forced_enc;
   my_ulonglong numberOfFields;
   my_ulonglong numberOfRows;
   unsigned long lastRowProcessed;

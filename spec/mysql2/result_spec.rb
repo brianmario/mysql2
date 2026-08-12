@@ -1287,6 +1287,104 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "with the :force_encoding query option" do
+    # 0x68C3A96C6C6F is "héllo" in UTF-8.
+    let(:sql) { "SELECT _utf8mb4 0x68C3A96C6C6F AS utf8_val, UNHEX('DEADBEEF') AS binary_val" }
+
+    it "retags string values with the forced encoding, bytes unchanged" do
+      plain = @client.query(sql).first
+      forced = @client.query(sql, force_encoding: Encoding::ISO_8859_1).first
+      expect(forced['utf8_val'].encoding).to eql(Encoding::ISO_8859_1)
+      expect(forced['utf8_val'].bytes).to eql(plain['utf8_val'].bytes)
+    end
+
+    it "accepts an encoding name as a String" do
+      row = @client.query(sql, force_encoding: 'ISO-8859-1').first
+      expect(row['utf8_val'].encoding).to eql(Encoding::ISO_8859_1)
+    end
+
+    it "retags BLOB/binary values instead of leaving them ASCII-8BIT" do
+      row = @client.query(sql, force_encoding: 'utf-8').first
+      expect(row['binary_val'].encoding).to eql(Encoding::UTF_8)
+      expect(row['binary_val'].bytes).to eql([0xDE, 0xAD, 0xBE, 0xEF])
+    end
+
+    it "wins over Encoding.default_internal: retag only, no transcode" do
+      with_internal_encoding Encoding::UTF_8 do
+        row = @client.query(sql, force_encoding: Encoding::ISO_8859_1).first
+        expect(row['utf8_val'].encoding).to eql(Encoding::ISO_8859_1)
+        expect(row['utf8_val'].bytes).to eql("h\xC3\xA9llo".bytes)
+      end
+    end
+
+    it "applies to streaming results" do
+      rows = @client.query(sql, stream: true, cache_rows: false, force_encoding: 'binary').to_a
+      expect(rows.first['utf8_val'].encoding).to eql(Encoding::BINARY)
+      expect(rows.first['binary_val'].encoding).to eql(Encoding::BINARY)
+    end
+
+    it "retags every value under cast: false, where numbers arrive as strings" do
+      row = @client.query("SELECT 1 AS int_val", cast: false, force_encoding: 'binary').first
+      expect(row['int_val']).to eql("1")
+      expect(row['int_val'].encoding).to eql(Encoding::BINARY)
+    end
+
+    it "does not affect values cast to non-string types" do
+      row = @client.query("SELECT 1 AS int_val, DATE'2026-08-11' AS date_val", force_encoding: 'binary').first
+      expect(row['int_val']).to eql(1)
+      expect(row['date_val']).to eql(Date.new(2026, 8, 11))
+    end
+
+    it "does not affect field names" do
+      result = @client.query(sql, symbolize_keys: true, force_encoding: 'binary')
+      expect(result.first.keys).to eql(%i[utf8_val binary_val])
+
+      result = @client.query(sql, force_encoding: 'binary')
+      expect(result.fields).to eql(%w[utf8_val binary_val])
+      expect(result.fields.first.encoding).to eql(Encoding::UTF_8)
+    end
+
+    it "raises for an unknown encoding name before the command is sent" do
+      @client.query("CREATE TEMPORARY TABLE mysql2_force_encoding_probe (id INT)")
+      expect { @client.query("INSERT INTO mysql2_force_encoding_probe VALUES (1)", force_encoding: 'not-an-encoding') }
+        .to raise_error(ArgumentError, /unknown encoding name.*not-an-encoding/)
+      # Nothing hit the wire: the INSERT never ran and the connection is
+      # still usable.
+      expect(@client.query("SELECT COUNT(*) AS n FROM mysql2_force_encoding_probe").first['n']).to eql(0)
+    end
+
+    it "raises for values that are not encodings" do
+      expect { @client.query(sql, force_encoding: 42) }.to raise_error(TypeError)
+    end
+
+    it "snapshots the option at query time, immune to later mutation of the caller's hash" do
+      name = +'binary'
+      opts = { force_encoding: name }
+      result = @client.query(sql, opts)
+      name.replace('utf-8')
+      opts[:force_encoding] = 'utf-8'
+      expect(result.first['utf8_val'].encoding).to eql(Encoding::BINARY)
+    end
+
+    it "cannot be set per Result#each call" do
+      result = @client.query(sql)
+      expect { result.each(force_encoding: 'utf-8') {} }
+        .to raise_error(Mysql2::Error, ":force_encoding is a query option and cannot be set on Result#each")
+      # Presence of the key is the error, even with a nil value.
+      expect { result.each(force_encoding: nil) {} }
+        .to raise_error(Mysql2::Error, ":force_encoding is a query option and cannot be set on Result#each")
+      # The result is still iterable, including with other per-each options.
+      expect(result.each(as: :array).first.first.encoding).to eql(Encoding::UTF_8)
+    end
+
+    it "carries through re-iteration with per-each options" do
+      result = @client.query(sql, force_encoding: 'binary', cache_rows: false)
+      rows = []
+      result.each(as: :array) { |row| rows << row }
+      expect(rows.first.first.encoding).to eql(Encoding::BINARY)
+    end
+  end
+
   context "cast: false raw string rows" do
     # Pins the text-protocol cast: false fast path in rb_mysql_result_fetch_row
     # (ext/mysql2/result.c) to the exact output of the casting loop's raw-string

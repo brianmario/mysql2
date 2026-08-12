@@ -1090,6 +1090,11 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
+  /* Resolve :force_encoding to an Encoding object up front: invalid values
+   * raise here, before anything is written to the wire, leaving the
+   * connection untouched and reusable. Nothing downstream of the send may
+   * raise for this option -- rb_mysql_result_to_obj in particular. */
+  mysql2_canonicalize_force_encoding(current);
   rb_ivar_set(self, intern_current_query_options, current);
 
   Check_Type(sql, T_STRING);

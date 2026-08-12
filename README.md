@@ -576,6 +576,22 @@ do_mysql               0.520000   0.010000   0.530000 (  0.574619)
 
 Although Mysql2 performs reasonably well at retrieving uncasted data, it (currently) is not as fast as the Mysql gem.  In spite of this small disadvantage, Mysql2 still sports a friendlier interface and doesn't block the entire ruby process when querying.
 
+### Forcing a string encoding
+
+Pass `:force_encoding` to `Client#query` or `Statement#execute` to retag string results with an encoding of your choosing:
+
+``` ruby
+result = client.query("SELECT * FROM legacy_table", force_encoding: Encoding::UTF_8)
+```
+
+It accepts an `Encoding` object or an encoding name (anything `Encoding.find` accepts). Invalid values raise before anything is sent to the server.
+
+Retag means exactly that: values keep their bytes and only the encoding tag changes — nothing is transcoded. Force means force, so the forced encoding wins over everything else: BLOB/`BINARY` columns are retagged too (instead of being tagged ASCII-8BIT), and the usual `Encoding.default_internal` conversion is skipped. This is useful for reading legacy data stored in a mislabeled character set (say, UTF-8 bytes living in latin1 columns), or for forcing `binary` when you want raw bytes for hashing or byte-wise comparison.
+
+Only values that arrive as strings are affected. With the default `cast: true`, columns cast to Integer/Date/Time and friends are untouched; with `cast: false`, every non-NULL value is a string and all of them are retagged. Field names are never affected.
+
+`:force_encoding` is fixed when the query or execute is issued — `Mysql2::Result#each` raises if you pass it there, because non-streaming `Statement#execute` materializes rows internally with `#each`, so a per-`each` value could never be honored consistently.
+
 ### Partial casting
 
 Between `:cast => true` and `:cast => false` sits `:cast => :fast`: cheap conversions still happen in C, while the expensive ones are skipped and their values returned as encoding-tagged Strings of the raw wire bytes.

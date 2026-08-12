@@ -1561,15 +1561,8 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   context "#ping interrupted mid-flight" do
-    # Regression coverage for #777: mysql_ping() has no non-blocking
-    # variant, so it's a plain blocking call wrapped in
-    # rb_thread_call_without_gvl. If a Thread#raise (e.g. a request-timeout
-    # watchdog like Phusion Passenger's) lands while it's in flight, the
-    # code after the blocking call -- which clears wrapper->active_fiber --
-    # never runs. Every other caller of this Client is then permanently
-    # locked out with "This connection is in use by: <dead fiber>", even
-    # long after the interrupted thread is gone, because only #close (not
-    # #ping or #query) can recover from a dead active_fiber.
+    # Regression coverage for #777 -- see do_ping in client.c for the
+    # mechanism this protects against.
     #
     # A tiny TCP pass-through proxy lets us freeze the server's response to
     # #ping on command, giving Thread#raise a real blocking window to land
@@ -1674,15 +1667,10 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
         expect { thread.join(5) }.to raise_error(SimulatedWatchdogInterrupt)
 
-        # The interrupted ping must not leave the connection permanently
-        # marked busy -- a normal, actionable connection error (or a clean
-        # false/true) is fine, but "This connection is in use by" (a dead
-        # fiber, forever) is not.
-        begin
-          client.ping
-        rescue Mysql2::Error => e
-          expect(e.message).not_to match(/This connection is in use by/)
-        end
+        # The interrupted ping correctly leaves the connection recognized as
+        # disconnected -- ping returns false, not the permanent
+        # "This connection is in use by" lockout the bug caused.
+        expect(client.ping).to eq(false)
       ensure
         begin
           client.close

@@ -8,6 +8,10 @@ module Mysql2
 
     ConnectionError = Class.new(Error)
     TimeoutError = Class.new(Error)
+    # Raised only by Client#verify_not_forked! -- never by mysql2 itself.
+    # There is no corresponding server error code: this is a purely
+    # client-side, opt-in check.
+    ForkSafetyError = Class.new(Error)
 
     CODES = {
       1205 => TimeoutError, # ER_LOCK_WAIT_TIMEOUT

@@ -1,6 +1,6 @@
 #include <mysql2_ext.h>
 
-VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
+VALUE mMysql2, cMysql2Error, cMysql2TimeoutError, cMysql2ForkSafetyError;
 
 /* Ruby Extension initializer */
 void Init_mysql2(void) {
@@ -12,6 +12,9 @@ void Init_mysql2(void) {
 
   cMysql2TimeoutError = rb_const_get(cMysql2Error, rb_intern("TimeoutError"));
   rb_global_variable(&cMysql2TimeoutError);
+
+  cMysql2ForkSafetyError = rb_const_get(cMysql2Error, rb_intern("ForkSafetyError"));
+  rb_global_variable(&cMysql2ForkSafetyError);
 
   init_mysql2_client();
   init_mysql2_result();

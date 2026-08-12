@@ -16,7 +16,7 @@
 #include "mysql_enc_name_to_ruby.h"
 
 VALUE cMysql2Client;
-extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
+extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError, cMysql2ForkSafetyError;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args,
   intern_current_query_options, intern_read_timeout, intern_values;
@@ -475,6 +475,30 @@ void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper)
   }
 }
 
+/* See client.h. */
+int mysql2_forked_without_reconnect(mysql_client_wrapper *wrapper)
+{
+#ifndef _WIN32
+  return wrapper->connect_pid != 0 && getpid() != wrapper->connect_pid;
+#else
+  return 0;
+#endif
+}
+
+/* See client.h. */
+void mysql2_warn_forked_without_reconnect(mysql_client_wrapper *wrapper, const char *action)
+{
+#ifndef _WIN32
+  fprintf(stderr,
+    "[WARN] mysql2 Client about to %s in process %d, but its connection was "
+    "established in process %d. This process forked after connecting and "
+    "never reconnected, so the connection's state can't be trusted. Call "
+    "Client#close and reconnect after fork() to avoid this warning and the "
+    "intermittent connection errors it can cause.\n",
+    action, (int)getpid(), wrapper->connect_pid);
+#endif
+}
+
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
@@ -507,21 +531,14 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
      * what command was last sent). That state can't be trusted regardless
      * of automatic_close -- neither process's copy reflects what the
      * other has actually sent or received on the shared socket. */
-    int forked_without_reconnect = wrapper->connect_pid != 0 && getpid() != wrapper->connect_pid;
+    int forked_without_reconnect = mysql2_forked_without_reconnect(wrapper);
 
     /* Only warn when automatic_close is still the default: setting it to
      * false is the existing, documented way to tell mysql2 an app expects
      * to inherit a connection across fork(), and warning there too would
      * just be the same log noise the TODO below already exists to avoid. */
     if (forked_without_reconnect && wrapper->automatic_close) {
-      fprintf(stderr,
-        "[WARN] mysql2 Client garbage collected in process %d, but its connection "
-        "was established in process %d. This process forked after connecting and "
-        "never reconnected, so the connection's state can't be trusted; discarding "
-        "this process's reference without closing the shared socket. Call "
-        "Client#close and reconnect after fork() to avoid this warning and the "
-        "intermittent connection errors it can cause.\n",
-        (int)getpid(), wrapper->connect_pid);
+      mysql2_warn_forked_without_reconnect(wrapper, "be garbage collected");
     }
 
     /* TODO: add an option to control close-across-forks because some users have
@@ -1130,6 +1147,11 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   GET_CLIENT(self);
 
   REQUIRE_CONNECTED(wrapper);
+
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "send a query");
+  }
+
   args.mysql = wrapper->client;
 
   (void)RB_GC_GUARD(current);
@@ -1522,6 +1544,37 @@ static void *nogvl_ping(void *ptr) {
 }
 
 /* call-seq:
+ *    client.verify_not_forked!
+ *
+ * Raises Mysql2::Error::ForkSafetyError if this Client's connection was
+ * established in a different process than the one calling this method --
+ * i.e. this process inherited the connection across a fork() and never
+ * reconnected, so the connection's protocol/TLS state can't be trusted.
+ * No-op otherwise (including on Windows, which has no fork()).
+ *
+ * mysql2 never calls this itself; it only ever warns automatically (see
+ * the [WARN] mysql2 messages on stderr). Call this explicitly at a point
+ * of your choosing -- e.g. right after a fork() you know happened -- to
+ * turn that warning into a hard, catchable error instead.
+ */
+static VALUE rb_mysql_client_verify_not_forked(VALUE self) {
+  GET_CLIENT(self);
+
+#ifndef _WIN32
+  if (mysql2_forked_without_reconnect(wrapper)) {
+    rb_raise(cMysql2ForkSafetyError,
+      "This Client's connection was established in process %d, but is being "
+      "used from process %d. This process forked after connecting and never "
+      "reconnected. Call #close and reconnect before continuing to use this "
+      "Client.",
+      wrapper->connect_pid, (int)getpid());
+  }
+#endif
+
+  return Qnil;
+}
+
+/* call-seq:
  *    client.ping
  *
  * Checks whether the connection to the server is working. If the connection
@@ -1532,6 +1585,10 @@ static void *nogvl_ping(void *ptr) {
 static VALUE rb_mysql_client_ping(VALUE self) {
   GET_CLIENT(self);
   rb_mysql_client_set_active_fiber(self, false);
+
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "ping");
+  }
 
   /* A low-traffic, frequently-called method; a good opportunistic safe
    * point to close out statements that were GC'd while we were busy, and to
@@ -1880,6 +1937,10 @@ static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
   GET_CLIENT(self);
   REQUIRE_CONNECTED(wrapper);
 
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "prepare a statement");
+  }
+
   stmt = rb_mysql_stmt_new(self, sql);
 
   return stmt;
@@ -1983,6 +2044,7 @@ void init_mysql2_client(void) {
   rb_define_method(cMysql2Client, "pending_result_frees", rb_mysql_client_pending_result_frees, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
+  rb_define_method(cMysql2Client, "verify_not_forked!", rb_mysql_client_verify_not_forked, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);
   rb_define_method(cMysql2Client, "set_server_option", rb_mysql_client_set_server_option, 1);
   rb_define_method(cMysql2Client, "more_results?", rb_mysql_client_more_results, 0);

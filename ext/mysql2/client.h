@@ -156,4 +156,17 @@ void mysql2_reap_pending_result_frees(mysql_client_wrapper *wrapper);
  * execute, ping, statement close). */
 void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper);
 
+/* Whether this process is not the one that established wrapper's
+ * connection (a fork() happened and nobody reconnected). Always false on
+ * Windows, which has no fork(). Safe to call from anywhere, including a
+ * dfree callback -- just compares two plain ints. */
+int mysql2_forked_without_reconnect(mysql_client_wrapper *wrapper);
+
+/* Prints the [WARN] explaining a forked-without-reconnect connection to
+ * stderr, naming the command about to be attempted (e.g. "send a query").
+ * Callers are expected to have already checked
+ * mysql2_forked_without_reconnect and wrapper->automatic_close -- see
+ * decr_mysql2_client for why the warning is conditional on the latter. */
+void mysql2_warn_forked_without_reconnect(mysql_client_wrapper *wrapper, const char *action);
+
 #endif

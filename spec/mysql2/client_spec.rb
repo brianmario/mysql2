@@ -1686,4 +1686,52 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
     end
   end
+
+  context "Thread#exit mid-query" do
+    # Regression coverage for #1392: query()'s send/wait phases (do_send_query,
+    # do_query) were only protected by rb_rescue2, which catches ordinary
+    # Ruby exceptions but not Thread#exit's non-exception unwind -- so an
+    # exited thread's cleanup (clearing active_fiber) never ran, leaving the
+    # connection permanently stuck reporting "This connection is in use by:
+    # <dead fiber>" for every future caller, even the interrupted thread's
+    # own client object being reused later (e.g. from an ActiveRecord pool).
+    #
+    # Reuses FreezableProxy (defined above, in the #ping interrupted mid-flight
+    # context) to reliably keep the query in flight when we call Thread#exit,
+    # rather than racing a fast localhost round-trip.
+    it "does not permanently lock the connection when Thread#exit interrupts a query" do
+      creds = DatabaseCredentials['root']
+      proxy = FreezableProxy.new(creds['host'], creds['port'] || 3306)
+      proxy.run
+      sleep 0.1 # let the accept loop start
+
+      client = new_client('host' => '127.0.0.1', 'port' => proxy.port)
+
+      begin
+        proxy.freeze!
+        thread = Thread.new { client.query("SELECT 1") }
+        thread.report_on_exception = false
+        thread.join(0.3) # query is now blocked inside the frozen response
+
+        thread.exit
+        thread.join(2)
+
+        # The interrupted query must not leave the connection permanently
+        # marked busy -- a normal, actionable connection error is fine, but
+        # "This connection is in use by" (a dead fiber, forever) is not.
+        begin
+          client.query("SELECT 1")
+        rescue Mysql2::Error => e
+          expect(e.message).not_to match(/This connection is in use by/)
+        end
+      ensure
+        begin
+          client.close
+        rescue StandardError
+          nil
+        end
+        proxy.shutdown
+      end
+    end
+  end
 end

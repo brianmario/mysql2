@@ -15,10 +15,10 @@ jobs:
       BUNDLE_WITHOUT: development
     steps:
     - uses: actions/checkout@v7
-    - name: Set up Ruby 3.4
+    - name: Set up Ruby 4.0
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: 3.4
+        ruby-version: 4.0
         bundler-cache: true # runs 'bundle install' and caches installed gems automatically
     - name: Run RuboCop
       run: bundle exec rubocop

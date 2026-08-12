@@ -219,7 +219,15 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   def run_gc
     if defined?(Rubinius)
       GC.run(true)
+      GC.run(true)
     else
+      # A second pass catches objects whose only remaining reference was a
+      # stale VALUE sitting in a since-reused VM stack slot or register --
+      # conservative stack scanning treats that as live, so the first sweep
+      # can miss a temporary that's otherwise genuinely unreachable. Calling
+      # GC.start again after that slot has been overwritten by this second
+      # call's own machinery reliably clears it.
+      GC.start
       GC.start
     end
     sleep(0.5)
@@ -273,6 +281,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(client.pending_result_frees).to eq(0)
   end
 
+  # A real method call, not just a block: the 10 throwaway Clients this
+  # creates must be unreachable by the time run_gc's caller runs GC.start,
+  # and a block sharing the caller's own VM stack frame is more likely to
+  # leave a stale, conservatively-scanned reference to one of them sitting
+  # in a slot that frame doesn't otherwise reuse. Returning from a real
+  # method call gives that frame back for reuse before GC ever runs.
+  def create_and_query_throwaway_client
+    Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
+  end
+
   it "should not leave dangling connections after garbage collection" do
     run_gc
     baseline_threads_connected = @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
@@ -280,9 +298,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     # rubocop:disable Lint/AmbiguousBlockAssociation
     expect do
       expect do
-        10.times do
-          Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
-        end
+        10.times { create_and_query_throwaway_client }
       end.to change {
         @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
       }.by(10)

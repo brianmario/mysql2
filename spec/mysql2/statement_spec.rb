@@ -311,6 +311,33 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       result = @client.query("SELECT 1 UNION SELECT 2 UNION SELECT 3")
       expect(result.to_a).to eq([{ '1' => 1 }, { '1' => 2 }, { '1' => 3 }])
     end
+
+    it "should stream a variable-length column past its initially-bound buffer size" do
+      # Regression coverage for #1058: a streaming (cursor-mode) prepared
+      # statement never calls mysql_stmt_store_result(), so
+      # fields[i].max_length -- what result buffers are originally sized
+      # from, see rb_mysql_result_alloc_result_buffers -- is never
+      # populated, and buffers start too small. Before the fix, the first
+      # row with any non-trivial data raised "IMPLBUG: caught
+      # MYSQL_DATA_TRUNCATED". This also covers growing back down: a small
+      # row fetched into an already-grown (larger) buffer must still come
+      # back at its own correct length, not the buffer's.
+      @client.query("DROP TABLE IF EXISTS stream_stmt_truncation_test")
+      @client.query("CREATE TABLE stream_stmt_truncation_test (id INT PRIMARY KEY AUTO_INCREMENT, data MEDIUMBLOB)")
+
+      begin
+        small = "a" * 10
+        large = "b" * 300_000
+        ins = @client.prepare("INSERT INTO stream_stmt_truncation_test (data) VALUES (?)")
+        [small, large, small].each { |v| ins.execute(v) }
+
+        stmt = @client.prepare("SELECT data FROM stream_stmt_truncation_test ORDER BY id")
+        rows = stmt.execute(stream: true, cache_rows: false).to_a
+        expect(rows.map { |r| r["data"] }).to eq([small, large, small])
+      ensure
+        @client.query("DROP TABLE IF EXISTS stream_stmt_truncation_test")
+      end
+    end
   end
 
   context "#each" do

@@ -335,10 +335,14 @@ The `:ssl_mode` option will also set the appropriate MariaDB connection flags:
 | ---                | ---                                  |
 | `:disabled`        | MYSQL_OPT_SSL_ENFORCE = 0            |
 | `:required`        | MYSQL_OPT_SSL_ENFORCE = 1            |
+| `:verify_ca`       | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 |
 | `:verify_identity` | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 |
 
-MariaDB does not support the `:preferred` or `:verify_ca` options. For more
-information about SSL/TLS in MariaDB, see
+MariaDB Connector/C has no CA-only verification mode, so `:verify_ca` gets
+the same full verification (CA and hostname) that `:verify_identity` gets --
+MYSQL_OPT_SSL_VERIFY_SERVER_CERT is the only verification it offers. MariaDB
+does not support the `:preferred` option; there's no equivalent to fall back
+to. For more information about SSL/TLS in MariaDB, see
 [https://mariadb.com/kb/en/securing-connections-for-client-and-server/](https://mariadb.com/kb/en/securing-connections-for-client-and-server/)
 and [https://mariadb.com/kb/en/mysql_optionsv/#tls-options](https://mariadb.com/kb/en/mysql_optionsv/#tls-options)
 

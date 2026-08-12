@@ -176,18 +176,24 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       new_client(option_overrides)
     end
 
-    # 'preferred' or 'verify_ca' are only in MySQL 5.6.36+, 5.7.11+, 8.0+.
-    # The upper bound stops at 100000 (not left unbounded) because MariaDB's
-    # client version numbering starts there (10.x = 100000+, 11.x = 110000+,
-    # 12.x = 120000+) and MariaDB has never implemented the 5-value ssl_mode
-    # API this branch is testing -- see FULL_SSL_MODE_SUPPORT in extconf.rb
-    # and rb_set_ssl_mode_option's own version >= 100000 MariaDB check.
+    # 'preferred' is only in MySQL 5.6.36+, 5.7.11+, 8.0+ -- MariaDB Connector/C
+    # has no equivalent option, so mysql2 can't do anything for it there.
+    # 'verify_ca' works everywhere: MariaDB Connector/C has no CA-only
+    # verification mode, so rb_set_ssl_mode_option maps it to the same full
+    # verification 'verify_identity' uses (MYSQL_OPT_SSL_VERIFY_SERVER_CERT).
+    #
+    # The upper bound on the first range stops at 100000 (not left unbounded)
+    # because MariaDB's client version numbering starts there (10.x =
+    # 100000+, 11.x = 110000+, 12.x = 120000+) and MariaDB has never
+    # implemented the 5-value ssl_mode API that range is testing -- see
+    # FULL_SSL_MODE_SUPPORT in extconf.rb and rb_set_ssl_mode_option's own
+    # version >= 100000 MariaDB check.
     version = Mysql2::Client.info[:id]
     ssl_modes = case version
     when 50636...50700, 50711...50800, 80000...100000
       %i[disabled preferred required verify_ca verify_identity]
     else
-      %i[disabled required verify_identity]
+      %i[disabled required verify_ca verify_identity]
     end
 
     # MySQL and MariaDB and all versions of Connector/C
@@ -202,6 +208,30 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
             new_client(options)
           end.not_to output(/does not support ssl_mode/).to_stderr
         end.not_to raise_error
+      end
+    end
+
+    it "should reject a connection when ssl_mode is verify_ca and the CA doesn't match the server's" do
+      require 'openssl'
+      require 'tempfile'
+
+      wrong_ca_key = OpenSSL::PKey::RSA.new(2048)
+      wrong_ca_cert = OpenSSL::X509::Certificate.new
+      wrong_ca_cert.version = 2
+      wrong_ca_cert.serial = 1
+      wrong_ca_cert.subject = OpenSSL::X509::Name.parse('/CN=wrong-ca')
+      wrong_ca_cert.issuer = wrong_ca_cert.subject
+      wrong_ca_cert.public_key = wrong_ca_key.public_key
+      wrong_ca_cert.not_before = Time.now
+      wrong_ca_cert.not_after = Time.now + 3600
+      wrong_ca_cert.sign(wrong_ca_key, OpenSSL::Digest.new('SHA256'))
+
+      Tempfile.create(['wrong-ca', '.pem']) do |f|
+        f.write(wrong_ca_cert.to_pem)
+        f.flush
+
+        options = option_overrides.merge(ssl_mode: :verify_ca, sslca: f.path)
+        expect { new_client(options) }.to raise_error(Mysql2::Error)
       end
     end
 

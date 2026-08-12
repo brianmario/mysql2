@@ -442,6 +442,19 @@ while client.next_result
 end
 ```
 
+A single call to `client.query` only ever returns the *first* statement's
+result -- or `nil`, if that first statement doesn't produce one at all (e.g.
+`CREATE TABLE` or `INSERT`, same as outside of `MULTI_STATEMENTS`). This is
+still true if you pass `:async => true`: `client.async_result` also only
+returns the first statement's result. The rest of the batch is not deferred
+until you ask for it -- the server runs every statement in the batch to
+completion regardless of whether you ever call `next_result` again -- but you
+do have to loop over `client.next_result`/`client.store_result`, as shown
+above, to actually retrieve each later result or find out whether any later
+statement raised an error. If you don't drain that loop, be sure to call
+`client.close` (or otherwise drain it) before reusing the connection for
+another command.
+
 Repeated calls to `client.next_result` will return true, false, or raise an
 exception if the respective query erred. When `client.next_result` returns true,
 call `client.store_result` to retrieve a result object. Exceptions are not

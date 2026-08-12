@@ -363,6 +363,36 @@ When secure_auth is enabled, the server will refuse a connection if the account 
 The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
 To bypass this restriction in the client, pass the option `:secure_auth => false` to Mysql2::Client.new().
 
+### `caching_sha2_password` and GnuTLS-linked client libraries
+
+MySQL 8's default authentication plugin, `caching_sha2_password`, needs to
+RSA-encrypt the password with the server's public key whenever the
+connection isn't already secure (no TLS, no Unix socket). If you see:
+
+```
+Mysql2::Error: RSA Encryption not supported - caching_sha2_password plugin was built with GnuTLS support
+```
+
+this is a permanent limitation of the specific MariaDB Connector/C build
+you have installed, not something mysql2 can work around. Connector/C
+implements that RSA step for its OpenSSL and WinCrypt backends, but not for
+GnuTLS -- a GnuTLS-linked build deliberately raises this error instead of
+attempting it. Some Linux distributions (Debian and its derivatives, in
+particular) ship a GnuTLS-linked `mariadb-connector-c` package for
+licensing reasons, so this shows up there even though nothing is
+misconfigured. Fixes, in order of preference:
+
+* Connect over TLS (e.g. `:ssl_mode => :required`) -- the RSA step is only
+  needed for connections that aren't already secure, so this sidesteps it
+  entirely.
+* Connect over a Unix socket (`:socket => '/path/to/mysql.sock'`) instead
+  of TCP -- also counts as secure for this check.
+* Change the server account's authentication plugin (e.g. to
+  `mysql_native_password`) if TLS isn't an option, understanding the
+  security tradeoff of doing so.
+* Use a client library actually linked against OpenSSL instead of GnuTLS,
+  if your distribution offers one.
+
 ### Flags option parsing
 
 The `:flags` parameter accepts an integer, a string, or an array. The integer

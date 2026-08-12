@@ -755,6 +755,16 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
       rb_raise_mysql2_error(wrapper);
   }
 
+  /* These originate as Ruby VALUEs, but we're using their C pointers
+   * directly -- keep the VALUEs live on the stack so GC can't collect them
+   * while we drop the GVL to make a MySQL API call. */
+  (void)RB_GC_GUARD(host);
+  (void)RB_GC_GUARD(socket);
+  (void)RB_GC_GUARD(user);
+  (void)RB_GC_GUARD(pass);
+  (void)RB_GC_GUARD(database);
+  (void)RB_GC_GUARD(tls_sni_name);
+
   wrapper->closed = 0;
   wrapper->server_version = mysql_get_server_version(wrapper->client);
   return self;

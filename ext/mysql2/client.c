@@ -1013,15 +1013,19 @@ static VALUE disconnect_query_if_incomplete(VALUE completionval) {
   return Qnil;
 }
 
-static VALUE do_query(VALUE args) {
-  struct async_query_args *async_args = (void *)args;
+/* Waits for fd to become readable, honoring @read_timeout. Shared by
+ * do_query below and next_result_nonblocking further down in this file.
+ * rb_wait_for_single_fd itself releases the GVL and is interruptible
+ * (Thread#raise, Timeout.timeout), unlike a raw blocking read inside
+ * libmysqlclient. */
+static void wait_for_readable_with_timeout(VALUE self, int fd) {
   struct timeval tv;
   struct timeval *tvp;
   long int sec;
   int retval;
   VALUE read_timeout;
 
-  read_timeout = rb_ivar_get(async_args->self, intern_read_timeout);
+  read_timeout = rb_ivar_get(self, intern_read_timeout);
 
   tvp = NULL;
   if (!NIL_P(read_timeout)) {
@@ -1038,21 +1042,20 @@ static VALUE do_query(VALUE args) {
     tvp->tv_usec = 0;
   }
 
-  for(;;) {
-    retval = rb_wait_for_single_fd(async_args->fd, RB_WAITFD_IN, tvp);
+  retval = rb_wait_for_single_fd(fd, RB_WAITFD_IN, tvp);
 
-    if (retval == 0) {
-      rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
-    }
-
-    if (retval < 0) {
-      rb_sys_fail(0);
-    }
-
-    if (retval > 0) {
-      break;
-    }
+  if (retval == 0) {
+    rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
   }
+  if (retval < 0) {
+    rb_sys_fail(0);
+  }
+}
+
+static VALUE do_query(VALUE args) {
+  struct async_query_args *async_args = (void *)args;
+
+  wait_for_readable_with_timeout(async_args->self, async_args->fd);
 
   async_args->completion.completed = 1;
   return Qnil;
@@ -1616,56 +1619,12 @@ static VALUE rb_mysql_client_more_results(VALUE self)
     return Qtrue;
 }
 
-#ifndef _WIN32
-/* Waits for the connection's fd to become readable, honoring @read_timeout
- * the same way do_query does for the initial query. rb_wait_for_single_fd
- * itself releases the GVL and is interruptible (Thread#raise,
- * Timeout.timeout), unlike a raw blocking read inside libmysqlclient. */
-static void wait_for_next_result_fd(VALUE self, mysql_client_wrapper *wrapper) {
-  struct timeval tv;
-  struct timeval *tvp;
-  long int sec;
-  int retval;
-  VALUE read_timeout;
-
-  read_timeout = rb_ivar_get(self, intern_read_timeout);
-
-  tvp = NULL;
-  if (!NIL_P(read_timeout)) {
-    Check_Type(read_timeout, T_FIXNUM);
-    tvp = &tv;
-    sec = FIX2INT(read_timeout);
-    if (sec >= 0) {
-      tvp->tv_sec = sec;
-    } else {
-      rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %ld", sec);
-    }
-    tvp->tv_usec = 0;
-  }
-
-  retval = rb_wait_for_single_fd(wrapper->client->net.fd, RB_WAITFD_IN, tvp);
-
-  if (retval == 0) {
-    rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
-  }
-  if (retval < 0) {
-    rb_sys_fail(0);
-  }
-}
-#endif
-
 #if defined(HAVE_MYSQL_NEXT_RESULT_NONBLOCKING) && !defined(_WIN32)
-/* Polls mysql_next_result_nonblocking() (added in MySQL 8.0.16) instead of
- * calling the blocking mysql_next_result() directly. Unlike the blocking
- * call, this never holds the GVL for a real network wait: each iteration
- * either returns immediately (never blocks, by the function's own
- * contract) or reports NET_ASYNC_NOT_READY, in which case
- * wait_for_next_result_fd -- not this function -- is what actually waits,
- * and it does so interruptibly.
- *
- * Mixing this with the ordinary blocking API on the same connection is
- * explicitly documented as supported, so nothing else in this file needs
- * to change:
+/* Polls mysql_next_result_nonblocking() (added in MySQL 8.0.16), which
+ * never blocks by its own contract, instead of calling the blocking
+ * mysql_next_result() directly. Mixing this with the ordinary blocking
+ * API on the same connection is explicitly documented as supported, so
+ * nothing else in this file needs to change:
  * https://dev.mysql.com/doc/c-api/8.0/en/c-api-asynchronous-interface-usage.html
  */
 static enum net_async_status next_result_nonblocking(VALUE self, mysql_client_wrapper *wrapper) {
@@ -1676,7 +1635,7 @@ static enum net_async_status next_result_nonblocking(VALUE self, mysql_client_wr
     if (status != NET_ASYNC_NOT_READY) {
       return status;
     }
-    wait_for_next_result_fd(self, wrapper);
+    wait_for_readable_with_timeout(self, wrapper->client->net.fd);
   }
 }
 #else

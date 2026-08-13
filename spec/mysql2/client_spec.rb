@@ -1076,6 +1076,50 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         expect(@multi_client.more_results?).to be false
       end
 
+      it "should honor :stream for later result sets, not just the first" do
+        # Regression coverage for #600: store_result must honor the
+        # original query's :stream option for every result set in a
+        # multi-statement batch, not just the first.
+        #
+        # mysql_store_result blocks until the entire result set has
+        # arrived; mysql_use_result returns almost immediately and defers
+        # the transfer to later row fetches. A large enough second result
+        # set creates an unambiguous timing gap between the two: if
+        # buffered, store_result itself pays the transfer cost; if
+        # streamed, #each pays it instead. (cache_rows: false, size below,
+        # chosen so this is quick, but a real dominant-cost gap either way
+        # -- not close enough to flake under CI load.)
+        @multi_client.query("DROP TABLE IF EXISTS store_result_stream_test")
+        @multi_client.query("CREATE TABLE store_result_stream_test (id INT PRIMARY KEY AUTO_INCREMENT, val TEXT)")
+
+        begin
+          @multi_client.query(
+            "INSERT INTO store_result_stream_test (val) " \
+            "SELECT REPEAT('x', 2000) FROM information_schema.columns a, information_schema.columns b LIMIT 60000",
+          )
+
+          result = @multi_client.query(
+            "SELECT 1 AS a; SELECT * FROM store_result_stream_test",
+            stream: true, cache_rows: false,
+          )
+          result.each { |_r| }
+
+          @multi_client.next_result
+
+          store_result_start = clock_time
+          second = @multi_client.store_result
+          store_result_time = clock_time - store_result_start
+
+          each_start = clock_time
+          second.each { |_r| }
+          each_time = clock_time - each_start
+
+          expect(store_result_time).to be < (each_time / 2)
+        ensure
+          @multi_client.query("DROP TABLE IF EXISTS store_result_stream_test")
+        end
+      end
+
       it "#more_results? should work with stored procedures" do
         @multi_client.query("DROP PROCEDURE IF EXISTS test_proc")
         @multi_client.query("CREATE PROCEDURE test_proc() BEGIN SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'; END")

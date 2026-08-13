@@ -602,6 +602,16 @@ result = client.query("SELECT true", :cast_booleans => true)
 
 CAST function wouldn't help here as there's no way to cast to TINYINT(1). Apparently the only way to solve this is to use a stored procedure with return type set to TINYINT(1).
 
+The same applies to `UNION` results: MySQL widens a `tinyint(1)` column to
+`tinyint(4)` for any query combined with `UNION`, dropping the display-width
+attribute `:cast_booleans` depends on. Do the boolean comparison in SQL
+instead, so the server sends real `0`/`1` values before `:cast_booleans`
+would ever need to guess:
+
+``` sql
+SELECT x = 1 AS x FROM t1 UNION ALL SELECT x = 1 AS x FROM t2
+```
+
 ### Skipping casting
 
 Mysql2 casting is fast, but not as fast as not casting data.  In rare cases where typecasting is not needed, it will be faster to disable it by providing :cast => false. (Note that :cast => false overrides :cast_booleans => true.)

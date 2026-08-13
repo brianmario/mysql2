@@ -1,4 +1,5 @@
 require 'spec_helper'
+require 'socket'
 
 RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   let(:performance_schema_enabled) do
@@ -1557,5 +1558,132 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
     expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
     expect(@client.close).to be_nil
+  end
+
+  context "#ping interrupted mid-flight" do
+    # Regression coverage for #777 -- see do_ping in client.c for the
+    # mechanism this protects against.
+    #
+    # A tiny TCP pass-through proxy lets us freeze the server's response to
+    # #ping on command, giving Thread#raise a real blocking window to land
+    # in -- something a real, fast localhost round-trip can't reliably
+    # provide.
+    class FreezableProxy
+      def initialize(real_host, real_port)
+        @server = TCPServer.new('127.0.0.1', 0)
+        @real_host = real_host
+        @real_port = real_port
+        @frozen = false
+        @mutex = Mutex.new
+        @threads = []
+      end
+
+      def port
+        @server.addr[1]
+      end
+
+      def freeze!
+        @mutex.synchronize { @frozen = true }
+      end
+
+      def unfreeze!
+        @mutex.synchronize { @frozen = false }
+      end
+
+      def frozen?
+        @mutex.synchronize { @frozen }
+      end
+
+      def run
+        @threads << Thread.new do
+          loop do
+            client_sock = @server.accept
+            @threads << Thread.new(client_sock) { |cs| handle(cs) }
+          end
+        end
+      end
+
+      def handle(client_sock)
+        upstream = TCPSocket.new(@real_host, @real_port)
+        [
+          Thread.new { pump(client_sock, upstream) },
+          Thread.new { pump(upstream, client_sock) },
+        ].each { |t| @threads << t }.each(&:join)
+      ensure
+        begin
+          client_sock.close
+        rescue StandardError
+          nil
+        end
+        begin
+          upstream.close
+        rescue StandardError
+          nil
+        end
+      end
+
+      def pump(src, dst)
+        loop do
+          data = src.readpartial(4096)
+          sleep 0.01 while frozen?
+          dst.write(data)
+        end
+      rescue IOError, Errno::ECONNRESET
+        nil
+      end
+
+      def shutdown
+        @threads.each(&:kill)
+        @server.close
+      rescue IOError
+        nil
+      end
+    end
+
+    class SimulatedWatchdogInterrupt < StandardError; end
+
+    it "does not permanently lock the connection when #ping is interrupted" do
+      # do_ping's rb_rescue2/disconnect_and_raise protection is #ifndef
+      # _WIN32 -- same as #query's own interrupt-safety a few lines up in
+      # client.c -- so on Windows this scenario still reproduces #777.
+      skip "not fixed on Windows -- see do_ping in client.c" if RUBY_PLATFORM =~ /mingw|mswin/
+
+      creds = DatabaseCredentials['root']
+      proxy = FreezableProxy.new(creds['host'], creds['port'] || 3306)
+      proxy.run
+      sleep 0.1 # let the accept loop start
+
+      client = new_client('host' => '127.0.0.1', 'port' => proxy.port)
+
+      begin
+        proxy.freeze!
+        # Not new_thread: this thread is expected to die from the raise
+        # below, and Thread#join re-raises a dead thread's exception on
+        # every call -- including the after(:example) hook's cleanup join
+        # on every tracked thread, which would fail the example a second
+        # time after we've already handled it here.
+        thread = Thread.new { client.ping }
+        thread.report_on_exception = false
+        thread.join(0.3) # ping is now blocked inside the frozen read
+
+        thread.raise(SimulatedWatchdogInterrupt)
+        sleep 0.2
+        proxy.unfreeze! # let the blocked read resolve so the pending raise can land
+
+        expect { thread.join(5) }.to raise_error(SimulatedWatchdogInterrupt)
+
+        # The interrupted ping correctly leaves the connection recognized as
+        # disconnected -- ping returns false, not the permanent
+        # "This connection is in use by" lockout the bug caused.
+        expect(client.ping).to eq(false)
+      ensure
+        begin
+          client.close
+        rescue StandardError
+          nil
+        end
+        proxy.shutdown
+      end
+    end
   end
 end

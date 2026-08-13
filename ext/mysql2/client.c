@@ -1487,6 +1487,30 @@ static void *nogvl_ping(void *ptr) {
   return (void *)(mysql_ping(client) == 0 ? Qtrue : Qfalse);
 }
 
+#ifndef _WIN32
+/* mysql_ping() has no non-blocking variant, and unlike a blocked query
+ * read, libmysqlclient retries EINTR internally while pinging -- so an
+ * interrupt (Thread#raise, Thread#kill, Timeout.timeout) delivered while
+ * this is in flight is not guaranteed to land promptly. What we *can*
+ * guarantee is that whenever it does land, active_fiber gets cleared and
+ * the now-suspect connection gets invalidated, same as an interrupted
+ * query -- otherwise every other caller of this Client is permanently
+ * locked out with "This connection is in use by: <dead fiber>" since
+ * ping's own active_fiber cleanup below never runs. */
+static VALUE do_ping(VALUE args) {
+  mysql_client_wrapper *wrapper = (mysql_client_wrapper *)args;
+  VALUE result;
+
+  if (!CONNECTED(wrapper)) {
+    result = Qfalse;
+  } else {
+    result = (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
+  }
+  wrapper->active_fiber = Qnil;
+  return result;
+}
+#endif
+
 /* call-seq:
  *    client.ping
  *
@@ -1508,6 +1532,9 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
 
+#ifndef _WIN32
+  return rb_rescue2(do_ping, (VALUE)wrapper, disconnect_and_raise, self, rb_eException, (VALUE)0);
+#else
   VALUE result = Qnil;
   if (!CONNECTED(wrapper)) {
     result = Qfalse;
@@ -1516,6 +1543,7 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   }
   wrapper->active_fiber = Qnil;
   return result;
+#endif
 }
 
 /* call-seq:

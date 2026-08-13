@@ -278,21 +278,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     # Track these 10 connections by thread_id rather than by a status
     # counter like Threads_connected or Aborted_clients: those are scoped to
-    # the whole server, not to this test, so any other connection opening or
-    # closing nearby -- including from unrelated tests earlier in the suite
-    # -- can perturb them (observed locally: Threads_connected can drop
-    # *below* an earlier baseline, and Aborted_clients can increment, from
-    # connections this test never touched).
+    # the whole server.
     thread_ids = 10.times.map do
       Mysql2::Client.new(DatabaseCredentials['root']).tap { |c| c.query('SELECT 1') }.thread_id
     end
 
     run_gc
 
-    # decr_mysql2_client's mysql_close() happens synchronously as part of
-    # the GC sweep above, but the server noticing the closed sockets and
-    # updating its own PROCESSLIST is a separate, genuinely async step on
-    # the server's side -- poll instead of trusting a fixed wait.
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
     loop do
       still_connected = @client.query("SHOW PROCESSLIST").map { |row| row['Id'] }

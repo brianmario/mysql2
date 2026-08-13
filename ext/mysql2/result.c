@@ -343,6 +343,18 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
     rb_encoding *conn_enc = wrapper->conn_enc;
 
+    /* A name that was never cached has to be read from the result, which the
+     * force-free of an abandoned stream has already released. Hash-mode rows
+     * cache names one cell at a time, so a raise between cells leaves the tail
+     * of the set uncached and still reachable through #fields.
+     *
+     * Checked per name rather than over the set as a whole, so that names
+     * cached before the free still answer, as callers after an ordinary free
+     * expect. */
+    if (wrapper->resultFreed) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
+
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
       rb_field = rb_intern3(field->name, field->name_length, rb_utf8_encoding());
@@ -430,6 +442,13 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
     rb_encoding *conn_enc = wrapper->conn_enc;
     int precision;
+
+    /* See the matching check in rb_mysql_result_fetch_field. #field_types
+     * hands back the internal array, so a caller can shorten it and send the
+     * next lookup back here after the result is gone. */
+    if (wrapper->resultFreed) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
 

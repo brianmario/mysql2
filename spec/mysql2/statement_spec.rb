@@ -119,6 +119,67 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(stmt.execute(1, as: :array).first).to eq([1])
   end
 
+  it "should raise TypeError naming the parameter index, class, and value for an unsupported bind type" do
+    stmt = @client.prepare 'SELECT ?, ?'
+
+    expect { stmt.execute(1, :pending) }.to \
+      raise_error(TypeError, "can't bind parameter 2: no conversion for Symbol (:pending)")
+    expect { stmt.execute({ key: "value" }, 2) }.to \
+      raise_error(TypeError, "can't bind parameter 1: no conversion for Hash (#{{ key: 'value' }.inspect})")
+    expect { stmt.execute(Object.new, 2) }.to \
+      raise_error(TypeError, /\Acan't bind parameter 1: no conversion for Object \(#<Object:0x\h+>\)\z/)
+  end
+
+  it "should truncate long values in the unsupported bind type message" do
+    stmt = @client.prepare 'SELECT ?'
+
+    expect { stmt.execute(("a" * 60).to_sym) }.to \
+      raise_error(TypeError, "can't bind parameter 1: no conversion for Symbol (:#{'a' * 39}...)")
+  end
+
+  it "should keep the parameter index when the value's inspect itself raises, chaining the inspect error as the cause" do
+    stmt = @client.prepare 'SELECT ?, ?'
+    broken = Object.new
+    def broken.inspect
+      raise ArgumentError, "broken inspect"
+    end
+
+    expect { stmt.execute(1, broken) }.to raise_error(TypeError, "can't bind parameter 2: no conversion for Object") { |error|
+      expect(error.cause).to be_an(ArgumentError)
+      expect(error.cause.message).to eq("broken inspect")
+    }
+  end
+
+  it "should omit the value when its inspect contains a NUL byte" do
+    stmt = @client.prepare 'SELECT ?'
+    nul = Object.new
+    def nul.inspect
+      "nul\0byte"
+    end
+
+    expect { stmt.execute(nul) }.to \
+      raise_error(TypeError, "can't bind parameter 1: no conversion for Object")
+  end
+
+  it "should remain usable after an unsupported bind type raises" do
+    stmt = @client.prepare 'SELECT ? AS a'
+
+    expect { stmt.execute(:pending) }.to raise_error(TypeError)
+    expect(stmt.execute(1).first).to eq("a" => 1)
+  end
+
+  it "should raise for an unsupported bind type instead of writing zero to the table" do
+    @client.query 'USE test'
+    @client.query 'DROP TABLE IF EXISTS mysql2_stmt_bind_type_test'
+    @client.query 'CREATE TABLE mysql2_stmt_bind_type_test (int_test INT)'
+
+    stmt = @client.prepare("INSERT INTO mysql2_stmt_bind_type_test VALUES (?)")
+    expect { stmt.execute(:pending) }.to raise_error(TypeError)
+    expect(@client.query("SELECT * FROM mysql2_stmt_bind_type_test").to_a).to be_empty
+
+    @client.query 'DROP TABLE IF EXISTS mysql2_stmt_bind_type_test'
+  end
+
   it "should keep its result after other query" do
     @client.query 'USE test'
     @client.query 'CREATE TABLE IF NOT EXISTS mysql2_stmt_q(a int)'

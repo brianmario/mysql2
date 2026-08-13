@@ -519,6 +519,22 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
             params_enc[i] = rb_val_as_string;
             params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
             set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
+          } else {
+            int state = 0;
+            VALUE inspect = rb_protect(rb_inspect, argv[i], &state);
+            if (!state && rb_str_strlen(inspect) > 40) {
+              inspect = rb_str_substr(inspect, 0, 40);
+              rb_str_cat2(inspect, "...");
+            }
+            /* An inspect that raised, or inspect output holding a NUL byte
+             * (which rb_raise's PRIsVALUE formatting rejects), still gets the
+             * TypeError -- just without the value. */
+            if (state || memchr(RSTRING_PTR(inspect), '\0', RSTRING_LEN(inspect))) {
+              rb_raise(rb_eTypeError, "can't bind parameter %lu: no conversion for %s",
+                       i + 1, rb_obj_classname(argv[i]));
+            }
+            rb_raise(rb_eTypeError, "can't bind parameter %lu: no conversion for %s (%" PRIsVALUE ")",
+                     i + 1, rb_obj_classname(argv[i]), inspect);
           }
           break;
       }

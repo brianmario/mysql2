@@ -180,6 +180,33 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       end
     end
 
+    it "should return the same symbol key across results and against literals" do
+      first = @client.query("SELECT 1 AS sym_parity_col", symbolize_keys: true).first.keys.first
+      second = @client.query("SELECT 2 AS sym_parity_col", symbolize_keys: true).first.keys.first
+      expect(first).to eql(second)
+      expect(first).to eql(:sym_parity_col)
+    end
+
+    it "should not permanently pin symbols for dynamically-named columns" do
+      skip "dynamic symbols are only GC-able on Ruby 2.2+" if RUBY_VERSION < "2.2"
+
+      name = "sym_gc_col_#{rand(2**32)}"
+
+      # Run the query on its own thread so its stack -- and any stale
+      # references conservative scanning would find there -- is gone before
+      # the collection check below.
+      Thread.new do
+        @client.query("SELECT 1 AS #{name}", symbolize_keys: true).each { |_| }
+        nil
+      end.join
+
+      collected = 10.times.any? do
+        GC.start
+        Symbol.all_symbols.none? { |sym| sym.to_s == name }
+      end
+      expect(collected).to be true
+    end
+
     it "should be able to return results as an array" do
       @result.each(as: :array) do |row|
         expect(row).to be_an_instance_of(Array)

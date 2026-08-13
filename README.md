@@ -378,8 +378,7 @@ implements it for the OpenSSL and WinCrypt backends, not for GnuTLS.
 Debian and its derivatives ship a GnuTLS-linked `mariadb-connector-c` by
 default.
 
-Fixes:
-
+Suggested alternatives:
 * Connect over TLS: `:ssl_mode => :required`.
 * Connect over a Unix socket instead of TCP: `:socket => '/path/to/mysql.sock'`.
 * Change the server account's authentication plugin, e.g. to

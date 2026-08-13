@@ -369,6 +369,62 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(result.field_types.length).to eql(1)
     end
 
+    context "when a hash row raises part way through" do
+      # Hash rows materialize field names one cell at a time, so a raise between
+      # cells leaves only part of the set cached. Filling the rest reads field
+      # metadata out of the result, which the next query has already released
+      # for an abandoned stream.
+      before do
+        @client.query("SET SESSION sql_mode = ''")
+        @client.query("DROP TABLE IF EXISTS mysql2_partial_fields")
+        @client.query("CREATE TABLE mysql2_partial_fields (a INT, bad_date DATE, c INT)")
+        @client.query("INSERT INTO mysql2_partial_fields VALUES (1, '1972-00-27', 3)")
+      end
+
+      after do
+        @client.query("DROP TABLE IF EXISTS mysql2_partial_fields")
+      end
+
+      let(:sql) { "SELECT a, bad_date, c FROM mysql2_partial_fields" }
+
+      it "should fill the remaining field names while the result is live" do
+        result = @client.query(sql, stream: true, cache_rows: false)
+        expect { result.each { |_| } }.to raise_error(Mysql2::Error, /Invalid date in field/)
+        expect(result.fields).to eql(%w[a bad_date c])
+      end
+
+      it "should raise instead of reading metadata freed by the next query" do
+        result = @client.query(sql, stream: true, cache_rows: false)
+        expect { result.each { |_| } }.to raise_error(Mysql2::Error, /Invalid date in field/)
+        @client.query("SELECT 1") # force-frees the abandoned stream
+        expect { result.fields }.to raise_error(Mysql2::Error, "Result set has already been freed")
+      end
+
+      it "should raise the same way for a prepared statement result" do
+        result = @client.prepare(sql).execute(stream: true, cache_rows: false)
+        expect { result.each { |_| } }.to raise_error(Mysql2::Error, /Invalid date in field/)
+        @client.query("SELECT 1") # force-frees the abandoned stream
+        expect { result.fields }.to raise_error(Mysql2::Error, "Result set has already been freed")
+      end
+
+      it "should raise rather than refill a caller-shortened field_types after free" do
+        result = @client.query(sql, stream: true, cache_rows: false)
+        expect { result.each { |_| } }.to raise_error(Mysql2::Error, /Invalid date in field/)
+        result.field_types.pop # #field_types hands back the internal array
+        @client.query("SELECT 1") # force-frees the abandoned stream
+        expect { result.field_types }.to raise_error(Mysql2::Error, "Result set has already been freed")
+      end
+
+      it "should not raise after free when every name is cached but the array was appended to" do
+        # #fields returns the internal array, so its length is not a reliable
+        # stand-in for whether a name still has to be read from the result.
+        result = @client.query("SELECT 1 AS a, 2 AS b")
+        result.fields << "added by caller"
+        result.free
+        expect(result.fields).to eql(["a", "b", "added by caller"])
+      end
+    end
+
     context "when iterating in array mode" do
       # Array rows never contain field names, so names are batch-materialized
       # on the first fetched row instead of fetched per cell. These pin that

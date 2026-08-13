@@ -1028,6 +1028,44 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.not_to raise_error
       end
 
+      # Regression coverage for #807 / #962 / #1033: #next_result calls
+      # mysql_next_result() directly, which can make a real blocking network
+      # read when the next statement in the batch isn't ready yet. Unlike
+      # the initial query (see do_query/wait_for_fd in client.c), this read
+      # is neither GVL-released nor interruptible.
+      it "should not hold the GVL while #next_result waits on a slow next statement" do
+        @multi_client.query("SELECT 1 AS a; SELECT SLEEP(1) AS b")
+
+        ticks = 0
+        stop = false
+        counter = new_thread do
+          until stop
+            ticks += 1
+            sleep 0.01
+          end
+        end
+
+        @multi_client.next_result
+        stop = true
+        counter.join
+
+        # ~100 ticks in 1s if the GVL was free to schedule the counter
+        # thread on an idle machine; the bug holds the GVL for the entire
+        # wait, so ticks stays at exactly 0. GitHub's macOS runners are
+        # slow/oversubscribed enough to only deliver ~18-24 in practice
+        # (observed in CI), so the threshold has real margin above 0
+        # without assuming a well-scheduled machine.
+        expect(ticks).to be > 5
+      end
+
+      it "should be interruptible via Thread#raise while #next_result waits on a slow next statement" do
+        @multi_client.query("SELECT 1 AS a; SELECT SLEEP(2) AS b")
+
+        expect do
+          Timeout.timeout(0.3) { @multi_client.next_result }
+        end.to raise_error(Timeout::Error)
+      end
+
       it "#more_results? should work" do
         @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'")
         expect(@multi_client.more_results?).to be true
@@ -1036,6 +1074,50 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         @multi_client.store_result
 
         expect(@multi_client.more_results?).to be false
+      end
+
+      it "should honor :stream for later result sets, not just the first" do
+        # Regression coverage for #600: store_result must honor the
+        # original query's :stream option for every result set in a
+        # multi-statement batch, not just the first.
+        #
+        # mysql_store_result blocks until the entire result set has
+        # arrived; mysql_use_result returns almost immediately and defers
+        # the transfer to later row fetches. A large enough second result
+        # set creates an unambiguous timing gap between the two: if
+        # buffered, store_result itself pays the transfer cost; if
+        # streamed, #each pays it instead. (cache_rows: false, size below,
+        # chosen so this is quick, but a real dominant-cost gap either way
+        # -- not close enough to flake under CI load.)
+        @multi_client.query("DROP TABLE IF EXISTS store_result_stream_test")
+        @multi_client.query("CREATE TABLE store_result_stream_test (id INT PRIMARY KEY AUTO_INCREMENT, val TEXT)")
+
+        begin
+          @multi_client.query(
+            "INSERT INTO store_result_stream_test (val) " \
+            "SELECT REPEAT('x', 2000) FROM information_schema.columns a, information_schema.columns b LIMIT 60000",
+          )
+
+          result = @multi_client.query(
+            "SELECT 1 AS a; SELECT * FROM store_result_stream_test",
+            stream: true, cache_rows: false,
+          )
+          result.each { |_r| }
+
+          @multi_client.next_result
+
+          store_result_start = clock_time
+          second = @multi_client.store_result
+          store_result_time = clock_time - store_result_start
+
+          each_start = clock_time
+          second.each { |_r| }
+          each_time = clock_time - each_start
+
+          expect(store_result_time).to be < (each_time / 2)
+        ensure
+          @multi_client.query("DROP TABLE IF EXISTS store_result_stream_test")
+        end
       end
 
       it "#more_results? should work with stored procedures" do
@@ -1676,6 +1758,60 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         # disconnected -- ping returns false, not the permanent
         # "This connection is in use by" lockout the bug caused.
         expect(client.ping).to eq(false)
+      ensure
+        begin
+          client.close
+        rescue StandardError
+          nil
+        end
+        proxy.shutdown
+      end
+    end
+  end
+
+  context "Thread#exit mid-query" do
+    # Regression coverage for #1392: query()'s send/wait phases (do_send_query,
+    # do_query) were only protected by rb_rescue2, which catches ordinary
+    # Ruby exceptions but not Thread#exit's non-exception unwind -- so an
+    # exited thread's cleanup (clearing active_fiber) never ran, leaving the
+    # connection permanently stuck reporting "This connection is in use by:
+    # <dead fiber>" for every future caller, even the interrupted thread's
+    # own client object being reused later (e.g. from an ActiveRecord pool).
+    #
+    # Reuses FreezableProxy (defined above, in the #ping interrupted mid-flight
+    # context) to reliably keep the query in flight when we call Thread#exit,
+    # rather than racing a fast localhost round-trip.
+    it "does not permanently lock the connection when Thread#exit interrupts a query" do
+      # rb_mysql_query's rb_ensure protection around do_send_query/do_query is
+      # #ifndef _WIN32 -- same as do_ping's rb_rescue2/disconnect_and_raise a
+      # few lines down in client.c -- so on Windows this scenario still
+      # reproduces #1392.
+      skip "not fixed on Windows -- see rb_mysql_query in client.c" if RUBY_PLATFORM =~ /mingw|mswin/
+
+      creds = DatabaseCredentials['root']
+      proxy = FreezableProxy.new(creds['host'], creds['port'] || 3306)
+      proxy.run
+      sleep 0.1 # let the accept loop start
+
+      client = new_client('host' => '127.0.0.1', 'port' => proxy.port)
+
+      begin
+        proxy.freeze!
+        thread = Thread.new { client.query("SELECT 1") }
+        thread.report_on_exception = false
+        thread.join(0.3) # query is now blocked inside the frozen response
+
+        thread.exit
+        thread.join(2)
+
+        # The interrupted query must not leave the connection permanently
+        # marked busy -- a normal, actionable connection error is fine, but
+        # "This connection is in use by" (a dead fiber, forever) is not.
+        begin
+          client.query("SELECT 1")
+        rescue Mysql2::Error => e
+          expect(e.message).not_to match(/This connection is in use by/)
+        end
       ensure
         begin
           client.close

@@ -349,6 +349,18 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
     rb_encoding *conn_enc = wrapper->conn_enc;
 
+    /* A name that was never cached has to be read from the result, which the
+     * force-free of an abandoned stream has already released. Hash-mode rows
+     * cache names one cell at a time, so a raise between cells leaves the tail
+     * of the set uncached and still reachable through #fields.
+     *
+     * Checked per name rather than over the set as a whole, so that names
+     * cached before the free still answer, as callers after an ordinary free
+     * expect. */
+    if (wrapper->resultFreed) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
+
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
       rb_field = rb_intern3(field->name, field->name_length, rb_utf8_encoding());
@@ -436,6 +448,13 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
     rb_encoding *conn_enc = wrapper->conn_enc;
     int precision;
+
+    /* See the matching check in rb_mysql_result_fetch_field. #field_types
+     * hands back the internal array, so a caller can shorten it and send the
+     * next lookup back here after the result is gone. */
+    if (wrapper->resultFreed) {
+      rb_raise(cMysql2Error, "Result set has already been freed");
+    }
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
 
@@ -946,12 +965,13 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
   /* Bind once per result set rather than once per row. The buffers are
    * allocated exactly once (rb_mysql_result_alloc_result_buffers returns early
-   * when they exist) and are never resized -- a buffer too short for a value
-   * raises on MYSQL_DATA_TRUNCATED rather than reallocating -- and they are
-   * only released by rb_mysql_result_free_result, which nulls the pointer and
-   * clears this flag. So the addresses registered here stay valid for every
-   * subsequent mysql_stmt_fetch on this result. Re-binding per row copied the
-   * whole MYSQL_BIND array into the statement each time for no gain.
+   * when they exist), but a variable-length column's buffer may grow later --
+   * see the MYSQL_DATA_TRUNCATED case below -- always in place, at the same
+   * address registered here, so the bind itself never needs to be redone.
+   * Buffers are only released by rb_mysql_result_free_result, which nulls the
+   * pointer and clears this flag. So the addresses registered here stay valid
+   * for every subsequent mysql_stmt_fetch on this result. Re-binding per row
+   * copied the whole MYSQL_BIND array into the statement each time for no gain.
    *
    * Binding is tracked separately from allocation so that a failed bind is
    * still retried on a later fetch, exactly as it was when the bind ran on
@@ -988,8 +1008,27 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         /* no more row */
         return Qnil;
 
-      case MYSQL_DATA_TRUNCATED:
-        rb_raise(cMysql2Error, "IMPLBUG: caught MYSQL_DATA_TRUNCATED. should not come here as buffer_length is set to fields[i].max_length.");
+      case MYSQL_DATA_TRUNCATED: {
+        /* A streaming (cursor-mode) fetch never calls mysql_stmt_store_result(),
+         * so fields[i].max_length was never populated and buffers started too
+         * small -- see the alloc comment above. Grow just the truncated
+         * column(s) to their actual length (wrapper->length[i]) and re-fetch
+         * with mysql_stmt_fetch_column(), MySQL's documented recovery for this
+         * case. That call copies data already buffered in the client library,
+         * so no GVL release is needed here. */
+        unsigned int j;
+        for (j = 0; j < wrapper->numberOfFields; j++) {
+          if (!wrapper->error[j]) continue;
+
+          wrapper->result_buffers[j].buffer = xrealloc(wrapper->result_buffers[j].buffer, wrapper->length[j]);
+          wrapper->result_buffers[j].buffer_length = wrapper->length[j];
+
+          if (mysql_stmt_fetch_column(wrapper->stmt_wrapper->stmt, &wrapper->result_buffers[j], j, 0)) {
+            rb_raise_mysql2_stmt_error(wrapper->stmt_wrapper);
+          }
+        }
+        break;
+      }
     }
   }
 

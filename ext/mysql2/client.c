@@ -104,12 +104,22 @@ struct nogvl_connect_args {
  * used to pass all arguments to mysql_send_query while inside
  * rb_thread_call_without_gvl
  */
+/* Shared by nogvl_send_query_args and async_query_args below: passed as its
+ * own rb_ensure data argument (independent of the struct it lives in) so
+ * a single trampoline can clean up after either. completed is set once the
+ * owning call finishes normally, which lets that trampoline tell a normal
+ * completion apart from a Thread#exit-style unwind. */
+struct query_completion {
+  mysql_client_wrapper *wrapper;
+  int completed;
+};
+
 struct nogvl_send_query_args {
   MYSQL *mysql;
   VALUE sql;
   const char *sql_ptr;
   long sql_len;
-  mysql_client_wrapper *wrapper;
+  struct query_completion completion;
 };
 
 /*
@@ -837,12 +847,14 @@ static void *nogvl_send_query(void *ptr) {
 
 static VALUE do_send_query(VALUE args) {
   struct nogvl_send_query_args *query_args = (void *)args;
-  mysql_client_wrapper *wrapper = query_args->wrapper;
+  mysql_client_wrapper *wrapper = query_args->completion.wrapper;
   if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, query_args, RUBY_UBF_IO, 0) == Qfalse) {
-    /* an error occurred, we're not active anymore */
-    wrapper->active_fiber = Qnil;
+    /* An error occurred: raise it and let disconnect_query_if_incomplete
+     * (this call's rb_ensure companion) do the cleanup, same as any other
+     * kind of unwind out of this function. */
     rb_raise_mysql2_error(wrapper);
   }
+  query_args->completion.completed = 1;
   return Qnil;
 }
 
@@ -884,28 +896,13 @@ static void *nogvl_use_result(void *ptr) {
   return nogvl_do_result(ptr, 1);
 }
 
-/* call-seq:
- *    client.async_result
- *
- * Returns the result for the last async issued query.
- */
-static VALUE rb_mysql_client_async_result(VALUE self) {
-  MYSQL_RES * result;
-  VALUE resultObj;
-  VALUE current, is_streaming;
-  GET_CLIENT(self);
-
-  /* if we're not waiting on a result, do nothing */
-  if (NIL_P(wrapper->active_fiber))
-    return Qnil;
-
-  REQUIRE_CONNECTED(wrapper);
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
-    /* an error occurred, mark this connection inactive */
-    wrapper->active_fiber = Qnil;
-    wrapper->state = MYSQL2_CLIENT_IDLE;
-    rb_raise_mysql2_error(wrapper);
-  }
+/* Shared by async_result (a query's first result set) and store_result (a
+ * later one, from a multi-statement batch): fetch the current result set as
+ * either streamed or fully-buffered, per :stream, track it on wrapper, and
+ * wrap it as a Result. */
+static VALUE mysql2_fetch_result_set(VALUE self, mysql_client_wrapper *wrapper) {
+  MYSQL_RES *result;
+  VALUE resultObj, current, is_streaming;
 
   is_streaming = rb_hash_aref(rb_ivar_get(self, intern_current_query_options), sym_stream);
   if (is_streaming == Qtrue) {
@@ -930,9 +927,9 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
       wrapper->state = MYSQL2_CLIENT_IDLE;
       rb_raise_mysql2_error(wrapper);
     }
-    /* no data and no error, so query was not a SELECT -- e.g. :stream was
-     * requested for an INSERT/UPDATE. No cursor was actually opened, so
-     * don't leave the connection marked STREAMING. */
+    /* no data and no error, so this result set was not a SELECT -- e.g.
+     * :stream was requested for an INSERT/UPDATE. No cursor was actually
+     * opened, so don't leave the connection marked STREAMING. */
     wrapper->state = MYSQL2_CLIENT_IDLE;
     return Qnil;
   }
@@ -952,15 +949,40 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   return resultObj;
 }
 
+/* call-seq:
+ *    client.async_result
+ *
+ * Returns the result for the last async issued query.
+ */
+static VALUE rb_mysql_client_async_result(VALUE self) {
+  GET_CLIENT(self);
+
+  /* if we're not waiting on a result, do nothing */
+  if (NIL_P(wrapper->active_fiber))
+    return Qnil;
+
+  REQUIRE_CONNECTED(wrapper);
+  if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
+    /* an error occurred, mark this connection inactive */
+    wrapper->active_fiber = Qnil;
+    wrapper->state = MYSQL2_CLIENT_IDLE;
+    rb_raise_mysql2_error(wrapper);
+  }
+
+  return mysql2_fetch_result_set(self, wrapper);
+}
+
 #ifndef _WIN32
 struct async_query_args {
   int fd;
   VALUE self;
+  struct query_completion completion;
 };
 
-static VALUE disconnect_and_raise(VALUE self, VALUE error) {
-  GET_CLIENT(self);
-
+/* Shared cleanup for an interrupted send/read/ping: none of them reached
+ * their own normal completion, so the connection may be left
+ * mid-protocol-exchange. */
+static void invalidate_after_interrupted_query(mysql_client_wrapper *wrapper) {
   wrapper->active_fiber = Qnil;
   wrapper->state = MYSQL2_CLIENT_IDLE;
 
@@ -974,19 +996,44 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
     }
     wrapper->client->net.fd = -1;
   }
+}
 
+/* rb_rescue2 companion (do_ping): re-raises after cleanup. do_ping is a
+ * single blocking call, so it has no Thread#exit window to worry about. */
+static VALUE disconnect_and_raise(VALUE self, VALUE error) {
+  GET_CLIENT(self);
+  invalidate_after_interrupted_query(wrapper);
   rb_exc_raise(error);
 }
 
-static VALUE do_query(VALUE args) {
-  struct async_query_args *async_args = (void *)args;
+/* rb_ensure companion (do_send_query, do_query): unlike disconnect_and_raise
+ * above, this never raises -- rb_ensure runs it during any unwind, including
+ * a non-exception one like Thread#exit, which rb_rescue2 can't see. Takes a
+ * struct query_completion directly (passed as rb_ensure's data2, independent
+ * of whatever larger struct it's embedded in) so both call sites share it. */
+static VALUE disconnect_query_if_incomplete(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
+
+  if (!completion->completed) {
+    invalidate_after_interrupted_query(completion->wrapper);
+  }
+
+  return Qnil;
+}
+
+/* Waits for fd to become readable, honoring @read_timeout. Shared by
+ * do_query below and next_result_nonblocking further down in this file.
+ * rb_wait_for_single_fd itself releases the GVL and is interruptible
+ * (Thread#raise, Timeout.timeout), unlike a raw blocking read inside
+ * libmysqlclient. */
+static void wait_for_readable_with_timeout(VALUE self, int fd) {
   struct timeval tv;
   struct timeval *tvp;
   long int sec;
   int retval;
   VALUE read_timeout;
 
-  read_timeout = rb_ivar_get(async_args->self, intern_read_timeout);
+  read_timeout = rb_ivar_get(self, intern_read_timeout);
 
   tvp = NULL;
   if (!NIL_P(read_timeout)) {
@@ -1003,22 +1050,22 @@ static VALUE do_query(VALUE args) {
     tvp->tv_usec = 0;
   }
 
-  for(;;) {
-    retval = rb_wait_for_single_fd(async_args->fd, RB_WAITFD_IN, tvp);
+  retval = rb_wait_for_single_fd(fd, RB_WAITFD_IN, tvp);
 
-    if (retval == 0) {
-      rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
-    }
-
-    if (retval < 0) {
-      rb_sys_fail(0);
-    }
-
-    if (retval > 0) {
-      break;
-    }
+  if (retval == 0) {
+    rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
   }
+  if (retval < 0) {
+    rb_sys_fail(0);
+  }
+}
 
+static VALUE do_query(VALUE args) {
+  struct async_query_args *async_args = (void *)args;
+
+  wait_for_readable_with_timeout(async_args->self, async_args->fd);
+
+  async_args->completion.completed = 1;
   return Qnil;
 }
 #endif
@@ -1112,7 +1159,8 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   args.sql = rb_str_export_to_enc(sql, rb_to_encoding(wrapper->encoding));
   args.sql_ptr = RSTRING_PTR(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
-  args.wrapper = wrapper;
+  args.completion.wrapper = wrapper;
+  args.completion.completed = 0;
 
   rb_mysql_client_set_active_fiber(self, false);
 
@@ -1135,7 +1183,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   wrapper->state = MYSQL2_CLIENT_QUERYING;
 
 #ifndef _WIN32
-  rb_rescue2(do_send_query, (VALUE)&args, disconnect_and_raise, self, rb_eException, (VALUE)0);
+  rb_ensure(do_send_query, (VALUE)&args, disconnect_query_if_incomplete, (VALUE)&args.completion);
   (void)RB_GC_GUARD(sql);
 
   if (rb_hash_aref(current, sym_async) == Qtrue) {
@@ -1143,8 +1191,10 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   } else {
     async_args.fd = wrapper->client->net.fd;
     async_args.self = self;
+    async_args.completion.wrapper = wrapper;
+    async_args.completion.completed = 0;
 
-    rb_rescue2(do_query, (VALUE)&async_args, disconnect_and_raise, self, rb_eException, (VALUE)0);
+    rb_ensure(do_query, (VALUE)&async_args, disconnect_query_if_incomplete, (VALUE)&async_args.completion);
 
     return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
   }
@@ -1577,26 +1627,110 @@ static VALUE rb_mysql_client_more_results(VALUE self)
     return Qtrue;
 }
 
-/* call-seq:
- *    client.next_result
- *
- * Fetch the next result set from the server.
- * Returns nothing.
+#if defined(HAVE_MYSQL_NEXT_RESULT_NONBLOCKING) && !defined(_WIN32)
+/* Polls mysql_next_result_nonblocking() (added in MySQL 8.0.16), which
+ * never blocks by its own contract, instead of calling the blocking
+ * mysql_next_result() directly. Mixing this with the ordinary blocking
+ * API on the same connection is explicitly documented as supported, so
+ * nothing else in this file needs to change:
+ * https://dev.mysql.com/doc/c-api/8.0/en/c-api-asynchronous-interface-usage.html
  */
-static VALUE rb_mysql_client_next_result(VALUE self)
-{
-    int ret;
-    GET_CLIENT(self);
-    ret = mysql_next_result(wrapper->client);
+static enum net_async_status next_result_nonblocking(VALUE self, mysql_client_wrapper *wrapper) {
+  enum net_async_status status;
+
+  for (;;) {
+    status = mysql_next_result_nonblocking(wrapper->client);
+    if (status != NET_ASYNC_NOT_READY) {
+      return status;
+    }
+    wait_for_readable_with_timeout(self, wrapper->client->net.fd);
+  }
+}
+#else
+/* Fallback for MariaDB (mysql_next_result_nonblocking doesn't exist there
+ * under this name -- MariaDB Connector/C has its own mysql_next_result_start
+ * / _cont pair instead, not yet wired up here) and for MySQL builds older
+ * than 8.0.16. Releasing the GVL around the still-blocking call at least
+ * lets other Ruby threads run during the wait; it does not make the call
+ * interruptible via Thread#raise/Timeout.timeout the way the nonblocking
+ * path above is, since libmysqlclient's own blocking read loop may retry
+ * internally on the signal RUBY_UBF_IO sends. */
+static void *nogvl_next_result(void *ptr) {
+  mysql_client_wrapper *wrapper = ptr;
+  /* Cast through intptr_t, not straight through void*, to round-trip a
+   * signed int (including -1 for "no more results") intact. */
+  return (void *)(intptr_t)mysql_next_result(wrapper->client);
+}
+#endif
+
+static VALUE mysql2_next_result_reset_state(VALUE self) {
+  GET_CLIENT(self);
+
+  if (wrapper->state != MYSQL2_CLIENT_IDLE) {
+    wrapper->state = MYSQL2_CLIENT_IDLE;
+    mysql2_reap_pending_result_frees(wrapper);
+    mysql2_reap_pending_stmt_closes(wrapper);
+  }
+
+  return Qnil;
+}
+
+static VALUE mysql2_next_result_body(VALUE self) {
+  GET_CLIENT(self);
+
+  /* Mark the connection busy for the duration of the wait: on the fast
+   * path above, the GVL is no longer held for the whole call the way the
+   * old blocking mysql_next_result() incidentally held it, so a Statement
+   * on another thread getting GC'd during that window must not be allowed
+   * to enqueue-and-flush a close over this same socket mid-command. See
+   * the QUERYING/IDLE bracket rb_mysql_query uses for the same reason. */
+  wrapper->state = MYSQL2_CLIENT_QUERYING;
+
+#if defined(HAVE_MYSQL_NEXT_RESULT_NONBLOCKING) && !defined(_WIN32)
+  {
+    enum net_async_status status = next_result_nonblocking(self, wrapper);
     wrapper->affected_rows = mysql_affected_rows(wrapper->client);
+
+    switch (status) {
+      case NET_ASYNC_ERROR:
+        rb_raise_mysql2_error(wrapper);
+        return Qfalse; /* unreached */
+      case NET_ASYNC_COMPLETE_NO_MORE_RESULTS:
+        return Qfalse;
+      case NET_ASYNC_COMPLETE:
+      default:
+        return Qtrue;
+    }
+  }
+#else
+  {
+    int ret = (int)(intptr_t)rb_thread_call_without_gvl(nogvl_next_result, wrapper, RUBY_UBF_IO, 0);
+    wrapper->affected_rows = mysql_affected_rows(wrapper->client);
+
     if (ret > 0) {
       rb_raise_mysql2_error(wrapper);
-      return Qfalse;
+      return Qfalse; /* unreached */
     } else if (ret == 0) {
       return Qtrue;
     } else {
       return Qfalse;
     }
+  }
+#endif
+}
+
+/* call-seq:
+ *    client.next_result
+ *
+ * Fetch the next result set from the server.
+ * Returns true or false if there was another result in the multi-statement set.
+ */
+static VALUE rb_mysql_client_next_result(VALUE self)
+{
+  GET_CLIENT(self);
+  REQUIRE_CONNECTED(wrapper);
+
+  return rb_ensure(mysql2_next_result_body, self, mysql2_next_result_reset_state, self);
 }
 
 /* call-seq:
@@ -1607,28 +1741,16 @@ static VALUE rb_mysql_client_next_result(VALUE self)
  */
 static VALUE rb_mysql_client_store_result(VALUE self)
 {
-  MYSQL_RES * result;
-  VALUE resultObj;
-  VALUE current;
   GET_CLIENT(self);
 
-  result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
-
-  if (result == NULL) {
-    if (mysql_errno(wrapper->client) != 0) {
-      rb_raise_mysql2_error(wrapper);
-    }
-    /* no data and no error, so query was not a SELECT */
-    return Qnil;
-  }
-
-  // Duplicate the options hash and put the copy in the Result object
-  current = rb_hash_dup(rb_ivar_get(self, intern_current_query_options));
-  (void)RB_GC_GUARD(current);
-  Check_Type(current, T_HASH);
-  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
-
-  return resultObj;
+  /* Honor :stream on later result sets of a multi-statement query the same
+   * way async_result already does for the first one -- previously this
+   * always called mysql_store_result regardless, silently buffering every
+   * result set after the first even when the original query asked to
+   * stream them (see #600). Also refreshes affected_rows: it's a
+   * per-statement value at the C level, so it needs re-reading here too,
+   * not just by async_result for the batch's first statement. */
+  return mysql2_fetch_result_set(self, wrapper);
 }
 
 /* call-seq:

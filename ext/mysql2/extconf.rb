@@ -187,6 +187,7 @@ have_type('my_bool', mysql_h)
 
 # detect mysql functions
 have_func('mysql_ssl_set', mysql_h)
+have_func('mysql_next_result_nonblocking', mysql_h) # Added in MySQL 8.0.16; no MariaDB Connector/C equivalent under this name (see mysql_next_result_start/_cont)
 
 ### Compiler flags to help catch errors
 

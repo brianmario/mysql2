@@ -363,6 +363,29 @@ When secure_auth is enabled, the server will refuse a connection if the account 
 The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
 To bypass this restriction in the client, pass the option `:secure_auth => false` to Mysql2::Client.new().
 
+### `caching_sha2_password` and GnuTLS-linked client libraries
+
+MySQL 8's default authentication plugin, `caching_sha2_password`,
+RSA-encrypts the password with the server's public key on a non-encrypted
+TCP connection. If you see this error:
+
+```
+Mysql2::Error: RSA Encryption not supported - caching_sha2_password plugin was built with GnuTLS support
+```
+
+your MariaDB Connector/C build can't take that step. Connector/C
+implements it for the OpenSSL and WinCrypt backends, not for GnuTLS.
+Debian and its derivatives ship a GnuTLS-linked `mariadb-connector-c` by
+default.
+
+Suggested alternatives:
+* Connect over TLS: `:ssl_mode => :required`.
+* Connect over a Unix socket instead of TCP: `:socket => '/path/to/mysql.sock'`.
+* Change the server account's authentication plugin, e.g. to
+  `mysql_native_password`, if TLS isn't an option. Understand the security
+  tradeoff first.
+* Use a client library linked against OpenSSL instead of GnuTLS.
+
 ### Flags option parsing
 
 The `:flags` parameter accepts an integer, a string, or an array. The integer
@@ -441,6 +464,26 @@ while client.next_result
   # result now contains the next result set
 end
 ```
+
+The call to `client.query` returns the *first* statement's
+result -- or `nil`, if that first statement doesn't produce one at all (e.g.
+`CREATE TABLE` or `INSERT`, same as outside of `MULTI_STATEMENTS`). This is
+still true if you pass `:async => true`: `client.async_result` also only
+returns the first statement's result.
+
+The rest of the batch isn't deferred. The server runs every statement
+immediately, whether or not you ever call `next_result`. But you still have
+to loop over `client.next_result`/`client.store_result`, as shown above, to
+retrieve each later result or find out if a later statement errored.
+
+Skip that loop and try to reuse the connection, and you'll get this error:
+
+```
+Mysql2::Error: Commands out of sync; you can't run this command now
+```
+
+Drain the loop to clear it. Or call `client.abandon_results!` to discard the
+remaining results without reading them.
 
 Repeated calls to `client.next_result` will return true, false, or raise an
 exception if the respective query erred. When `client.next_result` returns true,
@@ -766,6 +809,31 @@ automatically when you run rake (or explicitly `rake spec/configuration.yml`).
 
 For a normal installation on a Mac, you most likely do not need to do anything,
 though.
+
+## I'm running an older version of Rails and need a back-ported feature
+
+Requests to backport features, bug fixes, or newer MySQL/MariaDB
+compatibility to old mysql2 release lines can't be honored. Keeping old
+branches working would suggest they're properly supported and maintained
+when they aren't. An EOL Rails or Ruby version isn't receiving security
+patches either, and testing in CI becomes impossible over time as CI
+providers prune old runtime images.
+
+Keeping an older application running means taking responsibility for
+its older open-source dependencies.
+For example, to use
+Rails 3.2 with a newer mysql2 gem:
+
+1. Fork Rails and set the needed version branch as the default, e.g.
+   [`3-2-stable`](https://github.com/rails/rails/tree/3-2-stable).
+2. Edit
+   [`mysql2_adapter.rb`](https://github.com/rails/rails/blob/3-2-stable/activerecord/lib/active_record/connection_adapters/mysql2_adapter.rb#L1-L6)
+   and change the `gem 'mysql2', '~> 0.3.10'` line to the needed version
+   constraint.
+3. Point the Gemfile at the fork instead of the `rails` gem, using
+   [Bundler's git source](https://bundler.io/guides/git.html).
+4. Test the combination in your actual dev, test, and production
+   environments.
 
 ## Special Thanks
 

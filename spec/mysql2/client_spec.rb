@@ -247,6 +247,46 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "option coherence warnings" do
+    it "warns when :sslkey is given without :sslcert" do
+      expect do
+        begin
+          new_client(sslkey: '/path/to/client-key.pem')
+        rescue Mysql2::Error
+          # MariaDB Connector/C rejects a lone key at connect; the warning precedes it.
+        end
+      end.to output(/:sslkey and :sslcert only take effect together/).to_stderr
+    end
+
+    it "warns when :sslcert is given without :sslkey" do
+      expect do
+        begin
+          new_client(sslcert: '/path/to/client-cert.pem')
+        rescue Mysql2::Error
+          # MariaDB Connector/C rejects a lone certificate at connect; the warning precedes it.
+        end
+      end.to output(/:sslkey and :sslcert only take effect together/).to_stderr
+    end
+
+    it "warns when :stream is enabled with :cache_rows left on" do
+      expect do
+        new_client(stream: true)
+      end.to output(/:cache_rows is ignored on a client with :stream enabled/).to_stderr
+    end
+
+    it "does not warn when :stream is enabled with :cache_rows disabled" do
+      expect do
+        new_client(stream: true, cache_rows: false)
+      end.not_to output(/:cache_rows is ignored/).to_stderr
+    end
+
+    it "does not warn on a plain connection" do
+      expect do
+        new_client
+      end.not_to output(/:sslkey and :sslcert only take effect together|:cache_rows is ignored/).to_stderr
+    end
+  end
+
   def run_gc
     if defined?(Rubinius)
       GC.run(true)

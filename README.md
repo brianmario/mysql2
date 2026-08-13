@@ -638,6 +638,16 @@ emoji; `utf8mb4` can. See the
 docs for the full list of supported character sets and how they interact
 with column- and server-level collations.
 
+Under `:cast => false` and `:cast => :fast`, values from numeric and
+date/time columns come back as `ASCII-8BIT`-encoded Strings. The
+connection's encoding only applies to text columns. Numeric and
+date/time values are always plain ASCII, so this is safe for
+concatenation, comparison, and interpolation with other
+ASCII-compatible character sets, including ISO-8859 and UTF-8. Ruby's
+`Encoding::ASCII-8BIT` and `Encoding::Binary` are aliases of one
+another; it's the same encoding used for `BLOB`, `BINARY`, and
+`VARBINARY` columns too.
+
 ### Forcing a string encoding
 
 Pass `:force_encoding` to `Client#query` or `Statement#execute` to retag string results with an encoding of your choosing:

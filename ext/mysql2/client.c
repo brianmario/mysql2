@@ -1250,7 +1250,14 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
     return str;
   } else {
     rb_str = rb_str_new((const char*)newStr, newLen);
-    rb_enc_associate(rb_str, conn_enc);
+    /* mysql_real_escape_string() only backslash-escapes a handful of
+     * syntax-breaking bytes; it doesn't transcode or validate the rest.
+     * Tag the result with str's own encoding (already normalized to
+     * conn_enc above for anything transcodable, left as-is for binary),
+     * not unconditionally conn_enc -- otherwise binary input that happens
+     * to contain an escapable byte comes back mislabeled, while identical
+     * binary input that doesn't need escaping is correctly left alone. */
+    rb_enc_associate(rb_str, rb_enc_get(str));
     if (default_internal_enc) {
       rb_str = rb_str_export_to_enc(rb_str, default_internal_enc);
     }

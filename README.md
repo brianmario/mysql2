@@ -442,6 +442,26 @@ while client.next_result
 end
 ```
 
+The call to `client.query` returns the *first* statement's
+result -- or `nil`, if that first statement doesn't produce one at all (e.g.
+`CREATE TABLE` or `INSERT`, same as outside of `MULTI_STATEMENTS`). This is
+still true if you pass `:async => true`: `client.async_result` also only
+returns the first statement's result.
+
+The rest of the batch isn't deferred. The server runs every statement
+immediately, whether or not you ever call `next_result`. But you still have
+to loop over `client.next_result`/`client.store_result`, as shown above, to
+retrieve each later result or find out if a later statement errored.
+
+Skip that loop and try to reuse the connection, and you'll get this error:
+
+```
+Mysql2::Error: Commands out of sync; you can't run this command now
+```
+
+Drain the loop to clear it. Or call `client.abandon_results!` to discard the
+remaining results without reading them.
+
 Repeated calls to `client.next_result` will return true, false, or raise an
 exception if the respective query erred. When `client.next_result` returns true,
 call `client.store_result` to retrieve a result object. Exceptions are not

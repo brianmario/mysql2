@@ -820,7 +820,7 @@ patches either, and testing in CI becomes impossible over time as CI
 providers prune old runtime images.
 
 Keeping an older application running means taking responsibility for
-these older open-source dependencies. Fork Rails instead, and point its
+its older open-source dependencies.
 bundled mysql2 adapter at a newer mysql2 version. For example, to use
 Rails 3.2 with a newer mysql2 gem:
 

@@ -110,11 +110,8 @@ struct nogvl_send_query_args {
   const char *sql_ptr;
   long sql_len;
   mysql_client_wrapper *wrapper;
-  /* Set by do_send_query itself, only once mysql_send_query has actually
-   * returned -- lets disconnect_send_query_if_incomplete (its rb_ensure
-   * companion) tell a normal completion (success or an error already
-   * raised and handled here) apart from any other kind of unwind, e.g.
-   * Thread#exit, which do_send_query never gets a chance to react to. */
+  /* Set once do_send_query finishes normally; lets its rb_ensure
+   * companion tell that apart from a Thread#exit-style unwind. */
   int completed;
 };
 
@@ -964,11 +961,8 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 struct async_query_args {
   int fd;
   VALUE self;
-  /* Set by do_query itself, only once its wait loop has actually finished.
-   * Same purpose as nogvl_send_query_args.completed below: lets this
-   * struct's rb_ensure companion tell a normal completion (success, or an
-   * error already raised and handled here) apart from any other kind of
-   * unwind, e.g. Thread#exit. */
+  mysql_client_wrapper *wrapper;
+  /* Same purpose as nogvl_send_query_args.completed above. */
   int completed;
 };
 
@@ -991,25 +985,17 @@ static void invalidate_after_interrupted_query(mysql_client_wrapper *wrapper) {
   }
 }
 
-/* rb_rescue2 companion (do_ping): only catches ordinary Ruby exceptions,
- * so this re-raises after cleanup -- appropriate for do_ping, which has no
- * equivalent Thread#exit hazard to worry about (a single blocking call,
- * not a send-then-separately-read pair with a window in between). */
+/* rb_rescue2 companion (do_ping): re-raises after cleanup. do_ping is a
+ * single blocking call, so it has no Thread#exit window to worry about. */
 static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   GET_CLIENT(self);
   invalidate_after_interrupted_query(wrapper);
   rb_exc_raise(error);
 }
 
-/* rb_ensure companions (do_send_query, do_query below): unlike
- * disconnect_and_raise above, these never raise anything themselves --
- * they only run from rb_ensure, which continues whatever unwind (a raised
- * exception, or a non-exception one like Thread#exit) is already in
- * progress on its own once this returns. That's the difference that
- * matters here: do_send_query and do_query each have a window where
- * active_fiber is set but neither has reached the point that would clear
- * it, and only rb_ensure (not rb_rescue2) is guaranteed to run during a
- * non-exception unwind like Thread#exit. */
+/* rb_ensure companions (do_send_query, do_query): unlike disconnect_and_raise
+ * above, these never raise -- rb_ensure runs them during any unwind, including
+ * a non-exception one like Thread#exit, which rb_rescue2 can't see. */
 static VALUE disconnect_send_query_if_incomplete(VALUE argsval) {
   struct nogvl_send_query_args *query_args = (void *)argsval;
 
@@ -1024,8 +1010,7 @@ static VALUE disconnect_async_query_if_incomplete(VALUE argsval) {
   struct async_query_args *async_args = (void *)argsval;
 
   if (!async_args->completed) {
-    GET_CLIENT(async_args->self);
-    invalidate_after_interrupted_query(wrapper);
+    invalidate_after_interrupted_query(async_args->wrapper);
   }
 
   return Qnil;
@@ -1198,6 +1183,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   } else {
     async_args.fd = wrapper->client->net.fd;
     async_args.self = self;
+    async_args.wrapper = wrapper;
     async_args.completed = 0;
 
     rb_ensure(do_query, (VALUE)&async_args, disconnect_async_query_if_incomplete, (VALUE)&async_args);

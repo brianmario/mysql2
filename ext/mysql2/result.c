@@ -84,6 +84,12 @@ typedef struct {
    * per row. Changing it mid-iteration therefore no longer affects later rows
    * of that same call; the next #each call observes the new value. */
   rb_encoding *default_internal_enc;
+  /* Array-mode cell scratch: one slot per field, ALLOCV-allocated (so the
+   * VALUEs written into it are GC-visible) once per #each call and reused for
+   * every row. Each row's cells are cast into it and the row is built with a
+   * single rb_ary_new4 instead of one rb_ary_push per cell. NULL in hash mode
+   * and when the fetch functions can never run (freed result). */
+  VALUE *rowScratch;
 } result_each_args;
 
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
@@ -923,7 +929,7 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
 
 static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, const result_each_args *args)
 {
-  VALUE rowVal;
+  VALUE rowVal = Qnil;
   unsigned int i = 0;
 
   rb_encoding *default_internal_enc;
@@ -945,9 +951,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
-  if (args->asArray) {
-    rowVal = rb_ary_new2(wrapper->numberOfFields);
-  } else {
+  if (!args->asArray) {
 #ifdef HAVE_RB_HASH_NEW_CAPA
     rowVal = rb_hash_new_capa(wrapper->numberOfFields);
 #else
@@ -1185,10 +1189,14 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     }
 
     if (args->asArray) {
-      rb_ary_push(rowVal, val);
+      args->rowScratch[i] = val;
     } else {
       rb_hash_aset(rowVal, field, val);
     }
+  }
+
+  if (args->asArray) {
+    rowVal = rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
   }
 
   return rowVal;
@@ -1213,7 +1221,7 @@ static int decimal_str_is_zero(const char *str) {
 
 static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const result_each_args *args)
 {
-  VALUE rowVal;
+  VALUE rowVal = Qnil;
   MYSQL_ROW row;
   unsigned int i = 0;
   unsigned long * fieldLengths;
@@ -1257,7 +1265,6 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
      * first fetched row and an empty result set stays untouched, exactly
      * as it was when the (never-entered) cell loop did the materializing. */
     rb_mysql_result_materialize_field_names(self, args->symbolizeKeys);
-    rowVal = rb_ary_new2(wrapper->numberOfFields);
   } else {
     /* Pre-size to the column count so a row with more than the default
      * number of entries does not have to rehash while being built. */
@@ -1293,10 +1300,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
       }
 
       if (args->asArray) {
-        rb_ary_push(rowVal, val);
+        args->rowScratch[i] = val;
       } else {
         rb_hash_aset(rowVal, field, val);
       }
+    }
+    if (args->asArray) {
+      rowVal = rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
     }
     return rowVal;
   }
@@ -1517,17 +1527,20 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
       }
       if (args->asArray) {
-        rb_ary_push(rowVal, val);
+        args->rowScratch[i] = val;
       } else {
         rb_hash_aset(rowVal, field, val);
       }
     } else {
       if (args->asArray) {
-        rb_ary_push(rowVal, Qnil);
+        args->rowScratch[i] = Qnil;
       } else {
         rb_hash_aset(rowVal, field, Qnil);
       }
     }
+  }
+  if (args->asArray) {
+    rowVal = rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
   }
   return rowVal;
 }
@@ -1743,6 +1756,8 @@ static VALUE rb_mysql_result_each_(VALUE self,
 
 static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   result_each_args args;
+  VALUE scratch_holder = 0;
+  VALUE rows;
   VALUE opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone;
   int symbolizeKeys, asArray, castBool, cacheRows;
@@ -1927,13 +1942,29 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
    * result_each_args. */
   args.default_internal_enc = rb_default_internal_encoding();
 
+  /* See the field's comment in result_each_args. A freed result only
+   * replays cached rows (or raises), never fetches, so wrapper->result is
+   * valid whenever the scratch is allocated -- and the fetch functions only
+   * touch the scratch after their own freed-result guards pass. A raise or
+   * break during iteration skips the ALLOCV_END below and leaks the
+   * heap-allocated form of the buffer until GC reclaims scratch_holder;
+   * that is the standard ALLOCV trade, bounded to one buffer per raised
+   * iteration because the allocation is per-#each, not per-row. */
+  args.rowScratch = NULL;
+  if (asArray && !wrapper->resultFreed) {
+    args.rowScratch = ALLOCV_N(VALUE, scratch_holder, mysql_num_fields(wrapper->result));
+  }
+
   if (wrapper->stmt_wrapper) {
     fetch_row_func = rb_mysql_result_fetch_row_stmt;
   } else {
     fetch_row_func = rb_mysql_result_fetch_row;
   }
 
-  return rb_mysql_result_each_(self, fetch_row_func, &args);
+  rows = rb_mysql_result_each_(self, fetch_row_func, &args);
+  ALLOCV_END(scratch_holder);
+
+  return rows;
 }
 
 /* call-seq:

@@ -119,6 +119,17 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(stmt.execute(1, as: :array).first).to eq([1])
   end
 
+  it "should yield every cell in field order for wide array rows" do
+    width = 40
+    stmt = @client.prepare "SELECT #{Array.new(width) { |i| "#{i} AS c#{i}" }.join(', ')}"
+    expect(stmt.execute(as: :array).first).to eq((0...width).to_a)
+  end
+
+  it "should not carry array row cells over between rows" do
+    stmt = @client.prepare 'SELECT 1 AS a, NULL AS b UNION SELECT NULL, 2'
+    expect(stmt.execute(as: :array).to_a).to eq([[1, nil], [nil, 2]])
+  end
+
   it "should raise TypeError naming the parameter index, class, and value for an unsupported bind type" do
     stmt = @client.prepare 'SELECT ?, ?'
 

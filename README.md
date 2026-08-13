@@ -442,7 +442,7 @@ while client.next_result
 end
 ```
 
-A single call to `client.query` only ever returns the *first* statement's
+The call to `client.query` returns the *first* statement's
 result -- or `nil`, if that first statement doesn't produce one at all (e.g.
 `CREATE TABLE` or `INSERT`, same as outside of `MULTI_STATEMENTS`). This is
 still true if you pass `:async => true`: `client.async_result` also only

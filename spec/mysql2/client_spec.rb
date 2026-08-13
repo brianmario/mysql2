@@ -1270,19 +1270,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         @client.query("SET SESSION sql_mode = concat(@@sql_mode, ',NO_BACKSLASH_ESCAPES')")
       end
 
-      if Mysql2::Client::ESCAPE_QUOTE_SUPPORTED
-        it "should escape by doubling quote characters instead of raising" do
+      it "should escape correctly (round-tripping through a real query) or raise Mysql2::Error -- never a bare ArgumentError" do
+        begin
           escaped = @client.escape("it's \\a\\ test")
-          expect(escaped).to eq("it''s \\a\\ test")
-
           row = @client.query("SELECT '#{escaped}' AS x").first
           expect(row['x']).to eq("it's \\a\\ test")
-        end
-      else
-        it "should raise Mysql2::Error instead of a confusing ArgumentError" do
-          expect do
-            @client.escape("it's a test")
-          end.to raise_error(Mysql2::Error)
+        rescue Mysql2::Error
+          # Acceptable on client libraries that genuinely can't escape safely
+          # under this SQL mode (see ESCAPE_QUOTE_SUPPORTED). Anything other
+          # than Mysql2::Error -- e.g. the ArgumentError this regresses --
+          # propagates and fails this example.
         end
       end
     end

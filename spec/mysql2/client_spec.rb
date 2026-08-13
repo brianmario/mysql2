@@ -219,15 +219,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   def run_gc
     if defined?(Rubinius)
       GC.run(true)
-      GC.run(true)
     else
-      # A second pass catches objects whose only remaining reference was a
-      # stale VALUE sitting in a since-reused VM stack slot or register --
-      # conservative stack scanning treats that as live, so the first sweep
-      # can miss a temporary that's otherwise genuinely unreachable. Calling
-      # GC.start again after that slot has been overwritten by this second
-      # call's own machinery reliably clears it.
-      GC.start
       GC.start
     end
     sleep(0.5)
@@ -281,30 +273,19 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(client.pending_result_frees).to eq(0)
   end
 
-  # A real method call, not just a block: the throwaway Client this creates
-  # must be unreachable by the time run_gc's caller runs GC.start, and a
-  # block sharing the caller's own VM stack frame is more likely to leave a
-  # stale, conservatively-scanned reference to it sitting in a slot that
-  # frame doesn't otherwise reuse. Returning from a real method call gives
-  # that frame back for reuse before GC ever runs. Returns the connection's
-  # thread_id (a plain Integer, so it can't itself keep the Client alive)
-  # rather than the Client -- the caller needs to identify this exact
-  # connection later, not hold a reference to it.
-  def create_and_query_throwaway_client
-    Mysql2::Client.new(DatabaseCredentials['root']).tap { |c| c.query('SELECT 1') }.thread_id
-  end
-
   it "should not leave dangling connections after garbage collection" do
     run_gc
     baseline_aborted = @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a
 
     # Track these 10 connections by thread_id rather than by the raw
-    # Threads_connected count: that count is shared across the whole test
-    # suite, and other tests' connections settling asynchronously in the
-    # background (observed locally: the count can drop *below* an earlier
-    # baseline as unrelated connections finish closing) make it an
-    # unreliable signal for whether *these* 10 specifically closed.
-    thread_ids = Array.new(10) { create_and_query_throwaway_client }
+    # Threads_connected count: that count is scoped to the whole server, not
+    # to this test, so any other connection opening or closing nearby --
+    # including from unrelated tests earlier in the suite -- can perturb it
+    # (observed locally: the count can drop *below* an earlier baseline as
+    # an unrelated connection finishes closing).
+    thread_ids = 10.times.map do
+      Mysql2::Client.new(DatabaseCredentials['root']).tap { |c| c.query('SELECT 1') }.thread_id
+    end
 
     run_gc
 

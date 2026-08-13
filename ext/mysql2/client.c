@@ -1723,7 +1723,7 @@ static VALUE mysql2_next_result_body(VALUE self) {
  *    client.next_result
  *
  * Fetch the next result set from the server.
- * Returns nothing.
+ * Returns true or false if there was another result in the multi-statement set.
  */
 static VALUE rb_mysql_client_next_result(VALUE self)
 {

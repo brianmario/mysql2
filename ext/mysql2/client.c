@@ -1013,15 +1013,19 @@ static VALUE disconnect_query_if_incomplete(VALUE completionval) {
   return Qnil;
 }
 
-static VALUE do_query(VALUE args) {
-  struct async_query_args *async_args = (void *)args;
+/* Waits for fd to become readable, honoring @read_timeout. Shared by
+ * do_query below and next_result_nonblocking further down in this file.
+ * rb_wait_for_single_fd itself releases the GVL and is interruptible
+ * (Thread#raise, Timeout.timeout), unlike a raw blocking read inside
+ * libmysqlclient. */
+static void wait_for_readable_with_timeout(VALUE self, int fd) {
   struct timeval tv;
   struct timeval *tvp;
   long int sec;
   int retval;
   VALUE read_timeout;
 
-  read_timeout = rb_ivar_get(async_args->self, intern_read_timeout);
+  read_timeout = rb_ivar_get(self, intern_read_timeout);
 
   tvp = NULL;
   if (!NIL_P(read_timeout)) {
@@ -1038,21 +1042,20 @@ static VALUE do_query(VALUE args) {
     tvp->tv_usec = 0;
   }
 
-  for(;;) {
-    retval = rb_wait_for_single_fd(async_args->fd, RB_WAITFD_IN, tvp);
+  retval = rb_wait_for_single_fd(fd, RB_WAITFD_IN, tvp);
 
-    if (retval == 0) {
-      rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
-    }
-
-    if (retval < 0) {
-      rb_sys_fail(0);
-    }
-
-    if (retval > 0) {
-      break;
-    }
+  if (retval == 0) {
+    rb_raise(cMysql2TimeoutError, "Timeout waiting for a response from the last query. (waited %d seconds)", FIX2INT(read_timeout));
   }
+  if (retval < 0) {
+    rb_sys_fail(0);
+  }
+}
+
+static VALUE do_query(VALUE args) {
+  struct async_query_args *async_args = (void *)args;
+
+  wait_for_readable_with_timeout(async_args->self, async_args->fd);
 
   async_args->completion.completed = 1;
   return Qnil;
@@ -1616,6 +1619,98 @@ static VALUE rb_mysql_client_more_results(VALUE self)
     return Qtrue;
 }
 
+#if defined(HAVE_MYSQL_NEXT_RESULT_NONBLOCKING) && !defined(_WIN32)
+/* Polls mysql_next_result_nonblocking() (added in MySQL 8.0.16), which
+ * never blocks by its own contract, instead of calling the blocking
+ * mysql_next_result() directly. Mixing this with the ordinary blocking
+ * API on the same connection is explicitly documented as supported, so
+ * nothing else in this file needs to change:
+ * https://dev.mysql.com/doc/c-api/8.0/en/c-api-asynchronous-interface-usage.html
+ */
+static enum net_async_status next_result_nonblocking(VALUE self, mysql_client_wrapper *wrapper) {
+  enum net_async_status status;
+
+  for (;;) {
+    status = mysql_next_result_nonblocking(wrapper->client);
+    if (status != NET_ASYNC_NOT_READY) {
+      return status;
+    }
+    wait_for_readable_with_timeout(self, wrapper->client->net.fd);
+  }
+}
+#else
+/* Fallback for MariaDB (mysql_next_result_nonblocking doesn't exist there
+ * under this name -- MariaDB Connector/C has its own mysql_next_result_start
+ * / _cont pair instead, not yet wired up here) and for MySQL builds older
+ * than 8.0.16. Releasing the GVL around the still-blocking call at least
+ * lets other Ruby threads run during the wait; it does not make the call
+ * interruptible via Thread#raise/Timeout.timeout the way the nonblocking
+ * path above is, since libmysqlclient's own blocking read loop may retry
+ * internally on the signal RUBY_UBF_IO sends. */
+static void *nogvl_next_result(void *ptr) {
+  mysql_client_wrapper *wrapper = ptr;
+  /* Cast through intptr_t, not straight through void*, to round-trip a
+   * signed int (including -1 for "no more results") intact. */
+  return (void *)(intptr_t)mysql_next_result(wrapper->client);
+}
+#endif
+
+static VALUE mysql2_next_result_reset_state(VALUE self) {
+  GET_CLIENT(self);
+
+  if (wrapper->state != MYSQL2_CLIENT_IDLE) {
+    wrapper->state = MYSQL2_CLIENT_IDLE;
+    mysql2_reap_pending_result_frees(wrapper);
+    mysql2_reap_pending_stmt_closes(wrapper);
+  }
+
+  return Qnil;
+}
+
+static VALUE mysql2_next_result_body(VALUE self) {
+  GET_CLIENT(self);
+
+  /* Mark the connection busy for the duration of the wait: on the fast
+   * path above, the GVL is no longer held for the whole call the way the
+   * old blocking mysql_next_result() incidentally held it, so a Statement
+   * on another thread getting GC'd during that window must not be allowed
+   * to enqueue-and-flush a close over this same socket mid-command. See
+   * the QUERYING/IDLE bracket rb_mysql_query uses for the same reason. */
+  wrapper->state = MYSQL2_CLIENT_QUERYING;
+
+#if defined(HAVE_MYSQL_NEXT_RESULT_NONBLOCKING) && !defined(_WIN32)
+  {
+    enum net_async_status status = next_result_nonblocking(self, wrapper);
+    wrapper->affected_rows = mysql_affected_rows(wrapper->client);
+
+    switch (status) {
+      case NET_ASYNC_ERROR:
+        rb_raise_mysql2_error(wrapper);
+        return Qfalse; /* unreached */
+      case NET_ASYNC_COMPLETE_NO_MORE_RESULTS:
+        return Qfalse;
+      case NET_ASYNC_COMPLETE:
+      default:
+        return Qtrue;
+    }
+  }
+#else
+  {
+    int ret = (int)(intptr_t)rb_thread_call_without_gvl(nogvl_next_result, wrapper, RUBY_UBF_IO, 0);
+    wrapper->affected_rows = mysql_affected_rows(wrapper->client);
+
+    if (ret > 0) {
+      rb_raise_mysql2_error(wrapper);
+      return Qfalse; /* unreached */
+    } else if (ret == 0) {
+      return Qtrue;
+    } else {
+      return Qfalse;
+    }
+  }
+#endif
+}
+
 /* call-seq:
  *    client.next_result
  *
@@ -1624,18 +1719,10 @@ static VALUE rb_mysql_client_more_results(VALUE self)
  */
 static VALUE rb_mysql_client_next_result(VALUE self)
 {
-    int ret;
-    GET_CLIENT(self);
-    ret = mysql_next_result(wrapper->client);
-    wrapper->affected_rows = mysql_affected_rows(wrapper->client);
-    if (ret > 0) {
-      rb_raise_mysql2_error(wrapper);
-      return Qfalse;
-    } else if (ret == 0) {
-      return Qtrue;
-    } else {
-      return Qfalse;
-    }
+  GET_CLIENT(self);
+  REQUIRE_CONNECTED(wrapper);
+
+  return rb_ensure(mysql2_next_result_body, self, mysql2_next_result_reset_state, self);
 }
 
 /* call-seq:

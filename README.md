@@ -621,8 +621,6 @@ Mysql                  0.080000   0.000000   0.080000 (  0.129355)
 do_mysql               0.520000   0.010000   0.530000 (  0.574619)
 ```
 
-Although Mysql2 performs reasonably well at retrieving uncasted data, it (currently) is not as fast as the Mysql gem.  In spite of this small disadvantage, Mysql2 still sports a friendlier interface and doesn't block the entire ruby process when querying.
-
 ### Character encoding
 
 Pass `:encoding` to `Mysql2::Client.new` to set the connection's character

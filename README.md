@@ -812,24 +812,17 @@ though.
 
 ## I'm running an older version of Rails and need a back-ported feature
 
-Some Rails versions are pinned to specific release lines of mysql2
-that are no longer maintained. Applications using such older versions
-of Rails may find themselves trying to upgrade mysql2 gem to support
-a newer version of MySQL or MariaDB that is beyond the required
-version for the app's Rails gem.
+Requests to backport features, bug fixes, or newer MySQL/MariaDB
+compatibility to old mysql2 release lines can't be honored. Keeping old
+branches working would suggest they're properly supported and maintained,
+when they aren't. An EOL Rails or Ruby version isn't receiving security
+patches either, and testing it in CI becomes impossible over time as CI
+providers prune old runtime images.
 
-Requests for specific features, bug fixes, or database engine
-compatibility backports cannot be honored.
-
-An EOL Rails or Ruby version isn't receiving security patches either,
-and the whole works becomes impossible to test in CI over time as CI
-services prune older versions from their runtime environments.
-
-### Fork dependencies
-
-Fork Rails at the needed version branch, and repoint its bundled mysql2
-adapter at the newer gem version. For example, to use Rails 3.2 with a
-newer mysql2 gem:
+Keeping an older application running means taking responsibility for
+these older open-source dependencies. Fork Rails instead, and point its
+bundled mysql2 adapter at a newer mysql2 version. For example, to use
+Rails 3.2 with a newer mysql2 gem:
 
 1. Fork Rails and set the needed version branch as the default, e.g.
    [`3-2-stable`](https://github.com/rails/rails/tree/3-2-stable).
@@ -839,8 +832,8 @@ newer mysql2 gem:
    constraint.
 3. Point the Gemfile at the fork instead of the `rails` gem, using
    [Bundler's git source](https://bundler.io/guides/git.html).
-4. Test the combination in the specific dev, test, and production
-   environment that is needed.
+4. Test the combination in your actual dev, test, and production
+   environments.
 
 ## Special Thanks
 

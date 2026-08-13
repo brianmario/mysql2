@@ -129,6 +129,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     stmt = @client.prepare 'SELECT 1 AS a, NULL AS b UNION SELECT NULL, 2'
     expect(stmt.execute(as: :array).to_a).to eq([[1, nil], [nil, 2]])
   end
+
   it "should raise TypeError naming the parameter index, class, and value for an unsupported bind type" do
     stmt = @client.prepare 'SELECT ?, ?'
 

@@ -621,7 +621,22 @@ Mysql                  0.080000   0.000000   0.080000 (  0.129355)
 do_mysql               0.520000   0.010000   0.530000 (  0.574619)
 ```
 
-Although Mysql2 performs reasonably well at retrieving uncasted data, it (currently) is not as fast as the Mysql gem.  In spite of this small disadvantage, Mysql2 still sports a friendlier interface and doesn't block the entire ruby process when querying.
+### Character encoding
+
+Pass `:encoding` to `Mysql2::Client.new` to set the connection's character
+set, as a MySQL/MariaDB charset name:
+
+``` ruby
+Mysql2::Client.new(:encoding => 'utf8mb4')
+```
+
+The default is `utf8mb4`. `utf8mb4` is not the same as MySQL/MariaDB's own
+`utf8`, which is really `utf8mb3` and can't hold 4-byte characters like most
+emoji; `utf8mb4` can. See the
+[MySQL](https://dev.mysql.com/doc/refman/en/charset-unicode-utf8mb4.html) and
+[MariaDB](https://mariadb.com/kb/en/setting-character-sets-and-collations/)
+docs for the full list of supported character sets and how they interact
+with column- and server-level collations.
 
 ### Forcing a string encoding
 

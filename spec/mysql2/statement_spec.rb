@@ -314,14 +314,11 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
 
     it "should stream a variable-length column past its initially-bound buffer size" do
       # Regression coverage for #1058: a streaming (cursor-mode) prepared
-      # statement never calls mysql_stmt_store_result(), so
-      # fields[i].max_length -- what result buffers are originally sized
-      # from, see rb_mysql_result_alloc_result_buffers -- is never
-      # populated, and buffers start too small. Before the fix, the first
-      # row with any non-trivial data raised "IMPLBUG: caught
-      # MYSQL_DATA_TRUNCATED". This also covers growing back down: a small
-      # row fetched into an already-grown (larger) buffer must still come
-      # back at its own correct length, not the buffer's.
+      # statement's result buffers start too small (see the
+      # MYSQL_DATA_TRUNCATED case in rb_mysql_result_fetch_row_stmt), so a
+      # large column must grow its buffer mid-stream. Also covers a small
+      # row fetched afterward into that already-grown buffer, which must
+      # come back at its own correct length, not the buffer's.
       @client.query("DROP TABLE IF EXISTS stream_stmt_truncation_test")
       @client.query("CREATE TABLE stream_stmt_truncation_test (id INT PRIMARY KEY AUTO_INCREMENT, data MEDIUMBLOB)")
 

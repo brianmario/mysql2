@@ -104,15 +104,22 @@ struct nogvl_connect_args {
  * used to pass all arguments to mysql_send_query while inside
  * rb_thread_call_without_gvl
  */
+/* Shared by nogvl_send_query_args and async_query_args below: passed as its
+ * own rb_ensure data argument (independent of the struct it lives in) so
+ * a single trampoline can clean up after either. completed is set once the
+ * owning call finishes normally, which lets that trampoline tell a normal
+ * completion apart from a Thread#exit-style unwind. */
+struct query_completion {
+  mysql_client_wrapper *wrapper;
+  int completed;
+};
+
 struct nogvl_send_query_args {
   MYSQL *mysql;
   VALUE sql;
   const char *sql_ptr;
   long sql_len;
-  mysql_client_wrapper *wrapper;
-  /* Set once do_send_query finishes normally; lets its rb_ensure
-   * companion tell that apart from a Thread#exit-style unwind. */
-  int completed;
+  struct query_completion completion;
 };
 
 /*
@@ -840,14 +847,14 @@ static void *nogvl_send_query(void *ptr) {
 
 static VALUE do_send_query(VALUE args) {
   struct nogvl_send_query_args *query_args = (void *)args;
-  mysql_client_wrapper *wrapper = query_args->wrapper;
+  mysql_client_wrapper *wrapper = query_args->completion.wrapper;
   if ((VALUE)rb_thread_call_without_gvl(nogvl_send_query, query_args, RUBY_UBF_IO, 0) == Qfalse) {
-    /* An error occurred: raise it and let disconnect_send_query_if_incomplete
+    /* An error occurred: raise it and let disconnect_query_if_incomplete
      * (this call's rb_ensure companion) do the cleanup, same as any other
      * kind of unwind out of this function. */
     rb_raise_mysql2_error(wrapper);
   }
-  query_args->completed = 1;
+  query_args->completion.completed = 1;
   return Qnil;
 }
 
@@ -961,9 +968,7 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
 struct async_query_args {
   int fd;
   VALUE self;
-  mysql_client_wrapper *wrapper;
-  /* Same purpose as nogvl_send_query_args.completed above. */
-  int completed;
+  struct query_completion completion;
 };
 
 /* Shared cleanup for an interrupted send/read/ping: none of them reached
@@ -993,24 +998,16 @@ static VALUE disconnect_and_raise(VALUE self, VALUE error) {
   rb_exc_raise(error);
 }
 
-/* rb_ensure companions (do_send_query, do_query): unlike disconnect_and_raise
- * above, these never raise -- rb_ensure runs them during any unwind, including
- * a non-exception one like Thread#exit, which rb_rescue2 can't see. */
-static VALUE disconnect_send_query_if_incomplete(VALUE argsval) {
-  struct nogvl_send_query_args *query_args = (void *)argsval;
+/* rb_ensure companion (do_send_query, do_query): unlike disconnect_and_raise
+ * above, this never raises -- rb_ensure runs it during any unwind, including
+ * a non-exception one like Thread#exit, which rb_rescue2 can't see. Takes a
+ * struct query_completion directly (passed as rb_ensure's data2, independent
+ * of whatever larger struct it's embedded in) so both call sites share it. */
+static VALUE disconnect_query_if_incomplete(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
 
-  if (!query_args->completed) {
-    invalidate_after_interrupted_query(query_args->wrapper);
-  }
-
-  return Qnil;
-}
-
-static VALUE disconnect_async_query_if_incomplete(VALUE argsval) {
-  struct async_query_args *async_args = (void *)argsval;
-
-  if (!async_args->completed) {
-    invalidate_after_interrupted_query(async_args->wrapper);
+  if (!completion->completed) {
+    invalidate_after_interrupted_query(completion->wrapper);
   }
 
   return Qnil;
@@ -1057,7 +1054,7 @@ static VALUE do_query(VALUE args) {
     }
   }
 
-  async_args->completed = 1;
+  async_args->completion.completed = 1;
   return Qnil;
 }
 #endif
@@ -1151,8 +1148,8 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   args.sql = rb_str_export_to_enc(sql, rb_to_encoding(wrapper->encoding));
   args.sql_ptr = RSTRING_PTR(args.sql);
   args.sql_len = RSTRING_LEN(args.sql);
-  args.wrapper = wrapper;
-  args.completed = 0;
+  args.completion.wrapper = wrapper;
+  args.completion.completed = 0;
 
   rb_mysql_client_set_active_fiber(self, false);
 
@@ -1175,7 +1172,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   wrapper->state = MYSQL2_CLIENT_QUERYING;
 
 #ifndef _WIN32
-  rb_ensure(do_send_query, (VALUE)&args, disconnect_send_query_if_incomplete, (VALUE)&args);
+  rb_ensure(do_send_query, (VALUE)&args, disconnect_query_if_incomplete, (VALUE)&args.completion);
   (void)RB_GC_GUARD(sql);
 
   if (rb_hash_aref(current, sym_async) == Qtrue) {
@@ -1183,10 +1180,10 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   } else {
     async_args.fd = wrapper->client->net.fd;
     async_args.self = self;
-    async_args.wrapper = wrapper;
-    async_args.completed = 0;
+    async_args.completion.wrapper = wrapper;
+    async_args.completion.completed = 0;
 
-    rb_ensure(do_query, (VALUE)&async_args, disconnect_async_query_if_incomplete, (VALUE)&async_args);
+    rb_ensure(do_query, (VALUE)&async_args, disconnect_query_if_incomplete, (VALUE)&async_args.completion);
 
     return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
   }

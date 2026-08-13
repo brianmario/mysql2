@@ -281,49 +281,49 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(client.pending_result_frees).to eq(0)
   end
 
-  # A real method call, not just a block: the 10 throwaway Clients this
-  # creates must be unreachable by the time run_gc's caller runs GC.start,
-  # and a block sharing the caller's own VM stack frame is more likely to
-  # leave a stale, conservatively-scanned reference to one of them sitting
-  # in a slot that frame doesn't otherwise reuse. Returning from a real
-  # method call gives that frame back for reuse before GC ever runs.
+  # A real method call, not just a block: the throwaway Client this creates
+  # must be unreachable by the time run_gc's caller runs GC.start, and a
+  # block sharing the caller's own VM stack frame is more likely to leave a
+  # stale, conservatively-scanned reference to it sitting in a slot that
+  # frame doesn't otherwise reuse. Returning from a real method call gives
+  # that frame back for reuse before GC ever runs. Returns the connection's
+  # thread_id (a plain Integer, so it can't itself keep the Client alive)
+  # rather than the Client -- the caller needs to identify this exact
+  # connection later, not hold a reference to it.
   def create_and_query_throwaway_client
-    Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
+    Mysql2::Client.new(DatabaseCredentials['root']).tap { |c| c.query('SELECT 1') }.thread_id
   end
 
   it "should not leave dangling connections after garbage collection" do
     run_gc
-    baseline_threads_connected = @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
+    baseline_aborted = @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a
 
-    # rubocop:disable Lint/AmbiguousBlockAssociation
-    expect do
-      expect do
-        10.times { create_and_query_throwaway_client }
-      end.to change {
-        @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-      }.by(10)
+    # Track these 10 connections by thread_id rather than by the raw
+    # Threads_connected count: that count is shared across the whole test
+    # suite, and other tests' connections settling asynchronously in the
+    # background (observed locally: the count can drop *below* an earlier
+    # baseline as unrelated connections finish closing) make it an
+    # unreliable signal for whether *these* 10 specifically closed.
+    thread_ids = Array.new(10) { create_and_query_throwaway_client }
 
-      run_gc
+    run_gc
 
-      # decr_mysql2_client's mysql_close() happens synchronously as part of
-      # the GC sweep above, but the server noticing the closed sockets and
-      # updating its own Threads_connected count is a separate, genuinely
-      # async step on the server's side -- run_gc's fixed sleep is enough
-      # margin most of the time, but not a guarantee under CI load. Poll
-      # instead of trusting a single fixed wait.
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
-      loop do
-        current = @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-        break if current <= baseline_threads_connected
-        break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+    # decr_mysql2_client's mysql_close() happens synchronously as part of
+    # the GC sweep above, but the server noticing the closed sockets and
+    # updating its own PROCESSLIST is a separate, genuinely async step on
+    # the server's side -- poll instead of trusting a fixed wait.
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+    loop do
+      still_connected = @client.query("SHOW PROCESSLIST").map { |row| row['Id'] }
+      break if (thread_ids & still_connected).empty?
+      break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
 
-        sleep 0.1
-      end
-    end.to_not change {
-      @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
-        @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
-    }
-    # rubocop:enable Lint/AmbiguousBlockAssociation
+      sleep 0.1
+    end
+
+    still_connected = @client.query("SHOW PROCESSLIST").map { |row| row['Id'] }
+    expect(thread_ids & still_connected).to eq([])
+    expect(@client.query("SHOW STATUS LIKE 'Aborted_%'").to_a).to eq(baseline_aborted)
   end
 
   context "#set_server_option" do

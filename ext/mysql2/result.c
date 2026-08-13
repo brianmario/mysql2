@@ -986,20 +986,13 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         return Qnil;
 
       case MYSQL_DATA_TRUNCATED: {
-        /* One or more variable-length columns arrived larger than their
-         * currently-bound buffer. Expected and recoverable when streaming: a
-         * cursor-based fetch never calls mysql_stmt_store_result(), so
-         * fields[i].max_length (what rb_mysql_result_alloc_result_buffers
-         * originally sized these buffers from) was never populated and
-         * buffers started too small -- see the comment there. Grow just the
-         * truncated column(s) to the length the server actually reports for
-         * this row (wrapper->length[i], filled in by the fetch above) and
-         * re-fetch only those columns with mysql_stmt_fetch_column(); every
-         * other already-fetched column in this row is untouched. This is
-         * the recovery path MySQL's own docs describe for this situation --
-         * not a workaround. mysql_stmt_fetch_column() copies from data the
-         * fetch above already pulled off the wire, so no further network
-         * I/O happens here and there is no need to release the GVL. */
+        /* A streaming (cursor-mode) fetch never calls mysql_stmt_store_result(),
+         * so fields[i].max_length was never populated and buffers started too
+         * small -- see the alloc comment above. Grow just the truncated
+         * column(s) to their actual length (wrapper->length[i]) and re-fetch
+         * with mysql_stmt_fetch_column(), MySQL's documented recovery for this
+         * case. That call copies data already buffered in the client library,
+         * so no GVL release is needed here. */
         unsigned int j;
         for (j = 0; j < wrapper->numberOfFields; j++) {
           if (!wrapper->error[j]) continue;

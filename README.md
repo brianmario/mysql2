@@ -821,7 +821,7 @@ providers prune old runtime images.
 
 Keeping an older application running means taking responsibility for
 its older open-source dependencies.
-bundled mysql2 adapter at a newer mysql2 version. For example, to use
+For example, to use
 Rails 3.2 with a newer mysql2 gem:
 
 1. Fork Rails and set the needed version branch as the default, e.g.

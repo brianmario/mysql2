@@ -1265,6 +1265,28 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(escaped.valid_encoding?).to be true
     end
 
+    context 'under NO_BACKSLASH_ESCAPES sql_mode' do
+      before(:example) do
+        @client.query("SET SESSION sql_mode = concat(@@sql_mode, ',NO_BACKSLASH_ESCAPES')")
+      end
+
+      if Mysql2::Client::ESCAPE_QUOTE_SUPPORTED
+        it "should escape by doubling quote characters instead of raising" do
+          escaped = @client.escape("it's \\a\\ test")
+          expect(escaped).to eq("it''s \\a\\ test")
+
+          row = @client.query("SELECT '#{escaped}' AS x").first
+          expect(row['x']).to eq("it's \\a\\ test")
+        end
+      else
+        it "should raise Mysql2::Error instead of a confusing ArgumentError" do
+          expect do
+            @client.escape("it's a test")
+          end.to raise_error(Mysql2::Error)
+        end
+      end
+    end
+
     context 'when mysql encoding is not utf8' do
       let(:client) { new_client(encoding: "ujis") }
 

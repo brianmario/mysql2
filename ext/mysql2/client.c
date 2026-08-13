@@ -1240,7 +1240,15 @@ static VALUE rb_mysql_client_real_escape(VALUE self, VALUE str) {
   oldLen = RSTRING_LEN(str);
   newStr = xmalloc(oldLen*2+1);
 
+#ifdef HAVE_MYSQL_REAL_ESCAPE_STRING_QUOTE
+  newLen = mysql_real_escape_string_quote(wrapper->client, (char *)newStr, RSTRING_PTR(str), oldLen, '\'');
+#else
   newLen = mysql_real_escape_string(wrapper->client, (char *)newStr, RSTRING_PTR(str), oldLen);
+#endif
+  if (newLen == (unsigned long)-1) {
+    xfree(newStr);
+    rb_raise_mysql2_error(wrapper);
+  }
   if (newLen == oldLen) {
     /* no need to return a new ruby string if nothing changed */
     if (default_internal_enc) {
@@ -2348,5 +2356,11 @@ void init_mysql2_client(void) {
   rb_const_set(cMysql2Client, rb_intern("TLS_SNI_SUPPORTED"), Qtrue);
 #else
   rb_const_set(cMysql2Client, rb_intern("TLS_SNI_SUPPORTED"), Qfalse);
+#endif
+
+#ifdef HAVE_MYSQL_REAL_ESCAPE_STRING_QUOTE
+  rb_const_set(cMysql2Client, rb_intern("ESCAPE_QUOTE_SUPPORTED"), Qtrue);
+#else
+  rb_const_set(cMysql2Client, rb_intern("ESCAPE_QUOTE_SUPPORTED"), Qfalse);
 #endif
 }

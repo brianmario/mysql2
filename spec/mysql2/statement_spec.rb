@@ -2,7 +2,7 @@ require './spec/spec_helper'
 
 RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
   before(:example) do
-    @client = new_client(encoding: "utf8")
+    @client = new_client
   end
 
   let(:performance_schema_enabled) do

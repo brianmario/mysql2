@@ -896,28 +896,13 @@ static void *nogvl_use_result(void *ptr) {
   return nogvl_do_result(ptr, 1);
 }
 
-/* call-seq:
- *    client.async_result
- *
- * Returns the result for the last async issued query.
- */
-static VALUE rb_mysql_client_async_result(VALUE self) {
-  MYSQL_RES * result;
-  VALUE resultObj;
-  VALUE current, is_streaming;
-  GET_CLIENT(self);
-
-  /* if we're not waiting on a result, do nothing */
-  if (NIL_P(wrapper->active_fiber))
-    return Qnil;
-
-  REQUIRE_CONNECTED(wrapper);
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
-    /* an error occurred, mark this connection inactive */
-    wrapper->active_fiber = Qnil;
-    wrapper->state = MYSQL2_CLIENT_IDLE;
-    rb_raise_mysql2_error(wrapper);
-  }
+/* Shared by async_result (a query's first result set) and store_result (a
+ * later one, from a multi-statement batch): fetch the current result set as
+ * either streamed or fully-buffered, per :stream, track it on wrapper, and
+ * wrap it as a Result. */
+static VALUE mysql2_fetch_result_set(VALUE self, mysql_client_wrapper *wrapper) {
+  MYSQL_RES *result;
+  VALUE resultObj, current, is_streaming;
 
   is_streaming = rb_hash_aref(rb_ivar_get(self, intern_current_query_options), sym_stream);
   if (is_streaming == Qtrue) {
@@ -942,9 +927,9 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
       wrapper->state = MYSQL2_CLIENT_IDLE;
       rb_raise_mysql2_error(wrapper);
     }
-    /* no data and no error, so query was not a SELECT -- e.g. :stream was
-     * requested for an INSERT/UPDATE. No cursor was actually opened, so
-     * don't leave the connection marked STREAMING. */
+    /* no data and no error, so this result set was not a SELECT -- e.g.
+     * :stream was requested for an INSERT/UPDATE. No cursor was actually
+     * opened, so don't leave the connection marked STREAMING. */
     wrapper->state = MYSQL2_CLIENT_IDLE;
     return Qnil;
   }
@@ -962,6 +947,29 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   }
 
   return resultObj;
+}
+
+/* call-seq:
+ *    client.async_result
+ *
+ * Returns the result for the last async issued query.
+ */
+static VALUE rb_mysql_client_async_result(VALUE self) {
+  GET_CLIENT(self);
+
+  /* if we're not waiting on a result, do nothing */
+  if (NIL_P(wrapper->active_fiber))
+    return Qnil;
+
+  REQUIRE_CONNECTED(wrapper);
+  if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
+    /* an error occurred, mark this connection inactive */
+    wrapper->active_fiber = Qnil;
+    wrapper->state = MYSQL2_CLIENT_IDLE;
+    rb_raise_mysql2_error(wrapper);
+  }
+
+  return mysql2_fetch_result_set(self, wrapper);
 }
 
 #ifndef _WIN32
@@ -1733,57 +1741,16 @@ static VALUE rb_mysql_client_next_result(VALUE self)
  */
 static VALUE rb_mysql_client_store_result(VALUE self)
 {
-  MYSQL_RES * result;
-  VALUE resultObj;
-  VALUE current, is_streaming;
   GET_CLIENT(self);
 
   /* Honor :stream on later result sets of a multi-statement query the same
    * way async_result already does for the first one -- previously this
    * always called mysql_store_result regardless, silently buffering every
    * result set after the first even when the original query asked to
-   * stream them (see #600). */
-  is_streaming = rb_hash_aref(rb_ivar_get(self, intern_current_query_options), sym_stream);
-  if (is_streaming == Qtrue) {
-    result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_use_result, wrapper, RUBY_UBF_IO, 0);
-    /* A cursor is now open; leave the connection BUSY until the Result
-     * finishes (or abandons) streaming rows -- see result.c. */
-    wrapper->state = MYSQL2_CLIENT_STREAMING;
-  } else {
-    result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
-    /* The whole result set is buffered locally; the connection is free to
-     * run another command right away. */
-    wrapper->state = MYSQL2_CLIENT_IDLE;
-    mysql2_reap_pending_result_frees(wrapper);
-    mysql2_reap_pending_stmt_closes(wrapper);
-  }
-
-  if (result == NULL) {
-    if (mysql_errno(wrapper->client) != 0) {
-      wrapper->state = MYSQL2_CLIENT_IDLE;
-      rb_raise_mysql2_error(wrapper);
-    }
-    /* no data and no error, so this statement in the batch was not a SELECT
-     * -- e.g. :stream was requested but this particular result set wasn't
-     * one. No cursor was actually opened, so don't leave the connection
-     * marked STREAMING. */
-    wrapper->state = MYSQL2_CLIENT_IDLE;
-    return Qnil;
-  }
-
-  // Duplicate the options hash and put the copy in the Result object
-  current = rb_hash_dup(rb_ivar_get(self, intern_current_query_options));
-  (void)RB_GC_GUARD(current);
-  Check_Type(current, T_HASH);
-  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
-
-  /* Track the open cursor so a later command can force-drain it if it's
-   * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */
-  if (is_streaming == Qtrue) {
-    wrapper->active_streaming_result = resultObj;
-  }
-
-  return resultObj;
+   * stream them (see #600). Also refreshes affected_rows: it's a
+   * per-statement value at the C level, so it needs re-reading here too,
+   * not just by async_result for the batch's first statement. */
+  return mysql2_fetch_result_set(self, wrapper);
 }
 
 /* call-seq:

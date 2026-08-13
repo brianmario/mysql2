@@ -1077,10 +1077,9 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       it "should honor :stream for later result sets, not just the first" do
-        # Regression coverage for #600: store_result previously always
-        # called mysql_store_result regardless of the original query's
-        # :stream option, silently buffering every result set after the
-        # first even when the caller asked to stream them.
+        # Regression coverage for #600: store_result must honor the
+        # original query's :stream option for every result set in a
+        # multi-statement batch, not just the first.
         #
         # mysql_store_result blocks until the entire result set has
         # arrived; mysql_use_result returns almost immediately and defers

@@ -275,22 +275,27 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   it "should not leave dangling connections after garbage collection" do
     run_gc
-    # rubocop:disable Lint/AmbiguousBlockAssociation
-    expect do
-      expect do
-        10.times do
-          Mysql2::Client.new(DatabaseCredentials['root']).query('SELECT 1')
-        end
-      end.to change {
-        @client.query("SHOW STATUS LIKE 'Threads_connected'").first['Value'].to_i
-      }.by(10)
 
-      run_gc
-    end.to_not change {
-      @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a +
-        @client.query("SHOW STATUS LIKE 'Threads_connected'").to_a
-    }
-    # rubocop:enable Lint/AmbiguousBlockAssociation
+    # Track these 10 connections by thread_id rather than by a status
+    # counter like Threads_connected or Aborted_clients: those are scoped to
+    # the whole server.
+    thread_ids = 10.times.map do
+      Mysql2::Client.new(DatabaseCredentials['root']).tap { |c| c.query('SELECT 1') }.thread_id
+    end
+
+    run_gc
+
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+    loop do
+      still_connected = @client.query("SHOW PROCESSLIST").map { |row| row['Id'] }
+      break if (thread_ids & still_connected).empty?
+      break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep 0.1
+    end
+
+    still_connected = @client.query("SHOW PROCESSLIST").map { |row| row['Id'] }
+    expect(thread_ids & still_connected).to eq([])
   end
 
   context "#set_server_option" do

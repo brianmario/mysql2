@@ -816,7 +816,7 @@ Requests to backport features, bug fixes, or newer MySQL/MariaDB
 compatibility to old mysql2 release lines can't be honored. Keeping old
 branches working would suggest they're properly supported and maintained
 when they aren't. An EOL Rails or Ruby version isn't receiving security
-patches either, and testing it in CI becomes impossible over time as CI
+patches either, and testing in CI becomes impossible over time as CI
 providers prune old runtime images.
 
 Keeping an older application running means taking responsibility for

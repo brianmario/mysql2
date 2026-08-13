@@ -604,12 +604,14 @@ CAST function wouldn't help here as there's no way to cast to TINYINT(1). Appare
 
 The same applies to `UNION` results: MySQL widens a `tinyint(1)` column to
 `tinyint(4)` for any query combined with `UNION`, dropping the display-width
-attribute `:cast_booleans` depends on. Do the boolean comparison in SQL
-instead, so the server sends real `0`/`1` values before `:cast_booleans`
-would ever need to guess:
+attribute `:cast_booleans` depends on. There's no SQL-level fix either: a
+comparison like `x = 1` comes back as a `bigint`, not a `tinyint(1)`, so
+`:cast_booleans` won't catch that any more than the plain column does.
+Convert the raw value to a boolean yourself instead:
 
-``` sql
-SELECT x = 1 AS x FROM t1 UNION ALL SELECT x = 1 AS x FROM t2
+``` ruby
+result = client.query("SELECT x FROM t1 UNION ALL SELECT x FROM t2")
+result.each { |row| row['x'] = row['x'] == 1 }
 ```
 
 ### Skipping casting

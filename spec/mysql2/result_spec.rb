@@ -186,6 +186,45 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       end
     end
 
+    context "when building array rows" do
+      # Array rows are assembled from a per-#each scratch buffer, one slot
+      # per field, rather than pushed cell by cell. These pin the scratch
+      # bookkeeping: every slot lands in field order, NULL slots are written
+      # (not carried over from the previous row), and a mid-row cast raise
+      # leaves the connection usable.
+      let(:width) { 40 }
+      let(:wide_sql) { "SELECT #{Array.new(width) { |i| "#{i} AS c#{i}" }.join(', ')}" }
+
+      it "should yield every cell in field order for wide rows" do
+        expect(@client.query(wide_sql, as: :array).first).to eql((0...width).to_a)
+      end
+
+      it "should yield every cell in field order for wide rows without casting" do
+        expect(@client.query(wide_sql, as: :array, cast: false).first).to eql((0...width).map(&:to_s))
+      end
+
+      it "should yield every cell in field order for wide streaming rows" do
+        rows = []
+        @client.query(wide_sql, as: :array, stream: true, cache_rows: false).each { |row| rows << row }
+        expect(rows).to eql([(0...width).to_a])
+      end
+
+      it "should not carry cells over between rows" do
+        rows = @client.query("SELECT 1 AS a, NULL AS b UNION SELECT NULL, 2", as: :array).to_a
+        expect(rows).to eql([[1, nil], [nil, 2]])
+      end
+
+      it "should leave the connection usable after a cast error raised mid-row" do
+        client = new_client
+        client.query("SET SESSION sql_mode = ''")
+        client.query("CREATE TEMPORARY TABLE mysql2_batched_row_test (d DATETIME)")
+        client.query("INSERT INTO mysql2_batched_row_test VALUES ('1972-00-27 00:00:00')")
+        expect { client.query("SELECT 1 AS a, d FROM mysql2_batched_row_test", as: :array).each }.to \
+          raise_error(Mysql2::Error, "Invalid date in field 'd': 1972-00-27 00:00:00")
+        expect(client.query("SELECT 1", as: :array).first).to eql([1])
+      end
+    end
+
     it "should cache previously yielded results by default" do
       expect(@result.first.object_id).to eql(@result.first.object_id)
     end

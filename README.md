@@ -607,7 +607,7 @@ The same applies to `UNION` results: MySQL widens a `tinyint(1)` column to
 attribute `:cast_booleans` depends on. There's no SQL-level fix either: a
 comparison like `x = 1` comes back as a `bigint`, not a `tinyint(1)`, so
 `:cast_booleans` won't catch that any more than the plain column does.
-Convert the raw value to a boolean yourself instead:
+The only reliable way to get a Ruby Boolean is to test the value in Ruby:
 
 ``` ruby
 result = client.query("SELECT x FROM t1 UNION ALL SELECT x FROM t2")

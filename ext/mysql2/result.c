@@ -2165,8 +2165,30 @@ static VALUE rb_mysql_result_count(VALUE self) {
   }
 }
 
+/* call-seq:
+ *    result.query_time # => Float seconds, or nil
+ *
+ * The server round trip that produced this result, as observed by the
+ * calling thread: seconds from the moment the command was written to the
+ * connection until its first response had been fully read, measured in C
+ * on a monotonic clock. Server execution and network time to the first
+ * response are in; buffering the remaining rows (the store phase), casting
+ * values into Ruby objects, and GVL waits after the first response are
+ * out. On a quiet process the reading matches the wire; under GVL
+ * contention it includes time the thread spent waiting to be rescheduled
+ * mid-round-trip, like any thread-observed timing in CRuby. For a query
+ * issued with :async the bracket closes inside Client#async_result, so
+ * time between the response becoming readable and that call is included.
+ * nil when no reading applies -- the second and later result sets of a
+ * multi-statement command (Client#store_result).
+ */
+static VALUE rb_mysql_result_query_time(VALUE self) {
+  GET_RESULT(self);
+  return wrapper->query_time < 0 ? Qnil : DBL2NUM(wrapper->query_time);
+}
+
 /* Mysql2::Result */
-VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement) {
+VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement, double query_time) {
   VALUE obj;
   mysql2_result_wrapper * wrapper;
 
@@ -2202,6 +2224,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
    * A plain uint copy: cannot raise, per the post-streaming-registration
    * lifecycle rules in client.c/statement.c. */
   wrapper->server_status = wrapper->client_wrapper->client->server_status;
+  wrapper->query_time = query_time;
   wrapper->result_buffers = NULL;
   wrapper->result_buffers_bound = 0;
   wrapper->is_null = NULL;
@@ -2258,6 +2281,7 @@ void init_mysql2_result(void) {
   rb_define_method(cMysql2Result, "free", rb_mysql_result_free_, 0);
   rb_define_method(cMysql2Result, "count", rb_mysql_result_count, 0);
   rb_define_method(cMysql2Result, "server_flags", rb_mysql_result_server_flags, 0);
+  rb_define_method(cMysql2Result, "query_time", rb_mysql_result_query_time, 0);
   rb_define_alias(cMysql2Result, "size", "count");
 
   intern_new          = rb_intern("new");

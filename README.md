@@ -715,6 +715,19 @@ NOTE: Because of the way MySQL's query API works, this method will block until t
 So if you really need things to stay async, it's best to just monitor the socket with something like EventMachine.
 If you need multiple query concurrency take a look at using a connection pool.
 
+### Query timing
+
+Every `Mysql2::Result` carries the server round trip that produced it, measured in C on a monotonic clock:
+
+``` ruby
+result = client.query("SELECT * FROM table")
+result.query_time # => 0.000542 (Float seconds)
+```
+
+The bracket opens when the command is written to the connection and closes when its first response has been fully read. Server execution and network time to the first response are in; buffering the remaining rows, casting values into Ruby objects, and GVL waits after the first response are out -- so it answers "how slow was the server?" without the noise a Ruby-level stopwatch around `#query` picks up. The reading is the round trip as observed by the calling thread: on a quiet process it matches the wire, while under heavy GVL contention it includes time the thread spent waiting to be rescheduled mid-round-trip, like any thread-observed timing in CRuby.
+
+For a query issued with `:async => true` the bracket closes inside `#async_result`, so time between the response becoming readable and that call is included. `#query_time` is `nil` when no reading applies: the second and later result sets of a multi-statement command, retrieved via `#store_result`.
+
 ### Row Caching
 
 By default, Mysql2 will cache rows that have been created in Ruby (since this happens lazily).

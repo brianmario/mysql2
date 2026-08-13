@@ -52,6 +52,9 @@ have_func('rb_hash_new_capa', 'ruby.h')
 # 2.3+ (guarded so the funcall path remains available on anything older)
 have_func('rb_time_timespec_new', 'ruby.h')
 
+# Monotonic clock for Result#query_time (gettimeofday fallback otherwise)
+have_func('clock_gettime', 'time.h')
+
 ### Find OpenSSL library
 
 # User-specified OpenSSL if explicitly specified

@@ -6,6 +6,7 @@
 #ifndef _WIN32
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #endif
 #ifndef _MSC_VER
 #include <unistd.h>
@@ -598,6 +599,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->closed = 1; /* will be set false after calling mysql_real_connect */
   wrapper->refcount = 1;
   wrapper->affected_rows = -1;
+  wrapper->query_start = 0;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   wrapper->state = MYSQL2_CLIENT_IDLE;
   wrapper->pending_stmt_closes = NULL;
@@ -841,6 +843,16 @@ static VALUE rb_mysql_client_closed(VALUE self) {
   return CONNECTED(wrapper) ? Qfalse : Qtrue;
 }
 
+double mysql2_monotonic_now(void) {
+#if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC)
+  struct timespec ts;
+  return clock_gettime(CLOCK_MONOTONIC, &ts) == 0 ? (double)ts.tv_sec + (double)ts.tv_nsec / 1e9 : -1;
+#else
+  struct timeval tv;
+  return gettimeofday(&tv, NULL) == 0 ? (double)tv.tv_sec + (double)tv.tv_usec / 1e6 : -1;
+#endif
+}
+
 /*
  * mysql_send_query is unlikely to block since most queries are small
  * enough to fit in a socket buffer, but sometimes large UPDATE and
@@ -868,14 +880,24 @@ static VALUE do_send_query(VALUE args) {
   return Qnil;
 }
 
+struct nogvl_read_query_result_args {
+  MYSQL *mysql;
+  /* Round-trip close stamp, taken while the GVL is still released: under
+   * contention, reacquisition means queueing behind every runnable thread,
+   * and a stamp taken after it would charge that wait to the server. */
+  double query_end;
+};
+
 /*
  * even though we did rb_thread_select before calling this, a large
  * response can overflow the socket buffers and cause us to eventually
  * block while calling mysql_read_query_result
  */
 static void *nogvl_read_query_result(void *ptr) {
-  MYSQL * client = ptr;
-  my_bool res = mysql_read_query_result(client);
+  struct nogvl_read_query_result_args *args = ptr;
+  my_bool res = mysql_read_query_result(args->mysql);
+
+  args->query_end = mysql2_monotonic_now();
 
   return (void *)(res == 0 ? Qtrue : Qfalse);
 }
@@ -909,8 +931,9 @@ static void *nogvl_use_result(void *ptr) {
 /* Shared by async_result (a query's first result set) and store_result (a
  * later one, from a multi-statement batch): fetch the current result set as
  * either streamed or fully-buffered, per :stream, track it on wrapper, and
- * wrap it as a Result. */
-static VALUE mysql2_fetch_result_set(VALUE self, mysql_client_wrapper *wrapper) {
+ * wrap it as a Result carrying query_elapsed as its #query_time (negative
+ * for none). */
+static VALUE mysql2_fetch_result_set(VALUE self, mysql_client_wrapper *wrapper, double query_elapsed) {
   MYSQL_RES *result;
   VALUE resultObj, current, is_streaming;
 
@@ -948,7 +971,7 @@ static VALUE mysql2_fetch_result_set(VALUE self, mysql_client_wrapper *wrapper) 
   current = rb_hash_dup(rb_ivar_get(self, intern_current_query_options));
   (void)RB_GC_GUARD(current);
   Check_Type(current, T_HASH);
-  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil);
+  resultObj = rb_mysql_result_to_obj(self, wrapper->encoding, current, result, Qnil, query_elapsed);
 
   /* Track the open cursor so a later command can force-drain it if it's
    * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */
@@ -965,6 +988,8 @@ static VALUE mysql2_fetch_result_set(VALUE self, mysql_client_wrapper *wrapper) 
  * Returns the result for the last async issued query.
  */
 static VALUE rb_mysql_client_async_result(VALUE self) {
+  struct nogvl_read_query_result_args read_args;
+  double query_elapsed;
   GET_CLIENT(self);
 
   /* if we're not waiting on a result, do nothing */
@@ -972,14 +997,24 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
     return Qnil;
 
   REQUIRE_CONNECTED(wrapper);
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
+  read_args.mysql = wrapper->client;
+  if ((VALUE)rb_thread_call_without_gvl(nogvl_read_query_result, &read_args, RUBY_UBF_IO, 0) == Qfalse) {
     /* an error occurred, mark this connection inactive */
     wrapper->active_fiber = Qnil;
     wrapper->state = MYSQL2_CLIENT_IDLE;
     rb_raise_mysql2_error(wrapper);
   }
 
-  return mysql2_fetch_result_set(self, wrapper);
+  /* The first response is now fully read: the stamp nogvl_read_query_result
+   * took closes the round-trip bracket opened when the command was written
+   * (rb_mysql_query). The store phase in mysql2_fetch_result_set stays
+   * outside it -- Result#query_time measures the server, not local row
+   * buffering. A negative stamp at either end means the clock call itself
+   * failed; pass the sentinel through so the reading is nil, not garbage. */
+  query_elapsed = (wrapper->query_start < 0 || read_args.query_end < 0)
+    ? -1 : read_args.query_end - wrapper->query_start;
+
+  return mysql2_fetch_result_set(self, wrapper, query_elapsed);
 }
 
 #ifndef _WIN32
@@ -1191,6 +1226,11 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   mysql2_reap_pending_stmt_closes(wrapper);
 
   wrapper->state = MYSQL2_CLIENT_QUERYING;
+
+  /* Open the round-trip bracket that async_result closes once the first
+   * response has been fully read -- including the socket wait in do_query,
+   * which is where most of a slow query's time goes. */
+  wrapper->query_start = mysql2_monotonic_now();
 
 #ifndef _WIN32
   rb_ensure(do_send_query, (VALUE)&args, disconnect_query_if_incomplete, (VALUE)&args.completion);
@@ -1759,8 +1799,13 @@ static VALUE rb_mysql_client_store_result(VALUE self)
    * result set after the first even when the original query asked to
    * stream them (see #600). Also refreshes affected_rows: it's a
    * per-statement value at the C level, so it needs re-reading here too,
-   * not just by async_result for the batch's first statement. */
-  return mysql2_fetch_result_set(self, wrapper);
+   * not just by async_result for the batch's first statement.
+   *
+   * No round-trip reading: this result set's response was read and consumed
+   * by Client#next_result, which no bracket surrounds -- the number the
+   * original bracket produced belongs to the batch's first result set, not
+   * this one. So #query_time is nil here. */
+  return mysql2_fetch_result_set(self, wrapper, -1);
 }
 
 /* call-seq:

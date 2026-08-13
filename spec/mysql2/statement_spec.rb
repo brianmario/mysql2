@@ -71,6 +71,28 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(rows).to eq([{ "1" => 1 }])
   end
 
+  it "should report the execute round trip as the result's query_time" do
+    statement = @client.prepare 'SELECT SLEEP(0.1)'
+    started = clock_time
+    result = statement.execute
+    elapsed = clock_time - started
+
+    expect(result.query_time).to be_a(Float)
+    # SLEEP(0.1) can return a scheduler tick (~16ms on Windows) early, so the
+    # bound sits below the nominal sleep -- still orders of magnitude above a
+    # bracket that misses the socket wait, which measures ~0.2ms.
+    expect(result.query_time).to be >= 0.05
+    expect(result.query_time).to be <= elapsed
+  end
+
+  it "should report query_time before a streamed execute's rows are read" do
+    statement = @client.prepare 'SELECT SLEEP(0.1)'
+    result = statement.execute(stream: true, cache_rows: false)
+
+    expect(result.query_time).to be >= 0.05
+    result.each.to_a
+  end
+
   it "should keep fields and field_types accessible for exhausted empty results" do
     statement = @client.prepare 'SELECT 1 AS only_col WHERE 1 = 0'
     result = statement.execute

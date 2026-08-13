@@ -64,6 +64,11 @@ typedef struct {
   int refcount;
   int closed;
   uint64_t affected_rows;
+  /* Monotonic stamp taken when the current command is written to the wire
+   * (rb_mysql_query). Lives on the wrapper because the bracket closes in a
+   * separate Ruby call on the async path: Client#query with :async returns
+   * right after the send, and #async_result reads the response later. */
+  double query_start;
   MYSQL *client;
   mysql2_client_state_t state;
   mysql2_pending_stmt_close *pending_stmt_closes;
@@ -86,6 +91,12 @@ extern const rb_data_type_t rb_mysql_client_type;
 
 void init_mysql2_client(void);
 void decr_mysql2_client(mysql_client_wrapper *wrapper);
+
+/* Seconds on a clock suitable for measuring elapsed intervals: monotonic
+ * (immune to wall-clock adjustment) where available, gettimeofday otherwise.
+ * Negative if the clock call itself fails. Calls no Ruby APIs, so it is
+ * safe inside rb_thread_call_without_gvl functions. */
+double mysql2_monotonic_now(void);
 
 /* Raises a Mysql2::Error built from the client's current mysql_error()/
  * mysql_errno()/mysql_sqlstate() -- the only correct way to surface a

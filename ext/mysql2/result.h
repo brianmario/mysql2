@@ -2,7 +2,9 @@
 #define MYSQL2_RESULT_H
 
 void init_mysql2_result(void);
-VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement);
+/* query_time is the round trip that produced this result in seconds
+ * (Result#query_time); pass a negative value when no reading applies. */
+VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement, double query_time);
 
 /* Resolve a :force_encoding query option (an Encoding object or an encoding
  * name) to its Encoding object, in place in the given options hash, raising
@@ -71,6 +73,11 @@ typedef struct {
    * per-charset lookup, the binary branch, or the default_internal
    * conversion. */
   rb_encoding *forced_enc;
+  /* Seconds from the command being written to its first response being
+   * fully read, measured on a monotonic clock by the query/execute path;
+   * negative when no reading applies (e.g. Client#store_result results).
+   * Exposed as #query_time. */
+  double query_time;
   my_ulonglong numberOfFields;
   my_ulonglong numberOfRows;
   unsigned long lastRowProcessed;

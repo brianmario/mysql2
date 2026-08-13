@@ -275,14 +275,14 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   it "should not leave dangling connections after garbage collection" do
     run_gc
-    baseline_aborted = @client.query("SHOW STATUS LIKE 'Aborted_%'").to_a
 
-    # Track these 10 connections by thread_id rather than by the raw
-    # Threads_connected count: that count is scoped to the whole server, not
-    # to this test, so any other connection opening or closing nearby --
-    # including from unrelated tests earlier in the suite -- can perturb it
-    # (observed locally: the count can drop *below* an earlier baseline as
-    # an unrelated connection finishes closing).
+    # Track these 10 connections by thread_id rather than by a status
+    # counter like Threads_connected or Aborted_clients: those are scoped to
+    # the whole server, not to this test, so any other connection opening or
+    # closing nearby -- including from unrelated tests earlier in the suite
+    # -- can perturb them (observed locally: Threads_connected can drop
+    # *below* an earlier baseline, and Aborted_clients can increment, from
+    # connections this test never touched).
     thread_ids = 10.times.map do
       Mysql2::Client.new(DatabaseCredentials['root']).tap { |c| c.query('SELECT 1') }.thread_id
     end
@@ -304,7 +304,6 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     still_connected = @client.query("SHOW PROCESSLIST").map { |row| row['Id'] }
     expect(thread_ids & still_connected).to eq([])
-    expect(@client.query("SHOW STATUS LIKE 'Aborted_%'").to_a).to eq(baseline_aborted)
   end
 
   context "#set_server_option" do

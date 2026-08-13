@@ -365,33 +365,27 @@ To bypass this restriction in the client, pass the option `:secure_auth => false
 
 ### `caching_sha2_password` and GnuTLS-linked client libraries
 
-MySQL 8's default authentication plugin, `caching_sha2_password`, needs to
-RSA-encrypt the password with the server's public key whenever the
-connection isn't already secure (no TLS, no Unix socket). If you see:
+MySQL 8's default authentication plugin, `caching_sha2_password`,
+RSA-encrypts the password with the server's public key on a non-encrypted
+TCP connection. If you see this error:
 
 ```
 Mysql2::Error: RSA Encryption not supported - caching_sha2_password plugin was built with GnuTLS support
 ```
 
-this is a permanent limitation of the specific MariaDB Connector/C build
-you have installed, not something mysql2 can work around. Connector/C
-implements that RSA step for its OpenSSL and WinCrypt backends, but not for
-GnuTLS -- a GnuTLS-linked build deliberately raises this error instead of
-attempting it. Some Linux distributions (Debian and its derivatives, in
-particular) ship a GnuTLS-linked `mariadb-connector-c` package for
-licensing reasons, so this shows up there even though nothing is
-misconfigured. Fixes, in order of preference:
+your MariaDB Connector/C build can't take that step. Connector/C
+implements it for the OpenSSL and WinCrypt backends, not for GnuTLS.
+Debian and its derivatives ship a GnuTLS-linked `mariadb-connector-c` by
+default.
 
-* Connect over TLS (e.g. `:ssl_mode => :required`) -- the RSA step is only
-  needed for connections that aren't already secure, so this sidesteps it
-  entirely.
-* Connect over a Unix socket (`:socket => '/path/to/mysql.sock'`) instead
-  of TCP -- also counts as secure for this check.
-* Change the server account's authentication plugin (e.g. to
-  `mysql_native_password`) if TLS isn't an option, understanding the
-  security tradeoff of doing so.
-* Use a client library actually linked against OpenSSL instead of GnuTLS,
-  if your distribution offers one.
+Fixes:
+
+* Connect over TLS: `:ssl_mode => :required`.
+* Connect over a Unix socket instead of TCP: `:socket => '/path/to/mysql.sock'`.
+* Change the server account's authentication plugin, e.g. to
+  `mysql_native_password`, if TLS isn't an option. Understand the security
+  tradeoff first.
+* Use a client library linked against OpenSSL instead of GnuTLS.
 
 ### Flags option parsing
 

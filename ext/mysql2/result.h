@@ -51,6 +51,8 @@ typedef struct {
 typedef struct {
   VALUE fields;
   VALUE fieldTypes;
+  VALUE tables;
+  VALUE dbs;
   VALUE rows;
   VALUE client;
   VALUE encoding;

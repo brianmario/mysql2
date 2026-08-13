@@ -810,6 +810,31 @@ automatically when you run rake (or explicitly `rake spec/configuration.yml`).
 For a normal installation on a Mac, you most likely do not need to do anything,
 though.
 
+## I'm running an older version of Rails and need a back-ported feature
+
+Requests to backport features, bug fixes, or newer MySQL/MariaDB
+compatibility to old mysql2 release lines can't be honored. Keeping old
+branches working would suggest they're properly supported and maintained
+when they aren't. An EOL Rails or Ruby version isn't receiving security
+patches either, and testing in CI becomes impossible over time as CI
+providers prune old runtime images.
+
+Keeping an older application running means taking responsibility for
+its older open-source dependencies.
+For example, to use
+Rails 3.2 with a newer mysql2 gem:
+
+1. Fork Rails and set the needed version branch as the default, e.g.
+   [`3-2-stable`](https://github.com/rails/rails/tree/3-2-stable).
+2. Edit
+   [`mysql2_adapter.rb`](https://github.com/rails/rails/blob/3-2-stable/activerecord/lib/active_record/connection_adapters/mysql2_adapter.rb#L1-L6)
+   and change the `gem 'mysql2', '~> 0.3.10'` line to the needed version
+   constraint.
+3. Point the Gemfile at the fork instead of the `rails` gem, using
+   [Bundler's git source](https://bundler.io/guides/git.html).
+4. Test the combination in your actual dev, test, and production
+   environments.
+
 ## Special Thanks
 
 * Eric Wong - for the contribution (and the informative explanations) of some thread-safety, non-blocking I/O and cleanup patches. You rock dude

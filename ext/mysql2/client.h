@@ -9,7 +9,15 @@
 typedef enum {
   MYSQL2_CLIENT_IDLE = 0,
   MYSQL2_CLIENT_QUERYING,
-  MYSQL2_CLIENT_STREAMING
+  MYSQL2_CLIENT_STREAMING,
+  /* A kill_on_timeout query's wait for the server's response was
+   * interrupted (read_timeout, Thread#raise) after the command was fully
+   * sent but before any of the response was read: the protocol stream is
+   * intact, so teardown is deferred while Client#query (lib/mysql2/
+   * client.rb) runs the KILL QUERY escalation. Still mid-exchange, like
+   * QUERYING. Settled by resume_cancelled_query/abort_cancelled_query
+   * (client.c). */
+  MYSQL2_CLIENT_CANCEL_PENDING
 } mysql2_client_state_t;
 
 /* A MYSQL_STMT handle whose Ruby wrapper was freed while the connection

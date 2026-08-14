@@ -1340,6 +1340,187 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.to raise_error(Mysql2::Error::TimeoutError)
       end
 
+      context "with :kill_on_timeout" do
+        def server_side_session(supervisor, client)
+          supervisor.query("SHOW PROCESSLIST").detect { |row| row['Id'] == client.thread_id }
+        end
+
+        it "stops the server-side query and keeps the connection on :read_timeout" do
+          client = new_client(read_timeout: 1, kill_on_timeout: true)
+          supervisor = new_client
+
+          expect { client.query("SELECT SLEEP(10)") }.to raise_error(Mysql2::Error::TimeoutError)
+
+          # Verify against the server, before using the victim connection for
+          # anything else: its session must still be registered but no longer
+          # executing the query.
+          victim = server_side_session(supervisor, client)
+          expect(victim).not_to be_nil
+          expect(victim['Info']).to be_nil
+
+          expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
+          expect(client.closed?).to be false
+        end
+
+        it "keeps the connection when the killed query dies with ER_QUERY_INTERRUPTED" do
+          supervisor = new_client
+          supervisor.query("SELECT GET_LOCK('mysql2_kill_on_timeout_spec', 10)")
+
+          # Unlike SLEEP above -- which reports being killed by completing
+          # early with a result -- a killed lock wait answers with
+          # ER_QUERY_INTERRUPTED (1317), so this exercises the resumed wait
+          # consuming an ordinary error packet. The caller still sees the
+          # timeout, not the interruption error. Also passes kill_on_timeout
+          # per-query rather than at connect, to cover that spelling.
+          client = new_client(read_timeout: 1)
+          expect do
+            client.query("SELECT GET_LOCK('mysql2_kill_on_timeout_spec', 30)", kill_on_timeout: true)
+          end.to raise_error(Mysql2::Error::TimeoutError)
+
+          expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
+        end
+
+        it "stops the server-side query and keeps the connection when the calling thread is interrupted" do
+          # ssl_mode pinned for the same reason as the non-standard exception
+          # class tests below: the interrupt must be able to fire mid-wait.
+          client = new_client(kill_on_timeout: true, ssl_mode: 'disabled')
+          supervisor = new_client
+
+          expect do
+            Timeout.timeout(0.2, ArgumentError) { client.query("SELECT SLEEP(10)") }
+          end.to raise_error(ArgumentError)
+
+          victim = server_side_session(supervisor, client)
+          expect(victim['Info']).to be_nil
+          expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
+        end
+
+        it "falls back to tearing down the connection when the KILL helper can't connect" do
+          client = new_client(read_timeout: 1, kill_on_timeout: true)
+          # Point the helper somewhere no server listens: rung 1 fails, so
+          # the escalation must skip straight to today's teardown.
+          client.instance_variable_set(:@kill_helper, -> { Mysql2::Client.new(host: '127.0.0.1', port: 2, connect_timeout: 1) })
+
+          expect { client.query("SELECT SLEEP(10)") }.to raise_error(Mysql2::Error::TimeoutError)
+          expect { client.query("SELECT 1") }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+        end
+
+        it "rejects a malformed :kill_grace at the call site, before the query runs" do
+          client = new_client(read_timeout: 1, kill_on_timeout: true)
+
+          expect { client.query("SELECT SLEEP(10)", kill_grace: "oops") }.to raise_error(ArgumentError)
+
+          # Nothing was sent: the connection is untouched and still usable.
+          expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
+        end
+
+        it "re-raises the original timeout when the escalation itself fails" do
+          client = new_client(read_timeout: 1, kill_on_timeout: true)
+          # A bug anywhere in the escalation path stays subordinate to the
+          # exception it is servicing: the caller sees the timeout, never
+          # the escalation's own error, and the connection is forfeited
+          # exactly as if kill_on_timeout were off.
+          allow(client).to receive(:kill_query).and_raise(ArgumentError, "bug in the escalation path")
+
+          expect { client.query("SELECT SLEEP(10)") }.to raise_error(Mysql2::Error::TimeoutError)
+          expect { client.query("SELECT 1") }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+        end
+
+        it "still tears down the connection when Thread#exit interrupts an armed query" do
+          # Thread#exit unwinds without an exception, so no rescue ever runs
+          # the escalation -- deferring teardown would leave the connection
+          # wedged on a dead fiber forever. The C extension only defers for
+          # exception unwinds; this must behave exactly like an unarmed
+          # interrupted query.
+          client = new_client(kill_on_timeout: true)
+          supervisor = new_client
+          thread = new_thread { client.query("SELECT SLEEP(10)") }
+          Timeout.timeout(5) do
+            sleep 0.05 until server_side_query(supervisor, client)
+          end
+
+          thread.exit
+          thread.join
+
+          expect { client.query("SELECT 1") }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+        end
+
+        it "tears down the connection when the grace period expires without a server response" do
+          client = new_client(read_timeout: 1, kill_on_timeout: true, kill_grace: 1)
+          # Neuter the KILL: the server keeps running the query, so the
+          # resumed wait must exhaust :kill_grace and forfeit the connection.
+          allow(client).to receive(:kill_query)
+
+          start = clock_time
+          expect { client.query("SELECT SLEEP(10)") }.to raise_error(Mysql2::Error::TimeoutError)
+          expect(clock_time - start).to be >= 2
+          expect { client.query("SELECT 1") }.to raise_error(Mysql2::Error, 'MySQL client is not connected')
+        end
+      end
+
+      describe "#kill_query" do
+        it "aborts an in-flight query from another thread, keeping the connection" do
+          client = new_client
+          supervisor = new_client
+          thr = new_thread do
+            begin
+              client.query("SELECT SLEEP(10) AS s")
+            rescue Mysql2::Error => e
+              e
+            end
+          end
+          Timeout.timeout(5) do
+            sleep 0.05 until server_side_query(supervisor, client)
+          end
+
+          start = clock_time
+          client.kill_query
+
+          # MySQL's SLEEP reports being killed mid-sleep by returning 1
+          # immediately; MariaDB aborts the statement with an error instead.
+          outcome = thr.value
+          if outcome.is_a?(Mysql2::Error)
+            expect(outcome.message).to match(/interrupted/i)
+          else
+            expect(outcome.first).to eql('s' => 1)
+          end
+          expect(clock_time - start).to be < 5
+          expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
+        end
+      end
+
+      describe "#kill_connection" do
+        it "hard-kills the server session so a blocked query errors out" do
+          client = new_client
+          supervisor = new_client
+          thr = new_thread do
+            begin
+              client.query("SELECT SLEEP(10)")
+              nil
+            rescue Mysql2::Error => e
+              e
+            end
+          end
+          Timeout.timeout(5) do
+            sleep 0.05 until server_side_query(supervisor, client)
+          end
+
+          client.kill_connection
+
+          error = thr.value
+          expect(error).to be_a(Mysql2::Error)
+          expect(error.message).to match(%r{Lost connection|TLS/SSL error})
+          expect { client.query("SELECT 1") }.to raise_error(Mysql2::Error)
+        end
+      end
+
+      # The session row for client on the server, but only while it is
+      # actually executing a query -- for waiting out the race between
+      # sending a query on another thread and the server starting to run it.
+      def server_side_query(supervisor, client)
+        supervisor.query("SHOW PROCESSLIST").detect { |row| row['Id'] == client.thread_id && row['Info'] }
+      end
+
       # XXX this test is not deterministic (because Unix signal handling is not)
       # and may fail on a loaded system
       it "should run signal handlers while waiting for a response" do

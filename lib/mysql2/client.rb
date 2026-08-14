@@ -16,6 +16,8 @@ module Mysql2
         cast: true,
         default_file: nil,
         default_group: nil,
+        kill_on_timeout: false,      # on read_timeout/interrupt mid-query, KILL QUERY from a helper connection and try to keep this connection alive
+        kill_grace: 5,               # seconds to wait for the server to acknowledge the KILL before falling back to closing the connection
       }
     end
 
@@ -115,7 +117,30 @@ module Mysql2
       tls_sni_name = tls_sni_name.to_s unless tls_sni_name.nil?
       conn_attrs = parse_connect_attrs(opts[:connect_attrs])
 
+      @kill_helper = build_kill_helper(opts)
+
       connect user, pass, host, port, database, socket, flags, conn_attrs, tls_sni_name
+    end
+
+    # Ask the server to abort the query this connection is currently
+    # running, via a short-lived helper connection issuing
+    # KILL QUERY <thread_id>. Safe to call from another thread while this
+    # connection is blocked in #query: the helper never touches this
+    # connection's own socket or protocol state. The victim connection
+    # then reads the server's answer to the killed query as usual --
+    # ER_QUERY_INTERRUPTED, or its completed result if the query won the
+    # race -- and stays usable.
+    def kill_query
+      kill 'QUERY'
+    end
+
+    # Hard-kill variant: KILL CONNECTION <thread_id> terminates this
+    # connection's server session outright. A thread blocked in #query on
+    # the victim connection wakes up with the connection error the server's
+    # hangup produces. Gives pools a sanctioned way to unstick a stuck
+    # connection they are about to discard.
+    def kill_connection
+      kill 'CONNECTION'
     end
 
     def parse_ssl_mode(mode)
@@ -234,8 +259,34 @@ module Mysql2
     private_constant :EMPTY_QUERY_OPTIONS
 
     def query(sql, options = EMPTY_QUERY_OPTIONS)
+      opts = @query_options.merge(options)
+      # Resolve the escalation budget before the query is in flight: a
+      # malformed :kill_grace raises here, at the call site, instead of
+      # surfacing mid-escalation with a timeout already in hand.
+      kill_grace = Float(opts[:kill_grace] || 5) if opts[:kill_on_timeout]
       Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_NEVER) do
-        _query(sql, @query_options.merge(options))
+        begin
+          _query(sql, opts)
+        rescue Exception => e # rubocop:disable Lint/RescueException -- interrupts arrive as non-StandardError classes (Timeout's, Thread#raise's)
+          begin
+            # Mask interrupts while settling the connection: a second one
+            # landing mid-escalation would abandon it half-resumed.
+            Thread.handle_interrupt(Object => :never) do
+              kill_and_resume_cancelled_query(kill_grace) if cancel_pending?
+            end
+          rescue StandardError
+            # The escalation is a safety net for the exception already in
+            # hand: a failure of its own -- a bug in the escalation path --
+            # must not replace that exception. The ensure below still tears
+            # down whatever the aborted escalation left behind.
+            nil
+          ensure
+            # Whatever cut the escalation short -- and, when kill_on_timeout
+            # isn't armed, this is a no-op on an already-settled connection.
+            abort_cancelled_query
+          end
+          raise e
+        end
       end
     end
 
@@ -288,6 +339,53 @@ module Mysql2
       # warning in ext/mysql2/result.c).
       warn ":cache_rows is ignored on a client with :stream enabled; pass cache_rows: false to acknowledge streaming semantics" \
         if @query_options[:stream] && @query_options[:cache_rows]
+    end
+
+    # Rungs 1 and 2 of the escalation for a kill_on_timeout query whose
+    # wait was interrupted (the C extension left the connection
+    # CANCEL_PENDING): ask the server to abort the in-flight query, then
+    # give the surviving connection `grace` seconds to read the
+    # server's acknowledgement -- normally ER_QUERY_INTERRUPTED, or the
+    # query's own result if it finished before the KILL landed. A
+    # Mysql2::Error along the way is the ladder resolving itself: either
+    # the helper/KILL failed, leaving the connection CANCEL_PENDING for
+    # the caller's ensure to tear down (rung 3), or the resumed read
+    # surfaced the server's error and the connection is settled. The
+    # caller re-raises the original timeout/interrupt regardless.
+    def kill_and_resume_cancelled_query(grace)
+      kill_query
+      resumed = resume_cancelled_query(grace)
+      # false means the grace period expired and the connection is
+      # already torn down. Anything else means the query finished before
+      # the KILL landed: drop any remaining result sets of a
+      # multi-statement batch so the connection is ready for its next
+      # command.
+      abandon_results! unless resumed == false
+    rescue Mysql2::Error
+      nil
+    end
+
+    # Factory for the KILL QUERY/CONNECTION helper connection used by
+    # #kill_query and #kill_connection: a second connection with this
+    # connection's own credentials (KILL requires the same user, SUPER, or
+    # CONNECTION_ADMIN), bounded so a wedged server can't hang the
+    # escalation -- small connect/read/write timeouts, one statement,
+    # closed immediately. A lambda over the connect options rather than the
+    # options in an ivar, so the password isn't somewhere #inspect prints.
+    def build_kill_helper(opts)
+      helper_opts = opts.merge(kill_on_timeout: false, connect_timeout: 5, read_timeout: 5, write_timeout: 5)
+      -> { self.class.new(helper_opts) }
+    end
+
+    def kill(target)
+      id = thread_id
+      helper = @kill_helper.call
+      begin
+        helper.query("KILL #{target} #{id}")
+      ensure
+        helper.close
+      end
+      nil
     end
 
     def check_and_clean_query_options

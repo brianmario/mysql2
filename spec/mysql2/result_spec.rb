@@ -188,23 +188,29 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should not permanently pin symbols for dynamically-named columns" do
-      skip "dynamic symbols are only GC-able on Ruby 2.2+" if RUBY_VERSION < "2.2"
+      require "objspace"
+      skip "needs ObjectSpace.count_symbols (CRuby 2.2+)" unless ObjectSpace.respond_to?(:count_symbols)
+
+      # A pinned (immortal) symbol can never be collected; a mortal dynamic
+      # symbol can. Assert mortality directly from the intern-table
+      # bookkeeping rather than waiting for the GC to actually reclaim the
+      # symbol: conservative stack/register scanning can keep a dead symbol
+      # alive indefinitely, but it cannot change which table the symbol was
+      # interned into, so this holds regardless of GC timing.
+      immortal_symbols = -> { ObjectSpace.count_symbols[:immortal_symbol] }
+
+      # Absorb first-use interning (lazy autoloads, inline caches) outside
+      # the measured window with an identically-shaped query and count.
+      @client.query("SELECT 1 AS sym_warmup_#{rand(2**32)}", symbolize_keys: true).first
+      immortal_symbols.call
 
       name = "sym_gc_col_#{rand(2**32)}"
+      before = immortal_symbols.call
+      row = @client.query("SELECT 1 AS #{name}", symbolize_keys: true).first
+      pinned = immortal_symbols.call - before
 
-      # Run the query on its own thread so its stack -- and any stale
-      # references conservative scanning would find there -- is gone before
-      # the collection check below.
-      Thread.new do
-        @client.query("SELECT 1 AS #{name}", symbolize_keys: true).each { |_| }
-        nil
-      end.join
-
-      collected = 10.times.any? do
-        GC.start
-        Symbol.all_symbols.none? { |sym| sym.to_s == name }
-      end
-      expect(collected).to be true
+      expect(row.keys.first).to eql(name.to_sym)
+      expect(pinned).to eql(0), "column-name symbol :#{name} was interned as immortal"
     end
 
     it "should be able to return results as an array" do

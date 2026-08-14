@@ -367,8 +367,15 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
     if (symbolize_keys) {
+#ifdef HAVE_RB_CHECK_SYMBOL_CSTR
+      rb_field = rb_check_symbol_cstr(field->name, field->name_length, rb_utf8_encoding());
+      if (rb_field == Qnil) {
+        rb_field = rb_str_intern(rb_enc_str_new(field->name, field->name_length, rb_utf8_encoding()));
+      }
+#else
       rb_field = rb_intern3(field->name, field->name_length, rb_utf8_encoding());
       rb_field = ID2SYM(rb_field);
+#endif
     } else {
 #ifdef HAVE_RB_ENC_INTERNED_STR
       rb_field = rb_enc_interned_str(field->name, field->name_length, conn_enc);

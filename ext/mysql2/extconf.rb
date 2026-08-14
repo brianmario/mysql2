@@ -34,6 +34,9 @@ end
 have_func('rb_absint_size')
 have_func('rb_absint_singlebit_p')
 
+# 2.2+
+have_func('rb_check_symbol_cstr', 'ruby.h')
+
 # 2.7+
 have_func('rb_gc_mark_movable')
 

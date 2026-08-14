@@ -1360,6 +1360,14 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
    * connection untouched and reusable. Nothing downstream of the send may
    * raise for this option -- rb_mysql_result_to_obj in particular. */
   mysql2_canonicalize_force_encoding(current);
+  /* Text-protocol streaming is mysql_use_result: the server pushes rows and
+   * the client pulls them off the socket, so there is no prefetch to size.
+   * The stream: {size: N} spelling is prepared-statement-only
+   * (Statement#execute drives a server-side cursor, which does prefetch);
+   * reject it here rather than silently stream one row at a time. */
+  if (RB_TYPE_P(rb_hash_aref(current, sym_stream), T_HASH)) {
+    rb_raise(rb_eArgError, "stream: {size: N} is only supported for prepared statements; Client#query streams with mysql_use_result, which has no prefetch");
+  }
   rb_ivar_set(self, intern_current_query_options, current);
 
   Check_Type(sql, T_STRING);

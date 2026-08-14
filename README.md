@@ -776,6 +776,19 @@ There are a few things that need to be kept in mind while using streaming:
 
 Read more about the consequences of using `mysql_use_result` (what streaming is implemented with) here: [https://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html](https://dev.mysql.com/doc/c-api/9.7/en/mysql-use-result.html).
 
+#### Prepared statement streaming and prefetch
+
+Prepared statements stream differently: `Statement#execute(stream: true)` opens a read-only server-side cursor and fetches one row per network round trip. Pass `stream: {size: N}` to fetch N rows per round trip instead:
+
+``` ruby
+statement = client.prepare("SELECT * FROM really_big_table")
+result = statement.execute(stream: { size: 1000 }, cache_rows: false)
+```
+
+`stream: true` is equivalent to `stream: {size: 1}`. `size` bounds how many rows land in client memory per batch, so it trades peak memory for fewer round trips — the win scales with network latency to the server and is barely visible against a local socket.
+
+The two streaming implementations don't share this knob: `Client#query(stream: true)` is `mysql_use_result`, where the server pushes rows and there is no prefetch to size, so `Client#query` raises `ArgumentError` if given `stream: {size: N}`.
+
 ### Lazy Everything
 
 Well... almost ;)

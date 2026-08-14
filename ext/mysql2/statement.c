@@ -4,7 +4,7 @@
 
 extern VALUE mMysql2, cMysql2Error;
 static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate;
-static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
+static VALUE sym_stream, sym_size, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year,
   intern_query_options, intern_mul, intern_truncate;
 
@@ -358,6 +358,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   int is_streaming;
   struct nogvl_stmt_execute_args execute_args;
   double query_start, query_elapsed;
+  unsigned long prefetch_rows = 1;
   rb_encoding *conn_enc;
 
   GET_STATEMENT(self);
@@ -411,7 +412,35 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
   mysql2_canonicalize_force_encoding(current);
 
-  is_streaming = (Qtrue == rb_hash_aref(current, sym_stream));
+  // :stream comes in two shapes: true streams with the default prefetch of
+  // one row per COM_STMT_FETCH round trip, and {size: N} streams fetching N
+  // rows per round trip (STMT_ATTR_PREFETCH_ROWS below). The hash form is
+  // validated here, before any bind buffer is allocated and before anything
+  // is written to the wire, under the same no-raise-downstream rules as
+  // :force_encoding above. It admits exactly one key so that a future
+  // sizing key can be added without a silently-ignored spelling existing
+  // today.
+  {
+    VALUE stream = rb_hash_aref(current, sym_stream);
+    if (RB_TYPE_P(stream, T_HASH)) {
+      VALUE size = rb_hash_aref(stream, sym_size);
+      long size_l;
+      if (NIL_P(size) || RHASH_SIZE(stream) != 1) {
+        rb_raise(rb_eArgError, "stream: hash accepts only {size: Integer}");
+      }
+      if (!RB_TYPE_P(size, T_FIXNUM) && !RB_TYPE_P(size, T_BIGNUM)) {
+        rb_raise(rb_eTypeError, "stream: {size: } must be an Integer");
+      }
+      size_l = NUM2LONG(size);
+      if (size_l <= 0) {
+        rb_raise(rb_eArgError, "stream: {size: } must be positive (got %ld)", size_l);
+      }
+      prefetch_rows = (unsigned long)size_l;
+      is_streaming = 1;
+    } else {
+      is_streaming = (Qtrue == stream);
+    }
+  }
 
   // setup any bind variables in the query
   if (bind_count > 0) {
@@ -580,6 +609,13 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     if (mysql_stmt_attr_set(stmt, STMT_ATTR_CURSOR_TYPE, &type)) {
       FREE_BINDS;
       rb_raise(cMysql2Error, "Unable to stream prepared statement, could not set CURSOR_TYPE_READ_ONLY");
+    }
+    // Set unconditionally: statement attributes persist on the handle
+    // across executes, so stream: true must restore the one-row default
+    // after an earlier stream: {size: N} execute on the same statement.
+    if (mysql_stmt_attr_set(stmt, STMT_ATTR_PREFETCH_ROWS, &prefetch_rows)) {
+      FREE_BINDS;
+      rb_raise(cMysql2Error, "Unable to stream prepared statement, could not set STMT_ATTR_PREFETCH_ROWS");
     }
   }
 
@@ -825,6 +861,7 @@ void init_mysql2_statement(void) {
   rb_define_method(cMysql2Statement, "closed?", rb_mysql_stmt_closed_p, 0);
 
   sym_stream = ID2SYM(rb_intern("stream"));
+  sym_size = ID2SYM(rb_intern("size"));
 
   intern_new_with_args = rb_intern("new_with_args");
   intern_each = rb_intern("each");

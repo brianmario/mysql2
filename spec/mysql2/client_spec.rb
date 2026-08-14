@@ -236,6 +236,22 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
     end
 
+    it "should reject a connection when ssl_mode is verify_identity and the hostname doesn't match the server's certificate" do
+      # Regression coverage for #879: verify_identity being wired to the right
+      # mysql_options() call (MYSQL_OPT_SSL_MODE on MySQL, MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+      # on MariaDB) was never actually proven to reject a hostname mismatch --
+      # only that the option gets set, which isn't the same thing.
+      #
+      # spec/ssl/server-cert.pem has CN=mysql2gem.example.com and no SAN
+      # extension. option_overrides above connects via exactly that hostname
+      # (ssl_cert_host) so it matches; CI's /etc/hosts also points
+      # mysql2gem.example.com at 127.0.0.1 (see build-ubuntu.yml/build-macos.yml),
+      # so connecting via 127.0.0.1 instead reaches the identical server with a
+      # hostname the certificate doesn't cover -- verify_identity must reject it.
+      options = option_overrides.merge(ssl_mode: :verify_identity, 'host' => '127.0.0.1')
+      expect { new_client(options) }.to raise_error(Mysql2::Error)
+    end
+
     it "should be able to connect via SSL options" do
       # You may need to adjust the lines below to match your SSL certificate paths
       results = Hash[ssl_client.query('SHOW STATUS WHERE Variable_name LIKE "Ssl_%"').map { |x| x.values_at('Variable_name', 'Value') }]

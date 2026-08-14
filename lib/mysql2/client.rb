@@ -174,7 +174,28 @@ module Mysql2
 
     private
 
+    # Warns once per client, before connecting, about option combinations
+    # that are incoherent or silently ignored. Warnings only: the connection
+    # proceeds exactly as it would have without them.
+    def warn_incoherent_options
+      # The client key and certificate only take effect together. Given one
+      # without the other, libmysqlclient silently sends no client certificate
+      # and MariaDB Connector/C aborts the connection with a bare TLS error
+      # that never names the real problem.
+      # https://dev.mysql.com/doc/refman/en/using-encrypted-connections.html
+      warn ":sslkey and :sslcert only take effect together; alone, libmysqlclient sends no client certificate and MariaDB Connector/C fails to connect" \
+        if @query_options[:sslkey].nil? != @query_options[:sslcert].nil?
+
+      # Streaming results are never cached, so a client-wide :stream default
+      # overrides the :cache_rows default on every query (see the per-query
+      # warning in ext/mysql2/result.c).
+      warn ":cache_rows is ignored on a client with :stream enabled; pass cache_rows: false to acknowledge streaming semantics" \
+        if @query_options[:stream] && @query_options[:cache_rows]
+    end
+
     def check_and_clean_query_options
+      warn_incoherent_options
+
       if %i[user pass hostname dbname db sock].any? { |k| @query_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="
         warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."

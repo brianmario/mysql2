@@ -176,7 +176,17 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper, int fro
                  && wrapper->client_wrapper;
 
     if (wrapper->stmt_wrapper) {
-      if (!wrapper->stmt_wrapper->closed) {
+      mysql_stmt_wrapper *stmt_wrapper = wrapper->stmt_wrapper;
+      /* Whether the statement's metadata snapshot still describes the shape
+       * these artifacts were built for: an intervening execute can have
+       * rebuilt it (ALTER TABLE) while this Result sat unfreed after a
+       * mid-iteration raise, and handing back buffers bound for the old
+       * shape would make a later execute silently convert values into the
+       * wrong C types. */
+      int cache_compatible = !stmt_wrapper->closed &&
+                             stmt_wrapper->metadata_epoch == wrapper->stmt_metadata_epoch;
+
+      if (!stmt_wrapper->closed) {
         if (defer_free) {
           mysql2_enqueue_pending_result_free(wrapper->client_wrapper, NULL, wrapper->stmt_wrapper->stmt);
         } else {
@@ -194,11 +204,50 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper, int fro
         wrapper->stmt_wrapper->stmt->bind_result_done = 0;
       }
 
-      if (wrapper->statement != Qnil) {
-        decr_mysql2_stmt(wrapper->stmt_wrapper);
+      /* Hand the result buffers back to the statement for the next execute
+       * to adopt, instead of freeing them, whenever the cache slot is open
+       * and the shape still matches. Pointer moves only, so this is safe
+       * from the GC dfree path too. Everything cache-related happens before
+       * the decr below, which can free stmt_wrapper outright when this
+       * Result held the last reference. The bind-type election travels with
+       * the buffers (cached_result_buffers_string_binds): an adopting
+       * execute under the other cast mode sees the mismatch at fetch time
+       * and re-elects, exactly as a mid-result #each mode switch does. */
+      if (wrapper->result_buffers &&
+          cache_compatible && stmt_wrapper->cached_result_buffers == NULL) {
+        stmt_wrapper->cached_result_buffers = wrapper->result_buffers;
+        stmt_wrapper->cached_is_null = wrapper->is_null;
+        stmt_wrapper->cached_error = wrapper->error;
+        stmt_wrapper->cached_length = wrapper->length;
+        stmt_wrapper->cached_result_buffers_string_binds = wrapper->result_buffers_string_binds;
+        /* Clue that the next statement execute will need to allocate or
+         * adopt a result buffer. */
+        wrapper->result_buffers = NULL;
+        wrapper->result_buffers_bound = 0;
+      } else {
+        rb_mysql_result_free_result_buffers(wrapper);
       }
 
-      rb_mysql_result_free_result_buffers(wrapper);
+      /* Hand back the field-name array as a private dup, so caller
+       * mutations of this Result's #fields can never reach the cache. Only
+       * from the ordinary free path -- rb_ary_dup allocates, which a GC
+       * dfree callback must not -- and only for a non-streaming Result:
+       * those are materialized and freed entirely inside Statement#execute,
+       * so the array provably carries the execute-time :symbolize_keys and
+       * no user code has run against it. A streaming Result's names are
+       * built under its first #each's options instead, which may differ. */
+      if (!from_dfree_callback && !wrapper->is_streaming && cache_compatible &&
+          wrapper->fields != Qnil &&
+          (my_ulonglong)RARRAY_LEN(wrapper->fields) == wrapper->numberOfFields &&
+          (stmt_wrapper->cached_fields == Qnil ||
+           stmt_wrapper->cached_fields_symbolized != wrapper->fields_symbolized)) {
+        stmt_wrapper->cached_fields = rb_ary_dup(wrapper->fields);
+        stmt_wrapper->cached_fields_symbolized = wrapper->fields_symbolized;
+      }
+
+      if (wrapper->statement != Qnil) {
+        decr_mysql2_stmt(stmt_wrapper);
+      }
     }
 
     /* For prepared statements, wrapper->result is the result metadata
@@ -411,6 +460,7 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
 #endif
     }
     rb_ary_store(wrapper->fields, idx, rb_field);
+    wrapper->fields_symbolized = symbolize_keys ? 1 : 0;
   }
 
   return rb_field;
@@ -2455,9 +2505,52 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
 
   /* Keep a handle to the Statement to ensure it doesn't get garbage collected first */
   wrapper->statement = statement;
+  wrapper->stmt_metadata_epoch = 0;
+  wrapper->fields_symbolized = 0;
   if (statement != Qnil) {
-    wrapper->stmt_wrapper = DATA_PTR(statement);
-    wrapper->stmt_wrapper->refcount++;
+    mysql_stmt_wrapper *stmt_wrapper = DATA_PTR(statement);
+    wrapper->stmt_wrapper = stmt_wrapper;
+    stmt_wrapper->refcount++;
+    wrapper->stmt_metadata_epoch = stmt_wrapper->metadata_epoch;
+
+    /* Adopt the artifacts cached from this statement's previous execute;
+     * mysql2_stmt_validate_metadata_cache already verified them against
+     * this execute's freshly read metadata (dropping them on mismatch), so
+     * whatever survives here is shape-compatible. Buffer sizes are
+     * data-dependent, not part of that validation: an adopted char[] buffer
+     * can be smaller than this result's widest value, and the
+     * MYSQL_DATA_TRUNCATED grow-and-refetch path in
+     * rb_mysql_result_fetch_row_stmt grows it to fit, exactly as it grows a
+     * freshly allocated initial-size buffer. The bind-type election is
+     * adopted along with the buffers: when this execute's cast mode wants
+     * the other election, the fetch path sees the mismatch and re-elects
+     * (frees and reallocates) before binding, exactly as it does for a
+     * mid-result #each mode switch. */
+    if (stmt_wrapper->cached_result_buffers) {
+      wrapper->result_buffers = stmt_wrapper->cached_result_buffers;
+      wrapper->is_null = stmt_wrapper->cached_is_null;
+      wrapper->error = stmt_wrapper->cached_error;
+      wrapper->length = stmt_wrapper->cached_length;
+      wrapper->result_buffers_string_binds = stmt_wrapper->cached_result_buffers_string_binds;
+      wrapper->numberOfFields = stmt_wrapper->cached_field_count;
+      stmt_wrapper->cached_result_buffers = NULL;
+      stmt_wrapper->cached_is_null = NULL;
+      stmt_wrapper->cached_error = NULL;
+      stmt_wrapper->cached_length = NULL;
+    }
+
+    /* Field names are adopted only for a non-streaming Result (a streaming
+     * one materializes names under its first #each's options, which may
+     * differ from these) and only when they were built under the same
+     * :symbolize_keys. The cache keeps its private master copy; this Result
+     * gets a dup, so mutations of #fields stay its own. */
+    if (stmt_wrapper->cached_fields != Qnil &&
+        rb_hash_aref(options, sym_stream) != Qtrue &&
+        stmt_wrapper->cached_fields_symbolized == (RTEST(rb_hash_aref(options, sym_symbolize_keys)) ? 1 : 0)) {
+      wrapper->fields = rb_ary_dup(stmt_wrapper->cached_fields);
+      wrapper->fields_symbolized = stmt_wrapper->cached_fields_symbolized;
+      wrapper->numberOfFields = stmt_wrapper->cached_field_count;
+    }
   } else {
     wrapper->stmt_wrapper = NULL;
   }

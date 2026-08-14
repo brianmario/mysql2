@@ -1096,6 +1096,34 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.to raise_error(Timeout::Error)
       end
 
+      it "does not leave the connection claimed after an interrupted #next_result" do
+        @multi_client.query("SELECT 1 AS a; SELECT SLEEP(2) AS b")
+
+        expect do
+          Timeout.timeout(0.3) { @multi_client.next_result }
+        end.to raise_error(Timeout::Error)
+
+        # The interrupted exchange invalidates the connection, same as an
+        # interrupted query's read -- a normal, actionable connection error
+        # is fine, but a permanently leaked claim is not, whether reported
+        # to another fiber ("in use by") or to this one ("still waiting").
+        begin
+          @multi_client.query("SELECT 1")
+        rescue Mysql2::Error => e
+          expect(e.message).not_to match(/This connection is in use by|still waiting for a result/)
+        end
+      end
+
+      it "releases its claim and keeps the connection usable when #abandon_results! hits a failed statement" do
+        @multi_client.query("SELECT 1; SELECT * FROM abandon_no_such_table; SELECT 3")
+
+        expect do
+          @multi_client.abandon_results!
+        end.to raise_error(Mysql2::Error, /abandon_no_such_table/)
+
+        expect(@multi_client.query("SELECT 4 AS a").first).to eq('a' => 4)
+      end
+
       it "#more_results? should work" do
         @multi_client.query("SELECT 1 AS 'set_1'; SELECT 2 AS 'set_2'")
         expect(@multi_client.more_results?).to be true
@@ -1670,6 +1698,56 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
     expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
     expect(@client.close).to be_nil
+  end
+
+  it "should not allow concurrent use of #select_db" do
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    expect do
+      @client.select_db(DatabaseCredentials['root']['database'])
+    end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.select_db(DatabaseCredentials['root']['database'])).to eq(DatabaseCredentials['root']['database'])
+  end
+
+  it "should not allow concurrent use of #next_result" do
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    expect do
+      @client.next_result
+    end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.next_result).to be false
+  end
+
+  it "should not allow concurrent use of #store_result" do
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    expect do
+      @client.store_result
+    end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.query("SELECT 1 AS a").first).to eq('a' => 1)
+  end
+
+  it "should not allow concurrent use of #abandon_results!" do
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    expect do
+      @client.abandon_results!
+    end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.abandon_results!).to be_nil
+  end
+
+  it "should not allow concurrent use of #set_server_option" do
+    thread = new_thread { @client.query("SELECT SLEEP(1)") }
+    thread.join(0.1)
+    expect do
+      @client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_ON)
+    end.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value.to_a).to eq([{ "SLEEP(1)" => 0 }])
+    expect(@client.set_server_option(Mysql2::Client::OPTION_MULTI_STATEMENTS_OFF)).to be true
   end
 
   context "#ping interrupted mid-flight" do

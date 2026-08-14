@@ -944,6 +944,11 @@ static VALUE mysql2_cast_integer(const char *str, unsigned long len) {
   }
 }
 
+/* Initial size for variable-length (char[]) result buffers. Wide enough that
+ * typical short strings, decimals, enums, and sets never truncate; anything
+ * wider grows to fit on first encounter and stays grown. */
+#define MYSQL2_INITIAL_BUFFER_LENGTH 128
+
 static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields) {
   unsigned int i;
   GET_RESULT(self);
@@ -1007,8 +1012,14 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
       case MYSQL_TYPE_ENUM:         // char[]
       case MYSQL_TYPE_GEOMETRY:     // char[]
       default:
-        wrapper->result_buffers[i].buffer = xmalloc(fields[i].max_length);
-        wrapper->result_buffers[i].buffer_length = fields[i].max_length;
+        /* Variable-length columns start small and grow on demand: a value
+         * that doesn't fit comes back as MYSQL_DATA_TRUNCATED, and the
+         * fetch loop grows the buffer to the reported length and re-fetches
+         * the missing tail (see rb_mysql_result_fetch_row_stmt). Buffers
+         * never shrink, so each one levels off at its column's widest value
+         * actually read rather than the column's declared maximum. */
+        wrapper->result_buffers[i].buffer = xmalloc(MYSQL2_INITIAL_BUFFER_LENGTH);
+        wrapper->result_buffers[i].buffer_length = MYSQL2_INITIAL_BUFFER_LENGTH;
         break;
     }
 
@@ -1057,13 +1068,14 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
   /* Bind once per result set rather than once per row. The buffers are
    * allocated exactly once (rb_mysql_result_alloc_result_buffers returns early
-   * when they exist), but a variable-length column's buffer may grow later --
-   * see the MYSQL_DATA_TRUNCATED case below -- always in place, at the same
-   * address registered here, so the bind itself never needs to be redone.
-   * Buffers are only released by rb_mysql_result_free_result, which nulls the
-   * pointer and clears this flag. So the addresses registered here stay valid
-   * for every subsequent mysql_stmt_fetch on this result. Re-binding per row
-   * copied the whole MYSQL_BIND array into the statement each time for no gain.
+   * when they exist), and the addresses registered here stay valid for every
+   * subsequent mysql_stmt_fetch until a variable-length column's buffer is
+   * grown -- see the MYSQL_DATA_TRUNCATED case below. Both client libraries
+   * copy the MYSQL_BIND array into the statement handle at bind time, so a
+   * grow (xrealloc may move the buffer) leaves the registered copy pointing
+   * at freed memory; the grow path clears this flag so the next fetch
+   * re-registers the current addresses first. Re-binding per row copied the
+   * whole MYSQL_BIND array into the statement each time for no gain.
    *
    * Binding is tracked separately from allocation so that a failed bind is
    * still retried on a later fetch, exactly as it was when the bind ran on
@@ -1101,21 +1113,49 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         return Qnil;
 
       case MYSQL_DATA_TRUNCATED: {
-        /* A streaming (cursor-mode) fetch never calls mysql_stmt_store_result(),
-         * so fields[i].max_length was never populated and buffers started too
-         * small -- see the alloc comment above. Grow just the truncated
-         * column(s) to their actual length (wrapper->length[i]) and re-fetch
-         * with mysql_stmt_fetch_column(), MySQL's documented recovery for this
-         * case. That call copies data already buffered in the client library,
-         * so no GVL release is needed here. */
+        /* One or more variable-length columns arrived wider than their
+         * current buffer (wrapper->error[j], populated by the fetch). Grow
+         * each one to the length the server reported for this row
+         * (wrapper->length[j], also populated by the fetch) and complete it
+         * with mysql_stmt_fetch_column(), MySQL's documented recovery for
+         * this case. The truncating fetch already copied the first
+         * buffer_length bytes and xrealloc preserves them, so the re-fetch
+         * starts at that offset and copies only the missing tail -- from the
+         * client library's own row buffer, so no network I/O and no GVL
+         * release. The tail fetch reports into scratch variables: the row's
+         * authoritative length/error/is_null were already set by the
+         * truncating fetch, and what a partial fetch writes back to them
+         * differs between client libraries. */
         unsigned int j;
+
+        /* Growing can move a buffer, leaving the binds registered in the
+         * statement handle pointing at freed memory, so re-register them
+         * before the next fetch. Cleared before the loop rather than after
+         * it so a mid-loop allocation failure or fetch_column error cannot
+         * leave a stale registration behind for a rescued fetch to write
+         * through. */
+        wrapper->result_buffers_bound = 0;
+
         for (j = 0; j < wrapper->numberOfFields; j++) {
+          MYSQL_BIND tail;
+          unsigned long filled, tail_length = 0;
+          my_bool tail_error = 0;
+          my_bool tail_is_null = 0;
+
           if (!wrapper->error[j]) continue;
 
+          filled = wrapper->result_buffers[j].buffer_length;
           wrapper->result_buffers[j].buffer = xrealloc(wrapper->result_buffers[j].buffer, wrapper->length[j]);
           wrapper->result_buffers[j].buffer_length = wrapper->length[j];
 
-          if (mysql_stmt_fetch_column(wrapper->stmt_wrapper->stmt, &wrapper->result_buffers[j], j, 0)) {
+          tail = wrapper->result_buffers[j];
+          tail.buffer = (char *)tail.buffer + filled;
+          tail.buffer_length = wrapper->length[j] - filled;
+          tail.length = &tail_length;
+          tail.error = &tail_error;
+          tail.is_null = &tail_is_null;
+
+          if (mysql_stmt_fetch_column(wrapper->stmt_wrapper->stmt, &tail, j, filled)) {
             rb_raise_mysql2_stmt_error(wrapper->stmt_wrapper);
           }
         }

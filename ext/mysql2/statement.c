@@ -195,14 +195,6 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     rb_raise(cMysql2Error, "Unable to initialize prepared statement: out of memory");
   }
 
-  // set STMT_ATTR_UPDATE_MAX_LENGTH attr
-  {
-    my_bool truth = 1;
-    if (mysql_stmt_attr_set(stmt_wrapper->stmt, STMT_ATTR_UPDATE_MAX_LENGTH, &truth)) {
-      rb_raise(cMysql2Error, "Unable to initialize prepared statement: set STMT_ATTR_UPDATE_MAX_LENGTH");
-    }
-  }
-
   // call mysql_stmt_prepare w/o gvl
   {
     struct nogvl_prepare_statement_args args;

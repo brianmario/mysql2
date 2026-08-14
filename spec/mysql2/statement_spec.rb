@@ -429,12 +429,60 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     end
 
     it "should return wide variable-width columns correctly on every row" do
-      # Variable-width buffers are sized once, from fields[i].max_length. A row
+      # Variable-width buffers start at a small fixed size and grow on
+      # MYSQL_DATA_TRUNCATED (see rb_mysql_result_fetch_row_stmt). A row
       # fetched into a stale or too-short buffer would be truncated or wrong
-      # here, where the value is far larger than any inline buffer.
+      # here, where the value is far larger than the initial buffer.
       expected = ['a' * 60_000, 'b' * 60_000]
       result = @client.prepare("SELECT REPEAT('a', 60000) AS v UNION ALL SELECT REPEAT('b', 60000)").execute
       expect(result.to_a.map { |row| row['v'] }).to eq(expected)
+    end
+
+    it "should grow the result buffer past a wide value and keep every later row intact" do
+      # A wide value truncates, grows its buffer to fit, and completes via a
+      # tail-only mysql_stmt_fetch_column at the truncation offset; growing
+      # can move the buffer, so the statement's registered binds are
+      # re-registered before the next fetch. The varied byte patterns make a
+      # misplaced tail (wrong offset, or a skipped tail fetch) show up as a
+      # content mismatch, and the rows after each wide one catch a bind left
+      # pointing at the buffer's pre-grow address.
+      @client.query("DROP TABLE IF EXISTS stmt_buffer_grow_test")
+      @client.query("CREATE TABLE stmt_buffer_grow_test (id INT PRIMARY KEY AUTO_INCREMENT, data MEDIUMBLOB)")
+
+      begin
+        pattern = ->(n) { (0...n).map { |i| ((i * 7 + 13) % 256).chr }.join.b }
+        rows = [pattern.call(10), pattern.call(1_000_000), pattern.call(200), pattern.call(2_000_000), nil, pattern.call(10)]
+        ins = @client.prepare("INSERT INTO stmt_buffer_grow_test (data) VALUES (?)")
+        rows.each { |v| ins.execute(v) }
+
+        stmt = @client.prepare("SELECT data FROM stmt_buffer_grow_test ORDER BY id")
+        expect(stmt.execute.to_a.map { |r| r["data"] }).to eq(rows)
+      ensure
+        @client.query("DROP TABLE IF EXISTS stmt_buffer_grow_test")
+      end
+    end
+
+    it "should grow multiple truncated columns in the same row" do
+      # Each truncated column in a row is grown and tail-fetched
+      # independently before the binds are re-registered once.
+      @client.query("DROP TABLE IF EXISTS stmt_multi_grow_test")
+      @client.query("CREATE TABLE stmt_multi_grow_test (id INT PRIMARY KEY AUTO_INCREMENT, a MEDIUMBLOB, b MEDIUMBLOB)")
+
+      begin
+        pattern = ->(n, salt) { (0...n).map { |i| ((i * 11 + salt) % 256).chr }.join.b }
+        rows = [
+          [pattern.call(5, 3), pattern.call(7, 5)],
+          [pattern.call(70_000, 17), pattern.call(90_000, 29)],
+          [pattern.call(9, 7), pattern.call(4, 11)],
+        ]
+        ins = @client.prepare("INSERT INTO stmt_multi_grow_test (a, b) VALUES (?, ?)")
+        rows.each { |a, b| ins.execute(a, b) }
+
+        stmt = @client.prepare("SELECT a, b FROM stmt_multi_grow_test ORDER BY id")
+        expect(stmt.execute.to_a.map { |r| [r["a"], r["b"]] }).to eq(rows)
+      ensure
+        @client.query("DROP TABLE IF EXISTS stmt_multi_grow_test")
+      end
     end
 
     it "should yield rows as hash's with symbol keys if :symbolize_keys was set to true" do
@@ -497,11 +545,6 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       # Result#fields behaves exactly as it did with the per-cell
       # materialization over the binary protocol, including after an abandoned
       # stream is force-freed by the next query.
-      #
-      # Integer-only columns: streaming prepared statements size their result
-      # buffers from fields[i].max_length, which is 0 for var-length columns
-      # without mysql_stmt_store_result -- a pre-existing limitation unrelated
-      # to field names.
       let(:sql) { "SELECT 1 AS a, 10 AS b UNION SELECT 2, 20 UNION SELECT 3, 30" }
 
       it "should return field names after iteration" do
@@ -931,15 +974,10 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       expect(row['int_val']).to eql(1)
     end
 
-    it "passes through streaming execution" do
-      # Streaming prepared statements cannot return string values at all,
-      # with or without this option: statement streaming skips
-      # mysql_stmt_store_result, leaving max_length 0, and string fetches
-      # die with MYSQL_DATA_TRUNCATED ("IMPLBUG..."). So there is nothing to
-      # retag here; pin that the option at least threads through the
-      # streaming execute path unharmed.
-      rows = @client.prepare("SELECT 1 UNION SELECT 2").execute(stream: true, cache_rows: false, as: :array, force_encoding: 'binary').to_a
-      expect(rows).to eql([[1], [2]])
+    it "retags string values through streaming execution" do
+      rows = @client.prepare("SELECT 'ab' UNION SELECT 'cd'").execute(stream: true, cache_rows: false, as: :array, force_encoding: 'binary').to_a
+      expect(rows).to eql([['ab'], ['cd']])
+      expect(rows.flatten.map(&:encoding).uniq).to eql([Encoding::BINARY])
     end
 
     it "raises for an unknown encoding name before the statement executes" do

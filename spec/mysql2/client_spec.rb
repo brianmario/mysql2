@@ -1249,6 +1249,41 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end.to raise_error(Mysql2::Error)
     end
 
+    it "should not tag escaped binary data with the connection's encoding" do
+      client = new_client(encoding: 'utf8mb4')
+
+      # Two 16-byte binary strings, neither valid UTF-8. One happens to contain
+      # a byte mysql_real_escape_string escapes, the other doesn't -- both
+      # should come back tagged as binary, not silently promoted to UTF-8.
+      no_escaping_needed = ['bafe80143bbe4bd3ba785d0679192fbf'].pack('H*')
+      escaping_needed = ['6614ed2fb7e749cda6caab6ca6b34dcc'].pack('H*')
+
+      expect(client.escape(no_escaping_needed).encoding).to eql(Encoding::ASCII_8BIT)
+
+      escaped = client.escape(escaping_needed)
+      expect(escaped.encoding).to eql(Encoding::ASCII_8BIT)
+      expect(escaped.valid_encoding?).to be true
+    end
+
+    context 'under NO_BACKSLASH_ESCAPES sql_mode' do
+      before(:example) do
+        @client.query("SET SESSION sql_mode = concat(@@sql_mode, ',NO_BACKSLASH_ESCAPES')")
+      end
+
+      it "should escape correctly (round-tripping through a real query) or raise Mysql2::Error -- never a bare ArgumentError" do
+        begin
+          escaped = @client.escape("it's \\a\\ test")
+          row = @client.query("SELECT '#{escaped}' AS x").first
+          expect(row['x']).to eq("it's \\a\\ test")
+        rescue Mysql2::Error
+          # Acceptable on client libraries that genuinely can't escape safely
+          # under this SQL mode (see ESCAPE_QUOTE_SUPPORTED). Anything other
+          # than Mysql2::Error -- e.g. the ArgumentError this regresses --
+          # propagates and fails this example.
+        end
+      end
+    end
+
     context 'when mysql encoding is not utf8' do
       let(:client) { new_client(encoding: "ujis") }
 

@@ -690,7 +690,9 @@ result = client.query("SELECT * FROM table", :cast => :fast)
 
 This is for callers that consume mysql2 results directly -- raw-mysql2 pipelines, ETL jobs, and applications that do their own value parsing -- where DECIMAL and temporal columns are often passed through or parsed lazily, and paying BigDecimal/Time construction for every cell up front is waste. Your code must be prepared to receive Strings for those columns. Note that Active Record does not use this option.
 
-Any `:cast` value other than the exact symbol `:fast` (or `false`/`nil`) keeps meaning full casting. Prepared statement results are always fully cast, as with `:cast => false`.
+Any `:cast` value other than the exact symbol `:fast` (or `false`/`nil`) keeps meaning full casting.
+
+Prepared statements honor `:cast => false` and `:cast => :fast` too: result columns are bound as strings, so the client library delivers each value's string form from the binary protocol. Those strings are value-equivalent to the text protocol's, and byte-identical for every column type in the spec suite's parity matrix, under both libmysqlclient and libmariadb. Pass `:cast` to `Statement#execute` (or set it client-wide): non-streaming `#execute` materializes rows internally with `#each`, so a `:cast` passed to a later `Result#each` call only applies to rows not already materialized.
 
 ### Async
 

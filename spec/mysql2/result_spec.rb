@@ -1644,6 +1644,7 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
           bigint_umax_col BIGINT UNSIGNED,
           decimal_col DECIMAL(10,3),
           float_col FLOAT(10,3),
+          double_col DOUBLE,
           date_col DATE,
           datetime_col DATETIME(6),
           time_col TIME,
@@ -1658,12 +1659,13 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       ]
       @client.query %[
         INSERT INTO mysql2_cast_false_test VALUES
-          (1, -2147483648, 18446744073709551615, 10.3, 10.3, '2010-04-04',
+          (1, -2147483648, 18446744073709551615, 10.3, 10.3,
+           1.7976931348623157e308, '2010-04-04',
            '2010-04-04 11:44:00.123456', '-838:59:59', 2009, b'101', 1,
            'héllo ☃', 'héllo', _binary X'00DEADBEEF00FF', _binary X'760062'),
-          (2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+          (2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
            NULL, NULL, NULL, NULL),
-          (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+          (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
            '', '', '', '')
       ]
     end
@@ -1672,8 +1674,8 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
 
     let(:column_names) do
       %w[
-        row_id int_min_col bigint_umax_col decimal_col float_col date_col datetime_col time_col
-        year_col bit_col tiny1_col varchar_utf8_col varchar_latin1_col blob_col varbinary_col
+        row_id int_min_col bigint_umax_col decimal_col float_col double_col date_col datetime_col
+        time_col year_col bit_col tiny1_col varchar_utf8_col varchar_latin1_col blob_col varbinary_col
       ]
     end
 
@@ -1690,6 +1692,10 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
           'bigint_umax_col'    => ["18446744073709551615", Encoding::BINARY],
           'decimal_col'        => ["10.300", Encoding::BINARY],
           'float_col'          => ["10.300", Encoding::BINARY],
+          # Shortest round-trip formatting of DBL_MAX: the widest spot in the
+          # parity matrix for the client library's double-to-string
+          # conversion on the prepared-statement path.
+          'double_col'         => ["1.7976931348623157e308", Encoding::BINARY],
           'date_col'           => ["2010-04-04", Encoding::BINARY],
           'datetime_col'       => ["2010-04-04 11:44:00.123456", Encoding::BINARY],
           'time_col'           => ["-838:59:59", Encoding::BINARY],
@@ -1704,7 +1710,7 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
         {
           'row_id' => ["2", Encoding::BINARY],
           'int_min_col' => nil, 'bigint_umax_col' => nil, 'decimal_col' => nil,
-          'float_col' => nil, 'date_col' => nil, 'datetime_col' => nil,
+          'float_col' => nil, 'double_col' => nil, 'date_col' => nil, 'datetime_col' => nil,
           'time_col' => nil, 'year_col' => nil, 'bit_col' => nil,
           'tiny1_col' => nil, 'varchar_utf8_col' => nil,
           'varchar_latin1_col' => nil, 'blob_col' => nil, 'varbinary_col' => nil,
@@ -1712,7 +1718,7 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
         {
           'row_id' => ["3", Encoding::BINARY],
           'int_min_col' => nil, 'bigint_umax_col' => nil, 'decimal_col' => nil,
-          'float_col' => nil, 'date_col' => nil, 'datetime_col' => nil,
+          'float_col' => nil, 'double_col' => nil, 'date_col' => nil, 'datetime_col' => nil,
           'time_col' => nil, 'year_col' => nil, 'bit_col' => nil,
           'tiny1_col' => nil,
           'varchar_utf8_col' => ["", Encoding::UTF_8],
@@ -1810,14 +1816,100 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(result.fields).to eql(column_names)
     end
 
-    it "does not fast-path prepared statements: cast: false still warns and fully casts" do
-      statement = @client.prepare("SELECT int_min_col, date_col, varchar_utf8_col FROM mysql2_cast_false_test WHERE row_id = 1")
-      row = nil
-      expect { row = statement.execute(cast: false).first }
-        .to output(/:cast is forced for prepared statements/).to_stderr
-      expect(row['int_min_col']).to eql(-2147483648)
-      expect(row['date_col']).to eql(Date.new(2010, 4, 4))
-      expect(row['varchar_utf8_col']).to eql("héllo ☃")
+    # The prepared-statement (binary protocol) specs below assert the same
+    # expected literals as the text-protocol specs above: the parity matrix.
+    # The client library converts every string-bound value, so byte equality
+    # with the text protocol is an empirical property of the client library,
+    # not a guarantee -- these pin it per column type so any client-library
+    # divergence surfaces as a named, visible failure rather than silently.
+    it "honors cast: false on prepared statements without a warning" do
+      statement = @client.prepare(parity_select)
+      rows = nil
+      expect { rows = statement.execute(cast: false).to_a }
+        .not_to output(/:cast is forced/).to_stderr
+      expect_raw_rows(rows, column_names)
+    end
+
+    [false, true].each do |stream|
+      [false, true].each do |symbolize|
+        variant = "stream: #{stream}, symbolize_keys: #{symbolize}"
+
+        it "returns raw strings and nils in prepared-statement hash rows (#{variant})" do
+          statement = @client.prepare(parity_select)
+          rows = statement.execute(cast: false, stream: stream, cache_rows: !stream, symbolize_keys: symbolize).to_a
+          expect_raw_rows(rows, symbolize ? column_names.map(&:to_sym) : column_names)
+        end
+
+        it "returns raw strings and nils in prepared-statement array rows (#{variant})" do
+          statement = @client.prepare(parity_select)
+          result = statement.execute(cast: false, as: :array, stream: stream, cache_rows: !stream, symbolize_keys: symbolize)
+          expect_raw_rows(result.to_a, column_names)
+          expect(result.fields).to eql(symbolize ? column_names.map(&:to_sym) : column_names)
+        end
+      end
+    end
+
+    it "applies Encoding.default_internal to prepared-statement raw strings exactly as the text protocol does" do
+      with_internal_encoding Encoding::UTF_8 do
+        row = @client.prepare(parity_select).execute(cast: false).first
+        expect(row['blob_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['date_col'].encoding).to eql(Encoding::BINARY)
+        expect(row['int_min_col']).to eql("-2147483648")
+        expect(row['int_min_col'].encoding).to eql(Encoding::UTF_8)
+        expect(row['varchar_latin1_col']).to eql("héllo")
+        expect(row['varchar_latin1_col'].encoding).to eql(Encoding::UTF_8)
+      end
+    end
+
+    it "grows string-bound variable-length columns past their initial buffer mid-stream" do
+      # The streaming twin of the buffered parity specs above: no
+      # mysql_stmt_store_result means no max_length, so variable-length
+      # columns start with zero-length buffers and rely on the
+      # MYSQL_DATA_TRUNCATED grow-and-refetch path -- under string binds
+      # here, exactly as under server-type binds in the #1058 regression
+      # spec in statement_spec.rb.
+      @client.query("DROP TABLE IF EXISTS stream_cast_false_truncation_test")
+      @client.query("CREATE TABLE stream_cast_false_truncation_test (id INT PRIMARY KEY AUTO_INCREMENT, data MEDIUMBLOB)")
+      sizes = [10, 1024, 65_540, 512]
+      begin
+        ins = @client.prepare("INSERT INTO stream_cast_false_truncation_test (data) VALUES (?)")
+        sizes.each { |n| ins.execute("x" * n) }
+
+        stmt = @client.prepare("SELECT data FROM stream_cast_false_truncation_test ORDER BY id")
+        rows = stmt.execute(cast: false, stream: true, cache_rows: false).to_a
+        # Byte-for-byte, not just size: a truncated fetch still reports the
+        # full length, so only the content proves the buffer was grown and
+        # the column re-fetched.
+        expect(rows.map { |row| row['data'] }).to eql(sizes.map { |n| "x" * n })
+        expect(rows.first['data'].encoding).to eql(Encoding::BINARY)
+      ensure
+        @client.query("DROP TABLE IF EXISTS stream_cast_false_truncation_test")
+      end
+    end
+
+    it "re-elects bind types when a later #each switches cast mode mid-stream" do
+      # No temporal columns: the full-cast side of the switch would trip the
+      # pre-existing stmt-path limitation that a TIME outside 00..23 hours
+      # raises in Time.local.
+      statement = @client.prepare("SELECT row_id, int_min_col FROM mysql2_cast_false_test ORDER BY row_id")
+
+      result = statement.execute(cast: false, stream: true, cache_rows: false)
+      result.each do |row| # rubocop:disable Lint/UnreachableLoop
+        expect(row['row_id']).to eql("1")
+        break
+      end
+      rest = []
+      result.each(cast: true) { |row| rest << row['row_id'] }
+      expect(rest).to eql([2, 3])
+
+      result = statement.execute(cast: true, stream: true, cache_rows: false)
+      result.each do |row| # rubocop:disable Lint/UnreachableLoop
+        expect(row['row_id']).to eql(1)
+        break
+      end
+      rest = []
+      result.each(cast: false) { |row| rest << row['row_id'] }
+      expect(rest).to eql(%w[2 3])
     end
   end
 
@@ -2061,14 +2153,49 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(result.fields).to eql(column_names)
     end
 
-    it "does not fast-path prepared statements: cast: :fast still warns and fully casts" do
-      statement = @client.prepare("SELECT decimal_col, date_col, bigint_min_col FROM mysql2_cast_fast_test WHERE row_id = 1")
-      row = nil
-      expect { row = statement.execute(cast: :fast).first }
-        .to output(/:cast is forced for prepared statements/).to_stderr
+    # The prepared-statement specs below assert the same expected literals
+    # as the text-protocol specs above: the parity matrix. See the matching
+    # note in the cast: false context.
+    it "honors cast: :fast on prepared statements without a warning" do
+      statement = @client.prepare(fast_select)
+      rows = nil
+      expect { rows = statement.execute(cast: :fast).to_a }
+        .not_to output(/:cast is forced/).to_stderr
+      expect_fast_rows(rows, column_names)
+    end
+
+    [false, true].each do |stream|
+      variant = "stream: #{stream}"
+
+      it "casts cheap types and defers expensive ones in prepared-statement hash rows (#{variant})" do
+        statement = @client.prepare(fast_select)
+        rows = statement.execute(cast: :fast, stream: stream, cache_rows: !stream).to_a
+        expect_fast_rows(rows, column_names)
+      end
+
+      it "casts cheap types and defers expensive ones in prepared-statement array rows (#{variant})" do
+        statement = @client.prepare(fast_select)
+        result = statement.execute(cast: :fast, as: :array, stream: stream, cache_rows: !stream)
+        expect_fast_rows(result.to_a, column_names)
+        expect(result.fields).to eql(column_names)
+      end
+    end
+
+    it "casts TINYINT(1) and BIT(1) as booleans on prepared statements when :cast_booleans is enabled" do
+      row = @client.prepare(fast_select).execute(cast: :fast, cast_booleans: true).first
+      expect(row['tiny1_col']).to be true
+      expect(row['single_bit_col']).to be true
+      expect(row['bigint_min_col']).to eql(-9_223_372_036_854_775_808)
+      expect(row['decimal_col']).to eql("10.300")
+    end
+
+    it "does not treat unrecognized truthy :cast values as :fast on prepared statements" do
+      # No TIME column: under the full cast this select gets, the
+      # pre-existing stmt-path limitation that a TIME outside 00..23 hours
+      # raises in Time.local would trip on time_col.
+      row = @client.prepare("SELECT decimal_col, date_col FROM mysql2_cast_fast_test WHERE row_id = 1").execute(cast: :bogus).first
       expect(row['decimal_col']).to eql(BigDecimal("10.3"))
       expect(row['date_col']).to eql(Date.new(2010, 4, 4))
-      expect(row['bigint_min_col']).to eql(-9_223_372_036_854_775_808)
     end
   end
 

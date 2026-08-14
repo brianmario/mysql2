@@ -30,9 +30,9 @@ void mysql2_result_force_free(VALUE self);
  * nothing here is a heap VALUE, so no GC marking is needed. A call that
  * passes per-each options neither reads nor writes this cache.
  *
- * cacheRows and cast are stored as parsed, before the prepared-statement
- * forcing in #each, so the warnings and forcing replay identically on every
- * call whether the parse was cached or not. warnDbTimezone records that the
+ * cacheRows is stored as parsed, before the prepared-statement forcing in
+ * #each, so the warning and forcing replay identically on every call
+ * whether the parse was cached or not. warnDbTimezone records that the
  * invalid-:database_timezone warning must be re-issued (each warns every
  * call, and the warning point is after the freed-result guard). */
 typedef struct {
@@ -86,6 +86,11 @@ typedef struct {
   unsigned int server_status;
   /* statement result bind buffers */
   char result_buffers_bound;
+  /* Whether result_buffers were elected as MYSQL_TYPE_STRING binds (cast:
+   * false / :fast) rather than server-type binds (cast: true). Consulted on
+   * every fetch so a later #each with the other cast mode frees and
+   * re-elects the buffers instead of decoding through the wrong types. */
+  char result_buffers_string_binds;
   MYSQL_BIND *result_buffers;
   my_bool *is_null;
   my_bool *error;

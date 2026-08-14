@@ -121,6 +121,27 @@ static void rb_mysql_result_mark(void * wrapper) {
   }
 }
 
+/* Free the statement result bind buffers so the next fetch (or the next
+ * statement execute) allocates and binds fresh ones. Called from
+ * rb_mysql_result_free_result and when a fetch needs buffers of the other
+ * bind-type election (see result_buffers_string_binds in result.h). */
+static void rb_mysql_result_free_result_buffers(mysql2_result_wrapper *wrapper) {
+  if (wrapper->result_buffers) {
+    unsigned int i;
+    for (i = 0; i < wrapper->numberOfFields; i++) {
+      if (wrapper->result_buffers[i].buffer) {
+        xfree(wrapper->result_buffers[i].buffer);
+      }
+    }
+    xfree(wrapper->result_buffers);
+    xfree(wrapper->is_null);
+    xfree(wrapper->error);
+    xfree(wrapper->length);
+  }
+  wrapper->result_buffers = NULL;
+  wrapper->result_buffers_bound = 0;
+}
+
 /* this may be called manually or during GC.
  *
  * from_dfree_callback must be true when called from rb_mysql_result_free
@@ -177,21 +198,7 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper, int fro
         decr_mysql2_stmt(wrapper->stmt_wrapper);
       }
 
-      if (wrapper->result_buffers) {
-        unsigned int i;
-        for (i = 0; i < wrapper->numberOfFields; i++) {
-          if (wrapper->result_buffers[i].buffer) {
-            xfree(wrapper->result_buffers[i].buffer);
-          }
-        }
-        xfree(wrapper->result_buffers);
-        xfree(wrapper->is_null);
-        xfree(wrapper->error);
-        xfree(wrapper->length);
-      }
-      /* Clue that the next statement execute will need to allocate a new result buffer. */
-      wrapper->result_buffers = NULL;
-      wrapper->result_buffers_bound = 0;
+      rb_mysql_result_free_result_buffers(wrapper);
     }
 
     /* For prepared statements, wrapper->result is the result metadata
@@ -944,7 +951,7 @@ static VALUE mysql2_cast_integer(const char *str, unsigned long len) {
   }
 }
 
-static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields) {
+static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields, int stringBinds) {
   unsigned int i;
   GET_RESULT(self);
 
@@ -954,8 +961,86 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
   wrapper->is_null = xcalloc(wrapper->numberOfFields, sizeof(my_bool));
   wrapper->error = xcalloc(wrapper->numberOfFields, sizeof(my_bool));
   wrapper->length = xcalloc(wrapper->numberOfFields, sizeof(unsigned long));
+  wrapper->result_buffers_string_binds = stringBinds;
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
+    if (stringBinds) {
+      /* cast: false / :fast -- bind MYSQL_TYPE_STRING so the client library
+       * converts every value to its string form (the documented
+       * mysql_stmt_bind_result conversion table) and no per-cell cast layer
+       * is needed on fetch. Fixed-width server types need type-derived
+       * sizes: for a stored result fields[i].max_length is the BINARY wire
+       * length (4 bytes for an INT), not the converted string length, and
+       * for a streaming result it is 0. Each constant is the widest value
+       * the type can print ("-2147483648" for LONG, "-838:59:59.000000" for
+       * TIME, ...), further widened to fields[i].length because the client
+       * library pads ZEROFILL columns to their display width and my_fcvt
+       * output for a DOUBLE(M,D) scales with M and D. FLOAT/DOUBLE get
+       * enough headroom that the conversion never has to round: libmysql
+       * limits my_gcvt precision to the bind's buffer_length, so an
+       * undersized buffer would silently lose digits rather than report
+       * truncation. Variable-length types keep max_length sizing and the
+       * MYSQL_DATA_TRUNCATED grow-and-refetch backstop, exactly as under
+       * server-type binds. */
+      unsigned long len;
+      int fixed_width = 1;
+
+      switch(fields[i].type) {
+        case MYSQL_TYPE_NULL:
+          len = 0;
+          break;
+        case MYSQL_TYPE_TINY:
+          len = 4;   // "-128"
+          break;
+        case MYSQL_TYPE_SHORT:
+        case MYSQL_TYPE_YEAR:
+          len = 6;   // "-32768"
+          break;
+        case MYSQL_TYPE_INT24:
+        case MYSQL_TYPE_LONG:
+          len = 11;  // "-2147483648"
+          break;
+        case MYSQL_TYPE_LONGLONG:
+          len = 20;  // "-9223372036854775808"
+          break;
+        case MYSQL_TYPE_FLOAT:
+        case MYSQL_TYPE_DOUBLE:
+          len = 512; // my_fcvt worst case (DOUBLE(255,30) fixed notation) plus headroom
+          break;
+        case MYSQL_TYPE_TIME:
+          len = 17;  // "-838:59:59.000000"
+          break;
+        case MYSQL_TYPE_DATE:
+        case MYSQL_TYPE_NEWDATE:
+          len = 10;  // "2010-04-04"
+          break;
+        case MYSQL_TYPE_DATETIME:
+        case MYSQL_TYPE_TIMESTAMP:
+          len = 26;  // "2010-04-04 11:44:00.123456"
+          break;
+        default:
+          /* Variable-length: fields[i].length is the declared maximum (4GB
+           * for LONGBLOB), so only the fixed-width widening below wants it. */
+          len = fields[i].max_length;
+          fixed_width = 0;
+          break;
+      }
+      if (fields[i].type != MYSQL_TYPE_NULL) {
+        if (fixed_width && len < fields[i].length) len = fields[i].length;
+        wrapper->result_buffers[i].buffer_type = MYSQL_TYPE_STRING;
+        wrapper->result_buffers[i].buffer = xmalloc(len);
+      } else {
+        wrapper->result_buffers[i].buffer_type = MYSQL_TYPE_NULL;
+      }
+      wrapper->result_buffers[i].buffer_length = len;
+
+      wrapper->result_buffers[i].is_null = &wrapper->is_null[i];
+      wrapper->result_buffers[i].length  = &wrapper->length[i];
+      wrapper->result_buffers[i].error   = &wrapper->error[i];
+      wrapper->result_buffers[i].is_unsigned = ((fields[i].flags & UNSIGNED_FLAG) != 0);
+      continue;
+    }
+
     wrapper->result_buffers[i].buffer_type = fields[i].type;
 
     //      mysql type    |            C type
@@ -1051,8 +1136,20 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 #endif
   }
 
+  /* Bind types are elected from the cast mode (see the string-binds arm of
+   * rb_mysql_result_alloc_result_buffers), so buffers left by an earlier
+   * #each with the other cast mode cannot be decoded through -- free them
+   * and let the re-allocation below elect afresh. The client library
+   * applies result binds at fetch time, so rows not yet fetched (this only
+   * arises when an earlier iteration stopped short) convert under the new
+   * types; already-yielded rows are unaffected. */
+  if (wrapper->result_buffers != NULL &&
+      wrapper->result_buffers_string_binds != (args->cast != MYSQL2_CAST_ALL)) {
+    rb_mysql_result_free_result_buffers(wrapper);
+  }
+
   if (wrapper->result_buffers == NULL) {
-    rb_mysql_result_alloc_result_buffers(self, fields);
+    rb_mysql_result_alloc_result_buffers(self, fields, args->cast != MYSQL2_CAST_ALL);
   }
 
   /* Bind once per result set rather than once per row. The buffers are
@@ -1131,6 +1228,39 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     rb_mysql_result_materialize_field_names(self, args->symbolizeKeys);
   }
 
+  /* cast: false -- every column is string-bound (see
+   * rb_mysql_result_alloc_result_buffers), so every non-NULL cell is the
+   * client library's string conversion of the value: a raw String with the
+   * right encoding, no type dispatch at all. This loop is the stmt twin of
+   * the MYSQL2_CAST_NONE loop in rb_mysql_result_fetch_row: the same
+   * length-based rb_str_new (embedded NULs intact), the same
+   * mysql2_set_field_string_encoding, the same MYSQL_TYPE_NULL and NULL-cell
+   * handling, and the same key-before-value evaluation order. */
+  if (args->cast == MYSQL2_CAST_NONE) {
+    for (i = 0; i < wrapper->numberOfFields; i++) {
+      /* Hash keys only; array-mode names were batch-materialized above. */
+      VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+      VALUE val;
+
+      if (!wrapper->is_null[i] && fields[i].type != MYSQL_TYPE_NULL) {
+        val = rb_str_new(wrapper->result_buffers[i].buffer, wrapper->length[i]);
+        val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
+      } else {
+        val = Qnil;
+      }
+
+      if (args->asArray) {
+        args->rowScratch[i] = val;
+      } else {
+        rb_hash_aset(rowVal, field, val);
+      }
+    }
+    if (args->asArray) {
+      rowVal = rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
+    }
+    return rowVal;
+  }
+
   for (i = 0; i < wrapper->numberOfFields; i++) {
     /* Hash keys only; array-mode names were batch-materialized above. */
     VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
@@ -1139,6 +1269,61 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
     if (wrapper->is_null[i]) {
       val = Qnil;
+    } else if (args->cast == MYSQL2_CAST_FAST) {
+      /* cast: :fast over string-bound columns: dispatch on the server type
+       * (every buffer_type is MYSQL_TYPE_STRING here) and mirror the text
+       * path's :fast contract cell for cell -- cast the cheap types from
+       * their string bytes with the same mechanisms (mysql2_cast_integer,
+       * Kernel#Float, the :cast_booleans checks), defer everything
+       * expensive (DECIMAL, temporals) as tagged Strings. */
+      const MYSQL_BIND* const result_buffer = &wrapper->result_buffers[i];
+      const char *str = result_buffer->buffer;
+      const unsigned long len = *(result_buffer->length);
+
+      switch(fields[i].type) {
+        case MYSQL_TYPE_NULL:
+          val = Qnil;
+          break;
+        case MYSQL_TYPE_TINY:
+          if (args->castBool && fields[i].length == 1) {
+            val = *str != '0' ? Qtrue : Qfalse;
+            break;
+          }
+          /* Deliberate fallthrough into the integer cases, exactly as in
+           * rb_mysql_result_fetch_row. */
+        case MYSQL_TYPE_SHORT:
+        case MYSQL_TYPE_LONG:
+        case MYSQL_TYPE_INT24:
+        case MYSQL_TYPE_LONGLONG:
+        case MYSQL_TYPE_YEAR:
+          val = mysql2_cast_integer(str, len);
+          break;
+        case MYSQL_TYPE_BIT:
+          /* String-bound BIT is a byte copy, so the boolean check reads the
+           * raw byte, as the text path reads the wire byte. */
+          if (args->castBool && fields[i].length == 1) {
+            val = *str == 1 ? Qtrue : Qfalse;
+          } else {
+            val = rb_str_new(str, len);
+          }
+          break;
+        case MYSQL_TYPE_FLOAT:
+        case MYSQL_TYPE_DOUBLE: {
+          /* Kernel#Float() parses this locale-independently; strtod()
+           * would read '.' according to the current LC_NUMERIC. */
+          VALUE column_as_float = rb_funcall(rb_mKernel, intern_Float, 1, rb_str_new(str, len));
+          if (RFLOAT_VALUE(column_as_float) == 0.000000){
+            val = opt_float_zero;
+          }else{
+            val = column_as_float;
+          }
+          break;
+        }
+        default:
+          val = rb_str_new(str, len);
+          val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
+          break;
+      }
     } else {
       const MYSQL_BIND* const result_buffer = &wrapper->result_buffers[i];
 
@@ -2015,13 +2200,6 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   if (wrapper->stmt_wrapper && !cacheRows && !wrapper->is_streaming) {
     rb_warn(":cache_rows is forced for prepared statements (if not streaming)");
     cacheRows = 1;
-  }
-
-  /* The binary-protocol row fetch (rb_mysql_result_fetch_row_stmt) always
-   * fully casts; the existing warning already reads as "any non-true :cast
-   * is overridden here", so cast: :fast reuses it verbatim. */
-  if (wrapper->stmt_wrapper && cast != MYSQL2_CAST_ALL) {
-    rb_warn(":cast is forced for prepared statements");
   }
 
   /* A freed result can only be re-iterated from the fully cached rows array

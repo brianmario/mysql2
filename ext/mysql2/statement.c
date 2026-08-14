@@ -1,5 +1,7 @@
 #include <mysql2_ext.h>
 
+#include <string.h>
+
 extern VALUE mMysql2, cMysql2Error;
 static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate;
 static VALUE sym_stream, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
@@ -682,8 +684,15 @@ static VALUE rb_mysql_stmt_fields(VALUE self) {
 
   for (i = 0; i < field_count; i++) {
     VALUE rb_field;
+    const char *name_end;
+    size_t name_length;
 
-    rb_field = rb_str_new(fields[i].name, fields[i].name_length);
+    /* See the note on name_length in rb_mysql_result_fetch_field
+     * (result.c): the count can cross the name's NUL terminator. */
+    name_end = memchr(fields[i].name, '\0', fields[i].name_length);
+    name_length = name_end ? (size_t)(name_end - fields[i].name) : fields[i].name_length;
+
+    rb_field = rb_str_new(fields[i].name, name_length);
     rb_enc_associate(rb_field, conn_enc);
     if (default_internal_enc) {
      rb_field = rb_str_export_to_enc(rb_field, default_internal_enc);

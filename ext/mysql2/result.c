@@ -1,6 +1,7 @@
 #include <mysql2_ext.h>
 
 #include <limits.h>
+#include <string.h>
 
 #include "mysql_enc_to_ruby.h"
 #define MYSQL2_CHARSETNR_SIZE (sizeof(mysql2_mysql_enc_to_rb)/sizeof(mysql2_mysql_enc_to_rb[0]))
@@ -352,6 +353,8 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
     MYSQL_FIELD *field = NULL;
     rb_encoding *default_internal_enc = rb_default_internal_encoding();
     rb_encoding *conn_enc = wrapper->conn_enc;
+    size_t name_length;
+    const char *name_end;
 
     /* A name that was never cached has to be read from the result, which the
      * force-free of an abandoned stream has already released. Hash-mode rows
@@ -366,24 +369,34 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
     }
 
     field = mysql_fetch_field_direct(wrapper->result, idx);
+
+    /* The C API defines MYSQL_FIELD.name as a NUL-terminated string, so
+     * nothing past the first NUL is part of the name -- but the library can
+     * deliver a name_length that counts bytes beyond it. A long expression
+     * name truncated under GROUP BY arrives here with name_length 257 for a
+     * 255-byte name: the terminator plus one arbitrary byte (#1288). Stop
+     * at the terminator, capped by name_length. */
+    name_end = memchr(field->name, '\0', field->name_length);
+    name_length = name_end ? (size_t)(name_end - field->name) : field->name_length;
+
     if (symbolize_keys) {
 #ifdef HAVE_RB_CHECK_SYMBOL_CSTR
-      rb_field = rb_check_symbol_cstr(field->name, field->name_length, rb_utf8_encoding());
+      rb_field = rb_check_symbol_cstr(field->name, name_length, rb_utf8_encoding());
       if (rb_field == Qnil) {
-        rb_field = rb_str_intern(rb_enc_str_new(field->name, field->name_length, rb_utf8_encoding()));
+        rb_field = rb_str_intern(rb_enc_str_new(field->name, name_length, rb_utf8_encoding()));
       }
 #else
-      rb_field = rb_intern3(field->name, field->name_length, rb_utf8_encoding());
+      rb_field = rb_intern3(field->name, name_length, rb_utf8_encoding());
       rb_field = ID2SYM(rb_field);
 #endif
     } else {
 #ifdef HAVE_RB_ENC_INTERNED_STR
-      rb_field = rb_enc_interned_str(field->name, field->name_length, conn_enc);
+      rb_field = rb_enc_interned_str(field->name, name_length, conn_enc);
       if (default_internal_enc && default_internal_enc != conn_enc) {
         rb_field = rb_str_to_interned_str(rb_str_export_to_enc(rb_field, default_internal_enc));
       }
 #else
-      rb_field = rb_enc_str_new(field->name, field->name_length, conn_enc);
+      rb_field = rb_enc_str_new(field->name, name_length, conn_enc);
       if (default_internal_enc && default_internal_enc != conn_enc) {
         rb_field = rb_str_export_to_enc(rb_field, default_internal_enc);
       }

@@ -396,6 +396,57 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(result.field_types.length).to eql(1)
     end
 
+    context "when the server truncates a long expression name" do
+      # A long un-aliased expression grouped over a real column gets its name
+      # truncated, and the client library can hand back a name_length that
+      # counts bytes past the truncated name's NUL terminator, leaving
+      # arbitrary trailing bytes on every name surface (#1288). These pin
+      # that a name stops at its terminator.
+      #
+      # The expected name is taken from Statement#fields for the same query
+      # rather than from the SQL text: it is the server's own rendering at
+      # the server's own truncation length, read through a metadata path
+      # whose byte count is not affected by this bug. On a stack whose
+      # client library counts the text-protocol length correctly these pass
+      # without exercising the fix.
+      before do
+        @client.query("CREATE TEMPORARY TABLE mysql2_long_names (created_at DATETIME)")
+        @client.query("INSERT INTO mysql2_long_names VALUES (NOW()), (NOW() - INTERVAL 1 DAY)")
+      end
+
+      let(:expression) do
+        "IF(#{(['1=1'] * 76).join(' AND ')}, mysql2_long_names.created_at, mysql2_long_names.created_at)"
+      end
+      let(:sql) { "SELECT #{expression} FROM mysql2_long_names GROUP BY #{expression}" }
+
+      let(:expected_name) do
+        name = @client.prepare(sql).fields.first
+        expect(name).not_to be_empty
+        # A NUL is valid UTF-8, so the encoding check alone would accept a
+        # NUL-padded oracle -- and with it, identically corrupt names on
+        # every surface compared against it.
+        expect(name).not_to include("\0")
+        expect(name.valid_encoding?).to be true
+        name
+      end
+
+      it "should return the truncated name without trailing bytes" do
+        expect(@client.query(sql).fields.first).to eql(expected_name)
+      end
+
+      it "should use the same clean name for hash keys and symbols" do
+        expect(@client.query(sql).first.keys.first).to eql(expected_name)
+        sym = @client.query(sql, symbolize_keys: true).first.keys.first
+        expect(sym).to eql(expected_name.to_sym)
+      end
+
+      it "should use the same clean name for an executed prepared statement" do
+        result = @client.prepare(sql).execute
+        expect(result.fields.first).to eql(expected_name)
+        expect(result.first.keys.first).to eql(expected_name)
+      end
+    end
+
     context "when a hash row raises part way through" do
       # Hash rows materialize field names one cell at a time, so a raise between
       # cells leaves only part of the set cached. Filling the rest reads field

@@ -179,9 +179,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     # 'preferred' is only in MySQL 5.6.36+, 5.7.11+, 8.0+ -- MariaDB Connector/C
     # has no equivalent option, so mysql2 can't do anything for it there.
-    # 'verify_ca' works everywhere: MariaDB Connector/C has no CA-only
-    # verification mode, so rb_set_ssl_mode_option maps it to the same full
-    # verification 'verify_identity' uses (MYSQL_OPT_SSL_VERIFY_SERVER_CERT).
+    # 'verify_ca' works everywhere: on MariaDB Connector/C it maps to
+    # MYSQL_OPT_SSL_VERIFY_SERVER_CERT, which is CA verification at most --
+    # the connector never checks the hostname for local peers (#879).
+    # 'verify_identity' maps to the same option plus mysql2's own
+    # verification callback, which makes the hostname check real.
     #
     # The upper bound on the first range stops at 100000 (not left unbounded)
     # because MariaDB's client version numbering starts there (10.x =
@@ -197,9 +199,19 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       %i[disabled required verify_ca verify_identity]
     end
 
+    # On MariaDB-family builds without the enforcement callback,
+    # :verify_identity refuses to connect rather than silently skipping the
+    # hostname check -- the "refuses verify_identity outright" spec under
+    # TLS option validation covers that refusal.
+    mysql_native_verify = (50703...50711).cover?(version) || (60103...60200).cover?(version)
+    verify_identity_unenforceable = version >= 30000 && !mysql_native_verify && Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION.nil?
+
     # MySQL and MariaDB and all versions of Connector/C
     ssl_modes.each do |ssl_mode|
       it "should set ssl_mode option #{ssl_mode}" do
+        skip "this build refuses verify_identity rather than skipping the hostname check (#879)" \
+          if ssl_mode == :verify_identity && verify_identity_unenforceable
+
         options = {
           ssl_mode: ssl_mode,
         }
@@ -245,6 +257,142 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(ssl_client.ssl_cipher).not_to be_empty
       expect(results['Ssl_cipher']).to eql(ssl_client.ssl_cipher)
     end
+
+    context "peer identity verification (#879)" do
+      # The server certificate's CN is ssl_cert_host (mysql2gem.example.com,
+      # no SAN extension), and CI's /etc/hosts aliases both that name and
+      # ssl_cert_wrong_host to 127.0.0.1 -- so every leg below reaches the
+      # identical server, differing only in the hostname the certificate is
+      # checked against.
+      let(:verification) { Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION }
+
+      it "accepts verify_identity when the hostname matches the server certificate" do
+        skip "verify_identity is not enforceable on this build" if verification.nil?
+
+        new_client(option_overrides.merge(ssl_mode: :verify_identity)) do |client|
+          expect(client.query('SELECT 1 AS one').first['one']).to eql(1)
+        end
+      end
+
+      it "proves via tls_info which verification rung ran" do
+        skip "requires mysql2's callback enforcement (MariaDB Connector/C 3.4+ build)" unless verification == :callback
+
+        new_client(option_overrides.merge(ssl_mode: :verify_identity)) do |client|
+          info = client.tls_info
+          expect(info[:identity_verified]).to be true
+          expect(info[:verify_status]).to eql(0)
+        end
+      end
+
+      it "rejects verify_identity connecting by an IP address the certificate does not cover" do
+        # The #879 regression leg: the connector's default verifier decides
+        # which checks run from the peer address and classifies 127.0.0.1 as
+        # local, skipping hostname verification entirely -- before mysql2's
+        # callback enforcement this connection SUCCEEDED with the server's
+        # identity never verified.
+        options = option_overrides.merge(ssl_mode: :verify_identity, 'host' => '127.0.0.1')
+        if verification == :callback
+          expect { new_client(options) }.to raise_error(Mysql2::Error::ConnectionError, /verify_identity.+(certificate|hostname)/i)
+        else
+          # :native (libmysqlclient) refuses with its own error message; a
+          # build that cannot enforce refuses at Client.new instead of
+          # silently degrading.
+          expect { new_client(options) }.to raise_error(Mysql2::Error::ConnectionError)
+        end
+      end
+
+      it "fails closed at connect time, not Client.new, when no CA is configured" do
+        skip "verify_identity is not enforceable on this build" if verification.nil?
+
+        # Unset :sslca/:sslcapath is not pre-flighted in Ruby: the TLS
+        # backend resolves its default trust store natively, and the connect
+        # attempt is the source of truth. The suite's CA never appears in a
+        # system trust store, so the chain cannot verify -- enforcement (the
+        # verification callback and the post-connect tripwire) must refuse
+        # the connection rather than fall through to the connector's no-CA
+        # self-signed leniency.
+        options = option_overrides.reject { |k, _| k.to_s.start_with?("sslca") }.merge(ssl_mode: :verify_identity)
+        expect { new_client(options) }.to raise_error(Mysql2::Error::ConnectionError, /SSL|TLS|certificate/i)
+      end
+
+      it "rejects verify_identity connecting by a hostname the certificate does not cover" do
+        require 'resolv'
+        begin
+          Resolv.getaddress(ssl_cert_wrong_host)
+        rescue Resolv::ResolvError
+          skip("DON'T WORRY, THIS TEST PASSES - but #{ssl_cert_wrong_host} does not resolve here. Alias it to the database server (as CI does in /etc/hosts) to run this leg.")
+        end
+
+        # Guards the by-name topology: a non-local peer name gets the
+        # HOST/TRUST checks even from the connector's own default verifier,
+        # and must stay refused under mysql2's callback too.
+        options = option_overrides.merge(ssl_mode: :verify_identity, 'host' => ssl_cert_wrong_host)
+        expect { new_client(options) }.to raise_error(Mysql2::Error::ConnectionError)
+      end
+    end
+
+    context "Client#tls_info" do
+      it "describes the TLS session" do
+        info = ssl_client.tls_info
+
+        # Introspection ships with the same Connector/C 3.4 surface the
+        # callback enforcement builds against, so :callback builds must
+        # return a hash here; :native (libmysqlclient) has no introspection
+        # API and always returns nil.
+        expect(info).to be_a(Hash) if Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION == :callback
+        skip "tls_info introspection is not available on this build" if info.nil?
+
+        expect(info[:tls_version]).to match(/TLS/i)
+        expect(info[:cipher]).not_to be_empty
+        expect(info[:verify_status]).to eql(0)
+        expect(info[:identity_verified]).to be false # no :verify_identity requested
+        expect(info[:peer_cert][:subject]).to include(ssl_cert_host)
+        expect(info[:peer_cert][:issuer]).not_to be_empty
+        expect(info[:peer_cert][:fingerprint]).to match(/\A\h{64}\z/)
+        expect(info[:peer_cert][:not_after]).to be > info[:peer_cert][:not_before]
+      end
+
+      it "is nil when the connection does not use TLS" do
+        new_client(ssl_mode: :disabled) do |client|
+          expect(client.tls_info).to be_nil
+        end
+      end
+    end
+
+    context "certificate fingerprint pinning" do
+      let(:server_cert_fingerprint) do
+        require 'openssl'
+        OpenSSL::Digest::SHA256.hexdigest(OpenSSL::X509::Certificate.new(File.read("#{ssl_cert_dir}/server-cert.pem")).to_der)
+      end
+
+      it "connects CA-less when the server certificate matches the pinned fingerprint" do
+        skip "fingerprint pinning is not supported by this client library build" unless Mysql2::Client::TLS_PEER_FINGERPRINT_SUPPORTED
+
+        new_client(tls_peer_fingerprint: server_cert_fingerprint) do |client|
+          expect(client.query('SELECT 1 AS one').first['one']).to eql(1)
+          info = client.tls_info
+          next if info.nil?
+
+          # Pinning is its own verification rung: the fingerprint matched,
+          # the hostname rung deliberately did not run, and with no CA
+          # configured the connector records the chain as untrusted
+          # (TLS_VERIFY_TRUST) even though the pin -- not the chain -- is
+          # this connection's trust anchor. Anything beyond that bit would
+          # mean a check we do care about failed.
+          expect(info[:verify_status] & ~Mysql2::Client::TLS_VERIFY_TRUST).to eql(0)
+          expect(info[:identity_verified]).to be false
+          expect(info[:peer_cert][:fingerprint].downcase).to eql(server_cert_fingerprint.downcase)
+        end
+      end
+
+      it "refuses when the server certificate does not match the pinned fingerprint" do
+        skip "fingerprint pinning is not supported by this client library build" unless Mysql2::Client::TLS_PEER_FINGERPRINT_SUPPORTED
+
+        expect do
+          new_client(tls_peer_fingerprint: server_cert_fingerprint.reverse)
+        end.to raise_error(Mysql2::Error, /[Ff]ingerprint/)
+      end
+    end
   end
 
   context "option coherence warnings" do
@@ -284,6 +432,47 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect do
         new_client
       end.not_to output(/:sslkey and :sslcert only take effect together|:cache_rows is ignored/).to_stderr
+    end
+  end
+
+  context "TLS option validation" do
+    # These raises all fire in Client#initialize before any connection is
+    # attempted, so they hold on every build and don't need a TLS-enabled
+    # server. The zero-value skips cover ancient no-ssl_mode builds where
+    # every SSL_MODE_* constant collapses to 0.
+
+    it "refuses combining fingerprint pinning with a verifying ssl_mode" do
+      skip "this build has no verifying ssl_mode" if Mysql2::Client::SSL_MODE_VERIFY_IDENTITY.zero?
+
+      # The connector runs the FINGERPRINT check instead of the HOST/TRUST
+      # checks when a fingerprint is pinned: one of the two requested
+      # verification models would silently not run.
+      expect do
+        new_client(tls_peer_fingerprint: 'ab' * 32, ssl_mode: :verify_identity)
+      end.to raise_error(Mysql2::Error::ConnectionError, /mutually exclusive/)
+    end
+
+    it "refuses fingerprint pinning on client libraries that cannot enforce it" do
+      skip "this build supports fingerprint pinning" if Mysql2::Client::TLS_PEER_FINGERPRINT_SUPPORTED
+
+      expect do
+        new_client(tls_peer_fingerprint: 'ab' * 32)
+      end.to raise_error(Mysql2::Error::ConnectionError, /tls_peer_fingerprint/)
+    end
+
+    it "refuses verify_identity outright when this build cannot enforce hostname verification" do
+      # Mirrors rb_set_ssl_mode_option's open-ended MariaDB-family
+      # predicate: everything 3.0+ except the MySQL native-verify tiers.
+      version = Mysql2::Client.info[:id]
+      mysql_native_verify = (50703...50711).cover?(version) || (60103...60200).cover?(version)
+      mariadb = version >= 30000 && !mysql_native_verify
+      skip "this build enforces verify_identity" unless mariadb && Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION.nil?
+
+      # Connecting with the hostname check silently skipped is exactly the
+      # #879 failure mode; an unenforceable build must raise, not degrade.
+      expect do
+        new_client(ssl_mode: :verify_identity, sslca: '/nonexistent/ca.pem')
+      end.to raise_error(Mysql2::Error::ConnectionError, /cannot be enforced/)
     end
   end
 

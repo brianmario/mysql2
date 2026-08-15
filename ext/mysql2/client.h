@@ -69,6 +69,15 @@ typedef struct {
    * separate Ruby call on the async path: Client#query with :async returns
    * right after the send, and #async_result reads the response later. */
   double query_start;
+  /* ssl_mode: :verify_identity on MariaDB Connector/C: set when mysql2's
+   * TLS verification callback is registered for this connection, so the
+   * post-connect check in rb_mysql_connect knows enforcement was promised
+   * and must refuse the connection if it cannot prove verification ran. */
+  int tls_verify_identity;
+  /* The post-connect check confirmed certificate-chain and hostname
+   * verification against the live TLS session. Reported by Client#tls_info
+   * as :identity_verified. */
+  int tls_identity_verified;
   MYSQL *client;
   mysql2_client_state_t state;
   /* The pid that established this connection (set on every successful

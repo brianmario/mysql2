@@ -191,6 +191,76 @@ have_const('MYSQL_OPT_TLS_SNI_SERVERNAME', mysql_h) # Added in MySQL 8.1; no Mar
 # to retain compatibility with the typedef in earlier MySQLs.
 have_type('my_bool', mysql_h)
 
+### MariaDB Connector/C TLS verification surface (#879, #1480)
+
+# Client#tls_info wants the whole 3.4-era introspection set or nothing, so
+# its contract stays binary: a hash describing the TLS session on MariaDB
+# Connector/C 3.4+ builds, nil everywhere else.
+have_tls_introspection =
+  have_func('mariadb_get_infov', mysql_h) &&
+  have_const('MARIADB_CONNECTION_TLS_VERSION', mysql_h) &&
+  have_const('MARIADB_TLS_PEER_CERT_INFO', mysql_h) &&
+  have_const('MARIADB_TLS_VERIFY_STATUS', mysql_h)
+$CFLAGS << ' -DMYSQL2_TLS_INFO' if have_tls_introspection
+
+# Certificate-fingerprint pinning passthrough (:tls_peer_fingerprint and
+# :tls_peer_fingerprint_list); the options raise on builds without these.
+# The MARIADB_OPT_TLS_PEER_FP option itself predates Connector/C 3.4, but
+# older connectors compare against a hardcoded SHA-1 fingerprint of the peer
+# certificate, so the SHA-2 pins these options take can never match there.
+# Connector/C 3.4+ picks the digest from the pin's length (SHA-256/384/512).
+have_sha2_fingerprint_verification =
+  checking_for('MariaDB Connector/C 3.4+ SHA-2 fingerprint verification') do
+    try_compile(<<-SRC)
+#include <#{mysql_h}>
+#if !defined(MARIADB_PACKAGE_VERSION_ID) || MARIADB_PACKAGE_VERSION_ID < 30400
+#error fingerprint verification is SHA-1 only before Connector/C 3.4
+#endif
+int main(void) { return 0; }
+    SRC
+  end
+if have_sha2_fingerprint_verification
+  have_const('MARIADB_OPT_TLS_PEER_FP', mysql_h)
+  have_const('MARIADB_OPT_TLS_PEER_FP_LIST', mysql_h)
+end
+
+# The ssl_mode: :verify_identity enforcement callback (#879). Everything it
+# needs, or :verify_identity refuses to connect on MariaDB rather than
+# silently skipping hostname verification:
+# - MARIADB_OPT_TLS_VERIFICATION_CALLBACK (Connector/C 3.4+) to replace the
+#   connector's default verifier, whose local-peer heuristic skips the
+#   hostname check for 127.0.0.1/::1/socket peers;
+# - mariadb_get_infov + MARIADB_TLS_LIBRARY to confirm at runtime that the
+#   connector's TLS backend is OpenSSL, since the callback verifies the SSL
+#   session handle directly (a Schannel/GnuTLS build fails closed);
+# - OpenSSL itself, for SSL_get_verify_result and X509_check_host;
+# - the installed ma_pvio.h MARIADB_PVIO layout, which is how the callback
+#   reaches the MYSQL handle and the TLS session from its argument.
+have_verify_identity_shim =
+  have_tls_introspection &&
+  have_const('MARIADB_OPT_TLS_VERIFICATION_CALLBACK', mysql_h) &&
+  have_const('MARIADB_TLS_LIBRARY', mysql_h) &&
+  have_header('openssl/ssl.h') &&
+  have_header('openssl/x509v3.h') &&
+  have_library('crypto', 'X509_check_host', 'openssl/x509v3.h') &&
+  have_library('ssl', 'SSL_get_verify_result', 'openssl/ssl.h') &&
+  checking_for('MARIADB_PVIO layout for the verify_identity callback') do
+    pvio_h = [prefix, 'ma_pvio.h'].compact.join('/')
+    try_compile(<<-SRC)
+#include <#{mysql_h}>
+#include <#{pvio_h}>
+int main(void) {
+  MARIADB_PVIO pvio;
+  MYSQL mysql;
+  pvio.ctls = (void *)0;
+  pvio.mysql = &mysql;
+  mysql.net.pvio = &pvio;
+  return 0;
+}
+    SRC
+  end
+$CFLAGS << ' -DMYSQL2_VERIFY_IDENTITY_SHIM' if have_verify_identity_shim
+
 # detect mysql functions
 have_func('mysql_ssl_set', mysql_h)
 have_func('mysql_next_result_nonblocking', mysql_h) # Added in MySQL 8.0.16; no MariaDB Connector/C equivalent under this name (see mysql_next_result_start/_cont)

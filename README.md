@@ -331,20 +331,71 @@ the `:sslverify` boolean. For details on each of the `:ssl_mode` options, see
 
 The `:ssl_mode` option will also set the appropriate MariaDB connection flags:
 
-| `:ssl_mode`        | MariaDB option value                 |
-| ---                | ---                                  |
-| `:disabled`        | MYSQL_OPT_SSL_ENFORCE = 0            |
-| `:required`        | MYSQL_OPT_SSL_ENFORCE = 1            |
-| `:verify_ca`       | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 |
-| `:verify_identity` | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 |
+| `:ssl_mode`        | MariaDB option value                                |
+| ---                | ---                                                 |
+| `:disabled`        | MYSQL_OPT_SSL_ENFORCE = 0                           |
+| `:required`        | MYSQL_OPT_SSL_ENFORCE = 1                           |
+| `:verify_ca`       | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1                |
+| `:verify_identity` | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 + mysql2's own hostname verification |
 
-MariaDB Connector/C has no CA-only verification mode, so `:verify_ca` gets
-the same full verification (CA and hostname) that `:verify_identity` gets --
-MYSQL_OPT_SSL_VERIFY_SERVER_CERT is the only verification it offers. MariaDB
-does not support the `:preferred` option; there's no equivalent to fall back
-to. For more information about SSL/TLS in MariaDB, see
+MYSQL_OPT_SSL_VERIFY_SERVER_CERT verifies the CA at most: despite its
+MySQL-derived name, MariaDB Connector/C decides whether to check the
+hostname from the peer address, and never checks it for peers it considers
+local (127.0.0.1, ::1, or socket connections). mysql2 enforces
+`:verify_identity` on MariaDB itself, by registering a TLS
+verification callback (MariaDB Connector/C 3.4+) that verifies the
+certificate chain and the hostname (SAN, wildcard, and IP-address matching
+via OpenSSL) on every connection, local peers included.
+
+Two things worth knowing:
+
+* With `:sslca`/`:sslcapath` left unset, the TLS backend resolves its
+  default trust store natively (OpenSSL's default verify paths,
+  `SSL_CERT_FILE`/`SSL_CERT_DIR`, or the platform certificate store) --
+  publicly-CA-signed servers verify with no CA option passed. Under
+  `:verify_identity`, an unverifiable chain is refused at connect time.
+* If the mysql2 build cannot enforce the hostname check (MariaDB
+  Connector/C older than 3.4, or no OpenSSL headers at build time),
+  `ssl_mode: :verify_identity` raises instead of connecting.
+  `Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION` reports the mechanism
+  in effect: `:native` (libmysqlclient), `:callback` (MariaDB + mysql2's
+  verification callback), or `nil` (unenforceable).
+
+MariaDB does not support the `:preferred` option; there's no equivalent to
+fall back to. For more information about SSL/TLS in MariaDB, see
 [https://mariadb.com/kb/en/securing-connections-for-client-and-server/](https://mariadb.com/kb/en/securing-connections-for-client-and-server/)
 and [https://mariadb.com/kb/en/mysql_optionsv/#tls-options](https://mariadb.com/kb/en/mysql_optionsv/#tls-options)
+
+On MariaDB Connector/C 3.4+, the server certificate can be pinned by
+fingerprint instead of a CA -- an alternative trust model to
+`:verify_ca`/`:verify_identity` (the connector runs the fingerprint check
+*instead of* the CA/hostname checks, so combining them raises):
+
+``` ruby
+Mysql2::Client.new(
+  # ...options as above...,
+  :tls_peer_fingerprint => 'c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2', # SHA-256 hex
+  # or a file of acceptable fingerprints, one per line:
+  :tls_peer_fingerprint_list => '/path/to/fingerprints',
+  )
+```
+
+On client libraries without pinning support (libmysqlclient, MariaDB
+Connector/C before 3.4) these options raise rather than silently
+connecting unpinned.
+
+After connecting, `Client#tls_info` describes the TLS session as the
+client library observed it: negotiated protocol and cipher, the peer
+certificate the server actually presented (subject, issuer, validity,
+SHA-256 fingerprint), the bitmask of verification checks the connector
+recorded as failed (`:verify_status`, decodable with the
+`Mysql2::Client::TLS_VERIFY_*` constants -- note a CA-less pinned
+connection legitimately carries `TLS_VERIFY_TRUST`, since the pin rather
+than the chain is its trust anchor), and whether mysql2's
+`:verify_identity` enforcement confirmed chain and hostname verification
+for this connection (`:identity_verified`). It returns `nil` for non-TLS
+connections and on client libraries without the introspection API
+(libmysqlclient, MariaDB Connector/C before 3.4).
 
 To set the TLS Server Name Indication (SNI) hostname sent during the TLS
 handshake, e.g. when connecting through a proxy that routes by hostname:

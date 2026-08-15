@@ -452,6 +452,32 @@ It is useful if you want to provide session options which survive reconnection.
 Mysql2::Client.new(:init_command => "SET @@SESSION.sql_mode = 'STRICT_ALL_TABLES'")
 ```
 
+### Fork safety and `discard!`
+
+`fork` duplicates the client's socket into the child process, but the server
+session behind it is shared: if either process calls `close` -- or lets the
+garbage collector do it -- a QUIT command (and, under TLS, an SSL shutdown)
+goes down the shared socket and breaks the connection for the other process
+too.
+
+Call `discard!` to safely let go of a connection that another process owns:
+
+``` ruby
+fork do
+  client.discard! # the parent's session is untouched
+  # ... child works with its own, newly-created connections
+end
+```
+
+`discard!` drops this process's reference to the socket and frees client-side
+resources without sending anything to the server. Afterward the client behaves
+like a closed one: `closed?` returns true and further commands raise
+`Mysql2::Error`.
+
+Only discard connections some other process still owns: discarding a
+connection nothing else shares abandons the server session until it hits
+`wait_timeout`. Use `close` for connections this process owns.
+
 ### Multiple result sets
 
 You can also retrieve multiple result sets. For this to work you need to

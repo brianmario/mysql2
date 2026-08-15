@@ -509,6 +509,117 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "#discard!" do
+    it "marks the client closed and further commands raise" do
+      client = new_client
+      expect(client.discard!).to be_nil
+      expect(client.closed?).to eql(true)
+      expect do
+        client.query "SELECT 1"
+      end.to raise_error(Mysql2::Error, /not connected/)
+    end
+
+    # Client#socket raises on Windows, so fd release isn't observable there
+    unless RUBY_PLATFORM =~ /mingw|mswin/
+      it "releases this process's socket fd" do
+        client = new_client
+        fd = client.socket
+        client.discard!
+        expect do
+          IO.for_fd(fd, autoclose: false).stat
+        end.to raise_error(Errno::EBADF)
+      end
+    end
+
+    it "is idempotent, in either order with close" do
+      client = new_client
+      client.discard!
+      expect(client.discard!).to be_nil
+      expect(client.close).to be_nil
+
+      client = new_client
+      client.close
+      expect(client.discard!).to be_nil
+    end
+
+    it "does not resurrect the connection via reconnect" do
+      client = new_client(reconnect: true)
+      client.discard!
+      expect(client.closed?).to eql(true)
+      expect do
+        client.query "SELECT 1"
+      end.to raise_error(Mysql2::Error, /not connected/)
+    end
+
+    it "can discard mid-stream" do
+      client = new_client
+      result = client.query("SELECT 1 AS a UNION SELECT 2", stream: true, cache_rows: false)
+      result.first
+      client.discard!
+      expect(client.closed?).to eql(true)
+    end
+
+    unless RUBY_PLATFORM =~ /mingw|mswin/
+      it "leaves the parent's session intact when a forked child discards" do
+        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        thread_id = client.thread_id
+
+        child = fork do
+          client.discard!
+          status = client.closed? ? 0 : 1
+          client = nil
+          run_gc
+          exit! status
+        end
+
+        _, status = Process.waitpid2(child)
+        expect(status.exitstatus).to eq(0)
+
+        # both would raise if the child's discard!, or the GC run after it,
+        # had sent a QUIT or shutdown() down the shared socket
+        expect(client.query('SELECT 1 AS one').first).to eq('one' => 1)
+        expect(client.thread_id).to eq(thread_id)
+        client.close
+      end
+
+      it "leaves the parent's prepared statements intact when a forked child discards" do
+        client = new_client
+        stmt = client.prepare('SELECT ? AS n')
+
+        child = fork do
+          client.discard!
+          exit!
+        end
+        Process.wait(child)
+
+        expect(stmt.execute(42).first).to eq('n' => 42)
+        stmt.close
+      end
+
+      it "leaves the child's session intact when the parent discards" do
+        signal_r, signal_w = IO.pipe
+        result_r, result_w = IO.pipe
+
+        client = new_client
+        child = fork do
+          signal_w.close
+          result_r.close
+          signal_r.read(1) # wait for the parent's discard!
+          row = client.query("SELECT 'child session intact' AS proof").first
+          result_w.write(row.fetch('proof'))
+          exit!
+        end
+
+        signal_r.close
+        result_w.close
+        client.discard!
+        signal_w.write('!')
+        expect(result_r.read).to eq('child session intact')
+        Process.wait(child)
+      end
+    end
+  end
+
   it "should not try to query closed mysql connection" do
     client = new_client(reconnect: true)
     expect(client.close).to be_nil

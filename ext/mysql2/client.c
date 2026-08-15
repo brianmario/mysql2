@@ -378,6 +378,20 @@ static VALUE invalidate_fd(int clientfd)
 
   return Qtrue;
 }
+
+/* Drop this process's reference to the connection's socket -- redirect the
+ * fd to /dev/null and forget it -- leaving the underlying connection
+ * untouched for whatever else shares it across a fork. */
+static void invalidate_socket(mysql_client_wrapper *wrapper)
+{
+  if (CONNECTED(wrapper)) {
+    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+      fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
+      close(wrapper->client->net.fd);
+    }
+    wrapper->client->net.fd = -1;
+  }
+}
 #endif /* _WIN32 */
 
 void mysql2_enqueue_pending_stmt_close(mysql_client_wrapper *wrapper, MYSQL_STMT *stmt, uintptr_t wrapper_key)
@@ -841,6 +855,59 @@ static VALUE rb_mysql_client_closed(VALUE self) {
   return CONNECTED(wrapper) ? Qfalse : Qtrue;
 }
 
+/* call-seq:
+ *    client.discard!
+ *
+ * Abandon the connection without disconnecting the underlying server
+ * session: drop this process's reference to the socket and free
+ * client-side resources, but never send a QUIT or shut the socket down.
+ * Use this in place of +close+ to let go of a connection shared with
+ * another process across a fork -- the other process's session, including
+ * its prepared statements, stays intact.
+ *
+ * Afterward the client behaves like a closed one: +closed?+ returns true
+ * and further commands raise Mysql2::Error. Discarding an already-closed
+ * or already-discarded client is a no-op, as is +close+ after +discard!+.
+ *
+ * If nothing else shares the socket, discarding abandons the server
+ * session until it times out on its own (+wait_timeout+); use +close+
+ * for connections this process owns.
+ *
+ * @return [nil]
+ */
+static VALUE rb_mysql_client_discard(VALUE self) {
+  GET_CLIENT(self);
+
+  if (wrapper->initialized && !wrapper->closed) {
+#ifndef _WIN32
+    invalidate_socket(wrapper);
+#else
+    /* No fd redirection on Windows (see invalidate_fd); processes don't
+     * share sockets across fork() here anyway. Close the socket outright
+     * without a QUIT, same as disconnect_and_mark_inactive. */
+    if (CONNECTED(wrapper)) {
+      close(wrapper->client->net.fd);
+      wrapper->client->net.fd = -1;
+    }
+#endif
+
+    /* Same teardown sequence as Client#close, but aimed at the now-dead
+     * fd: the force-free's drain of an abandoned stream reads instant EOF
+     * instead of stealing bytes from the shared socket, and the QUIT (and
+     * TLS shutdown) that mysql_close() writes is absorbed harmlessly. The
+     * deferred result frees are dropped as bookkeeping only -- the reap
+     * skips the real mysql_free_result() calls once the wrapper is no
+     * longer CONNECTED, leaking those client-side copies, the same
+     * tradeoff decr_mysql2_client accepts. */
+    mysql2_abandon_active_stream(wrapper);
+    mysql2_reap_pending_result_frees(wrapper);
+    mysql2_drop_pending_stmt_closes(wrapper);
+    rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
+  }
+
+  return Qnil;
+}
+
 /*
  * mysql_send_query is unlikely to block since most queries are small
  * enough to fit in a socket buffer, but sometimes large UPDATE and
@@ -999,13 +1066,7 @@ static void invalidate_after_interrupted_query(mysql_client_wrapper *wrapper) {
   /* Invalidate the MySQL socket to prevent further communication.
    * The GC will come along later and call mysql_close to free it.
    */
-  if (CONNECTED(wrapper)) {
-    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
-      fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely, closing unsafely\n");
-      close(wrapper->client->net.fd);
-    }
-    wrapper->client->net.fd = -1;
-  }
+  invalidate_socket(wrapper);
 }
 
 /* rb_rescue2 companion (do_ping): re-raises after cleanup. do_ping is a
@@ -2111,6 +2172,7 @@ void init_mysql2_client(void) {
 
   rb_define_method(cMysql2Client, "close", rb_mysql_client_close, 0);
   rb_define_method(cMysql2Client, "closed?", rb_mysql_client_closed, 0);
+  rb_define_method(cMysql2Client, "discard!", rb_mysql_client_discard, 0);
   rb_define_method(cMysql2Client, "abandon_results!", rb_mysql_client_abandon_results, 0);
   rb_define_method(cMysql2Client, "escape", rb_mysql_client_real_escape, 1);
   rb_define_method(cMysql2Client, "server_info", rb_mysql_client_server_info, 0);

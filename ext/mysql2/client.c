@@ -491,7 +491,7 @@ void mysql2_warn_forked_without_reconnect(mysql_client_wrapper *wrapper, const c
 #ifndef _WIN32
   fprintf(stderr,
     "[WARN] mysql2: %s in pid %d, but connected in pid %d (crossed fork()); "
-    "do not close this Client here, open a new one instead\n",
+    "open a new one instead\n",
     action, (int)getpid(), wrapper->connect_pid);
 #endif
 }
@@ -535,7 +535,7 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
      * to inherit a connection across fork(), and warning there too would
      * just be the same log noise the TODO below already exists to avoid. */
     if (forked_without_reconnect && wrapper->automatic_close) {
-      mysql2_warn_forked_without_reconnect(wrapper, "be garbage collected");
+      mysql2_warn_forked_without_reconnect(wrapper, "garbage collected");
     }
 
     /* TODO: automatic_close: false unconditionally takes the invalidate_fd

@@ -480,8 +480,7 @@ Process.fork do
   begin
     client.verify_not_forked!
   rescue Mysql2::Error::ForkSafetyError
-    client.close
-    client = Mysql2::Client.new(...)
+    client = Mysql2::Client.new(...) # do not close the inherited client here
   end
 end
 ```

@@ -490,11 +490,8 @@ void mysql2_warn_forked_without_reconnect(mysql_client_wrapper *wrapper, const c
 {
 #ifndef _WIN32
   fprintf(stderr,
-    "[WARN] mysql2 Client about to %s in process %d, but its connection was "
-    "established in process %d. This process forked after connecting and "
-    "never reconnected, so the connection's state can't be trusted. Call "
-    "Client#close and reconnect after fork() to avoid this warning and the "
-    "intermittent connection errors it can cause.\n",
+    "[WARN] mysql2: %s in pid %d, but connected in pid %d (crossed fork()); "
+    "do not close this Client here, open a new one instead\n",
     action, (int)getpid(), wrapper->connect_pid);
 #endif
 }
@@ -1567,10 +1564,10 @@ static VALUE rb_mysql_client_verify_not_forked(VALUE self) {
 #ifndef _WIN32
   if (mysql2_forked_without_reconnect(wrapper)) {
     rb_raise(cMysql2ForkSafetyError,
-      "This Client's connection was established in process %d, but is being "
-      "used from process %d. This process forked after connecting and never "
-      "reconnected. Call #close and reconnect before continuing to use this "
-      "Client.",
+      "This Client's connection crossed a fork(): established in process "
+      "%d, used from process %d. Do not close it here -- that could "
+      "interrupt whichever process actually owns it. Open a new Client "
+      "instead.",
       wrapper->connect_pid, (int)getpid());
   }
 #endif

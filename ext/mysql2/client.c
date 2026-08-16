@@ -1948,6 +1948,13 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
       break;
 #endif
 
+#ifdef HAVE_CONST_MYSQL_OPT_TLS_VERSION
+    case MYSQL_OPT_TLS_VERSION:
+      charval = (const char *)StringValueCStr(value);
+      retval  = charval;
+      break;
+#endif
+
     default:
       return Qfalse;
   }
@@ -2648,6 +2655,14 @@ static VALUE set_default_auth(VALUE self, VALUE value) {
 #endif
 }
 
+static VALUE set_tls_version(VALUE self, VALUE value) {
+#ifdef HAVE_CONST_MYSQL_OPT_TLS_VERSION
+  return _mysql_client_options(self, MYSQL_OPT_TLS_VERSION, value);
+#else
+  rb_raise(cMysql2Error, "tls_version is not available, you may need a newer MySQL or MariaDB client library");
+#endif
+}
+
 static VALUE set_enable_cleartext_plugin(VALUE self, VALUE value) {
 #ifdef HAVE_CONST_MYSQL_ENABLE_CLEARTEXT_PLUGIN
   return _mysql_client_options(self, MYSQL_ENABLE_CLEARTEXT_PLUGIN, value);
@@ -2817,6 +2832,7 @@ void init_mysql2_client(void) {
   rb_define_private_method(cMysql2Client, "tls_peer_fingerprint=", rb_set_tls_peer_fingerprint, 1);
   rb_define_private_method(cMysql2Client, "tls_peer_fingerprint_list=", rb_set_tls_peer_fingerprint_list, 1);
   rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
+  rb_define_private_method(cMysql2Client, "tls_version=", set_tls_version, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 9);
   rb_define_private_method(cMysql2Client, "_query", rb_mysql_query, 2);
@@ -3020,6 +3036,12 @@ void init_mysql2_client(void) {
   rb_const_set(cMysql2Client, rb_intern("TLS_SNI_SUPPORTED"), Qtrue);
 #else
   rb_const_set(cMysql2Client, rb_intern("TLS_SNI_SUPPORTED"), Qfalse);
+#endif
+
+#ifdef HAVE_CONST_MYSQL_OPT_TLS_VERSION
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERSION_SUPPORTED"), Qtrue);
+#else
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERSION_SUPPORTED"), Qfalse);
 #endif
 
 #ifdef HAVE_MYSQL_REAL_ESCAPE_STRING_QUOTE

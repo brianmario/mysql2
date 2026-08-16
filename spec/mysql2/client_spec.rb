@@ -409,6 +409,24 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.to raise_error(Mysql2::Error, /[Ff]ingerprint/)
       end
     end
+
+    it "should negotiate the requested tls_version" do
+      skip("DON'T WORRY, THIS TEST PASSES - but this client library does not support tls_version.") unless Mysql2::Client::TLS_VERSION_SUPPORTED
+
+      %w[TLSv1.2 TLSv1.3].each do |version|
+        client = new_client(option_overrides.merge(tls_version: version))
+        result = client.query("SHOW STATUS LIKE 'Ssl_version'").first
+        expect(result['Value']).to eq(version)
+      end
+    end
+
+    it "should raise when the tls_version option is unsupported" do
+      skip("DON'T WORRY, THIS TEST PASSES - but this client library supports tls_version.") if Mysql2::Client::TLS_VERSION_SUPPORTED
+
+      expect do
+        new_client(option_overrides.merge(tls_version: 'TLSv1.2'))
+      end.to raise_error(Mysql2::Error, /tls_version/)
+    end
   end
 
   context "option coherence warnings" do

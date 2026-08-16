@@ -186,6 +186,7 @@ have_const('MYSQL_OPTION_MULTI_STATEMENTS_ON', mysql_h)
 have_const('MYSQL_OPTION_MULTI_STATEMENTS_OFF', mysql_h)
 have_const('MYSQL_OPT_GET_SERVER_PUBLIC_KEY', mysql_h)
 have_const('MYSQL_OPT_TLS_SNI_SERVERNAME', mysql_h) # Added in MySQL 8.1; no MariaDB equivalent (MDEV-10658)
+have_const('MYSQL_OPT_TLS_VERSION', mysql_h) # Added in MySQL 5.7.10; MariaDB Connector/C 3.4.3+ defines the same enum member
 
 # my_bool is replaced by C99 bool in MySQL 8.0, but we want
 # to retain compatibility with the typedef in earlier MySQLs.

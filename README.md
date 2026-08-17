@@ -311,6 +311,88 @@ support. MySQL client library defaults will be used for any parameters that are
 left out or set to nil. Relative paths are allowed, and may be required by
 managed hosting providers such as Heroku.
 
+#### Modern best practices
+
+A fully-verified connection (certificate chain **and** hostname checked) on
+exactly TLS 1.3 needs two options together:
+
+``` ruby
+Mysql2::Client.new(
+  host: 'db.example.com',
+  ssl_mode: :verify_identity,
+  tls_version: 'TLSv1.3',
+)
+```
+
+Whether this actually gets you both depends entirely on **your application's
+own client library** -- not the database server's version, and not even your
+distro's marketing version number. Server and client library versions move
+independently. Two very common base images make this concrete:
+
+* **Ubuntu 24.04 LTS** (`ubuntu:24.04`) -- `apt-get install libmariadb-dev` /
+  `mariadb-server` installs MariaDB 10.11.13, bundling **MariaDB Connector/C
+  3.3.16**. That's below the 3.4 floor mysql2 needs to enforce
+  `verify_identity`'s hostname check -- it raises rather than connect with the
+  check silently skipped (#879), and `tls_version` raises too. The strongest
+  option available out of the box is CA-only verification:
+  ``` ruby
+  Mysql2::Client.new(
+    host: 'db.example.com',
+    ssl_mode: :verify_ca,   # chain verified; hostname is NOT checked on this build
+  )
+  ```
+  To get real hostname verification and `tls_version` on Ubuntu 24.04, add
+  MariaDB's own package repository (not Ubuntu's) and install from that
+  instead -- see
+  [MariaDB's package repository setup guide](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage).
+* **Ubuntu 26.04 LTS** (`ubuntu:26.04`) -- ships MariaDB 11.8.6, bundling
+  **MariaDB Connector/C 3.4.9**. The first `ssl_mode: :verify_identity` /
+  `tls_version: 'TLSv1.3'` example above works out of the box, no extra repo
+  needed.
+
+If you're building or installing a client library directly rather than
+relying on a distro package, the modern floors are:
+
+* **MySQL 8.0.36 or later** (any current MySQL 8.0 LTS / 8.4 LTS / 9.x point
+  release -- via the
+  [MySQL APT repository](https://dev.mysql.com/doc/mysql-apt-repo-quick-guide/en/)
+  or equivalent). MySQL 5.7.11+ is functionally sufficient for everything in
+  this section too, but MySQL 5.7 itself is long past Oracle's supported
+  end-of-life -- treat 5.7.11+ as "still works," not as a recommendation.
+* **MariaDB Connector/C 3.4.3 or later**, installed from
+  [MariaDB's own package repository](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage)
+  rather than your distro's archive. This ships with recent MariaDB 11.4 LTS
+  point releases and all of 11.8+/12.3+, but *not* with 11.4's earliest point
+  releases (11.4.0-11.4.4 bundled Connector/C 3.4.2, which enforces
+  `verify_identity` but can't do `tls_version` -- see the compatibility table
+  below). Check what you actually have rather than assuming from the server's
+  marketing version:
+  ``` ruby
+  Mysql2::Client.info[:version]                        # linked client library version
+  Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION        # :native, :callback, or nil (unenforceable)
+  Mysql2::Client::TLS_VERSION_SUPPORTED                 # true/false
+  ```
+
+#### Version compatibility
+
+Only current, supported versions are listed here. If you're on something
+older than every row below, `ssl_mode`/`tls_*` behavior for it is still in
+the code and specs, but isn't covered in this README -- upgrading is the
+recommended path rather than working around it.
+
+| Client library | `ssl_mode` values | `verify_identity` | `tls_version` | `tls_peer_fingerprint` | `tls_passphrase` | `tls_sni_name` |
+| --- | --- | --- | --- | --- | --- | --- |
+| MySQL 5.7.11 -- 8.0.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ❌ |
+| MySQL 8.1+ / 8.4 LTS / 9.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ✅ (8.1+) |
+| MariaDB Connector/C 3.4.0 -- 3.4.2 | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ❌ raises | ✅ | ✅ | ❌ never |
+| MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ never |
+
+`:preferred` doesn't exist on MariaDB at any version -- MariaDB Connector/C
+never defines `MYSQL_OPT_SSL_MODE` at all; mysql2 maps `:ssl_mode`'s other
+four values onto MariaDB's own `MYSQL_OPT_SSL_ENFORCE` /
+`MYSQL_OPT_SSL_VERIFY_SERVER_CERT` options instead (see the table further
+below). `tls_sni_name` never works on any MariaDB Connector/C version.
+
 ``` ruby
 Mysql2::Client.new(
   # ...options as above...,
@@ -319,7 +401,7 @@ Mysql2::Client.new(
   :tls_ca => '/path/to/ca-cert.pem',
   :tls_capath => '/path/to/cacerts',
   :tls_cipher => 'DHE-RSA-AES256-SHA',
-  :sslverify => true, # Equivalent to ssl_mode: :verify_identity (see below)
+  :sslverify => true, # deprecated -- equivalent to ssl_mode: :verify_identity (see below)
   :ssl_mode => :disabled / :preferred / :required / :verify_ca / :verify_identity,
   )
 ```
@@ -341,9 +423,10 @@ begin with (see
 -- but it's the same underlying direction: `tls-` is the modern prefix
 for TLS configuration on both client libraries, and mysql2 follows it.
 
-`:sslverify` is intentionally not renamed to a `:tls_*` name -- it already
-maps onto `:ssl_mode` (see below) rather than being a plain rename of an
-existing option.
+`:sslverify` is deprecated in favor of `:ssl_mode`, which has more nuanced
+values available (see below) -- it's intentionally not renamed to a `:tls_*`
+name, since it isn't a plain rename of an existing option the way the five
+above are.
 
 If your `:sslkey`/`:tls_key` file is encrypted, supply the passphrase to
 decrypt it (MariaDB Connector/C only -- MySQL's client library has no
@@ -397,8 +480,8 @@ Two things worth knowing:
   verification callback), or `nil` (unenforceable).
 
 `:sslverify => true` is equivalent to `ssl_mode: :verify_identity`.
-`:ssl_mode` is preferred as it has more nuanced options available.
-An explicit `:ssl_mode` takes precedence over `:sslverify`,
+`:sslverify` is deprecated in favor of `:ssl_mode`, which has more nuanced
+values available. An explicit `:ssl_mode` takes precedence over `:sslverify`,
 however conflicting values, e.g. `:sslverify => false` alongside
 `:ssl_mode => :verify_ca` raises an exception, as the two
 would otherwise contradict each other.

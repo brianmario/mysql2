@@ -718,6 +718,117 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "metadata cached across executes" do
+    # A statement caches its metadata-derived artifacts (field-name array,
+    # result bind buffers) between executes, re-reading and validating the
+    # metadata each time. These specs pin the seams: buffers sized by a
+    # previous execute's data, metadata invalidated by ALTER TABLE, per-execute
+    # option changes, mutation isolation of #fields, and GC/compaction safety
+    # of the VALUEs rooted on the statement wrapper.
+    before(:example) do
+      @client.query "CREATE TEMPORARY TABLE cross_execute_test (id INT, val VARCHAR(255))"
+      @client.query "INSERT INTO cross_execute_test (id, val) VALUES (1, 'short')"
+    end
+
+    it "should return fresh rows on every execute, growing value buffers as the data widens" do
+      stmt = @client.prepare "SELECT id, val FROM cross_execute_test ORDER BY id"
+      expect(stmt.execute.to_a).to eql([{ "id" => 1, "val" => "short" }])
+
+      @client.query "INSERT INTO cross_execute_test (id, val) VALUES (2, REPEAT('x', 255))"
+      expect(stmt.execute.to_a).to eql([{ "id" => 1, "val" => "short" }, { "id" => 2, "val" => "x" * 255 }])
+    end
+
+    it "should reread metadata when ALTER TABLE changes a column type between executes" do
+      @client.query "CREATE TEMPORARY TABLE alter_type_test (id INT, num INT)"
+      @client.query "INSERT INTO alter_type_test VALUES (1, 42)"
+      stmt = @client.prepare "SELECT * FROM alter_type_test"
+      expect(stmt.execute.first["num"]).to eql(42)
+
+      @client.query "ALTER TABLE alter_type_test MODIFY num VARCHAR(16)"
+      expect(stmt.execute.first["num"]).to eql("42")
+    end
+
+    it "should reread metadata when ALTER TABLE flips a column to unsigned between executes" do
+      @client.query "CREATE TEMPORARY TABLE alter_unsigned_test (num INT)"
+      @client.query "INSERT INTO alter_unsigned_test VALUES (1)"
+      stmt = @client.prepare "SELECT * FROM alter_unsigned_test"
+      expect(stmt.execute.first["num"]).to eql(1)
+
+      @client.query "ALTER TABLE alter_unsigned_test MODIFY num INT UNSIGNED"
+      @client.query "UPDATE alter_unsigned_test SET num = 4294967295"
+      expect(stmt.execute.first["num"]).to eql(4294967295)
+    end
+
+    it "should keep row keys in step with the statement's own fresh metadata after ALTER TABLE renames a column" do
+      # MySQL pins a prepared handle's result-set column names for the life of
+      # the handle (even Statement#fields, which re-reads metadata, reports the
+      # original name after a rename), so this cannot demand the new name.
+      # What it pins instead is that cached names always track whatever the
+      # freshly read metadata reports: on a server that does propagate the
+      # rename, stale cached names would break this equality.
+      @client.query "CREATE TEMPORARY TABLE alter_name_test (id INT, before_name INT)"
+      @client.query "INSERT INTO alter_name_test VALUES (1, 42)"
+      stmt = @client.prepare "SELECT * FROM alter_name_test"
+      expect(stmt.execute.first.keys).to eql(stmt.fields)
+
+      @client.query "ALTER TABLE alter_name_test CHANGE before_name after_name INT"
+      expect(stmt.execute.first.keys).to eql(stmt.fields)
+    end
+
+    it "should re-elect bind types when the cast mode changes between executes" do
+      # Bind types are elected from the cast mode (cast: true binds server
+      # types; cast: false / :fast bind strings), so cached buffers carry
+      # their election across executes and an execute under the other mode
+      # must re-elect rather than decode through the adopted types.
+      stmt = @client.prepare "SELECT id, val FROM cross_execute_test"
+      expect(stmt.execute(cast: false).first).to eql("id" => "1", "val" => "short")
+      expect(stmt.execute.first).to eql("id" => 1, "val" => "short")
+      expect(stmt.execute(cast: :fast).first).to eql("id" => 1, "val" => "short")
+    end
+
+    it "should not reuse field names for an execute with different :symbolize_keys" do
+      stmt = @client.prepare "SELECT id FROM cross_execute_test"
+      expect(stmt.execute(symbolize_keys: true).first.keys).to eql([:id])
+      expect(stmt.execute.first.keys).to eql(["id"])
+      expect(stmt.execute(symbolize_keys: true).first.keys).to eql([:id])
+    end
+
+    it "should give each execute's result its own #fields array" do
+      stmt = @client.prepare "SELECT id, val FROM cross_execute_test"
+      # The first result's array is the one the statement harvests; the
+      # second's is handed out from the cache. Mutating both proves neither
+      # end of the exchange shares an array with the statement.
+      first = stmt.execute
+      first.fields << "mutated on harvest side"
+      second = stmt.execute
+      expect(second.fields).to eql(%w[id val])
+      second.fields << "mutated on adoption side"
+      expect(stmt.execute.fields).to eql(%w[id val])
+    end
+
+    it "should keep results correct across GC and compaction with a held statement" do
+      stmt = @client.prepare "SELECT id, val FROM cross_execute_test ORDER BY id"
+      expected = stmt.execute.to_a
+      stmt.execute
+      GC.start
+      GC.verify_compaction_references(expand_heap: true, toward: :empty) if GC.respond_to?(:verify_compaction_references) && RUBY_VERSION >= "3.2"
+      result = stmt.execute
+      expect(result.to_a).to eql(expected)
+      expect(result.fields).to eql(%w[id val])
+    end
+
+    it "should keep results correct when GC.stress runs between executes" do
+      stmt = @client.prepare "SELECT id, val FROM cross_execute_test"
+      expected = stmt.execute.to_a
+      begin
+        GC.stress = true
+        3.times { expect(stmt.execute.to_a).to eql(expected) }
+      ensure
+        GC.stress = false
+      end
+    end
+  end
+
   context "row data type mapping" do
     let(:test_result) { @client.prepare("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").execute.first }
 

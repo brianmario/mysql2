@@ -26,6 +26,7 @@ static void rb_mysql_stmt_mark(void * ptr) {
   if (!stmt_wrapper) return;
 
   rb_gc_mark_movable(stmt_wrapper->client);
+  rb_gc_mark_movable(stmt_wrapper->cached_fields);
 }
 
 static void rb_mysql_stmt_free(void *ptr) {
@@ -44,6 +45,7 @@ static void rb_mysql_stmt_compact(void * ptr) {
   if (!stmt_wrapper) return;
 
   rb_mysql2_gc_location(stmt_wrapper->client);
+  rb_mysql2_gc_location(stmt_wrapper->cached_fields);
 }
 #endif
 
@@ -73,6 +75,93 @@ static void *nogvl_stmt_close(void *ptr) {
   return NULL;
 }
 
+/* Free every cached metadata artifact: the validation snapshot, the private
+ * field-name array (dropped for the GC to reclaim), and the result bind
+ * buffers. Plain xfree and C-struct writes only, so this is safe from a GC
+ * dfree callback (decr_mysql2_stmt) as well as from ordinary Ruby code. */
+static void mysql2_stmt_metadata_cache_clear(mysql_stmt_wrapper *stmt_wrapper) {
+  unsigned int i;
+
+  if (stmt_wrapper->cached_field_meta) {
+    for (i = 0; i < stmt_wrapper->cached_field_count; i++) {
+      xfree(stmt_wrapper->cached_field_meta[i].name);
+    }
+    xfree(stmt_wrapper->cached_field_meta);
+    stmt_wrapper->cached_field_meta = NULL;
+  }
+
+  if (stmt_wrapper->cached_result_buffers) {
+    for (i = 0; i < stmt_wrapper->cached_field_count; i++) {
+      if (stmt_wrapper->cached_result_buffers[i].buffer) {
+        xfree(stmt_wrapper->cached_result_buffers[i].buffer);
+      }
+    }
+    xfree(stmt_wrapper->cached_result_buffers);
+    xfree(stmt_wrapper->cached_is_null);
+    xfree(stmt_wrapper->cached_error);
+    xfree(stmt_wrapper->cached_length);
+    stmt_wrapper->cached_result_buffers = NULL;
+    stmt_wrapper->cached_is_null = NULL;
+    stmt_wrapper->cached_error = NULL;
+    stmt_wrapper->cached_length = NULL;
+  }
+
+  stmt_wrapper->cached_fields = Qnil;
+  stmt_wrapper->cached_field_count = 0;
+}
+
+/* Compare freshly read result metadata against the statement's snapshot.
+ * On a match, every cached artifact was derived from an identical shape and
+ * remains valid, so it is kept for rb_mysql_result_to_obj to adopt. On any
+ * mismatch -- or when no snapshot exists yet -- drop the artifacts, bump the
+ * epoch, and snapshot the fresh fields.
+ *
+ * Names are compared NUL-trimmed, the same rule rb_mysql_result_fetch_field
+ * uses to derive them: the library can report a name_length that counts
+ * bytes past the terminator (#1288), and the byte beyond it is arbitrary,
+ * so a raw comparison could spuriously invalidate an unchanged name. */
+static void mysql2_stmt_validate_metadata_cache(mysql_stmt_wrapper *stmt_wrapper, MYSQL_RES *metadata) {
+  MYSQL_FIELD *fields = mysql_fetch_fields(metadata);
+  unsigned int field_count = mysql_num_fields(metadata);
+  unsigned int i;
+
+  if (stmt_wrapper->cached_field_meta && stmt_wrapper->cached_field_count == field_count) {
+    for (i = 0; i < field_count; i++) {
+      const mysql2_stmt_field_meta *meta = &stmt_wrapper->cached_field_meta[i];
+      const char *name_end = memchr(fields[i].name, '\0', fields[i].name_length);
+      unsigned long name_length = name_end ? (unsigned long)(name_end - fields[i].name) : fields[i].name_length;
+
+      if (meta->type != fields[i].type ||
+          meta->flags != fields[i].flags ||
+          meta->charsetnr != fields[i].charsetnr ||
+          meta->name_length != name_length ||
+          memcmp(meta->name, fields[i].name, name_length) != 0) {
+        break;
+      }
+    }
+    if (i == field_count) return;
+  }
+
+  mysql2_stmt_metadata_cache_clear(stmt_wrapper);
+  stmt_wrapper->metadata_epoch++;
+  stmt_wrapper->cached_field_count = field_count;
+  /* xcalloc so the name pointers start NULL: an allocation failure part way
+   * through the copy loop leaves a snapshot mysql2_stmt_metadata_cache_clear
+   * can free safely. */
+  stmt_wrapper->cached_field_meta = xcalloc(field_count, sizeof(mysql2_stmt_field_meta));
+  for (i = 0; i < field_count; i++) {
+    mysql2_stmt_field_meta *meta = &stmt_wrapper->cached_field_meta[i];
+    const char *name_end = memchr(fields[i].name, '\0', fields[i].name_length);
+
+    meta->name_length = name_end ? (unsigned long)(name_end - fields[i].name) : fields[i].name_length;
+    meta->name = xmalloc(meta->name_length);
+    memcpy(meta->name, fields[i].name, meta->name_length);
+    meta->type = fields[i].type;
+    meta->flags = fields[i].flags;
+    meta->charsetnr = fields[i].charsetnr;
+  }
+}
+
 void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
   stmt_wrapper->refcount--;
 
@@ -97,6 +186,7 @@ void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
                                          (uintptr_t)stmt_wrapper);
     }
 
+    mysql2_stmt_metadata_cache_clear(stmt_wrapper);
     decr_mysql2_client(stmt_wrapper->client_wrapper);
     xfree(stmt_wrapper);
   }
@@ -165,6 +255,16 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     stmt_wrapper->refcount = 1;
     stmt_wrapper->closed = 0;
     stmt_wrapper->stmt = NULL;
+    stmt_wrapper->cached_field_count = 0;
+    stmt_wrapper->cached_field_meta = NULL;
+    stmt_wrapper->metadata_epoch = 0;
+    stmt_wrapper->cached_fields = Qnil;
+    stmt_wrapper->cached_fields_symbolized = 0;
+    stmt_wrapper->cached_result_buffers = NULL;
+    stmt_wrapper->cached_is_null = NULL;
+    stmt_wrapper->cached_error = NULL;
+    stmt_wrapper->cached_length = NULL;
+    stmt_wrapper->cached_result_buffers_string_binds = 0;
 
     /* Keep a handle to the Client to ensure it doesn't get garbage collected first */
     stmt_wrapper->client = rb_client;
@@ -682,6 +782,13 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     wrapper->state = MYSQL2_CLIENT_STREAMING;
   }
 
+  /* The metadata was read fresh above -- reading it is cheap and it goes
+   * stale under ALTER TABLE -- and only the artifacts derived from it are
+   * cached. On a match the field-name array and result buffers from the
+   * previous execute remain compatible and rb_mysql_result_to_obj below
+   * adopts them; on a miss they are dropped and rebuilt from scratch. */
+  mysql2_stmt_validate_metadata_cache(stmt_wrapper, metadata);
+
   resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self, query_elapsed);
 
   /* Track the open cursor so a later command can force-drain it if it's
@@ -813,6 +920,7 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
       stmt_wrapper->closed = 1;
       rb_hash_delete(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper));
       rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+      mysql2_stmt_metadata_cache_clear(stmt_wrapper);
   }
 
   return Qnil;

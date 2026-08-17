@@ -102,6 +102,17 @@ typedef struct {
   my_bool *is_null;
   my_bool *error;
   unsigned long *length;
+  /* The statement's metadata_epoch when this Result was created. Cached
+   * artifacts are only handed back to the statement while its epoch still
+   * matches: an intervening execute may have rebuilt the snapshot around a
+   * different shape (ALTER TABLE), and buffers bound for the old shape would
+   * silently convert or truncate the new one. 0 and unused without a
+   * statement. */
+  unsigned long stmt_metadata_epoch;
+  /* Whether wrapper->fields holds symbolized names, recorded as they are
+   * built so the statement cache can refuse to reuse the array for an
+   * execute with a different :symbolize_keys. */
+  int fields_symbolized;
   mysql2_each_opts_cache each_opts;
 } mysql2_result_wrapper;
 

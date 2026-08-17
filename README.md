@@ -516,9 +516,20 @@ next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
 
 ### Fork safety
 
-A `Client`'s connection is not safe to use from a process that merely inherited it across `fork()`. The child shares the same underlying TCP socket as the parent, but its copy of the connection's protocol/TLS state is independent and unsynchronized. Using it can desync the connection or corrupt whatever the parent is doing with it.
+A `Client`'s connection is not safe to share across `fork()`. The child inherits the same underlying TCP socket as the parent, but its copy of the connection's protocol/TLS state is an independent, unsynchronized copy -- using it from both processes can desync the connection or corrupt whatever the other side is doing. Closing it (explicitly, or via the garbage collector) is just as unsafe: `close` sends a real QUIT (and, under TLS, an SSL shutdown) down the *shared* socket, which breaks the connection for whichever process didn't call it.
 
-mysql2 detects this automatically by recording the pid that established the connection and comparing it against the current pid. If a `Client` is garbage collected, queried, pinged, prepared, or executed from a different process than the one that connected it, mysql2 prints a `[WARN]` to stderr. This warning is silent when `automatic_close` has been explicitly set to `false` -- see below.
+mysql2 detects this automatically by recording the pid that established the connection and comparing it against the current pid. If a `Client` is garbage collected, queried, pinged, prepared, or executed from a different process than the one that connected it, mysql2 prints a `[WARN]` to stderr and, for garbage collection, takes care not to send a real close. This warning is silent when `automatic_close` has been explicitly set to `false` -- see below.
+
+Call `discard!`, not `close`, to deliberately let go of a connection another process owns:
+
+``` ruby
+fork do
+  client.discard! # the parent's session is untouched
+  # ... child works with its own, newly-created connections
+end
+```
+
+`discard!` drops this process's reference to the socket and frees client-side resources without sending anything to the server. Afterward the client behaves like a closed one: `closed?` returns true and further commands raise `Mysql2::Error`. Only discard connections some other process still owns -- discarding one nothing else shares just abandons the server session until it hits `wait_timeout`.
 
 By default (`automatic_close` is `true`), a `Client` garbage collected in a process that didn't establish its connection will not send a real close, to avoid interrupting the owning process's connection. Setting `automatic_close` to `false` opts out of automatic closing entirely -- useful if your application intentionally shares a `Client` across a `fork()` and serializes access to it (for example, closing it explicitly in the child once done, which ends the connection for both processes, not just the child's reference to it):
 

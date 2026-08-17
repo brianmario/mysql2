@@ -1,6 +1,6 @@
 #include <mysql2_ext.h>
 
-VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
+VALUE mMysql2, cMysql2Error, cMysql2ConnectionError, cMysql2TimeoutError;
 
 /* Ruby Extension initializer */
 void Init_mysql2(void) {
@@ -9,6 +9,9 @@ void Init_mysql2(void) {
 
   cMysql2Error = rb_const_get(mMysql2, rb_intern("Error"));
   rb_global_variable(&cMysql2Error);
+
+  cMysql2ConnectionError = rb_const_get(cMysql2Error, rb_intern("ConnectionError"));
+  rb_global_variable(&cMysql2ConnectionError);
 
   cMysql2TimeoutError = rb_const_get(cMysql2Error, rb_intern("TimeoutError"));
   rb_global_variable(&cMysql2TimeoutError);

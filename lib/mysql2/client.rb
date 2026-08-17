@@ -50,9 +50,7 @@ module Mysql2
       self.charset_name = opts[:encoding] || 'utf8mb4'
 
       mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
-      if (mode == SSL_MODE_VERIFY_CA || mode == SSL_MODE_VERIFY_IDENTITY) && !opts[:sslca]
-        opts[:sslca] = find_default_ca_path
-      end
+      configure_tls_verification(opts, mode)
 
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
@@ -118,6 +116,34 @@ module Mysql2
           memo
         end
       end
+    end
+
+    # Enforce the coherence of the TLS verification options before any of
+    # them reach the client library, so a verification the caller asked for
+    # can never be silently skipped (the #879 failure mode).
+    #
+    # :sslca/:sslcapath left unset means the TLS backend resolves its default
+    # trust store natively (OpenSSL's default verify paths,
+    # SSL_CERT_FILE/SSL_CERT_DIR, or the platform certificate store). Whether
+    # verification actually succeeded is proven at connect time -- the
+    # verification callback and the post-connect tripwire fail closed on any
+    # connection whose chain or hostname cannot be shown verified.
+    def configure_tls_verification(opts, mode)
+      # The mode != 0 guard keeps ancient no-ssl_mode builds (where every
+      # SSL_MODE_* constant collapses to 0) out of the verify-tier handling.
+      verify_mode = (mode == SSL_MODE_VERIFY_CA || mode == SSL_MODE_VERIFY_IDENTITY) && mode != 0
+
+      return unless opts[:tls_peer_fingerprint] || opts[:tls_peer_fingerprint_list]
+
+      # Fingerprint pinning and CA/hostname verification are alternative
+      # trust models in MariaDB Connector/C: a pinned connection runs the
+      # FINGERPRINT check instead of the HOST/TRUST checks, so combining
+      # them would silently drop whichever one loses. Refuse the ambiguity.
+      raise Mysql2::Error::ConnectionError, ":tls_peer_fingerprint pinning and ssl_mode: #{opts[:ssl_mode]} are mutually exclusive verification models; pick one" \
+        if verify_mode
+
+      self.tls_peer_fingerprint = opts[:tls_peer_fingerprint].to_s if opts[:tls_peer_fingerprint]
+      self.tls_peer_fingerprint_list = opts[:tls_peer_fingerprint_list].to_s if opts[:tls_peer_fingerprint_list]
     end
 
     # Find any default system CA paths to handle system roots

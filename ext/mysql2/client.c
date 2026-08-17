@@ -17,7 +17,7 @@
 #include "mysql_enc_name_to_ruby.h"
 
 VALUE cMysql2Client;
-extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
+extern VALUE mMysql2, cMysql2Error, cMysql2ConnectionError, cMysql2TimeoutError;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args,
   intern_current_query_options, intern_read_timeout, intern_values;
@@ -77,11 +77,14 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
  */
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
   #define SSL_MODE_VERIFY_IDENTITY 5
-  /* MYSQL_OPT_SSL_VERIFY_SERVER_CERT is the only verification this client
-   * library offers -- it checks the CA and the hostname together, with no
-   * way to ask for one without the other. SSL_MODE_VERIFY_CA maps to the
-   * same option: full verification is the closest honest behavior available,
-   * and strictly safer than the alternative of accepting any CA silently. */
+  /* MYSQL_OPT_SSL_VERIFY_SERVER_CERT is the only verification option this
+   * client library offers, and despite its MySQL-derived name it verifies
+   * the CA at most -- hostname verification is decided by the connector's
+   * local-peer heuristic, not by this option, and is skipped entirely for
+   * 127.0.0.1/::1/socket peers (#879). Both verify modes map to it;
+   * verify_identity additionally installs mysql2's own verification
+   * callback (see rb_set_ssl_mode_option) to enforce the hostname check
+   * the option alone never provides. */
   #define SSL_MODE_VERIFY_CA 4
   #define HAVE_CONST_SSL_MODE_VERIFY_IDENTITY
   #define HAVE_CONST_SSL_MODE_VERIFY_CA
@@ -140,6 +143,183 @@ struct nogvl_select_db_args {
   struct query_completion completion;
 };
 
+static VALUE rb_mysql_client_close(VALUE self);
+
+/*
+ * ssl_mode: :verify_identity enforcement for MariaDB Connector/C.
+ *
+ * The connector's default TLS verifier decides which checks run from the
+ * peer address, not from the requested verification mode:
+ * MYSQL_OPT_SSL_VERIFY_SERVER_CERT only clears the skip-everything gate
+ * (tls_allow_invalid_server_cert), while hostname verification is added
+ * only for peers the connector considers non-local -- 127.0.0.1, ::1, and
+ * socket transports never get it (plugins/auth/my_auth.c,
+ * is_local_connection). A :verify_identity connection to 127.0.0.1 never
+ * executes X509_check_host at all: it reports success without the identity
+ * ever being verified (#879).
+ *
+ * MARIADB_OPT_TLS_VERIFICATION_CALLBACK (Connector/C 3.4+, CONC-724)
+ * replaces the whole verifier, so mysql2 registers the callback below for
+ * :verify_identity connections. The connector's own verifier
+ * (ma_pvio_tls_verify_server_cert) would be the natural delegate for it,
+ * but distro builds hide that symbol behind a version script (local: *),
+ * so the callback verifies the TLS session directly with OpenSSL instead:
+ * certificate-chain trust via the handshake's recorded status plus
+ * SSL_get_verify_result, and the hostname via X509_check_host /
+ * X509_check_ip_asc -- real SAN, wildcard, and IP-address matching,
+ * applied unconditionally, local peers included. Verification runs inside
+ * the TLS handshake, before any credentials are sent, and a failure
+ * refuses the connection there.
+ *
+ * The callback runs inside mysql_real_connect without the GVL: pure C
+ * only, no Ruby calls.
+ */
+#ifdef MYSQL2_VERIFY_IDENTITY_SHIM
+
+/* Included without HAVE_TLS defined, which leaves MARIADB_TLS an opaque
+ * void in the MARIADB_PVIO struct -- the real MARIADB_TLS definition lives
+ * in ma_tls.h, which #includes the not-installed ma_hash.h and so cannot
+ * be consumed here. */
+#ifdef HAVE_MYSQL_H
+#include <ma_pvio.h>
+#else
+#include <mysql/ma_pvio.h>
+#endif
+#include <openssl/ssl.h>
+#include <openssl/x509v3.h>
+
+/* The leading members of MARIADB_TLS (struct st_ma_pvio_tls in the
+ * installed ma_tls.h), mirrored for the reason above; the MARIADB_X509_INFO
+ * tail is unused here and omitted. The callback validates the layout
+ * before trusting it -- the pvio read through this struct must point back
+ * at the same ctls the connector passed in, and the SSL session's app_data
+ * must be the MYSQL handle the pvio names -- and refuses the connection on
+ * any mismatch. */
+typedef struct {
+  void *data;
+  MARIADB_PVIO *pvio;
+  void *ssl;
+} mysql2_mariadb_tls_head;
+
+/* Report through the public NET error fields -- the same fields the
+ * connector's my_set_error fills -- so mysql_error() surfaces the real
+ * reason for the refused connection. */
+static void mysql2_tls_set_error(MYSQL *mysql, const char *detail) {
+  mysql->net.last_errno = CR_SSL_CONNECTION_ERROR;
+  snprintf(mysql->net.last_error, sizeof(mysql->net.last_error),
+           "SSL connection error: verify_identity: %s", detail);
+  memcpy(mysql->net.sqlstate, "HY000", 6);
+}
+
+/* Verify the live TLS session's peer identity: certificate chain against
+ * the configured CA, and hostname against the certificate's SAN/CN.
+ * Returns NULL on success; on failure returns a description -- static, or
+ * formatted into the caller's detail buffer with the specifics (hostname
+ * checked, CA in effect, OpenSSL's chain-failure reason) and the remedy,
+ * since this refusal is what a misconfigured caller actually sees -- and
+ * sets *status to the matching MARIADB_TLS_VERIFY_* bit. */
+static const char *mysql2_tls_check_peer_identity(MYSQL *mysql, mysql2_mariadb_tls_head *ctls, unsigned int *status, char *detail, size_t detail_len) {
+  const char *tls_library = NULL;
+  const char *host;
+  const char *ca;
+  SSL *ssl;
+  X509 *cert;
+  long chain_result;
+  int host_ok;
+
+  *status = MARIADB_TLS_VERIFY_UNKNOWN;
+
+  /* ctls->ssl is only an OpenSSL SSL* when the connector was built against
+   * OpenSSL or LibreSSL; under Schannel or GnuTLS it is a different
+   * animal entirely and this shim cannot verify anything -- refuse rather
+   * than guess. */
+  if (mariadb_get_infov(mysql, MARIADB_TLS_LIBRARY, (void *)&tls_library) != 0 ||
+      tls_library == NULL ||
+      (strncmp(tls_library, "OpenSSL", 7) != 0 && strncmp(tls_library, "LibreSSL", 8) != 0))
+    return "hostname verification requires an OpenSSL-based MariaDB Connector/C build";
+
+  ssl = (SSL *)ctls->ssl;
+  if (ssl == NULL || (MYSQL *)SSL_get_app_data(ssl) != mysql)
+    return "TLS session unavailable for verification";
+
+  /* The connector's handshake verify callback records chain failures
+   * (untrusted, expired, revoked) without aborting the handshake; the
+   * session still holds OpenSSL's specific reason. Name the CA actually in
+   * effect too -- "none" means the caller passed nothing and the backend's
+   * default trust store resolution was what failed to verify the chain. */
+  chain_result = SSL_get_verify_result(ssl);
+  if (mysql->net.tls_verify_status != 0 || chain_result != X509_V_OK) {
+    *status = mysql->net.tls_verify_status != 0 ? mysql->net.tls_verify_status : MARIADB_TLS_VERIFY_TRUST;
+    ca = mysql->options.ssl_ca != NULL ? mysql->options.ssl_ca :
+         mysql->options.ssl_capath != NULL ? mysql->options.ssl_capath : "none";
+    snprintf(detail, detail_len,
+             "certificate verification failed (%s; CA in effect: %s); pass the CA that "
+             "signed the server certificate as :sslca",
+             chain_result != X509_V_OK ? X509_verify_cert_error_string(chain_result)
+                                       : "recorded during the TLS handshake",
+             ca);
+    return detail;
+  }
+
+  host = mysql->host;
+  if (host == NULL || host[0] == '\0') {
+    *status = MARIADB_TLS_VERIFY_HOST;
+    return "no hostname to verify the certificate against";
+  }
+
+  cert = SSL_get_peer_certificate(ssl);
+  if (cert == NULL)
+    return "server presented no certificate";
+
+  host_ok = X509_check_host(cert, host, strlen(host), 0, NULL) == 1 ||
+            X509_check_ip_asc(cert, host, 0) == 1;
+  X509_free(cert);
+
+  if (!host_ok) {
+    *status = MARIADB_TLS_VERIFY_HOST;
+    snprintf(detail, detail_len,
+             "hostname \"%s\" does not match the server certificate; connect via a name "
+             "the certificate covers, or pin the certificate with :tls_peer_fingerprint",
+             host);
+    return detail;
+  }
+
+  return NULL;
+}
+
+static int mysql2_tls_verification_callback(void *vctls, unsigned int flags) {
+  mysql2_mariadb_tls_head *ctls = (mysql2_mariadb_tls_head *)vctls;
+  MYSQL *mysql;
+  unsigned int status = MARIADB_TLS_VERIFY_UNKNOWN;
+  char detail[MYSQL_ERRMSG_SIZE];
+  const char *failure;
+
+  /* The connector's flags encode its local-peer leniency -- the policy
+   * this callback exists to override. Full verification runs regardless. */
+  (void)flags;
+
+  if (ctls == NULL || ctls->pvio == NULL ||
+      (void *)ctls->pvio->ctls != vctls ||
+      (mysql = ctls->pvio->mysql) == NULL ||
+      mysql->net.pvio != ctls->pvio)
+    return 1; /* layout mismatch: refuse; there is no MYSQL handle to report through */
+
+  failure = mysql2_tls_check_peer_identity(mysql, ctls, &status, detail, sizeof(detail));
+  if (failure != NULL) {
+    /* Force a status the caller cannot forgive: my_auth.c treats a failed
+     * verification carrying only HOST/TRUST bits with no CA configured as
+     * acceptable for its self-signed leniency path and completes the
+     * connection anyway. MARIADB_TLS_VERIFY_ERROR keeps the refusal a
+     * refusal even if no CA reached the C layer. */
+    mysql->net.tls_verify_status |= status | MARIADB_TLS_VERIFY_ERROR;
+    mysql2_tls_set_error(mysql, failure);
+    return 1;
+  }
+  return 0;
+}
+
+#endif /* MYSQL2_VERIFY_IDENTITY_SHIM */
+
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
   const char *version_str = mysql_get_client_info();
@@ -164,20 +344,73 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   GET_CLIENT(self);
   int val = NUM2INT(setting);
 
-  /* Expected code path for MariaDB 10.x and MariaDB Connector/C 3.x
+  /* Expected code path for MariaDB 10.x+ and MariaDB Connector/C 3.x+
    * Workaround code path for MySQL 5.7.3 - 5.7.10 and MySQL Connector/C 6.1.3 - 6.1.x
-   */
-  if (version >= 100000                         // MariaDB (all versions numbered 10.x)
-    || (version >= 30000 && version < 40000)    // MariaDB Connector/C (all versions numbered 3.x)
-    || (version >= 50703 && version < 50711)    // Workaround for MySQL 5.7.3 - 5.7.10
-    || (version >= 60103 && version < 60200)) { // Workaround for MySQL Connector/C 6.1.3 - 6.1.x
+   *
+   * The MySQL tiers verify the hostname natively under
+   * MYSQL_OPT_SSL_VERIFY_SERVER_CERT. Everything else new enough to reach
+   * this branch is treated as the MariaDB family -- open-ended rather than
+   * a closed version window, so a future Connector/C major version lands on
+   * the verify_identity enforcement (or its fail-closed refusal) below
+   * instead of falling through to the unverified #879 path with no signal. */
+  int mysql_native_verify = (version >= 50703 && version < 50711)   // MySQL 5.7.3 - 5.7.10
+                         || (version >= 60103 && version < 60200);  // MySQL Connector/C 6.1.3 - 6.1.x
+  int mariadb_family = !mysql_native_verify && version >= 30000;    // MariaDB 10.x+ servers (100000+) and Connector/C 3.x+
+
+  if (mariadb_family || mysql_native_verify) {
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
-    /* This client library has no CA-only verification mode -- verify_ca
-     * gets the same full verification as verify_identity, since that's the
-     * only real verification MYSQL_OPT_SSL_VERIFY_SERVER_CERT offers. */
+    /* On MariaDB Connector/C, MYSQL_OPT_SSL_VERIFY_SERVER_CERT is CA
+     * verification at most: it clears the connector's skip-everything gate,
+     * but which checks actually run is chosen by the connector's local-peer
+     * heuristic, and hostname verification never runs against 127.0.0.1,
+     * ::1, or socket peers (#879). verify_ca maps here as the CA-only mode
+     * it is; verify_identity additionally registers mysql2's own
+     * verification callback below to make the hostname check real. */
     if (val == SSL_MODE_VERIFY_IDENTITY || val == SSL_MODE_VERIFY_CA) {
       my_bool b = 1;
       int result = mysql_options(wrapper->client, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &b);
+      /* The MySQL native-verify tiers share this branch but verify the
+       * hostname themselves under this option, so the shim (and the refusal
+       * when it isn't available) is MariaDB-only. */
+      if (val == SSL_MODE_VERIFY_IDENTITY && mariadb_family) {
+#ifdef MYSQL2_VERIFY_IDENTITY_SHIM
+        /* Both registrations are checked: a runtime client library that
+         * rejects either option (say, an older libmariadb.so than the
+         * headers this gem was built against) cannot enforce verification
+         * inside the handshake, and must refuse here -- before any connect
+         * -- rather than silently demote enforcement to the post-connect
+         * tripwire, which refuses only after credentials have already
+         * crossed the wire to the unverified peer. */
+#ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
+        /* verify_identity implies a required TLS connection, as it does on
+         * MySQL -- a connection that never negotiates TLS must not bypass
+         * verification. */
+        if (mysql_options(wrapper->client, MYSQL_OPT_SSL_ENFORCE, &b) != 0)
+          rb_raise(cMysql2ConnectionError,
+                   "ssl_mode: :verify_identity cannot be enforced: the runtime client library "
+                   "(%s) rejected MYSQL_OPT_SSL_ENFORCE, so an unverified non-TLS connection "
+                   "could not be ruled out. Refusing to connect (#879).", version_str);
+#endif
+        if (mysql_options(wrapper->client, MARIADB_OPT_TLS_VERIFICATION_CALLBACK,
+                          (const void *)mysql2_tls_verification_callback) != 0)
+          rb_raise(cMysql2ConnectionError,
+                   "ssl_mode: :verify_identity cannot be enforced: the runtime client library "
+                   "(%s) rejected the TLS verification callback, which needs MariaDB "
+                   "Connector/C 3.4+ at runtime as well as at gem build time. Refusing to "
+                   "connect with the hostname check silently skipped (#879).", version_str);
+        wrapper->tls_verify_identity = 1;
+#else
+        /* Connecting anyway with the hostname check silently skipped is
+         * exactly the failure #879 describes -- refuse instead. */
+        rb_raise(cMysql2ConnectionError,
+                 "ssl_mode: :verify_identity cannot be enforced by this mysql2 build "
+                 "(client library %s): hostname verification needs MariaDB Connector/C 3.4+ "
+                 "and OpenSSL headers at gem build time. Refusing to connect with the check "
+                 "silently skipped (#879). Use ssl_mode: :verify_ca, pin the server "
+                 "certificate with :tls_peer_fingerprint, or rebuild mysql2 against a newer "
+                 "client library.", version_str);
+#endif
+      }
       return INT2NUM(result);
     }
 #endif
@@ -649,6 +882,8 @@ static VALUE allocate(VALUE klass) {
   wrapper->connect_timeout = 0;
   wrapper->initialized = 0; /* will be set true after calling mysql_init */
   wrapper->closed = 1; /* will be set false after calling mysql_real_connect */
+  wrapper->tls_verify_identity = 0;
+  wrapper->tls_identity_verified = 0;
   wrapper->refcount = 1;
   wrapper->affected_rows = -1;
   wrapper->query_start = 0;
@@ -757,6 +992,116 @@ static VALUE rb_mysql_get_ssl_cipher(VALUE self)
   return rb_str;
 }
 
+#ifdef MYSQL2_TLS_INFO
+static VALUE mysql2_tm_to_time(const struct tm *tm) {
+  if (tm->tm_year == 0 && tm->tm_mon == 0 && tm->tm_mday == 0)
+    return Qnil;
+  return rb_funcall(rb_cTime, rb_intern("utc"), 6,
+                    INT2NUM(tm->tm_year + 1900), INT2NUM(tm->tm_mon + 1), INT2NUM(tm->tm_mday),
+                    INT2NUM(tm->tm_hour), INT2NUM(tm->tm_min), INT2NUM(tm->tm_sec));
+}
+
+static VALUE mysql2_utf8_str_or_nil(const char *str) {
+  VALUE rb_str;
+  if (str == NULL)
+    return Qnil;
+  rb_str = rb_str_new2(str);
+  rb_enc_associate(rb_str, rb_utf8_encoding());
+  return rb_str;
+}
+#endif
+
+/* call-seq: client.tls_info
+ *
+ * Describes the connection's TLS session as observed after the handshake:
+ * negotiated protocol and cipher, the peer certificate the server actually
+ * presented (subject, issuer, validity period, SHA-256 fingerprint), the
+ * MARIADB_TLS_VERIFY_* bitmask of verification checks the client library
+ * recorded as failed, and whether mysql2's own :verify_identity
+ * enforcement confirmed certificate-chain and hostname verification for
+ * this connection.
+ *
+ * Returns nil when the connection is not using TLS, and on client
+ * libraries without the introspection API (libmysqlclient, and MariaDB
+ * Connector/C before 3.4). On a returned hash every key is present:
+ * :verify_status and :peer_cert are nil if the library cannot report them.
+ */
+static VALUE rb_mysql_client_tls_info(VALUE self) {
+  GET_CLIENT(self);
+  REQUIRE_CONNECTED(wrapper);
+#ifdef MYSQL2_TLS_INFO
+  {
+    VALUE info, peer;
+    const char *tls_version = NULL;
+    unsigned int verify_status = 0;
+    MARIADB_X509_INFO *cert = NULL;
+
+    if (mariadb_get_infov(wrapper->client, MARIADB_CONNECTION_TLS_VERSION, (void *)&tls_version) != 0 ||
+        tls_version == NULL)
+      return Qnil; /* no TLS session on this connection */
+
+    info = rb_hash_new();
+    rb_hash_aset(info, ID2SYM(rb_intern("tls_version")), mysql2_utf8_str_or_nil(tls_version));
+    rb_hash_aset(info, ID2SYM(rb_intern("cipher")), mysql2_utf8_str_or_nil(mysql_get_ssl_cipher(wrapper->client)));
+    /* The hash's shape is invariant: every key is always present, with nil
+     * for anything the client library could not report. */
+    rb_hash_aset(info, ID2SYM(rb_intern("verify_status")),
+                 mariadb_get_infov(wrapper->client, MARIADB_TLS_VERIFY_STATUS, (void *)&verify_status) == 0 ?
+                   UINT2NUM(verify_status) : Qnil);
+    rb_hash_aset(info, ID2SYM(rb_intern("identity_verified")), wrapper->tls_identity_verified ? Qtrue : Qfalse);
+
+    /* 256 selects the SHA-256 fingerprint of the peer certificate. */
+    peer = Qnil;
+    if (mariadb_get_infov(wrapper->client, MARIADB_TLS_PEER_CERT_INFO, (void *)&cert, 256) == 0 && cert != NULL) {
+      peer = rb_hash_new();
+      rb_hash_aset(peer, ID2SYM(rb_intern("version")), INT2NUM(cert->version));
+      rb_hash_aset(peer, ID2SYM(rb_intern("subject")), mysql2_utf8_str_or_nil(cert->subject));
+      rb_hash_aset(peer, ID2SYM(rb_intern("issuer")), mysql2_utf8_str_or_nil(cert->issuer));
+      rb_hash_aset(peer, ID2SYM(rb_intern("fingerprint")), mysql2_utf8_str_or_nil(cert->fingerprint));
+      rb_hash_aset(peer, ID2SYM(rb_intern("not_before")), mysql2_tm_to_time(&cert->not_before));
+      rb_hash_aset(peer, ID2SYM(rb_intern("not_after")), mysql2_tm_to_time(&cert->not_after));
+    }
+    rb_hash_aset(info, ID2SYM(rb_intern("peer_cert")), peer);
+    return info;
+  }
+#else
+  return Qnil;
+#endif
+}
+
+/* :tls_peer_fingerprint / :tls_peer_fingerprint_list -- CA-less pinned TLS
+ * on MariaDB Connector/C 3.4+ (MARIADB_OPT_TLS_PEER_FP/_LIST). A pin the
+ * client library cannot apply is a security control silently not applied
+ * -- the same failure class as #879 -- so unsupported builds raise instead
+ * of warning and connecting unpinned. */
+static VALUE rb_set_tls_peer_fingerprint(VALUE self, VALUE fingerprint) {
+#ifdef HAVE_CONST_MARIADB_OPT_TLS_PEER_FP
+  GET_CLIENT(self);
+  mysql_options(wrapper->client, MARIADB_OPT_TLS_PEER_FP, StringValueCStr(fingerprint));
+  return fingerprint;
+#else
+  (void)self; (void)fingerprint;
+  rb_raise(cMysql2ConnectionError,
+           ":tls_peer_fingerprint requires MariaDB Connector/C 3.4+; this client library "
+           "(%s) cannot pin the server certificate, and connecting unpinned would silently "
+           "drop the verification you asked for", mysql_get_client_info());
+#endif
+}
+
+static VALUE rb_set_tls_peer_fingerprint_list(VALUE self, VALUE path) {
+#ifdef HAVE_CONST_MARIADB_OPT_TLS_PEER_FP_LIST
+  GET_CLIENT(self);
+  mysql_options(wrapper->client, MARIADB_OPT_TLS_PEER_FP_LIST, StringValueCStr(path));
+  return path;
+#else
+  (void)self; (void)path;
+  rb_raise(cMysql2ConnectionError,
+           ":tls_peer_fingerprint_list requires MariaDB Connector/C 3.4+; this client library "
+           "(%s) cannot pin the server certificate, and connecting unpinned would silently "
+           "drop the verification you asked for", mysql_get_client_info());
+#endif
+}
+
 #ifdef CLIENT_CONNECT_ATTRS
 static int opt_connect_attr_add_i(VALUE key, VALUE value, VALUE arg)
 {
@@ -848,6 +1193,49 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
   wrapper->connect_pid = getpid();
 #endif
   wrapper->server_version = mysql_get_server_version(wrapper->client);
+
+#ifdef MYSQL2_VERIFY_IDENTITY_SHIM
+  /* Tripwire for the #879 bug class: verify_identity enforcement was
+   * promised via the verification callback, so prove it ran against a live
+   * TLS session before handing the connection back -- a connect that
+   * somehow completed without TLS, or without invoking the callback, must
+   * be refused rather than silently degraded to an unverified one. The
+   * re-check is cheap (the session is already established) and fails
+   * closed on every path the callback cannot see. */
+  if (wrapper->tls_verify_identity) {
+    MARIADB_PVIO *pvio = wrapper->client->net.pvio;
+    mysql2_mariadb_tls_head *ctls = pvio ? (mysql2_mariadb_tls_head *)pvio->ctls : NULL;
+    unsigned int status;
+    char detail[MYSQL_ERRMSG_SIZE];
+    const char *failure;
+
+    if (ctls == NULL) {
+      failure = "connection did not negotiate TLS";
+    } else if (pvio->mysql != wrapper->client || ctls->pvio != pvio) {
+      failure = "TLS session unavailable for verification";
+    } else {
+      failure = mysql2_tls_check_peer_identity(wrapper->client, ctls, &status, detail, sizeof(detail));
+    }
+
+    if (failure != NULL) {
+      VALUE error, error_msg;
+      mysql2_tls_set_error(wrapper->client, failure);
+      error_msg = rb_str_new2(mysql_error(wrapper->client));
+      rb_enc_associate(error_msg, rb_utf8_encoding());
+      error = rb_funcall(cMysql2Error, intern_new_with_args, 4,
+                         error_msg,
+                         LONG2FIX(wrapper->server_version),
+                         UINT2NUM(mysql_errno(wrapper->client)),
+                         rb_usascii_str_new_cstr("HY000"));
+      /* Close before raising: an identity-unverified connection must not
+       * outlive this method, even unreachable and pending GC. */
+      rb_mysql_client_close(self);
+      rb_exc_raise(error);
+    }
+    wrapper->tls_identity_verified = 1;
+  }
+#endif
+
   return self;
 }
 
@@ -2408,6 +2796,7 @@ void init_mysql2_client(void) {
   rb_define_method(cMysql2Client, "warning_count", rb_mysql_client_warning_count, 0);
   rb_define_method(cMysql2Client, "query_info_string", rb_mysql_info, 0);
   rb_define_method(cMysql2Client, "ssl_cipher", rb_mysql_get_ssl_cipher, 0);
+  rb_define_method(cMysql2Client, "tls_info", rb_mysql_client_tls_info, 0);
   rb_define_method(cMysql2Client, "encoding", rb_mysql_client_encoding, 0);
   rb_define_method(cMysql2Client, "session_track", rb_mysql_client_session_track, 1);
   rb_define_method(cMysql2Client, "database", rb_mysql_client_database, 0);
@@ -2425,6 +2814,8 @@ void init_mysql2_client(void) {
   rb_define_private_method(cMysql2Client, "default_auth=", set_default_auth, 1);
   rb_define_private_method(cMysql2Client, "ssl_set", set_ssl_options, 5);
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
+  rb_define_private_method(cMysql2Client, "tls_peer_fingerprint=", rb_set_tls_peer_fingerprint, 1);
+  rb_define_private_method(cMysql2Client, "tls_peer_fingerprint_list=", rb_set_tls_peer_fingerprint_list, 1);
   rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 9);
@@ -2635,5 +3026,40 @@ void init_mysql2_client(void) {
   rb_const_set(cMysql2Client, rb_intern("ESCAPE_QUOTE_SUPPORTED"), Qtrue);
 #else
   rb_const_set(cMysql2Client, rb_intern("ESCAPE_QUOTE_SUPPORTED"), Qfalse);
+#endif
+
+  /* How this build enforces the hostname check ssl_mode: :verify_identity
+   * promises: :native (libmysqlclient's own MYSQL_OPT_SSL_MODE), :callback
+   * (mysql2's verification callback on MariaDB Connector/C 3.4+), or nil
+   * (unenforceable -- :verify_identity raises on MariaDB rather than
+   * connecting with the check silently skipped, see #879). */
+#if defined(FULL_SSL_MODE_SUPPORT)
+  rb_const_set(cMysql2Client, rb_intern("TLS_PEER_IDENTITY_VERIFICATION"), ID2SYM(rb_intern("native")));
+#elif defined(MYSQL2_VERIFY_IDENTITY_SHIM)
+  rb_const_set(cMysql2Client, rb_intern("TLS_PEER_IDENTITY_VERIFICATION"), ID2SYM(rb_intern("callback")));
+#else
+  rb_const_set(cMysql2Client, rb_intern("TLS_PEER_IDENTITY_VERIFICATION"), Qnil);
+#endif
+
+#ifdef HAVE_CONST_MARIADB_OPT_TLS_PEER_FP
+  rb_const_set(cMysql2Client, rb_intern("TLS_PEER_FINGERPRINT_SUPPORTED"), Qtrue);
+#else
+  rb_const_set(cMysql2Client, rb_intern("TLS_PEER_FINGERPRINT_SUPPORTED"), Qfalse);
+#endif
+
+  /* The MARIADB_TLS_VERIFY_* bits reported by Client#tls_info's
+   * :verify_status -- which verification checks the client library
+   * recorded as failed. A check can be recorded without being requested:
+   * a CA-less fingerprint-pinned connection legitimately carries
+   * TLS_VERIFY_TRUST, since the pin, not the chain, is its trust anchor. */
+#ifdef MARIADB_TLS_VERIFY_TRUST
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERIFY_OK"), INT2NUM(MARIADB_TLS_VERIFY_OK));
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERIFY_TRUST"), INT2NUM(MARIADB_TLS_VERIFY_TRUST));
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERIFY_HOST"), INT2NUM(MARIADB_TLS_VERIFY_HOST));
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERIFY_FINGERPRINT"), INT2NUM(MARIADB_TLS_VERIFY_FINGERPRINT));
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERIFY_PERIOD"), INT2NUM(MARIADB_TLS_VERIFY_PERIOD));
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERIFY_REVOKED"), INT2NUM(MARIADB_TLS_VERIFY_REVOKED));
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERIFY_UNKNOWN"), INT2NUM(MARIADB_TLS_VERIFY_UNKNOWN));
+  rb_const_set(cMysql2Client, rb_intern("TLS_VERIFY_ERROR"), INT2NUM(MARIADB_TLS_VERIFY_ERROR));
 #endif
 }

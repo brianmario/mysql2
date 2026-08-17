@@ -117,6 +117,21 @@ RSpec.configure do |config|
     @ssl_cert_host
   end
 
+  # A hostname that resolves to the same server as ssl_cert_host but that the
+  # server certificate does not cover, for the #879 hostname-mismatch specs.
+  # CI aliases it to 127.0.0.1 in /etc/hosts alongside ssl_cert_host.
+  def ssl_cert_wrong_host
+    return @ssl_cert_wrong_host if @ssl_cert_wrong_host
+
+    host = ENV['TEST_RUBY_MYSQL2_SSL_WRONG_HOST']
+    @ssl_cert_wrong_host = if host && !host.empty?
+      host
+    else
+      'wrong.mysql2gem.example.com'
+    end
+    @ssl_cert_wrong_host
+  end
+
   config.before(:suite) do
     begin
       new_client

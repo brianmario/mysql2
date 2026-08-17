@@ -353,8 +353,7 @@ relying on a distro package, the modern floors are:
   rather than your distro's archive. This ships with recent MariaDB 11.4 LTS
   point releases and all of 11.8+/12.3+, but *not* with 11.4's earliest point
   releases (11.4.0-11.4.4 bundled Connector/C 3.4.2, which enforces
-  `verify_identity` but can't do `tls_version` -- see the compatibility table
-  below). Check what you actually have:
+  `verify_identity` but can't do `tls_version`). Check what you actually have:
   ``` ruby
   Mysql2::Client.info[:version]                        # linked client library version
   Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION        # :native, :callback, or nil (unenforceable)
@@ -371,7 +370,7 @@ work around them.
 | --- | --- | --- | --- | --- | --- | --- |
 | MySQL 5.7.11 -- 8.0.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ❌ |
 | MySQL 8.1+ / 8.4 LTS / 9.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ✅ |
-| MariaDB Connector/C 3.4.0 -- 3.4.2 | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ❌ raises | ✅ | ✅ | ❌ never |
+| MariaDB Connector/C 3.3.x | 4 of 5, no `:preferred` | ❌ raises | ❌ raises | ❌ raises | ✅ | ❌ never |
 | MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ never |
 
 `:preferred` is missing from every MariaDB row above because MariaDB

@@ -341,19 +341,19 @@ concrete:
 If you're building or installing a client library directly rather than
 relying on a distro package, the modern floors are:
 
-* **MySQL 5.7.11+ / MySQL 8.0+** (any current MySQL 8.0 LTS / 8.4 LTS / 9.x
-  point release -- via the
-  [MySQL APT repository](https://dev.mysql.com/doc/mysql-apt-repo-quick-guide/en/)
-  or equivalent).
-* **MariaDB Connector/C 3.4.3+**, installed from
-  [MariaDB's own package repository](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage)
-  rather than your distro's archive. This ships with MariaDB 11.4.5+ /
-  11.8+ / 12.3+. Check what you actually have:
-  ``` ruby
-  Mysql2::Client.info[:version]                        # linked client library version
-  Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION        # :native, :callback, or nil (unenforceable)
-  Mysql2::Client::TLS_VERSION_SUPPORTED                 # true/false
-  ```
+* **MySQL 5.7.11+ / 8.0+** -- via the
+  [MySQL APT repository](https://dev.mysql.com/doc/mysql-apt-repo-quick-guide/en/).
+* **MariaDB Connector/C 3.4.3+** -- via
+  [MariaDB's own package repository](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage),
+  bundled with MariaDB 11.4.5+ / 11.8+ / 12.3+.
+
+Check what you actually have:
+
+``` ruby
+Mysql2::Client.info[:version]                        # linked client library version
+Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION        # :native, :callback, or nil (unenforceable)
+Mysql2::Client::TLS_VERSION_SUPPORTED                 # true/false
+```
 
 #### Version compatibility
 

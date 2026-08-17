@@ -413,8 +413,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     it "should negotiate the requested tls_version" do
       skip("DON'T WORRY, THIS TEST PASSES - but this client library does not support tls_version.") unless Mysql2::Client::TLS_VERSION_SUPPORTED
 
+      # option_overrides' :sslcipher is a TLS 1.2-only cipher name (TLS 1.3
+      # negotiates ciphersuites through a separate mechanism entirely --
+      # MYSQL_OPT_TLS_CIPHERSUITES, which mysql2 doesn't set). Forcing that
+      # legacy cipher while also restricting to tls_version: 'TLSv1.3' is a
+      # real, self-inflicted handshake failure, not a tls_version bug -- drop
+      # it here and let the library pick its own default cipher per version.
+      tls_options = option_overrides.reject { |k, _| k == :sslcipher }
+
       %w[TLSv1.2 TLSv1.3].each do |version|
-        client = new_client(option_overrides.merge(tls_version: version))
+        client = new_client(tls_options.merge(tls_version: version))
         result = client.query("SHOW STATUS LIKE 'Ssl_version'").first
         expect(result['Value']).to eq(version)
       end

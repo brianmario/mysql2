@@ -4,7 +4,7 @@ require 'rubygems'
 require 'benchmark/ips'
 require 'active_record'
 
-ActiveRecord::Base.default_timezone = :local
+ActiveRecord.default_timezone = :local
 ActiveRecord::Base.time_zone_aware_attributes = true
 
 opts = { database: 'test' }
@@ -16,7 +16,7 @@ end
 batch_size = 1000
 
 Benchmark.ips do |x|
-  %w[mysql mysql2].each do |adapter|
+  %w[mysql2 trilogy].each do |adapter|
     TestModel.establish_connection(opts.merge(adapter: adapter))
 
     x.report(adapter) do

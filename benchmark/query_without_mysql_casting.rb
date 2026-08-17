@@ -2,9 +2,8 @@ $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__) + '/../lib')
 
 require 'rubygems'
 require 'benchmark/ips'
-require 'mysql'
 require 'mysql2'
-require 'do_mysql'
+require 'trilogy'
 
 database = 'test'
 sql = "SELECT * FROM mysql2_test LIMIT 100"
@@ -24,18 +23,18 @@ Benchmark.ips do |x|
     mysql2_result.each { |res| puts res.inspect if debug }
   end
 
-  mysql = Mysql.new("localhost", "root")
-  mysql.query "USE #{database}"
-  x.report "Mysql" do
-    mysql_result = mysql.query sql
-    mysql_result.each_hash { |res| puts res.inspect if debug }
+  trilogy = Trilogy.new(host: "localhost", username: "root", database: database)
+  cast_flags = trilogy.query_flags | Trilogy::QUERY_FLAGS_CAST | Trilogy::QUERY_FLAGS_CAST_BOOLEANS
+  no_cast_flags = trilogy.query_flags & ~Trilogy::QUERY_FLAGS_CAST & ~Trilogy::QUERY_FLAGS_CAST_BOOLEANS
+
+  x.report "Trilogy (cast: true)" do
+    trilogy_result = trilogy.query_with_flags sql, cast_flags
+    trilogy_result.each_hash { |res| puts res.inspect if debug }
   end
 
-  do_mysql = DataObjects::Connection.new("mysql://localhost/#{database}")
-  command = DataObjects::Mysql::Command.new do_mysql, sql
-  x.report "do_mysql" do
-    do_result = command.execute_reader
-    do_result.each { |res| puts res.inspect if debug }
+  x.report "Trilogy (cast: false)" do
+    trilogy_result = trilogy.query_with_flags sql, no_cast_flags
+    trilogy_result.each_hash { |res| puts res.inspect if debug }
   end
 
   x.compare!

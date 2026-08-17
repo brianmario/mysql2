@@ -76,8 +76,8 @@ end
 
 puts "Creating #{num} records"
 num.times do |n|
-  five_words = Faker::Lorem.words(rand(5))
-  twenty5_paragraphs = Faker::Lorem.paragraphs(rand(25))
+  five_words = Faker::Lorem.words(number: rand(1..5))
+  twenty5_paragraphs = Faker::Lorem.paragraphs(number: rand(1..25))
   insert_record(
     bit_test: 1,
     tiny_int_test: rand(128),
@@ -100,7 +100,7 @@ num.times do |n|
     binary_test: five_words.join.byteslice(0, 10), # BINARY(10)
     varbinary_test: five_words.join.byteslice(0, 10), # VARBINARY(10)
     tiny_blob_test: five_words.join.byteslice(0, 255), # TINYBLOB
-    tiny_text_test: Faker::Lorem.paragraph(rand(5)).byteslice(0, 255), # TINYTEXT
+    tiny_text_test: Faker::Lorem.paragraph(sentence_count: rand(1..5)).byteslice(0, 255), # TINYTEXT
     blob_test: twenty5_paragraphs,
     text_test: twenty5_paragraphs,
     medium_blob_test: twenty5_paragraphs,

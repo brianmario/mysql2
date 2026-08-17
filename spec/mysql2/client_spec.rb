@@ -567,6 +567,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
     it "maps sslverify: true onto ssl_mode: :verify_identity when no ssl_mode is given" do
       skip "this build has no verifying ssl_mode" if Mysql2::Client::SSL_MODE_VERIFY_IDENTITY.zero?
+      # The mapped ssl_mode: :verify_identity goes through the same #879
+      # enforcement as an explicit one -- on a build that can't enforce it
+      # (MariaDB Connector/C older than 3.4), Client.new refuses to connect
+      # rather than silently mapping to a check it can't keep.
+      skip("DON'T WORRY, THIS TEST PASSES - but this client library cannot enforce ssl_mode: :verify_identity.") if Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION.nil?
 
       # Mirrors the "refuses verify_identity outright" predicate above: a
       # MariaDB-family build without the enforcement callback refuses the

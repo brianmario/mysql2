@@ -374,53 +374,7 @@ being silently ignored.
 | MariaDB Connector/C 3.3.x | 3 of 5 (`:disabled`/`:required`/`:verify_ca`) | ❌ | ❌ | ❌ | ✅ | ❌ |
 | MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ |
 
-`:preferred` is missing from every MariaDB row above -- see the `:ssl_mode`
-mapping table further below for why.
-
-``` ruby
-Mysql2::Client.new(
-  # ...options as above...,
-  :tls_key => '/path/to/client-key.pem',
-  :tls_cert => '/path/to/client-cert.pem',
-  :tls_ca => '/path/to/ca-cert.pem',
-  :tls_capath => '/path/to/cacerts',
-  :tls_cipher => 'DHE-RSA-AES256-SHA',
-  :sslverify => true, # deprecated -- equivalent to ssl_mode: :verify_identity (see below)
-  :ssl_mode => :disabled / :preferred / :required / :verify_ca / :verify_identity,
-  )
-```
-
-`:tls_key`/`:tls_cert`/`:tls_ca`/`:tls_capath`/`:tls_cipher` are the
-recommended names; `:sslkey`/`:sslcert`/`:sslca`/`:sslcapath`/`:sslcipher`
-remain supported as aliases so existing code keeps working. If both a
-`:tls_*` option and its legacy `:ssl*` alias are given with different
-values, `:tls_*` wins. This mirrors MariaDB Connector/C itself, which
-registers both an `ssl-*` and a `tls-*` name for the equivalent
-`mysql_options()` settings in its own config-file parser (see
-[`mariadb_lib.c`](https://github.com/mariadb-corporation/mariadb-connector-c/blob/master/libmariadb/mariadb_lib.c),
-e.g. `ssl-key`/`tls-key`). MySQL's own `mysql_options()` doesn't carry the
-same `ssl-key`/`tls-key`-style rename for these particular options --
-`--tls-version` and `--tls-ciphersuites` are its only `tls-`-prefixed
-options, and both are new capabilities that never had an `ssl-` name to
-begin with (see
-[https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html](https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html))
--- but it's the same underlying direction: `tls-` is the modern prefix
-for TLS configuration on both client libraries, and mysql2 follows it.
-
-`:sslverify` is deprecated in favor of `:ssl_mode`.
-
-If your `:sslkey`/`:tls_key` file is encrypted, supply the passphrase to
-decrypt it (MariaDB Connector/C only -- MySQL's client library has no
-equivalent option, and mysql2 raises rather than connecting with an
-unusable key):
-
-``` ruby
-Mysql2::Client.new(
-  # ...options as above...,
-  :tls_key => '/path/to/encrypted-client-key.pem',
-  :tls_passphrase => 'the passphrase the key was encrypted with',
-  )
-```
+#### Verification levels
 
 `:ssl_mode` is native on MySQL 5.7.11+
 ([full option reference](https://dev.mysql.com/doc/refman/8.0/en/connection-options.html#option_general_ssl-mode)).
@@ -448,17 +402,60 @@ Two things worth knowing:
   in effect: `:native` (libmysqlclient), `:callback` (MariaDB + mysql2's
   verification callback), or `nil` (unenforceable).
 
-`:sslverify => true` is equivalent to `ssl_mode: :verify_identity`.
-`:sslverify` is deprecated in favor of `:ssl_mode`. An explicit `:ssl_mode`
-takes precedence over `:sslverify`,
-however conflicting values, e.g. `:sslverify => false` alongside
-`:ssl_mode => :verify_ca` raises an exception, as the two
-would otherwise contradict each other.
+`:sslverify => true` is deprecated, equivalent to `ssl_mode: :verify_identity`.
+An explicit `:ssl_mode` takes precedence over `:sslverify`; however,
+conflicting values, e.g. `:sslverify => false` alongside
+`:ssl_mode => :verify_ca`, raise an exception, as the two would otherwise
+contradict each other.
 
-MariaDB does not support the `:preferred` option; there's no equivalent to
-fall back to. For more information about SSL/TLS in MariaDB, see
+For more information about SSL/TLS in MariaDB, see
 [https://mariadb.com/kb/en/securing-connections-for-client-and-server/](https://mariadb.com/kb/en/securing-connections-for-client-and-server/)
 and [https://mariadb.com/kb/en/mysql_optionsv/#tls-options](https://mariadb.com/kb/en/mysql_optionsv/#tls-options)
+
+#### Client keys, certificates, and CAs
+
+``` ruby
+Mysql2::Client.new(
+  # ...options as above...,
+  :tls_key => '/path/to/client-key.pem',
+  :tls_cert => '/path/to/client-cert.pem',
+  :tls_ca => '/path/to/ca-cert.pem',
+  :tls_capath => '/path/to/cacerts',
+  :tls_cipher => 'DHE-RSA-AES256-SHA',
+  )
+```
+
+`:tls_key`/`:tls_cert`/`:tls_ca`/`:tls_capath`/`:tls_cipher` are the
+recommended names; `:sslkey`/`:sslcert`/`:sslca`/`:sslcapath`/`:sslcipher`
+remain supported as aliases so existing code keeps working. If both a
+`:tls_*` option and its legacy `:ssl*` alias are given with different
+values, `:tls_*` wins. This mirrors MariaDB Connector/C itself, which
+registers both an `ssl-*` and a `tls-*` name for the equivalent
+`mysql_options()` settings in its own config-file parser (see
+[`mariadb_lib.c`](https://github.com/mariadb-corporation/mariadb-connector-c/blob/master/libmariadb/mariadb_lib.c),
+e.g. `ssl-key`/`tls-key`). MySQL's own `mysql_options()` doesn't carry the
+same `ssl-key`/`tls-key`-style rename for these particular options --
+`--tls-version` and `--tls-ciphersuites` are its only `tls-`-prefixed
+options, and both are new capabilities that never had an `ssl-` name to
+begin with (see
+[https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html](https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html))
+-- but it's the same underlying direction: `tls-` is the modern prefix
+for TLS configuration on both client libraries, and mysql2 follows it.
+
+If your `:sslkey`/`:tls_key` file is encrypted, supply the passphrase to
+decrypt it (MariaDB Connector/C only -- MySQL's client library has no
+equivalent option, and mysql2 raises rather than connecting with an
+unusable key):
+
+``` ruby
+Mysql2::Client.new(
+  # ...options as above...,
+  :tls_key => '/path/to/encrypted-client-key.pem',
+  :tls_passphrase => 'the passphrase the key was encrypted with',
+  )
+```
+
+#### Certificate fingerprint pinning
 
 On MariaDB Connector/C 3.4+, the server certificate can be pinned by
 fingerprint instead of a CA -- an alternative trust model to
@@ -474,9 +471,7 @@ Mysql2::Client.new(
   )
 ```
 
-On client libraries without pinning support (libmysqlclient, MariaDB
-Connector/C before 3.4) these options raise rather than silently
-connecting unpinned.
+#### Inspecting the TLS session
 
 After connecting, `Client#tls_info` describes the TLS session as the
 client library observed it: negotiated protocol and cipher, the peer
@@ -491,6 +486,8 @@ for this connection (`:identity_verified`). It returns `nil` for non-TLS
 connections and on client libraries without the introspection API
 (libmysqlclient, MariaDB Connector/C before 3.4).
 
+#### Restricting TLS protocol versions
+
 To restrict which TLS protocol versions the client will negotiate:
 
 ``` ruby
@@ -501,9 +498,9 @@ Mysql2::Client.new(
 ```
 
 A comma-separated list of TLS versions available on your SSL client library,
-e.g. `'TLSv1.2,TLSv1.3'`. Works identically on MySQL (5.7.10+) and MariaDB
-Connector/C (3.4.3+). Raises `Mysql2::Error` on older client libraries rather
-than silently ignoring the option.
+e.g. `'TLSv1.2,TLSv1.3'`.
+
+#### TLS Server Name Indication (SNI)
 
 To set the TLS Server Name Indication (SNI) hostname sent during the TLS
 handshake, e.g. when connecting through a proxy that routes by hostname:
@@ -515,9 +512,7 @@ Mysql2::Client.new(
   )
 ```
 
-This requires MySQL client library 8.1 or higher. On older client libraries
-and all versions of MariaDB, passing this option raises `Mysql2::Error`
-rather than silently connecting without it.
+This requires MySQL client library 8.1 or higher; unsupported on MariaDB.
 
 ### Secure auth
 

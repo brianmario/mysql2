@@ -514,6 +514,20 @@ Yields:
 next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
 ```
 
+### Fork safety
+
+A `Client`'s connection is not safe to use from a process that merely inherited it across `fork()`. The child shares the same underlying TCP socket as the parent, but its copy of the connection's protocol/TLS state is independent and unsynchronized. Using it can desync the connection or corrupt whatever the parent is doing with it.
+
+mysql2 detects this automatically by recording the pid that established the connection and comparing it against the current pid. If a `Client` is garbage collected, queried, pinged, prepared, or executed from a different process than the one that connected it, mysql2 prints a `[WARN]` to stderr. This warning is silent when `automatic_close` has been explicitly set to `false` -- see below.
+
+By default (`automatic_close` is `true`), a `Client` garbage collected in a process that didn't establish its connection will not send a real close, to avoid interrupting the owning process's connection. Setting `automatic_close` to `false` opts out of automatic closing entirely -- useful if your application intentionally shares a `Client` across a `fork()` and serializes access to it (for example, closing it explicitly in the child once done, which ends the connection for both processes, not just the child's reference to it):
+
+``` ruby
+Mysql2::Client.new(:automatic_close => false)
+```
+
+`automatic_close = false` only keeps a **plaintext** connection alive across `fork()`. `fork()` duplicates a TLS connection's OpenSSL session state into two independent copies, and the first real query from either side desyncs the other's: `Aborted_clients` increments on the server, and the stale side sees `Mysql2::Error::ConnectionError: Lost connection to MySQL server during query`. Connect with `:ssl_mode => :disabled` if your application depends on sharing a connection across `fork()`.
+
 ## Cascading config
 
 The default config hash is at:

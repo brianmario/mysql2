@@ -495,6 +495,27 @@ void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper)
   }
 }
 
+/* See client.h. */
+int mysql2_forked_without_reconnect(mysql_client_wrapper *wrapper)
+{
+#ifndef _WIN32
+  return wrapper->connect_pid != 0 && getpid() != wrapper->connect_pid;
+#else
+  return 0;
+#endif
+}
+
+/* See client.h. */
+void mysql2_warn_forked_without_reconnect(mysql_client_wrapper *wrapper, const char *action)
+{
+#ifndef _WIN32
+  fprintf(stderr,
+    "[WARN] mysql2: %s in pid %d, but connected in pid %d (crossed fork()); "
+    "open a new one instead\n",
+    action, (int)getpid(), wrapper->connect_pid);
+#endif
+}
+
 static void *nogvl_close(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
 
@@ -518,23 +539,47 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
     return;
 
 #ifndef _WIN32
-  /* TODO: add an option to control close-across-forks because some users have
-   * complained about log noise on the server side and were not running code
-   * that expected to inherit a connection to a child process.
-   */
-  if (CONNECTED(wrapper) && !wrapper->automatic_close) {
-    /* The client is being garbage collected while connected. Prevent
-     * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
-     * the socket by invalidating it. invalidate_fd() will drop this
-     * process's reference to the socket only, while a QUIT or shutdown()
-     * would render the underlying connection unusable, interrupting other
-     * processes which share this object across a fork().
-     */
-    if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
-      fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely\n");
-      close(wrapper->client->net.fd);
+  if (CONNECTED(wrapper)) {
+    /* A pid mismatch means this Client was inherited across a fork() and
+     * never reconnected: this process shares the exact same underlying
+     * TCP socket as whichever process actually established the
+     * connection, but has its own independent, unsynchronized copy of the
+     * connection's protocol/TLS state (sequence numbers, session keys,
+     * what command was last sent). That state can't be trusted regardless
+     * of automatic_close -- neither process's copy reflects what the
+     * other has actually sent or received on the shared socket. */
+    int forked_without_reconnect = mysql2_forked_without_reconnect(wrapper);
+
+    /* Only warn when automatic_close is still the default: setting it to
+     * false is the existing, documented way to tell mysql2 an app expects
+     * to inherit a connection across fork(), and warning there too would
+     * just be the same log noise the TODO below already exists to avoid. */
+    if (forked_without_reconnect && wrapper->automatic_close) {
+      mysql2_warn_forked_without_reconnect(wrapper, "garbage collected");
     }
-    wrapper->client->net.fd = -1;
+
+    /* TODO: automatic_close: false unconditionally takes the invalidate_fd
+     * path below even when this process never forked at all -- if
+     * connect_pid still matches (no fork happened), a real mysql_close()
+     * would be safe and wouldn't leave the connection to linger on the
+     * server side until it times out, which is the log noise some users
+     * have reported. Worth an option, or just using forked_without_reconnect
+     * instead of automatic_close here, so the real close is only skipped
+     * when a fork() actually happened. */
+    if (!wrapper->automatic_close || forked_without_reconnect) {
+      /* The client is being garbage collected while connected. Prevent
+       * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
+       * the socket by invalidating it. invalidate_fd() will drop this
+       * process's reference to the socket only, while a QUIT or shutdown()
+       * would render the underlying connection unusable, interrupting other
+       * processes which share this object across a fork().
+       */
+      if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
+        fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely\n");
+        close(wrapper->client->net.fd);
+      }
+      wrapper->client->net.fd = -1;
+    }
   }
 #endif
 
@@ -600,6 +645,7 @@ static VALUE allocate(VALUE klass) {
   wrapper->affected_rows = -1;
   wrapper->client = (MYSQL*)xmalloc(sizeof(MYSQL));
   wrapper->state = MYSQL2_CLIENT_IDLE;
+  wrapper->connect_pid = 0; /* 0 means never successfully connected */
   wrapper->pending_stmt_closes = NULL;
   wrapper->pending_stmt_close_count = 0;
   wrapper->pending_result_frees = NULL;
@@ -786,6 +832,12 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
   (void)RB_GC_GUARD(tls_sni_name);
 
   wrapper->closed = 0;
+#ifndef _WIN32
+  /* Recorded so a later GC in a forked child that inherited this Client
+   * without reconnecting can tell it isn't the process that owns this
+   * socket -- see decr_mysql2_client. */
+  wrapper->connect_pid = getpid();
+#endif
   wrapper->server_version = mysql_get_server_version(wrapper->client);
   return self;
 }
@@ -1153,6 +1205,11 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
   GET_CLIENT(self);
 
   REQUIRE_CONNECTED(wrapper);
+
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "send a query");
+  }
+
   args.mysql = wrapper->client;
 
   (void)RB_GC_GUARD(current);
@@ -1598,6 +1655,10 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   GET_CLIENT(self);
   rb_mysql_client_set_active_fiber(self, false);
 
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "ping");
+  }
+
   /* A low-traffic, frequently-called method; a good opportunistic safe
    * point to close out statements that were GC'd while we were busy, and to
    * free any abandoned result sets -- mysql_ping() itself sends a command,
@@ -1830,6 +1891,12 @@ static VALUE get_automatic_close(VALUE self) {
  * collected. To avoid "Aborted connection" errors on the server, explicitly
  * call +close+ when the connection is no longer needed.
  *
+ * This protects a plaintext connection across fork(). A TLS connection's
+ * OpenSSL session state is a separate, per-process copy that fork()
+ * duplicates rather than shares, and desyncs between parent and child the
+ * moment either side performs a real query, regardless of this setting --
+ * see the README for the full mechanism and the ssl_mode workaround.
+ *
  * @see http://dev.mysql.com/doc/en/communication-errors.html
  */
 static VALUE set_automatic_close(VALUE self, VALUE value) {
@@ -2020,6 +2087,10 @@ static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
   VALUE stmt;
   GET_CLIENT(self);
   REQUIRE_CONNECTED(wrapper);
+
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "prepare a statement");
+  }
 
   stmt = rb_mysql_stmt_new(self, sql);
 

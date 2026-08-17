@@ -247,6 +247,46 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "option coherence warnings" do
+    it "warns when :sslkey is given without :sslcert" do
+      expect do
+        begin
+          new_client(sslkey: '/path/to/client-key.pem')
+        rescue Mysql2::Error
+          # MariaDB Connector/C rejects a lone key at connect; the warning precedes it.
+        end
+      end.to output(/:sslkey and :sslcert only take effect together/).to_stderr
+    end
+
+    it "warns when :sslcert is given without :sslkey" do
+      expect do
+        begin
+          new_client(sslcert: '/path/to/client-cert.pem')
+        rescue Mysql2::Error
+          # MariaDB Connector/C rejects a lone certificate at connect; the warning precedes it.
+        end
+      end.to output(/:sslkey and :sslcert only take effect together/).to_stderr
+    end
+
+    it "warns when :stream is enabled with :cache_rows left on" do
+      expect do
+        new_client(stream: true)
+      end.to output(/:cache_rows is ignored on a client with :stream enabled/).to_stderr
+    end
+
+    it "does not warn when :stream is enabled with :cache_rows disabled" do
+      expect do
+        new_client(stream: true, cache_rows: false)
+      end.not_to output(/:cache_rows is ignored/).to_stderr
+    end
+
+    it "does not warn on a plain connection" do
+      expect do
+        new_client
+      end.not_to output(/:sslkey and :sslcert only take effect together|:cache_rows is ignored/).to_stderr
+    end
+  end
+
   def run_gc
     if defined?(Rubinius)
       GC.run(true)
@@ -433,6 +473,51 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         expect { client.query('SELECT 1') }.to_not raise_exception
         client.close
       end
+
+      it "should not close the parent's connection when a stale reference is GC'd in a child, even with automatic_close left at its default" do
+        run_gc
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge('ssl_mode' => 'disabled'))
+        expect(client.automatic_close?).to be(true)
+
+        child = fork do
+          # Inherit the connection without reconnecting, then abandon it --
+          # the common real-world mistake this is meant to protect against.
+          client = nil
+          run_gc
+        end
+
+        Process.wait(child)
+
+        # this will throw an error if the underlying socket was shutdown by
+        # the child's GC, per the pid mismatch it should have detected
+        expect { client.query('SELECT 1') }.to_not raise_exception
+        client.close
+      end
+    end
+  end
+
+  context "fork safety" do
+    it "warns, but does not raise, when a query, ping, or prepare is issued from a forked child that hasn't reconnected" do
+      skip "fork() is not implemented on Windows" if RUBY_PLATFORM =~ /mingw|mswin/
+
+      client = new_client(ssl_mode: 'disabled')
+      read, write = IO.pipe
+
+      child = fork do
+        read.close
+        write.puts client.query('SELECT 1').first['1']
+        write.puts client.ping
+        write.puts client.prepare('SELECT 1').execute.first['1']
+        write.close
+      end
+      write.close
+
+      Process.wait(child)
+      expect(read.gets).to eq("1\n")
+      expect(read.gets).to eq("true\n")
+      expect(read.gets).to eq("1\n")
+      read.close
+      client.close
     end
   end
 
@@ -466,6 +551,117 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     it "should return true after close" do
       @client.close
       expect(@client.closed?).to eql(true)
+    end
+  end
+
+  context "#discard!" do
+    it "marks the client closed and further commands raise" do
+      client = new_client
+      expect(client.discard!).to be_nil
+      expect(client.closed?).to eql(true)
+      expect do
+        client.query "SELECT 1"
+      end.to raise_error(Mysql2::Error, /not connected/)
+    end
+
+    # Client#socket raises on Windows, so fd release isn't observable there
+    unless RUBY_PLATFORM =~ /mingw|mswin/
+      it "releases this process's socket fd" do
+        client = new_client
+        fd = client.socket
+        client.discard!
+        expect do
+          IO.for_fd(fd, autoclose: false).stat
+        end.to raise_error(Errno::EBADF)
+      end
+    end
+
+    it "is idempotent, in either order with close" do
+      client = new_client
+      client.discard!
+      expect(client.discard!).to be_nil
+      expect(client.close).to be_nil
+
+      client = new_client
+      client.close
+      expect(client.discard!).to be_nil
+    end
+
+    it "does not resurrect the connection via reconnect" do
+      client = new_client(reconnect: true)
+      client.discard!
+      expect(client.closed?).to eql(true)
+      expect do
+        client.query "SELECT 1"
+      end.to raise_error(Mysql2::Error, /not connected/)
+    end
+
+    it "can discard mid-stream" do
+      client = new_client
+      result = client.query("SELECT 1 AS a UNION SELECT 2", stream: true, cache_rows: false)
+      result.first
+      client.discard!
+      expect(client.closed?).to eql(true)
+    end
+
+    unless RUBY_PLATFORM =~ /mingw|mswin/
+      it "leaves the parent's session intact when a forked child discards" do
+        client = Mysql2::Client.new(DatabaseCredentials['root'])
+        thread_id = client.thread_id
+
+        child = fork do
+          client.discard!
+          status = client.closed? ? 0 : 1
+          client = nil
+          run_gc
+          exit! status
+        end
+
+        _, status = Process.waitpid2(child)
+        expect(status.exitstatus).to eq(0)
+
+        # both would raise if the child's discard!, or the GC run after it,
+        # had sent a QUIT or shutdown() down the shared socket
+        expect(client.query('SELECT 1 AS one').first).to eq('one' => 1)
+        expect(client.thread_id).to eq(thread_id)
+        client.close
+      end
+
+      it "leaves the parent's prepared statements intact when a forked child discards" do
+        client = new_client
+        stmt = client.prepare('SELECT ? AS n')
+
+        child = fork do
+          client.discard!
+          exit!
+        end
+        Process.wait(child)
+
+        expect(stmt.execute(42).first).to eq('n' => 42)
+        stmt.close
+      end
+
+      it "leaves the child's session intact when the parent discards" do
+        signal_r, signal_w = IO.pipe
+        result_r, result_w = IO.pipe
+
+        client = new_client
+        child = fork do
+          signal_w.close
+          result_r.close
+          signal_r.read(1) # wait for the parent's discard!
+          row = client.query("SELECT 'child session intact' AS proof").first
+          result_w.write(row.fetch('proof'))
+          exit!
+        end
+
+        signal_r.close
+        result_w.close
+        client.discard!
+        signal_w.write('!')
+        expect(result_r.read).to eq('child session intact')
+        Process.wait(child)
+      end
     end
   end
 
@@ -1247,6 +1443,41 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect do
         @client.escape ""
       end.to raise_error(Mysql2::Error)
+    end
+
+    it "should not tag escaped binary data with the connection's encoding" do
+      client = new_client(encoding: 'utf8mb4')
+
+      # Two 16-byte binary strings, neither valid UTF-8. One happens to contain
+      # a byte mysql_real_escape_string escapes, the other doesn't -- both
+      # should come back tagged as binary, not silently promoted to UTF-8.
+      no_escaping_needed = ['bafe80143bbe4bd3ba785d0679192fbf'].pack('H*')
+      escaping_needed = ['6614ed2fb7e749cda6caab6ca6b34dcc'].pack('H*')
+
+      expect(client.escape(no_escaping_needed).encoding).to eql(Encoding::ASCII_8BIT)
+
+      escaped = client.escape(escaping_needed)
+      expect(escaped.encoding).to eql(Encoding::ASCII_8BIT)
+      expect(escaped.valid_encoding?).to be true
+    end
+
+    context 'under NO_BACKSLASH_ESCAPES sql_mode' do
+      before(:example) do
+        @client.query("SET SESSION sql_mode = concat(@@sql_mode, ',NO_BACKSLASH_ESCAPES')")
+      end
+
+      it "should escape correctly (round-tripping through a real query) or raise Mysql2::Error -- never a bare ArgumentError" do
+        begin
+          escaped = @client.escape("it's \\a\\ test")
+          row = @client.query("SELECT '#{escaped}' AS x").first
+          expect(row['x']).to eq("it's \\a\\ test")
+        rescue Mysql2::Error
+          # Acceptable on client libraries that genuinely can't escape safely
+          # under this SQL mode (see ESCAPE_QUOTE_SUPPORTED). Anything other
+          # than Mysql2::Error -- e.g. the ArgumentError this regresses --
+          # propagates and fails this example.
+        end
+      end
     end
 
     context 'when mysql encoding is not utf8' do

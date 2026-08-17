@@ -362,12 +362,11 @@ Two things worth knowing:
   in effect: `:native` (libmysqlclient), `:callback` (MariaDB + mysql2's
   verification callback), or `nil` (unenforceable).
 
-`:sslverify => true` is equivalent to `ssl_mode: :verify_identity` on
-every client library mysql2 supports -- mysql2 maps it internally, so it
-carries the same enforcement described above on MariaDB rather than being
-a no-op there. An explicit `:ssl_mode` always takes precedence over
-`:sslverify`; passing `:sslverify => false` alongside a verifying
-`:ssl_mode` (`:verify_ca` or `:verify_identity`) raises, since the two
+`:sslverify => true` is equivalent to `ssl_mode: :verify_identity`.
+`:ssl_mode` is preferred as it has more nuanced options available.
+An explicit `:ssl_mode` takes precedence over `:sslverify`,
+however conflicting values, e.g. `:sslverify => false` alongside
+`:ssl_mode => :verify_ca` raises an exception, as the two
 would otherwise contradict each other.
 
 MariaDB does not support the `:preferred` option; there's no equivalent to

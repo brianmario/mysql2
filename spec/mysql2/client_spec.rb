@@ -37,8 +37,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   it "should connect via TLS" do
-    have_ssl = @client.query("SHOW VARIABLES LIKE 'have_ssl'").first['Value']
-    skip("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") unless have_ssl == 'YES'
+    # have_ssl was removed in newer MySQL (SSL is unconditionally compiled
+    # in there); an empty result set means "assume available", matching the
+    # "context SSL" before(:example) hook's own fallback below.
+    ssl_disabled = @client.query("SHOW VARIABLES LIKE 'have_ssl'").any? { |x| %w[OFF DISABLED].include?(x['Value']) }
+    skip("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
 
     client = new_client(ssl_mode: 'required')
     expect(client.ssl_cipher).not_to be_empty

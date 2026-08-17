@@ -354,6 +354,10 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   GET_STATEMENT(self);
   GET_CLIENT(stmt_wrapper->client);
 
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "execute a statement");
+  }
+
   /* We're about to issue a new command on this connection: a safe point to
    * close out any statements that were GC'd while it was last busy, and to
    * free any abandoned result sets left over from a stream that was

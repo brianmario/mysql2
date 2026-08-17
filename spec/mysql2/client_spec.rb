@@ -473,6 +473,51 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         expect { client.query('SELECT 1') }.to_not raise_exception
         client.close
       end
+
+      it "should not close the parent's connection when a stale reference is GC'd in a child, even with automatic_close left at its default" do
+        run_gc
+        client = Mysql2::Client.new(DatabaseCredentials['root'].merge('ssl_mode' => 'disabled'))
+        expect(client.automatic_close?).to be(true)
+
+        child = fork do
+          # Inherit the connection without reconnecting, then abandon it --
+          # the common real-world mistake this is meant to protect against.
+          client = nil
+          run_gc
+        end
+
+        Process.wait(child)
+
+        # this will throw an error if the underlying socket was shutdown by
+        # the child's GC, per the pid mismatch it should have detected
+        expect { client.query('SELECT 1') }.to_not raise_exception
+        client.close
+      end
+    end
+  end
+
+  context "fork safety" do
+    it "warns, but does not raise, when a query, ping, or prepare is issued from a forked child that hasn't reconnected" do
+      skip "fork() is not implemented on Windows" if RUBY_PLATFORM =~ /mingw|mswin/
+
+      client = new_client(ssl_mode: 'disabled')
+      read, write = IO.pipe
+
+      child = fork do
+        read.close
+        write.puts client.query('SELECT 1').first['1']
+        write.puts client.ping
+        write.puts client.prepare('SELECT 1').execute.first['1']
+        write.close
+      end
+      write.close
+
+      Process.wait(child)
+      expect(read.gets).to eq("1\n")
+      expect(read.gets).to eq("true\n")
+      expect(read.gets).to eq("1\n")
+      read.close
+      client.close
     end
   end
 

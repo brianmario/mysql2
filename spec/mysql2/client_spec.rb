@@ -393,6 +393,32 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.to raise_error(Mysql2::Error, /[Ff]ingerprint/)
       end
     end
+
+    it "should negotiate the requested tls_version" do
+      skip("DON'T WORRY, THIS TEST PASSES - but this client library does not support tls_version.") unless Mysql2::Client::TLS_VERSION_SUPPORTED
+
+      # option_overrides' :sslcipher is a TLS 1.2-only cipher name (TLS 1.3
+      # negotiates ciphersuites through a separate mechanism entirely --
+      # MYSQL_OPT_TLS_CIPHERSUITES, which mysql2 doesn't set). Forcing that
+      # legacy cipher while also restricting to tls_version: 'TLSv1.3' is a
+      # real, self-inflicted handshake failure, not a tls_version bug -- drop
+      # it here and let the library pick its own default cipher per version.
+      tls_options = option_overrides.reject { |k, _| k == :sslcipher }
+
+      %w[TLSv1.2 TLSv1.3].each do |version|
+        client = new_client(tls_options.merge(tls_version: version))
+        result = client.query("SHOW STATUS LIKE 'Ssl_version'").first
+        expect(result['Value']).to eq(version)
+      end
+    end
+
+    it "should raise when the tls_version option is unsupported" do
+      skip("DON'T WORRY, THIS TEST PASSES - but this client library supports tls_version.") if Mysql2::Client::TLS_VERSION_SUPPORTED
+
+      expect do
+        new_client(option_overrides.merge(tls_version: 'TLSv1.2'))
+      end.to raise_error(Mysql2::Error, /tls_version/)
+    end
   end
 
   context "option coherence warnings" do
@@ -473,6 +499,37 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect do
         new_client(ssl_mode: :verify_identity, sslca: '/nonexistent/ca.pem')
       end.to raise_error(Mysql2::Error::ConnectionError, /cannot be enforced/)
+    end
+
+    it "refuses sslverify: false combined with a verifying ssl_mode" do
+      skip "this build has no verifying ssl_mode" if Mysql2::Client::SSL_MODE_VERIFY_IDENTITY.zero?
+
+      # sslverify: false says the connection doesn't need to be verified;
+      # ssl_mode: :verify_identity/:verify_ca says mysql2 must refuse it
+      # unless it is. Pick one instead of silently choosing between them.
+      expect do
+        new_client(sslverify: false, ssl_mode: :verify_identity)
+      end.to raise_error(Mysql2::Error::ConnectionError, /sslverify: false conflicts/)
+
+      expect do
+        new_client(sslverify: false, ssl_mode: :verify_ca)
+      end.to raise_error(Mysql2::Error::ConnectionError, /sslverify: false conflicts/)
+    end
+
+    it "does not refuse sslverify: false combined with a non-verifying ssl_mode" do
+      expect { Klient.new(sslverify: false, ssl_mode: :required) }.not_to raise_error
+      expect { Klient.new(sslverify: false) }.not_to raise_error
+    end
+
+    it "maps sslverify: true onto ssl_mode: :verify_identity when no ssl_mode is given" do
+      skip "this build has no verifying ssl_mode" if Mysql2::Client::SSL_MODE_VERIFY_IDENTITY.zero?
+
+      client = Klient.new(sslverify: true)
+      expect(client.connect_args.last[6] & Mysql2::Client::SSL_VERIFY_SERVER_CERT).not_to eql(0)
+    end
+
+    it "lets an explicit ssl_mode win over sslverify: true" do
+      expect { Klient.new(sslverify: true, ssl_mode: :required) }.not_to raise_error
     end
   end
 

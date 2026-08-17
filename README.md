@@ -483,31 +483,14 @@ connections and on client libraries without the introspection API
 
 #### Restricting TLS protocol versions
 
-To restrict which TLS protocol versions the client will negotiate:
-
-``` ruby
-Mysql2::Client.new(
-  # ...options as above...,
-  :tls_version => 'TLSv1.2,TLSv1.3',
-  )
-```
-
-A comma-separated list of TLS versions available on your SSL client library,
-e.g. `'TLSv1.2,TLSv1.3'`.
+* `:tls_version => 'TLSv1.2,TLSv1.3'` -- comma-separated list of TLS versions
+  the client will negotiate.
 
 #### TLS Server Name Indication (SNI)
 
-To set the TLS Server Name Indication (SNI) hostname sent during the TLS
-handshake, e.g. when connecting through a proxy that routes by hostname:
-
-``` ruby
-Mysql2::Client.new(
-  # ...options as above...,
-  :tls_sni_name => 'db.example.com',
-  )
-```
-
-This requires MySQL client library 8.1 or higher; unsupported on MariaDB.
+* `:tls_sni_name => 'db.example.com'` -- SNI hostname sent during the TLS
+  handshake, e.g. when connecting through a proxy that routes by hostname.
+  Requires MySQL client library 8.1+; unsupported on MariaDB.
 
 ### Secure auth
 

@@ -702,6 +702,46 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "#query_time" do
+    it "should report the server round trip in seconds as a Float" do
+      started = clock_time
+      result = @client.query "SELECT SLEEP(0.1)"
+      elapsed = clock_time - started
+
+      expect(result.query_time).to be_a(Float)
+      # SLEEP(0.1) can return a scheduler tick (~16ms on Windows) early, so the
+      # bound sits below the nominal sleep -- still orders of magnitude above a
+      # bracket that misses the socket wait, which measures ~0.2ms.
+      expect(result.query_time).to be >= 0.05
+      expect(result.query_time).to be <= elapsed
+    end
+
+    if RUBY_PLATFORM !~ /mingw|mswin/
+      it "should cover the wait for the response when the query is async" do
+        expect(@client.query("SELECT SLEEP(0.1)", async: true)).to be nil
+        result = @client.async_result
+
+        expect(result.query_time).to be >= 0.05
+      end
+    end
+
+    it "should be available before a streamed result's rows are read" do
+      result = @client.query "SELECT SLEEP(0.1)", stream: true, cache_rows: false
+
+      expect(result.query_time).to be >= 0.05
+      result.each.to_a
+    end
+
+    it "should be nil for later result sets of a multi-statement command" do
+      client = new_client(flags: Mysql2::Client::MULTI_STATEMENTS)
+      result = client.query "SELECT 1; SELECT 2"
+
+      expect(result.query_time).to be_a(Float)
+      expect(client.next_result).to be true
+      expect(client.store_result.query_time).to be nil
+    end
+  end
+
   context "streaming" do
     it "should maintain a count while streaming" do
       result = @client.query('SELECT 1', stream: true, cache_rows: false)

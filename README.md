@@ -371,7 +371,7 @@ being silently ignored.
 | --- | --- | --- | --- | --- | --- | --- |
 | MySQL 5.7.11 -- 8.0.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ❌ |
 | MySQL 8.1+ / 8.4 LTS / 9.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ✅ |
-| MariaDB Connector/C 3.3.x | 4 of 5, no `:preferred` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| MariaDB Connector/C 3.3.x | 3 of 5 (`:disabled`/`:required`/`:verify_ca`) | ❌ | ❌ | ❌ | ✅ | ❌ |
 | MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ |
 
 `:preferred` is missing from every MariaDB row above because MariaDB

@@ -152,7 +152,7 @@ module Mysql2
           # other: one says the connection doesn't need to be verified, the
           # other asks mysql2 to refuse it unless it is. Refuse the ambiguity
           # instead of silently picking a side.
-          raise Mysql2::Error::ConnectionError, "sslverify: false conflicts with ssl_mode: #{opts[:ssl_mode]}, which requires verification; pick one"
+          raise Mysql2::Error::ConnectionError, "sslverify: false conflicts with ssl_mode: #{opts[:ssl_mode]}"
         end
       end
 

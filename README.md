@@ -374,10 +374,8 @@ being silently ignored.
 | MariaDB Connector/C 3.3.x | 3 of 5 (`:disabled`/`:required`/`:verify_ca`) | ❌ | ❌ | ❌ | ✅ | ❌ |
 | MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ |
 
-`:preferred` is missing from every MariaDB row above because MariaDB
-Connector/C never defines `MYSQL_OPT_SSL_MODE` at all -- mysql2 maps
-`:ssl_mode`'s other four values onto `MYSQL_OPT_SSL_ENFORCE` /
-`MYSQL_OPT_SSL_VERIFY_SERVER_CERT` instead (see the table further below).
+`:preferred` is missing from every MariaDB row above -- see the `:ssl_mode`
+mapping table further below for why.
 
 ``` ruby
 Mysql2::Client.new(
@@ -427,17 +425,14 @@ Mysql2::Client.new(
   )
 ```
 
-For MySQL versions 5.7.11 and higher, use `:ssl_mode` to prefer or require an
-SSL connection and certificate validation; it offers clearer, more granular
-values than `:sslverify` (see below). For details on each of the `:ssl_mode`
-options, see
-[https://dev.mysql.com/doc/refman/8.0/en/connection-options.html](https://dev.mysql.com/doc/refman/8.0/en/connection-options.html#option_general_ssl-mode).
-
-The `:ssl_mode` option will also set the appropriate MariaDB connection flags:
+`:ssl_mode` is native on MySQL 5.7.11+
+([full option reference](https://dev.mysql.com/doc/refman/8.0/en/connection-options.html#option_general_ssl-mode));
+on MariaDB it maps onto these options instead:
 
 | `:ssl_mode`        | MariaDB option value                                |
 | ---                | ---                                                 |
 | `:disabled`        | MYSQL_OPT_SSL_ENFORCE = 0                           |
+| `:preferred`       | not available -- MariaDB Connector/C never defines MYSQL_OPT_SSL_MODE |
 | `:required`        | MYSQL_OPT_SSL_ENFORCE = 1                           |
 | `:verify_ca`       | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1                |
 | `:verify_identity` | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 + mysql2's own hostname verification |

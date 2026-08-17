@@ -345,12 +345,10 @@ independently. A very common base image makes this concrete:
 If you're building or installing a client library directly rather than
 relying on a distro package, the modern floors are:
 
-* **MySQL 8.0.36 or later** (any current MySQL 8.0 LTS / 8.4 LTS / 9.x point
-  release -- via the
+* **MySQL 5.7.11+ / MySQL 8.0+** (any current MySQL 8.0 LTS / 8.4 LTS / 9.x
+  point release -- via the
   [MySQL APT repository](https://dev.mysql.com/doc/mysql-apt-repo-quick-guide/en/)
-  or equivalent). MySQL 5.7.11+ is functionally sufficient for everything in
-  this section too, but MySQL 5.7 itself is long past Oracle's supported
-  end-of-life -- treat 5.7.11+ as "still works," not as a recommendation.
+  or equivalent).
 * **MariaDB Connector/C 3.4.3 or later**, installed from
   [MariaDB's own package repository](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage)
   rather than your distro's archive. This ships with recent MariaDB 11.4 LTS

@@ -137,6 +137,7 @@ struct nogvl_send_query_args {
 struct nogvl_select_db_args {
   MYSQL *mysql;
   char *db;
+  struct query_completion completion;
 };
 
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
@@ -1039,6 +1040,14 @@ static void *nogvl_use_result(void *ptr) {
   return nogvl_do_result(ptr, 1);
 }
 
+/* Unlike nogvl_store_result above, leaves active_fiber alone: the drain loop
+ * in do_abandon_results holds its claim across every result set in the
+ * batch, not just up to the first stored one. */
+static void *nogvl_store_result_raw(void *ptr) {
+  mysql_client_wrapper *wrapper = ptr;
+  return mysql_store_result(wrapper->client);
+}
+
 /* Shared by async_result (a query's first result set) and store_result (a
  * later one, from a multi-statement batch): fetch the current result set as
  * either streamed or fully-buffered, per :stream, track it on wrapper, and
@@ -1246,6 +1255,37 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
   return Qnil;
 }
 
+/* rb_ensure companion for the fiber-claimed command methods that release the
+ * GVL mid-command (select_db, next_result, abandon_results!): releases the
+ * claim on every kind of unwind, so no raise -- or Thread#exit -- between
+ * claim and release can leave the connection permanently reporting "This
+ * connection is in use by". When the body never reached its completion mark,
+ * an interrupt landed mid-exchange and the connection may be stuck
+ * mid-protocol, so it also gets invalidated, same as an interrupted query.
+ * Bodies mark completion before raising a server-reported error: that reply
+ * finished the round trip, so the connection itself is still usable. */
+static VALUE release_claim_or_disconnect(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
+  mysql_client_wrapper *wrapper = completion->wrapper;
+
+  if (completion->completed) {
+    wrapper->active_fiber = Qnil;
+  } else {
+#ifndef _WIN32
+    invalidate_after_interrupted_query(wrapper);
+#else
+    wrapper->active_fiber = Qnil;
+    wrapper->state = MYSQL2_CLIENT_IDLE;
+    if (CONNECTED(wrapper)) {
+      close(wrapper->client->net.fd);
+      wrapper->client->net.fd = -1;
+    }
+#endif
+  }
+
+  return Qnil;
+}
+
 /* call-seq:
  *    client.abandon_results!
  *
@@ -1254,26 +1294,42 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
  * put the connection back into a state where queries can be issued
  * again.
  */
-static VALUE rb_mysql_client_abandon_results(VALUE self) {
+static VALUE do_abandon_results(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
+  mysql_client_wrapper *wrapper = completion->wrapper;
   MYSQL_RES *result;
   int ret;
-
-  GET_CLIENT(self);
 
   while (mysql_more_results(wrapper->client) == 1) {
     ret = mysql_next_result(wrapper->client);
     if (ret > 0) {
+      /* A complete server reply reporting a failed statement in the batch;
+       * the connection is fine, so the rb_ensure companion only releases
+       * the claim. */
+      completion->completed = 1;
       rb_raise_mysql2_error(wrapper);
     }
 
-    result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+    result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result_raw, wrapper, RUBY_UBF_IO, 0);
 
     if (result != NULL) {
       mysql_free_result(result);
     }
   }
 
+  completion->completed = 1;
   return Qnil;
+}
+
+static VALUE rb_mysql_client_abandon_results(VALUE self) {
+  struct query_completion completion;
+  GET_CLIENT(self);
+
+  completion.wrapper = wrapper;
+  completion.completed = 0;
+
+  rb_mysql_client_set_active_fiber(self, false);
+  return rb_ensure(do_abandon_results, (VALUE)&completion, release_claim_or_disconnect, (VALUE)&completion);
 }
 
 /* call-seq:
@@ -1676,6 +1732,20 @@ static void *nogvl_select_db(void *ptr) {
     return (void *)Qfalse;
 }
 
+static VALUE do_select_db(VALUE argsval) {
+  struct nogvl_select_db_args *args = (void *)argsval;
+
+  if (rb_thread_call_without_gvl(nogvl_select_db, args, RUBY_UBF_IO, 0) == Qfalse) {
+    /* A complete round trip -- the server replied with an error -- so the
+     * rb_ensure companion only releases the claim. */
+    args->completion.completed = 1;
+    rb_raise_mysql2_error(args->completion.wrapper);
+  }
+
+  args->completion.completed = 1;
+  return Qnil;
+}
+
 /* call-seq:
  *    client.select_db(name)
  *
@@ -1691,9 +1761,11 @@ static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
 
   args.mysql = wrapper->client;
   args.db = StringValueCStr(db);
+  args.completion.wrapper = wrapper;
+  args.completion.completed = 0;
 
-  if (rb_thread_call_without_gvl(nogvl_select_db, &args, RUBY_UBF_IO, 0) == Qfalse)
-    rb_raise_mysql2_error(wrapper);
+  rb_mysql_client_set_active_fiber(self, false);
+  rb_ensure(do_select_db, (VALUE)&args, release_claim_or_disconnect, (VALUE)&args.completion);
 
   /* This originates as a Ruby VALUE, but we're using its C pointer
    * directly -- keep the VALUE live on the stack so GC can't collect it
@@ -1780,13 +1852,20 @@ static VALUE rb_mysql_client_ping(VALUE self) {
  * for more information.
  */
 static VALUE rb_mysql_client_set_server_option(VALUE self, VALUE value) {
+  int option;
+  int rv;
   GET_CLIENT(self);
 
-  if (mysql_set_server_option(wrapper->client, NUM2INT(value)) == 0) {
-    return Qtrue;
-  } else {
-    return Qfalse;
-  }
+  option = NUM2INT(value);
+
+  /* mysql_set_server_option runs its whole COM_SET_OPTION round trip with
+   * the GVL held, so nothing can raise -- and no interrupt can land --
+   * between this claim and its release below. */
+  rb_mysql_client_set_active_fiber(self, false);
+  rv = mysql_set_server_option(wrapper->client, option);
+  wrapper->active_fiber = Qnil;
+
+  return rv == 0 ? Qtrue : Qfalse;
 }
 
 /* call-seq:
@@ -1839,8 +1918,9 @@ static void *nogvl_next_result(void *ptr) {
 }
 #endif
 
-static VALUE mysql2_next_result_reset_state(VALUE self) {
-  GET_CLIENT(self);
+static VALUE mysql2_next_result_reset_state(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
+  mysql_client_wrapper *wrapper = completion->wrapper;
 
   if (wrapper->state != MYSQL2_CLIENT_IDLE) {
     wrapper->state = MYSQL2_CLIENT_IDLE;
@@ -1848,10 +1928,17 @@ static VALUE mysql2_next_result_reset_state(VALUE self) {
     mysql2_reap_pending_stmt_closes(wrapper);
   }
 
-  return Qnil;
+  return release_claim_or_disconnect(completionval);
 }
 
-static VALUE mysql2_next_result_body(VALUE self) {
+struct next_result_args {
+  VALUE self;
+  struct query_completion completion;
+};
+
+static VALUE mysql2_next_result_body(VALUE argsval) {
+  struct next_result_args *args = (void *)argsval;
+  VALUE self = args->self;
   GET_CLIENT(self);
 
   /* Mark the connection busy for the duration of the wait: on the fast
@@ -1865,6 +1952,10 @@ static VALUE mysql2_next_result_body(VALUE self) {
 #if defined(HAVE_MYSQL_NEXT_RESULT_NONBLOCKING) && !defined(_WIN32)
   {
     enum net_async_status status = next_result_nonblocking(self, wrapper);
+    /* The exchange finished: even NET_ASYNC_ERROR is a complete reply (a
+     * failed statement in the batch), not a mid-protocol interruption, so
+     * the rb_ensure companion only releases the claim. */
+    args->completion.completed = 1;
     wrapper->affected_rows = mysql_affected_rows(wrapper->client);
 
     switch (status) {
@@ -1881,6 +1972,9 @@ static VALUE mysql2_next_result_body(VALUE self) {
 #else
   {
     int ret = (int)(intptr_t)rb_thread_call_without_gvl(nogvl_next_result, wrapper, RUBY_UBF_IO, 0);
+    /* Same as the nonblocking path: a nonzero ret is a complete
+     * server-reported error, not a mid-protocol interruption. */
+    args->completion.completed = 1;
     wrapper->affected_rows = mysql_affected_rows(wrapper->client);
 
     if (ret > 0) {
@@ -1903,10 +1997,17 @@ static VALUE mysql2_next_result_body(VALUE self) {
  */
 static VALUE rb_mysql_client_next_result(VALUE self)
 {
+  struct next_result_args args;
+
   GET_CLIENT(self);
   REQUIRE_CONNECTED(wrapper);
 
-  return rb_ensure(mysql2_next_result_body, self, mysql2_next_result_reset_state, self);
+  args.self = self;
+  args.completion.wrapper = wrapper;
+  args.completion.completed = 0;
+
+  rb_mysql_client_set_active_fiber(self, false);
+  return rb_ensure(mysql2_next_result_body, (VALUE)&args, mysql2_next_result_reset_state, (VALUE)&args.completion);
 }
 
 /* call-seq:
@@ -1918,6 +2019,11 @@ static VALUE rb_mysql_client_next_result(VALUE self)
 static VALUE rb_mysql_client_store_result(VALUE self)
 {
   GET_CLIENT(self);
+
+  /* The claim is released inside nogvl_do_result once the result is stored
+   * (or, on a fetch error, by mysql2_fetch_result_set before it raises) --
+   * the same lifecycle a query's own result fetch follows. */
+  rb_mysql_client_set_active_fiber(self, false);
 
   /* Honor :stream on later result sets of a multi-statement query the same
    * way async_result already does for the first one -- previously this

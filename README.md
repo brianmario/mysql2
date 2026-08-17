@@ -324,17 +324,16 @@ Mysql2::Client.new(
 )
 ```
 
-Whether this actually gets you both depends entirely on **your application's
-own client library** -- not the database server's version, and not even your
-distro's marketing version number. Server and client library versions move
-independently. A very common base image makes this concrete:
+This depends on **your application's client library version**, not the
+server's -- they move independently. A very common base image makes this
+concrete:
 
 * **Ubuntu 24.04 LTS** (`ubuntu:24.04`) -- `apt-get install libmariadb-dev` /
   `mariadb-server` installs MariaDB 10.11.13, bundling **MariaDB Connector/C
-  3.3.16**. That's below the 3.4 floor mysql2 needs to enforce
-  `verify_identity`'s hostname check -- it raises rather than connect with the
-  check silently skipped (#879), and `tls_version` raises too. The strongest
-  option available out of the box is CA-only verification:
+  3.3.16** -- below the 3.4 floor mysql2 needs for `verify_identity`
+  (raises rather than skip the hostname check silently, #879) or
+  `tls_version` (also raises). The strongest option out of the box is
+  CA-only verification:
   ``` ruby
   Mysql2::Client.new(
     host: 'db.example.com',
@@ -355,8 +354,7 @@ relying on a distro package, the modern floors are:
   point releases and all of 11.8+/12.3+, but *not* with 11.4's earliest point
   releases (11.4.0-11.4.4 bundled Connector/C 3.4.2, which enforces
   `verify_identity` but can't do `tls_version` -- see the compatibility table
-  below). Check what you actually have rather than assuming from the server's
-  marketing version:
+  below). Check what you actually have:
   ``` ruby
   Mysql2::Client.info[:version]                        # linked client library version
   Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION        # :native, :callback, or nil (unenforceable)
@@ -365,10 +363,9 @@ relying on a distro package, the modern floors are:
 
 #### Version compatibility
 
-Only current, supported versions are listed here. If you're on something
-older than every row below, `ssl_mode`/`tls_*` behavior for it is still in
-the code and specs, but isn't covered in this README -- upgrading is the
-recommended path rather than working around it.
+Only current, supported versions are listed. Older combinations still work
+in the code and specs but aren't documented here -- upgrade rather than
+work around them.
 
 | Client library | `ssl_mode` values | `verify_identity` | `tls_version` | `tls_peer_fingerprint` | `tls_passphrase` | `tls_sni_name` |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -377,11 +374,10 @@ recommended path rather than working around it.
 | MariaDB Connector/C 3.4.0 -- 3.4.2 | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ❌ raises | ✅ | ✅ | ❌ never |
 | MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ never |
 
-`:preferred` doesn't exist on MariaDB at any version -- MariaDB Connector/C
-never defines `MYSQL_OPT_SSL_MODE` at all; mysql2 maps `:ssl_mode`'s other
-four values onto MariaDB's own `MYSQL_OPT_SSL_ENFORCE` /
-`MYSQL_OPT_SSL_VERIFY_SERVER_CERT` options instead (see the table further
-below). `tls_sni_name` never works on any MariaDB Connector/C version.
+`:preferred` is missing from every MariaDB row above because MariaDB
+Connector/C never defines `MYSQL_OPT_SSL_MODE` at all -- mysql2 maps
+`:ssl_mode`'s other four values onto `MYSQL_OPT_SSL_ENFORCE` /
+`MYSQL_OPT_SSL_VERIFY_SERVER_CERT` instead (see the table further below).
 
 ``` ruby
 Mysql2::Client.new(

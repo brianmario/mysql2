@@ -407,10 +407,7 @@ begin with (see
 -- but it's the same underlying direction: `tls-` is the modern prefix
 for TLS configuration on both client libraries, and mysql2 follows it.
 
-`:sslverify` is deprecated in favor of `:ssl_mode`, which has more nuanced
-values available (see below) -- it's intentionally not renamed to a `:tls_*`
-name, since it isn't a plain rename of an existing option the way the five
-above are.
+`:sslverify` is deprecated in favor of `:ssl_mode`.
 
 If your `:sslkey`/`:tls_key` file is encrypted, supply the passphrase to
 decrypt it (MariaDB Connector/C only -- MySQL's client library has no
@@ -461,8 +458,8 @@ Two things worth knowing:
   verification callback), or `nil` (unenforceable).
 
 `:sslverify => true` is equivalent to `ssl_mode: :verify_identity`.
-`:sslverify` is deprecated in favor of `:ssl_mode`, which has more nuanced
-values available. An explicit `:ssl_mode` takes precedence over `:sslverify`,
+`:sslverify` is deprecated in favor of `:ssl_mode`. An explicit `:ssl_mode`
+takes precedence over `:sslverify`,
 however conflicting values, e.g. `:sslverify => false` alongside
 `:ssl_mode => :verify_ca` raises an exception, as the two
 would otherwise contradict each other.

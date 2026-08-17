@@ -423,25 +423,16 @@ Mysql2::Client.new(
 ```
 
 `:ssl_mode` is native on MySQL 5.7.11+
-([full option reference](https://dev.mysql.com/doc/refman/8.0/en/connection-options.html#option_general_ssl-mode));
-on MariaDB it maps onto these options instead:
+([full option reference](https://dev.mysql.com/doc/refman/8.0/en/connection-options.html#option_general_ssl-mode)).
+What each value actually checks:
 
-| `:ssl_mode`        | MariaDB option value                                |
-| ---                | ---                                                 |
-| `:disabled`        | MYSQL_OPT_SSL_ENFORCE = 0                           |
-| `:preferred`       | not available -- MariaDB Connector/C never defines MYSQL_OPT_SSL_MODE |
-| `:required`        | MYSQL_OPT_SSL_ENFORCE = 1                           |
-| `:verify_ca`       | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1                |
-| `:verify_identity` | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 + mysql2's own hostname verification |
-
-MYSQL_OPT_SSL_VERIFY_SERVER_CERT verifies the CA at most: despite its
-MySQL-derived name, MariaDB Connector/C decides whether to check the
-hostname from the peer address, and never checks it for peers it considers
-local (127.0.0.1, ::1, or socket connections). mysql2 enforces
-`:verify_identity` on MariaDB itself, by registering a TLS
-verification callback (MariaDB Connector/C 3.4+) that verifies the
-certificate chain and the hostname (SAN, wildcard, and IP-address matching
-via OpenSSL) on every connection, local peers included.
+| `:ssl_mode`        | MySQL client behavior              | MariaDB client behavior            |
+| ---                | ---                                 | ---                                 |
+| `:disabled`        | no TLS                              | no TLS                              |
+| `:preferred`       | TLS if available, else plaintext    | not supported                       |
+| `:required`        | TLS required, no verification       | TLS required, no verification       |
+| `:verify_ca`       | TLS required, CA chain verified     | TLS required, CA chain verified -- hostname is NOT checked, even for local peers |
+| `:verify_identity` | TLS required, CA chain + hostname verified natively | TLS required, CA chain + hostname verified via mysql2's own verification callback (Connector/C 3.4+) |
 
 Two things worth knowing:
 

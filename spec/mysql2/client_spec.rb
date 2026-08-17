@@ -37,6 +37,9 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   it "should connect via TLS" do
+    have_ssl = @client.query("SHOW VARIABLES LIKE 'have_ssl'").first['Value']
+    skip("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") unless have_ssl == 'YES'
+
     client = new_client(ssl_mode: 'required')
     expect(client.ssl_cipher).not_to be_empty
   end

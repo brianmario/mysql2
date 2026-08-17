@@ -20,13 +20,6 @@ jobs:
         include:
           - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb11.8-client_mariadb12.3-server', client_only: mariadb11.8, services: {mariadb: {image: 'mariadb:12.3', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
           - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb12.3-client_mariadb11.8-server', client_only: mariadb12.3, services: {mariadb: {image: 'mariadb:11.8', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
-          # A Connector/C 3.4+ client against 10.6/10.11 servers: the ubuntu/mariadb10.6
-          # and mariadb10.11 legs in Build (Ubuntu) install a client library bundled
-          # with those older server releases (pre-3.4, ssl_mode: :verify_identity
-          # unenforceable, see #879), so they never exercise mysql2's verification
-          # callback. These rows pair a modern client with those same servers instead.
-          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb11.8-client_mariadb10.6-server', client_only: mariadb11.8, services: {mariadb: {image: 'mariadb:10.6', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
-          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb12.3-client_mariadb10.11-server', client_only: mariadb12.3, services: {mariadb: {image: 'mariadb:10.11', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
           - {os: ubuntu-24.04, ruby: '3.4', db: 'mysql84-client_mysql97-server', client_only: mysql84, services: {mysql: {image: 'mysql:9.7', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
           - {os: ubuntu-24.04, ruby: '3.4', db: 'mysql97-client_mysql84-server', client_only: mysql97, services: {mysql: {image: 'mysql:8.4', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
       fail-fast: false

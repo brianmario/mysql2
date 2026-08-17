@@ -364,14 +364,15 @@ relying on a distro package, the modern floors are:
 
 Only current, supported versions are listed. Older combinations still work
 in the code and specs but aren't documented here -- upgrade rather than
-work around them.
+work around them. ❌ means the option raises `Mysql2::Error` rather than
+being silently ignored.
 
 | Client library | `ssl_mode` values | `verify_identity` | `tls_version` | `tls_peer_fingerprint` | `tls_passphrase` | `tls_sni_name` |
 | --- | --- | --- | --- | --- | --- | --- |
 | MySQL 5.7.11 -- 8.0.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ❌ |
 | MySQL 8.1+ / 8.4 LTS / 9.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ✅ |
-| MariaDB Connector/C 3.3.x | 4 of 5, no `:preferred` | ❌ raises | ❌ raises | ❌ raises | ✅ | ❌ never |
-| MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ never |
+| MariaDB Connector/C 3.3.x | 4 of 5, no `:preferred` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ |
 
 `:preferred` is missing from every MariaDB row above because MariaDB
 Connector/C never defines `MYSQL_OPT_SSL_MODE` at all -- mysql2 maps

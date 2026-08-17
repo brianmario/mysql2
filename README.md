@@ -314,13 +314,47 @@ managed hosting providers such as Heroku.
 ``` ruby
 Mysql2::Client.new(
   # ...options as above...,
-  :sslkey => '/path/to/client-key.pem',
-  :sslcert => '/path/to/client-cert.pem',
-  :sslca => '/path/to/ca-cert.pem',
-  :sslcapath => '/path/to/cacerts',
-  :sslcipher => 'DHE-RSA-AES256-SHA',
+  :tls_key => '/path/to/client-key.pem',
+  :tls_cert => '/path/to/client-cert.pem',
+  :tls_ca => '/path/to/ca-cert.pem',
+  :tls_capath => '/path/to/cacerts',
+  :tls_cipher => 'DHE-RSA-AES256-SHA',
   :sslverify => true, # Equivalent to ssl_mode: :verify_identity (see below)
   :ssl_mode => :disabled / :preferred / :required / :verify_ca / :verify_identity,
+  )
+```
+
+`:tls_key`/`:tls_cert`/`:tls_ca`/`:tls_capath`/`:tls_cipher` are the
+recommended names; `:sslkey`/`:sslcert`/`:sslca`/`:sslcapath`/`:sslcipher`
+remain supported as aliases so existing code keeps working. If both a
+`:tls_*` option and its legacy `:ssl*` alias are given with different
+values, `:tls_*` wins. This mirrors MariaDB Connector/C itself, which
+registers both an `ssl-*` and a `tls-*` name for the equivalent
+`mysql_options()` settings in its own config-file parser (see
+[`mariadb_lib.c`](https://github.com/mariadb-corporation/mariadb-connector-c/blob/master/libmariadb/mariadb_lib.c),
+e.g. `ssl-key`/`tls-key`). MySQL's own `mysql_options()` doesn't carry the
+same `ssl-key`/`tls-key`-style rename for these particular options --
+`--tls-version` and `--tls-ciphersuites` are its only `tls-`-prefixed
+options, and both are new capabilities that never had an `ssl-` name to
+begin with (see
+[https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html](https://dev.mysql.com/doc/c-api/8.0/en/mysql-options.html))
+-- but it's the same underlying direction: `tls-` is the modern prefix
+for TLS configuration on both client libraries, and mysql2 follows it.
+
+`:sslverify` is intentionally not renamed to a `:tls_*` name -- it already
+maps onto `:ssl_mode` (see below) rather than being a plain rename of an
+existing option.
+
+If your `:sslkey`/`:tls_key` file is encrypted, supply the passphrase to
+decrypt it (MariaDB Connector/C only -- MySQL's client library has no
+equivalent option, and mysql2 raises rather than connecting with an
+unusable key):
+
+``` ruby
+Mysql2::Client.new(
+  # ...options as above...,
+  :tls_key => '/path/to/encrypted-client-key.pem',
+  :tls_passphrase => 'the passphrase the key was encrypted with',
   )
 ```
 

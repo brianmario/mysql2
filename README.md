@@ -368,9 +368,8 @@ fall back to. For more information about SSL/TLS in MariaDB, see
 [https://mariadb.com/kb/en/securing-connections-for-client-and-server/](https://mariadb.com/kb/en/securing-connections-for-client-and-server/)
 and [https://mariadb.com/kb/en/mysql_optionsv/#tls-options](https://mariadb.com/kb/en/mysql_optionsv/#tls-options)
 
-`:sslverify` still works on MySQL 8.0+ (it's what `ssl_mode: :verify_identity`
-sets internally there) but is a complete no-op on MariaDB Connector/C -- the
-connect-flag it sets is never read there -- so prefer `:ssl_mode` on MariaDB.
+On MySQL 8.0+, `:sslverify` is identical to `ssl_mode: :verify_identity`.
+On MariaDB Connector/C, only the :ssl_mode flag is available.
 
 On MariaDB Connector/C 3.4+, the server certificate can be pinned by
 fingerprint instead of a CA -- an alternative trust model to

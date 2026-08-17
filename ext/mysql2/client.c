@@ -582,17 +582,10 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
      * when a fork() actually happened. */
     if (!wrapper->automatic_close || forked_without_reconnect) {
       /* The client is being garbage collected while connected. Prevent
-       * mysql_close() from sending a mysql-QUIT or from calling shutdown() on
-       * the socket by invalidating it. invalidate_fd() will drop this
-       * process's reference to the socket only, while a QUIT or shutdown()
-       * would render the underlying connection unusable, interrupting other
-       * processes which share this object across a fork().
+       * mysql_close() from sending a mysql-QUIT or from calling shutdown()
+       * on the socket -- see invalidate_socket().
        */
-      if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
-        fprintf(stderr, "[WARN] mysql2 failed to invalidate FD safely\n");
-        close(wrapper->client->net.fd);
-      }
-      wrapper->client->net.fd = -1;
+      invalidate_socket(wrapper);
     }
   }
 #endif
@@ -1202,18 +1195,16 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
      * an abnormal early exit (timeout, exception). Don't leave the
      * connection stuck BUSY. */
     wrapper->state = MYSQL2_CLIENT_IDLE;
-    if (CONNECTED(wrapper)) {
-      /* Invalidate the MySQL socket to prevent further communication. */
+    /* Invalidate the MySQL socket to prevent further communication -- see
+     * invalidate_socket(). */
 #ifndef _WIN32
-      if (invalidate_fd(wrapper->client->net.fd) == Qfalse) {
-        rb_warn("mysql2 failed to invalidate FD safely, closing unsafely\n");
-        close(wrapper->client->net.fd);
-      }
+    invalidate_socket(wrapper);
 #else
+    if (CONNECTED(wrapper)) {
       close(wrapper->client->net.fd);
-#endif
       wrapper->client->net.fd = -1;
     }
+#endif
     /* Skip mysql client check performed before command execution. */
     wrapper->client->status = MYSQL_STATUS_READY;
     wrapper->active_fiber = Qnil;

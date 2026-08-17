@@ -1068,6 +1068,14 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   context "#query" do
+    it "should reject stream: {size: N}, which only prepared statements support" do
+      # Text-protocol streaming is mysql_use_result -- no cursor, no
+      # prefetch to size. Raising beats silently streaming row-by-row.
+      expect do
+        @client.query("SELECT 1", stream: { size: 10 })
+      end.to raise_error(ArgumentError, /prepared statements/)
+    end
+
     it "should let you query again if iterating is finished when streaming" do
       @client.query("SELECT 1 UNION SELECT 2", stream: true, cache_rows: false).each.to_a
 

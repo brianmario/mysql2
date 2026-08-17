@@ -2467,7 +2467,15 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
 
   /* Options that cannot be changed in results.each(...) { |row| }
    * should be processed here. */
-  wrapper->is_streaming = (rb_hash_aref(options, sym_stream) == Qtrue ? 1 : 0);
+  /* Both streaming spellings: stream: true, and stream: {size: N} (already
+   * validated at the execute entry point; only Statement#execute lets the
+   * hash form through). Any other value -- including other truthy ones --
+   * means the query ran buffered, so this test must match the execute-side
+   * predicate exactly or the fetch path desyncs from the protocol state. */
+  {
+    VALUE stream = rb_hash_aref(options, sym_stream);
+    wrapper->is_streaming = (stream == Qtrue || RB_TYPE_P(stream, T_HASH)) ? 1 : 0;
+  }
 
   /* :force_encoding was canonicalized to an Encoding object at the
    * query/execute entry point (mysql2_canonicalize_force_encoding), so

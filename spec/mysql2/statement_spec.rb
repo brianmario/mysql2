@@ -429,6 +429,104 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
         @client.query("DROP TABLE IF EXISTS stream_stmt_truncation_test")
       end
     end
+
+    context "with stream: {size: N}" do
+      # Com_stmt_fetch counts COM_STMT_FETCH commands the server received on
+      # this session -- a direct observation of how many round trips a
+      # cursor drain cost, from the same connection once it's idle again.
+      def com_stmt_fetch_count
+        @client.query("SHOW SESSION STATUS LIKE 'Com_stmt_fetch'").first['Value'].to_i
+      end
+
+      def fetches_during
+        before = com_stmt_fetch_count
+        yield
+        com_stmt_fetch_count - before
+      end
+
+      before(:example) do
+        @client.query("DROP TABLE IF EXISTS stream_prefetch_test")
+        @client.query("CREATE TABLE stream_prefetch_test (id INT PRIMARY KEY AUTO_INCREMENT, v VARCHAR(32))")
+        ins = @client.prepare("INSERT INTO stream_prefetch_test (v) VALUES (?)")
+        20.times { |i| ins.execute("row#{i}") }
+      end
+
+      after(:example) do
+        @client.query("DROP TABLE IF EXISTS stream_prefetch_test")
+      end
+
+      it "fetches N rows per round trip and returns the same rows as stream: true" do
+        stmt = @client.prepare("SELECT * FROM stream_prefetch_test ORDER BY id")
+
+        single_rows = nil
+        single = fetches_during do
+          single_rows = stmt.execute(stream: true, cache_rows: false).to_a
+        end
+
+        batched_rows = nil
+        batched = fetches_during do
+          batched_rows = stmt.execute(stream: { size: 10 }, cache_rows: false).to_a
+        end
+
+        expect(batched_rows).to eq(single_rows)
+        expect(single_rows.length).to eq(20)
+        expect(single).to be >= 20
+        expect(batched).to be <= 4
+      end
+
+      it "resets the prefetch size when the same statement streams with stream: true again" do
+        # STMT_ATTR_PREFETCH_ROWS persists on the statement handle, so a
+        # plain stream: true execute after a sized one must not inherit N.
+        stmt = @client.prepare("SELECT * FROM stream_prefetch_test ORDER BY id")
+        stmt.execute(stream: { size: 10 }, cache_rows: false).to_a
+
+        single = fetches_during do
+          stmt.execute(stream: true, cache_rows: false).to_a
+        end
+        expect(single).to be >= 20
+      end
+
+      it "grows a truncated column buffer inside a multi-row batch" do
+        # The regrow-on-MYSQL_DATA_TRUNCATED path (see the stream: true spec
+        # above), but with the large row arriving mid-batch rather than as
+        # the only row of its fetch.
+        @client.query("DROP TABLE IF EXISTS stream_prefetch_grow_test")
+        @client.query("CREATE TABLE stream_prefetch_grow_test (id INT PRIMARY KEY AUTO_INCREMENT, data MEDIUMBLOB)")
+        begin
+          small = "a" * 10
+          large = "b" * 300_000
+          values = [small, large, small, large, small]
+          ins = @client.prepare("INSERT INTO stream_prefetch_grow_test (data) VALUES (?)")
+          values.each { |v| ins.execute(v) }
+
+          stmt = @client.prepare("SELECT data FROM stream_prefetch_grow_test ORDER BY id")
+          rows = stmt.execute(stream: { size: 2 }, cache_rows: false).to_a
+          expect(rows.map { |r| r["data"] }).to eq(values)
+        ensure
+          @client.query("DROP TABLE IF EXISTS stream_prefetch_grow_test")
+        end
+      end
+
+      it "accepts stream: {size: 1} as equivalent to stream: true" do
+        stmt = @client.prepare("SELECT * FROM stream_prefetch_test ORDER BY id")
+        expect(stmt.execute(stream: { size: 1 }, cache_rows: false).to_a.length).to eq(20)
+      end
+
+      it "rejects invalid sizes before touching the network" do
+        stmt = @client.prepare("SELECT * FROM stream_prefetch_test")
+        expect { stmt.execute(stream: { size: 0 }) }.to raise_error(ArgumentError, /positive/)
+        expect { stmt.execute(stream: { size: -1 }) }.to raise_error(ArgumentError, /positive/)
+        expect { stmt.execute(stream: { size: 1.5 }) }.to raise_error(TypeError, /Integer/)
+        expect { stmt.execute(stream: { size: "10" }) }.to raise_error(TypeError, /Integer/)
+        expect { stmt.execute(stream: {}) }.to raise_error(ArgumentError, /size/)
+        expect { stmt.execute(stream: { sise: 10 }) }.to raise_error(ArgumentError, /size/)
+        expect { stmt.execute(stream: { size: 10, max_memory: 1 }) }.to raise_error(ArgumentError, /size/)
+
+        # The raises above happened at option parse: the statement and
+        # connection are untouched and still usable.
+        expect(stmt.execute(stream: { size: 5 }, cache_rows: false).to_a.length).to eq(20)
+      end
+    end
   end
 
   context "#each" do

@@ -524,8 +524,22 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     it "maps sslverify: true onto ssl_mode: :verify_identity when no ssl_mode is given" do
       skip "this build has no verifying ssl_mode" if Mysql2::Client::SSL_MODE_VERIFY_IDENTITY.zero?
 
-      client = Klient.new(sslverify: true)
-      expect(client.connect_args.last[6] & Mysql2::Client::SSL_VERIFY_SERVER_CERT).not_to eql(0)
+      # Mirrors the "refuses verify_identity outright" predicate above: a
+      # MariaDB-family build without the enforcement callback refuses the
+      # mapped :verify_identity at Client.new rather than silently skipping
+      # the hostname check. That refusal is itself proof the mapping
+      # happened -- :sslverify alone never trips verify_identity
+      # enforcement (see "does not refuse sslverify: false" above).
+      version = Mysql2::Client.info[:id]
+      mysql_native_verify = (50703...50711).cover?(version) || (60103...60200).cover?(version)
+      mariadb = version >= 30000 && !mysql_native_verify
+
+      if mariadb && Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION.nil?
+        expect { Klient.new(sslverify: true) }.to raise_error(Mysql2::Error::ConnectionError, /cannot be enforced/)
+      else
+        client = Klient.new(sslverify: true)
+        expect(client.connect_args.last[6] & Mysql2::Client::SSL_VERIFY_SERVER_CERT).not_to eql(0)
+      end
     end
 
     it "lets an explicit ssl_mode win over sslverify: true" do

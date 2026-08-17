@@ -330,10 +330,7 @@ concrete:
 
 * **Ubuntu 24.04 LTS** (`ubuntu:24.04`) -- `apt-get install libmariadb-dev` /
   `mariadb-server` installs MariaDB 10.11.13, bundling **MariaDB Connector/C
-  3.3.16** -- below the 3.4 floor mysql2 needs for `verify_identity`
-  (raises rather than skip the hostname check silently, #879) or
-  `tls_version` (also raises). The strongest option out of the box is
-  CA-only verification:
+  3.3.16**. The strongest option out of the box is CA-only verification:
   ``` ruby
   Mysql2::Client.new(
     host: 'db.example.com',

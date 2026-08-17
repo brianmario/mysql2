@@ -327,7 +327,7 @@ Mysql2::Client.new(
 Whether this actually gets you both depends entirely on **your application's
 own client library** -- not the database server's version, and not even your
 distro's marketing version number. Server and client library versions move
-independently. Two very common base images make this concrete:
+independently. A very common base image makes this concrete:
 
 * **Ubuntu 24.04 LTS** (`ubuntu:24.04`) -- `apt-get install libmariadb-dev` /
   `mariadb-server` installs MariaDB 10.11.13, bundling **MariaDB Connector/C
@@ -341,14 +341,6 @@ independently. Two very common base images make this concrete:
     ssl_mode: :verify_ca,   # chain verified; hostname is NOT checked on this build
   )
   ```
-  To get real hostname verification and `tls_version` on Ubuntu 24.04, add
-  MariaDB's own package repository (not Ubuntu's) and install from that
-  instead -- see
-  [MariaDB's package repository setup guide](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage).
-* **Ubuntu 26.04 LTS** (`ubuntu:26.04`) -- ships MariaDB 11.8.6, bundling
-  **MariaDB Connector/C 3.4.9**. The first `ssl_mode: :verify_identity` /
-  `tls_version: 'TLSv1.3'` example above works out of the box, no extra repo
-  needed.
 
 If you're building or installing a client library directly rather than
 relying on a distro package, the modern floors are:

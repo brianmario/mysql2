@@ -30,13 +30,22 @@ group :test do
 end
 
 group :benchmarks, optional: true do
+  # active_record.rb / active_record_threaded.rb compare against the
+  # trilogy ActiveRecord adapter, built into activerecord >= 7.1. This is
+  # intentionally not pinned to >= 7.1 here: `bundle lock` resolves the
+  # whole Gemfile regardless of this group's `optional: true`, and a hard
+  # floor above what old Rubies can run breaks CI legs that never touch
+  # this group at all.
   gem 'activerecord', '>= 3.0'
   gem 'benchmark-ips'
-  gem 'do_mysql'
   gem 'faker'
-  # The installation of the mysql latest version 2.9.1 fails on Ruby >= 2.4.
-  gem 'mysql' if Gem::Version.new(RUBY_VERSION) < Gem::Version.new('2.4')
   gem 'sequel'
+  # trilogy's gemspec requires Ruby >= 3.0. `bundle lock` resolves the
+  # whole Gemfile regardless of this group's `optional: true`, so this
+  # line must be omitted entirely on older Rubies rather than merely
+  # version-constrained, the same way the old `mysql` gem line was
+  # guarded here before it was dropped.
+  gem 'trilogy' if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('3.0')
 end
 
 group :development do

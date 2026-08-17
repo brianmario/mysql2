@@ -583,8 +583,7 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
     if (!wrapper->automatic_close || forked_without_reconnect) {
       /* The client is being garbage collected while connected. Prevent
        * mysql_close() from sending a mysql-QUIT or from calling shutdown()
-       * on the socket -- see invalidate_socket().
-       */
+       * on the socket. */
       invalidate_socket(wrapper);
     }
   }
@@ -1195,8 +1194,7 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
      * an abnormal early exit (timeout, exception). Don't leave the
      * connection stuck BUSY. */
     wrapper->state = MYSQL2_CLIENT_IDLE;
-    /* Invalidate the MySQL socket to prevent further communication -- see
-     * invalidate_socket(). */
+    /* Invalidate the MySQL socket to prevent further communication. */
 #ifndef _WIN32
     invalidate_socket(wrapper);
 #else

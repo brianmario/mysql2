@@ -50,7 +50,7 @@ module Mysql2
       self.charset_name = opts[:encoding] || 'utf8mb4'
 
       mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
-      configure_tls_verification(opts, mode)
+      mode = configure_tls_verification(opts, mode)
 
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
@@ -120,7 +120,9 @@ module Mysql2
 
     # Enforce the coherence of the TLS verification options before any of
     # them reach the client library, so a verification the caller asked for
-    # can never be silently skipped (the #879 failure mode).
+    # can never be silently skipped (the #879 failure mode). Also maps the
+    # legacy :sslverify boolean onto :ssl_mode, and returns the effective
+    # mode -- possibly filled in from :sslverify -- for the caller to apply.
     #
     # :sslca/:sslcapath left unset means the TLS backend resolves its default
     # trust store natively (OpenSSL's default verify paths,
@@ -133,7 +135,28 @@ module Mysql2
       # SSL_MODE_* constant collapses to 0) out of the verify-tier handling.
       verify_mode = (mode == SSL_MODE_VERIFY_CA || mode == SSL_MODE_VERIFY_IDENTITY) && mode != 0
 
-      return unless opts[:tls_peer_fingerprint] || opts[:tls_peer_fingerprint_list]
+      if opts.key?(:sslverify)
+        if opts[:sslverify]
+          # :sslverify => true is the legacy spelling of ssl_mode: :verify_identity
+          # -- MYSQL_OPT_SSL_MODE's own VERIFY_IDENTITY handler sets the same
+          # CLIENT_SSL_VERIFY_SERVER_CERT connect-flag :sslverify sets directly
+          # (still below, unconditionally). An explicit :ssl_mode always wins;
+          # this only fills in a mode the caller didn't otherwise ask for, and
+          # only where SSL_MODE_VERIFY_IDENTITY is a real, enforceable value.
+          if (mode.nil? || mode.zero?) && !SSL_MODE_VERIFY_IDENTITY.zero?
+            mode = SSL_MODE_VERIFY_IDENTITY
+            verify_mode = true
+          end
+        elsif verify_mode
+          # :sslverify => false and a verifying ssl_mode contradict each
+          # other: one says the connection doesn't need to be verified, the
+          # other asks mysql2 to refuse it unless it is. Refuse the ambiguity
+          # instead of silently picking a side.
+          raise Mysql2::Error::ConnectionError, "sslverify: false conflicts with ssl_mode: #{opts[:ssl_mode]}, which requires verification; pick one"
+        end
+      end
+
+      return mode unless opts[:tls_peer_fingerprint] || opts[:tls_peer_fingerprint_list]
 
       # Fingerprint pinning and CA/hostname verification are alternative
       # trust models in MariaDB Connector/C: a pinned connection runs the
@@ -144,6 +167,8 @@ module Mysql2
 
       self.tls_peer_fingerprint = opts[:tls_peer_fingerprint].to_s if opts[:tls_peer_fingerprint]
       self.tls_peer_fingerprint_list = opts[:tls_peer_fingerprint_list].to_s if opts[:tls_peer_fingerprint_list]
+
+      mode
     end
 
     # Find any default system CA paths to handle system roots

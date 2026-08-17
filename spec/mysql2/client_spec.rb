@@ -474,6 +474,37 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         new_client(ssl_mode: :verify_identity, sslca: '/nonexistent/ca.pem')
       end.to raise_error(Mysql2::Error::ConnectionError, /cannot be enforced/)
     end
+
+    it "refuses sslverify: false combined with a verifying ssl_mode" do
+      skip "this build has no verifying ssl_mode" if Mysql2::Client::SSL_MODE_VERIFY_IDENTITY.zero?
+
+      # sslverify: false says the connection doesn't need to be verified;
+      # ssl_mode: :verify_identity/:verify_ca says mysql2 must refuse it
+      # unless it is. Pick one instead of silently choosing between them.
+      expect do
+        new_client(sslverify: false, ssl_mode: :verify_identity)
+      end.to raise_error(Mysql2::Error::ConnectionError, /sslverify: false conflicts/)
+
+      expect do
+        new_client(sslverify: false, ssl_mode: :verify_ca)
+      end.to raise_error(Mysql2::Error::ConnectionError, /sslverify: false conflicts/)
+    end
+
+    it "does not refuse sslverify: false combined with a non-verifying ssl_mode" do
+      expect { Klient.new(sslverify: false, ssl_mode: :required) }.not_to raise_error
+      expect { Klient.new(sslverify: false) }.not_to raise_error
+    end
+
+    it "maps sslverify: true onto ssl_mode: :verify_identity when no ssl_mode is given" do
+      skip "this build has no verifying ssl_mode" if Mysql2::Client::SSL_MODE_VERIFY_IDENTITY.zero?
+
+      client = Klient.new(sslverify: true)
+      expect(client.connect_args.last[6] & Mysql2::Client::SSL_VERIFY_SERVER_CERT).not_to eql(0)
+    end
+
+    it "lets an explicit ssl_mode win over sslverify: true" do
+      expect { Klient.new(sslverify: true, ssl_mode: :required) }.not_to raise_error
+    end
   end
 
   def run_gc

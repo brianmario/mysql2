@@ -412,8 +412,7 @@ Mysql2::Client.new(
   )
 ```
 
-A comma-separated list of one or more versions (`TLSv1.2`, `TLSv1.3`, etc. --
-availability depends on the SSL library the client was built against). Works
+A comma-separated list of TLS versions, e.g. `'TLSv1.2,TLSv1.3', that are available on your SSL client library. Works
 identically on MySQL (5.7.10+) and MariaDB Connector/C (3.4.3+); raises
 `Mysql2::Error` on older client libraries rather than silently ignoring the
 option.

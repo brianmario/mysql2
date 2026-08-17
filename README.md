@@ -345,12 +345,10 @@ relying on a distro package, the modern floors are:
   point release -- via the
   [MySQL APT repository](https://dev.mysql.com/doc/mysql-apt-repo-quick-guide/en/)
   or equivalent).
-* **MariaDB Connector/C 3.4.3 or later**, installed from
+* **MariaDB Connector/C 3.4.3+**, installed from
   [MariaDB's own package repository](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage)
-  rather than your distro's archive. This ships with recent MariaDB 11.4 LTS
-  point releases and all of 11.8+/12.3+, but *not* with 11.4's earliest point
-  releases (11.4.0-11.4.4 bundled Connector/C 3.4.2, which enforces
-  `verify_identity` but can't do `tls_version`). Check what you actually have:
+  rather than your distro's archive. This ships with MariaDB 11.4.5+ /
+  11.8+ / 12.3+. Check what you actually have:
   ``` ruby
   Mysql2::Client.info[:version]                        # linked client library version
   Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION        # :native, :callback, or nil (unenforceable)

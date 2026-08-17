@@ -1300,14 +1300,19 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end.to raise_error(Timeout::Error)
 
         # The interrupted exchange invalidates the connection, same as an
-        # interrupted query's read -- a normal, actionable connection error
-        # is fine, but a permanently leaked claim is not, whether reported
-        # to another fiber ("in use by") or to this one ("still waiting").
-        begin
+        # interrupted query's read -- so the follow-up query may raise a
+        # normal, actionable connection error, or may succeed outright.
+        # Either is fine; the one forbidden outcome is a permanently leaked
+        # claim, whether reported to another fiber ("in use by") or to this
+        # one ("still waiting"). Capture the error, if any, so the assertion
+        # runs on every outcome rather than only inside a rescue.
+        follow_up_error = begin
           @multi_client.query("SELECT 1")
+          nil
         rescue Mysql2::Error => e
-          expect(e.message).not_to match(/This connection is in use by|still waiting for a result/)
+          e
         end
+        expect(follow_up_error.to_s).not_to match(/This connection is in use by|still waiting for a result/)
       end
 
       it "releases its claim and keeps the connection usable when #abandon_results! hits a failed statement" do
@@ -2144,13 +2149,18 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         thread.join(2)
 
         # The interrupted query must not leave the connection permanently
-        # marked busy -- a normal, actionable connection error is fine, but
-        # "This connection is in use by" (a dead fiber, forever) is not.
-        begin
+        # marked busy -- the follow-up query may raise a normal, actionable
+        # connection error or may succeed, but must never report "This
+        # connection is in use by" (a dead fiber, forever). Capture the
+        # error, if any, so the assertion runs on every outcome rather than
+        # only inside a rescue.
+        follow_up_error = begin
           client.query("SELECT 1")
+          nil
         rescue Mysql2::Error => e
-          expect(e.message).not_to match(/This connection is in use by/)
+          e
         end
+        expect(follow_up_error.to_s).not_to match(/This connection is in use by/)
       ensure
         begin
           client.close

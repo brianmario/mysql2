@@ -64,8 +64,21 @@ typedef struct {
   int refcount;
   int closed;
   uint64_t affected_rows;
+  /* Monotonic stamp taken when the current command is written to the wire
+   * (rb_mysql_query). Lives on the wrapper because the bracket closes in a
+   * separate Ruby call on the async path: Client#query with :async returns
+   * right after the send, and #async_result reads the response later. */
+  double query_start;
   MYSQL *client;
   mysql2_client_state_t state;
+  /* The pid that established this connection (set on every successful
+   * connect). Compared against getpid() when the wrapper is garbage
+   * collected: a mismatch means this process inherited the connection
+   * across a fork() without reconnecting, so its copy of the connection's
+   * protocol/TLS state can't be trusted -- see decr_mysql2_client. Plain
+   * int, not pid_t, so this header doesn't need a POSIX-only typedef --
+   * only ever compared on the #ifndef _WIN32 path anyway. */
+  int connect_pid;
   mysql2_pending_stmt_close *pending_stmt_closes;
   unsigned long pending_stmt_close_count; /* O(1) mirror of the list above, for Client#pending_prepared_statement_closes */
   mysql2_pending_result_free *pending_result_frees;
@@ -86,6 +99,12 @@ extern const rb_data_type_t rb_mysql_client_type;
 
 void init_mysql2_client(void);
 void decr_mysql2_client(mysql_client_wrapper *wrapper);
+
+/* Seconds on a clock suitable for measuring elapsed intervals: monotonic
+ * (immune to wall-clock adjustment) where available, gettimeofday otherwise.
+ * Negative if the clock call itself fails. Calls no Ruby APIs, so it is
+ * safe inside rb_thread_call_without_gvl functions. */
+double mysql2_monotonic_now(void);
 
 /* Raises a Mysql2::Error built from the client's current mysql_error()/
  * mysql_errno()/mysql_sqlstate() -- the only correct way to surface a
@@ -147,5 +166,18 @@ void mysql2_reap_pending_result_frees(mysql_client_wrapper *wrapper);
  * to pick up). Call right before sending any new command (query, prepare,
  * execute, ping, statement close). */
 void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper);
+
+/* Whether this process is not the one that established wrapper's
+ * connection (a fork() happened and nobody reconnected). Always false on
+ * Windows, which has no fork(). Safe to call from anywhere, including a
+ * dfree callback -- just compares two plain ints. */
+int mysql2_forked_without_reconnect(mysql_client_wrapper *wrapper);
+
+/* Prints the [WARN] explaining a forked-without-reconnect connection to
+ * stderr, naming the command about to be attempted (e.g. "send a query").
+ * Callers are expected to have already checked
+ * mysql2_forked_without_reconnect and wrapper->automatic_close -- see
+ * decr_mysql2_client for why the warning is conditional on the latter. */
+void mysql2_warn_forked_without_reconnect(mysql_client_wrapper *wrapper, const char *action);
 
 #endif

@@ -195,14 +195,6 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     rb_raise(cMysql2Error, "Unable to initialize prepared statement: out of memory");
   }
 
-  // set STMT_ATTR_UPDATE_MAX_LENGTH attr
-  {
-    my_bool truth = 1;
-    if (mysql_stmt_attr_set(stmt_wrapper->stmt, STMT_ATTR_UPDATE_MAX_LENGTH, &truth)) {
-      rb_raise(cMysql2Error, "Unable to initialize prepared statement: set STMT_ATTR_UPDATE_MAX_LENGTH");
-    }
-  }
-
   // call mysql_stmt_prepare w/o gvl
   {
     struct nogvl_prepare_statement_args args;
@@ -252,14 +244,21 @@ static VALUE rb_mysql_stmt_field_count(VALUE self) {
   return UINT2NUM(mysql_stmt_field_count(stmt_wrapper->stmt));
 }
 
-static void *nogvl_stmt_execute(void *ptr) {
-  MYSQL_STMT *stmt = ptr;
+struct nogvl_stmt_execute_args {
+  MYSQL_STMT *stmt;
+  /* Round-trip close stamp, taken while the GVL is still released: under
+   * contention, reacquisition means queueing behind every runnable thread,
+   * and a stamp taken after it would charge that wait to the server. */
+  double query_end;
+};
 
-  if (mysql_stmt_execute(stmt)) {
-    return (void*)Qfalse;
-  } else {
-    return (void*)Qtrue;
-  }
+static void *nogvl_stmt_execute(void *ptr) {
+  struct nogvl_stmt_execute_args *args = ptr;
+  int rv = mysql_stmt_execute(args->stmt);
+
+  args->query_end = mysql2_monotonic_now();
+
+  return (void*)(rv == 0 ? Qtrue : Qfalse);
 }
 
 static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length_buffer, VALUE string) {
@@ -349,10 +348,16 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   VALUE resultObj;
   VALUE *params_enc = NULL;
   int is_streaming;
+  struct nogvl_stmt_execute_args execute_args;
+  double query_start, query_elapsed;
   rb_encoding *conn_enc;
 
   GET_STATEMENT(self);
   GET_CLIENT(stmt_wrapper->client);
+
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "execute a statement");
+  }
 
   /* We're about to issue a new command on this connection: a safe point to
    * close out any statements that were GC'd while it was last busy, and to
@@ -588,11 +593,23 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   // mysql2_enqueue_pending_stmt_close / mysql2_reap_pending_stmt_closes.
   wrapper->state = MYSQL2_CLIENT_QUERYING;
 
-  if ((VALUE)rb_thread_call_without_gvl(nogvl_stmt_execute, stmt, RUBY_UBF_IO, 0) == Qfalse) {
+  query_start = mysql2_monotonic_now();
+  execute_args.stmt = stmt;
+
+  if ((VALUE)rb_thread_call_without_gvl(nogvl_stmt_execute, &execute_args, RUBY_UBF_IO, 0) == Qfalse) {
     FREE_BINDS;
     wrapper->state = MYSQL2_CLIENT_IDLE;
     rb_raise_mysql2_stmt_error(stmt_wrapper);
   }
+
+  /* mysql_stmt_execute both writes the command and reads its first
+   * response, so the stamp nogvl_stmt_execute took closes the round-trip
+   * bracket. The metadata and store phases below stay outside it --
+   * Result#query_time measures the server, not local row buffering. A
+   * negative stamp at either end means the clock call itself failed; pass
+   * the sentinel through so the reading is nil, not garbage. */
+  query_elapsed = (query_start < 0 || execute_args.query_end < 0)
+    ? -1 : execute_args.query_end - query_start;
 
   FREE_BINDS;
 
@@ -629,7 +646,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     wrapper->state = MYSQL2_CLIENT_STREAMING;
   }
 
-  resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self);
+  resultObj = rb_mysql_result_to_obj(stmt_wrapper->client, wrapper->encoding, current, metadata, self, query_elapsed);
 
   /* Track the open cursor so a later command can force-drain it if it's
    * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */

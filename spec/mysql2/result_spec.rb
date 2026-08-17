@@ -188,23 +188,29 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should not permanently pin symbols for dynamically-named columns" do
-      skip "dynamic symbols are only GC-able on Ruby 2.2+" if RUBY_VERSION < "2.2"
+      require "objspace"
+      skip "needs ObjectSpace.count_symbols (CRuby 2.2+)" unless ObjectSpace.respond_to?(:count_symbols)
+
+      # A pinned (immortal) symbol can never be collected; a mortal dynamic
+      # symbol can. Assert mortality directly from the intern-table
+      # bookkeeping rather than waiting for the GC to actually reclaim the
+      # symbol: conservative stack/register scanning can keep a dead symbol
+      # alive indefinitely, but it cannot change which table the symbol was
+      # interned into, so this holds regardless of GC timing.
+      immortal_symbols = -> { ObjectSpace.count_symbols[:immortal_symbol] }
+
+      # Absorb first-use interning (lazy autoloads, inline caches) outside
+      # the measured window with an identically-shaped query and count.
+      @client.query("SELECT 1 AS sym_warmup_#{rand(2**32)}", symbolize_keys: true).first
+      immortal_symbols.call
 
       name = "sym_gc_col_#{rand(2**32)}"
+      before = immortal_symbols.call
+      row = @client.query("SELECT 1 AS #{name}", symbolize_keys: true).first
+      pinned = immortal_symbols.call - before
 
-      # Run the query on its own thread so its stack -- and any stale
-      # references conservative scanning would find there -- is gone before
-      # the collection check below.
-      Thread.new do
-        @client.query("SELECT 1 AS #{name}", symbolize_keys: true).each { |_| }
-        nil
-      end.join
-
-      collected = 10.times.any? do
-        GC.start
-        Symbol.all_symbols.none? { |sym| sym.to_s == name }
-      end
-      expect(collected).to be true
+      expect(row.keys.first).to eql(name.to_sym)
+      expect(pinned).to eql(0), "column-name symbol :#{name} was interned as immortal"
     end
 
     it "should be able to return results as an array" do
@@ -699,6 +705,46 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       result.dbs.each do |f|
         expect(f).to be_frozen
       end
+    end
+  end
+
+  context "#query_time" do
+    it "should report the server round trip in seconds as a Float" do
+      started = clock_time
+      result = @client.query "SELECT SLEEP(0.1)"
+      elapsed = clock_time - started
+
+      expect(result.query_time).to be_a(Float)
+      # SLEEP(0.1) can return a scheduler tick (~16ms on Windows) early, so the
+      # bound sits below the nominal sleep -- still orders of magnitude above a
+      # bracket that misses the socket wait, which measures ~0.2ms.
+      expect(result.query_time).to be >= 0.05
+      expect(result.query_time).to be <= elapsed
+    end
+
+    if RUBY_PLATFORM !~ /mingw|mswin/
+      it "should cover the wait for the response when the query is async" do
+        expect(@client.query("SELECT SLEEP(0.1)", async: true)).to be nil
+        result = @client.async_result
+
+        expect(result.query_time).to be >= 0.05
+      end
+    end
+
+    it "should be available before a streamed result's rows are read" do
+      result = @client.query "SELECT SLEEP(0.1)", stream: true, cache_rows: false
+
+      expect(result.query_time).to be >= 0.05
+      result.each.to_a
+    end
+
+    it "should be nil for later result sets of a multi-statement command" do
+      client = new_client(flags: Mysql2::Client::MULTI_STATEMENTS)
+      result = client.query "SELECT 1; SELECT 2"
+
+      expect(result.query_time).to be_a(Float)
+      expect(client.next_result).to be true
+      expect(client.store_result.query_time).to be nil
     end
   end
 

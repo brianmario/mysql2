@@ -52,6 +52,9 @@ have_func('rb_hash_new_capa', 'ruby.h')
 # 2.3+ (guarded so the funcall path remains available on anything older)
 have_func('rb_time_timespec_new', 'ruby.h')
 
+# Monotonic clock for Result#query_time (gettimeofday fallback otherwise)
+have_func('clock_gettime', 'time.h')
+
 ### Find OpenSSL library
 
 # User-specified OpenSSL if explicitly specified
@@ -191,6 +194,7 @@ have_type('my_bool', mysql_h)
 # detect mysql functions
 have_func('mysql_ssl_set', mysql_h)
 have_func('mysql_next_result_nonblocking', mysql_h) # Added in MySQL 8.0.16; no MariaDB Connector/C equivalent under this name (see mysql_next_result_start/_cont)
+have_func('mysql_real_escape_string_quote', mysql_h) # Added in MySQL 5.7.6; no MariaDB Connector/C equivalent
 
 ### Compiler flags to help catch errors
 

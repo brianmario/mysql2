@@ -16,7 +16,7 @@
 #include "mysql_enc_name_to_ruby.h"
 
 VALUE cMysql2Client;
-extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError, cMysql2ForkSafetyError;
+extern VALUE mMysql2, cMysql2Error, cMysql2TimeoutError;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args,
   intern_current_query_options, intern_read_timeout, intern_values;
@@ -1545,37 +1545,6 @@ static void *nogvl_ping(void *ptr) {
 }
 
 /* call-seq:
- *    client.verify_not_forked!
- *
- * Raises Mysql2::Error::ForkSafetyError if this Client's connection was
- * established in a different process than the one calling this method --
- * i.e. this process inherited the connection across a fork() and never
- * reconnected, so the connection's protocol/TLS state can't be trusted.
- * No-op otherwise (including on Windows, which has no fork()).
- *
- * mysql2 never calls this itself; it only ever warns automatically (see
- * the [WARN] mysql2 messages on stderr). Call this explicitly at a point
- * of your choosing -- e.g. right after a fork() you know happened -- to
- * turn that warning into a hard, catchable error instead.
- */
-static VALUE rb_mysql_client_verify_not_forked(VALUE self) {
-  GET_CLIENT(self);
-
-#ifndef _WIN32
-  if (mysql2_forked_without_reconnect(wrapper)) {
-    rb_raise(cMysql2ForkSafetyError,
-      "This Client's connection crossed a fork(): established in process "
-      "%d, used from process %d. Do not close it here -- that could "
-      "interrupt whichever process actually owns it. Open a new Client "
-      "instead.",
-      wrapper->connect_pid, (int)getpid());
-  }
-#endif
-
-  return Qnil;
-}
-
-/* call-seq:
  *    client.ping
  *
  * Checks whether the connection to the server is working. If the connection
@@ -2051,7 +2020,6 @@ void init_mysql2_client(void) {
   rb_define_method(cMysql2Client, "pending_result_frees", rb_mysql_client_pending_result_frees, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
-  rb_define_method(cMysql2Client, "verify_not_forked!", rb_mysql_client_verify_not_forked, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);
   rb_define_method(cMysql2Client, "set_server_option", rb_mysql_client_set_server_option, 1);
   rb_define_method(cMysql2Client, "more_results?", rb_mysql_client_more_results, 0);

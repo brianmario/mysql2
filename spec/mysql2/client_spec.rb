@@ -426,37 +426,6 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   context "fork safety" do
-    context "#verify_not_forked!" do
-      it "does not raise in the process that established the connection" do
-        client = new_client
-        expect(client.verify_not_forked!).to be_nil
-      end
-
-      it "raises Mysql2::Error::ForkSafetyError in a child that inherited the connection" do
-        skip "fork() is not implemented on Windows" if RUBY_PLATFORM =~ /mingw|mswin/
-
-        client = new_client(ssl_mode: 'disabled')
-        read, write = IO.pipe
-
-        child = fork do
-          read.close
-          begin
-            client.verify_not_forked!
-            write.puts 'did not raise'
-          rescue Mysql2::Error::ForkSafetyError => e
-            write.puts "raised: #{e.message}"
-          end
-          write.close
-        end
-        write.close
-
-        Process.wait(child)
-        expect(read.gets).to match(/\Araised: /)
-        read.close
-        client.close
-      end
-    end
-
     it "warns, but does not raise, when a query, ping, or prepare is issued from a forked child that hasn't reconnected" do
       skip "fork() is not implemented on Windows" if RUBY_PLATFORM =~ /mingw|mswin/
 

@@ -473,20 +473,6 @@ A `Client`'s connection is not safe to use from a process that merely inherited 
 
 mysql2 detects this automatically by recording the pid that established the connection and comparing it against the current pid. If a `Client` is garbage collected, queried, pinged, prepared, or executed from a different process than the one that connected it, mysql2 prints a `[WARN]` to stderr. This warning is silent when `automatic_close` has been explicitly set to `false` -- see below.
 
-If you want a hard, catchable error instead of a warning, call `client.verify_not_forked!` explicitly (for example, right after a `fork()` you know just happened):
-
-``` ruby
-Process.fork do
-  begin
-    client.verify_not_forked!
-  rescue Mysql2::Error::ForkSafetyError
-    client = Mysql2::Client.new(...) # do not close the inherited client here
-  end
-end
-```
-
-mysql2 never calls `verify_not_forked!` itself; it only ever warns automatically.
-
 By default (`automatic_close` is `true`), a `Client` garbage collected in a process that didn't establish its connection will not send a real close, to avoid interrupting the owning process's connection. Setting `automatic_close` to `false` opts out of automatic closing entirely -- useful if your application intentionally shares a `Client` across a `fork()` and serializes access to it (for example, closing it explicitly in the child once done, which ends the connection for both processes, not just the child's reference to it):
 
 ``` ruby

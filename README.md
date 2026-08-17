@@ -370,7 +370,7 @@ work around them.
 | Client library | `ssl_mode` values | `verify_identity` | `tls_version` | `tls_peer_fingerprint` | `tls_passphrase` | `tls_sni_name` |
 | --- | --- | --- | --- | --- | --- | --- |
 | MySQL 5.7.11 -- 8.0.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ❌ |
-| MySQL 8.1+ / 8.4 LTS / 9.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ✅ (8.1+) |
+| MySQL 8.1+ / 8.4 LTS / 9.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ✅ |
 | MariaDB Connector/C 3.4.0 -- 3.4.2 | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ❌ raises | ✅ | ✅ | ❌ never |
 | MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ never |
 

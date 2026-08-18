@@ -30,6 +30,12 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
 
+#if defined(_WIN32) && defined(HAVE_RB_W32_WRAP_IO_HANDLE)
+/* Defined below, alongside rb_mysql_client_socket; needed here by the
+ * #close/#discard! call sites further up the file. */
+static void mysql2_win32_unwrap_socket(mysql_client_wrapper *wrapper);
+#endif
+
 #if defined(HAVE_MYSQL_NET_VIO) || defined(HAVE_ST_NET_VIO)
   #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
 #elif defined(HAVE_MYSQL_NET_PVIO) || defined(HAVE_ST_NET_PVIO)

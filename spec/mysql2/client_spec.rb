@@ -877,20 +877,21 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect(@client.closed?).to eql(true)
     end
 
-    # The peer-closed peek behind this is POSIX-only (see mysql2_socket_peer_closed,
-    # ext/mysql2/client.c); closed? on Windows still only checks CONNECTED(),
-    # unchanged, so a server-side KILL isn't detected without a further command.
-    unless RUBY_PLATFORM =~ /mingw|mswin/
-      it "should detect a connection killed server-side, without waiting for a command to fail" do
-        supervisor = new_client
-        connection_id = @client.thread_id
-        supervisor.query("KILL #{connection_id}")
+    it "should detect a connection killed server-side, without waiting for a command to fail" do
+      # The peer-closed peek behind this is POSIX-only (see
+      # mysql2_socket_peer_closed, ext/mysql2/client.c); closed? on Windows
+      # still only checks CONNECTED(), unchanged, so a server-side KILL
+      # isn't detected without a further command.
+      skip "not implemented on Windows -- see mysql2_socket_peer_closed in client.c" if RUBY_PLATFORM =~ /mingw|mswin/
 
-        Timeout.timeout(5) do
-          sleep 0.05 until @client.closed?
-        end
-        expect(@client.closed?).to be true
+      supervisor = new_client
+      connection_id = @client.thread_id
+      supervisor.query("KILL #{connection_id}")
+
+      Timeout.timeout(5) do
+        sleep 0.05 until @client.closed?
       end
+      expect(@client.closed?).to be true
     end
 
     it "should not report a healthy idle connection as closed" do

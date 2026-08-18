@@ -627,6 +627,36 @@ static void invalidate_socket(mysql_client_wrapper *wrapper)
     wrapper->client->net.fd = -1;
   }
 }
+
+/* Whether the peer has cleanly closed the TCP connection (a graceful FIN --
+ * another session's KILL, wait_timeout expiring server-side, a proxy or
+ * load balancer dropping an idle connection) without mysql2 or the client
+ * library having done anything yet to notice: CONNECTED() only checks that
+ * a vio/fd exists, not that the peer is actually still there, so closed?
+ * can report false right up until the next real command happens to fail.
+ *
+ * A single-byte non-blocking peek: MSG_PEEK leaves any real data
+ * untouched, which is safe here because this is only ever called from an
+ * idle-connection check (closed?), never while a query's response is
+ * actually expected. MSG_DONTWAIT makes it non-blocking regardless of the
+ * socket's own blocking mode, so this can't stall the caller. recv()
+ * returning 0 is the standard EOF signal for a clean peer close; EAGAIN/
+ * EWOULDBLOCK means nothing is waiting to be read, the ordinary idle
+ * state -- both are cheap, common outcomes on every call. Actual queued
+ * data, or any other error, is treated as still-connected rather than
+ * guessed at: this exists to catch the common, unambiguous dead case
+ * promptly, not to be the sole authority on liveness. A connection that's
+ * broken in some other way still surfaces on the next real command,
+ * exactly as it does today without this check. */
+static bool mysql2_socket_peer_closed(int fd) {
+  char buf[1];
+  ssize_t n;
+
+  if (fd < 0) return false;
+
+  n = recv(fd, buf, 1, MSG_PEEK | MSG_DONTWAIT);
+  return n == 0;
+}
 #endif /* _WIN32 */
 
 void mysql2_enqueue_pending_stmt_close(mysql_client_wrapper *wrapper, MYSQL_STMT *stmt, uintptr_t wrapper_key)
@@ -1306,7 +1336,16 @@ static VALUE rb_mysql_client_close(VALUE self) {
  */
 static VALUE rb_mysql_client_closed(VALUE self) {
   GET_CLIENT(self);
-  return CONNECTED(wrapper) ? Qfalse : Qtrue;
+  if (!CONNECTED(wrapper)) return Qtrue;
+#ifndef _WIN32
+  /* CONNECTED() alone only confirms a vio/fd exists, not that the peer is
+   * still there -- see mysql2_socket_peer_closed. Scoped to closed? rather
+   * than folded into CONNECTED()/REQUIRE_CONNECTED generally: this is a
+   * real recv() syscall, unlike the rest of that check, and
+   * REQUIRE_CONNECTED runs on every command. */
+  if (mysql2_socket_peer_closed(wrapper->client->net.fd)) return Qtrue;
+#endif
+  return Qfalse;
 }
 
 /* call-seq:

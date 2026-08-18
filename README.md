@@ -454,6 +454,20 @@ connections and on client libraries without the introspection API
 | `TLS_VERIFY_UNKNOWN`      | Verification failed for an unspecified reason.
 | `TLS_VERIFY_ERROR`        | mysql2's own hostname-verification refusal -- forced so the connector's local-peer leniency (which would otherwise accept a self-signed certificate with no CA configured) can't complete the connection anyway.
 
+`Client#tls_info` is `nil` on MySQL (libmysqlclient has no C-level introspection
+API), but the server's session status variables are visible to any client
+library, so a query works everywhere `tls_info` doesn't:
+
+``` ruby
+client.query("SHOW SESSION STATUS LIKE 'Ssl_%'").each { |row| p row }
+# Ssl_cipher, Ssl_version, etc. -- empty values mean the connection isn't encrypted
+```
+
+See MySQL's
+[Monitoring Current Client Session TLS Protocol and Cipher](https://dev.mysql.com/doc/refman/en/encrypted-connection-protocols-ciphers.html#encrypted-connection-protocol-monitoring)
+and MariaDB's
+[Verifying that a Connection is Using TLS](https://mariadb.com/docs/server/security/encryption/data-in-transit-encryption/securing-connections-for-client-and-server#verifying-that-a-connection-is-using-tls).
+
 ### Secure auth
 
 Starting with MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).

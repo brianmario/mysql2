@@ -1,6 +1,5 @@
 #include <mysql2_ext.h>
 
-#include <ctype.h>
 #include <limits.h>
 #include <string.h>
 
@@ -444,16 +443,28 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
     name_length = name_end ? (size_t)(name_end - field->name) : field->name_length;
     field_name = field->name;
 
-    /* :downcase_keys lowercases the ASCII a-z/A-Z range only, byte by byte.
-     * Safe on a UTF-8 name: every continuation byte in a multibyte sequence
-     * is >= 0x80, outside that range, so this can never corrupt one -- it
-     * just doesn't case-fold non-ASCII letters, which is fine since column
-     * and alias names are effectively always ASCII in practice. */
+    /* :downcase_keys lowercases the ASCII A-Z range only, byte by byte, by
+     * hand rather than via tolower(3): tolower() is locale-dependent, and
+     * MySQL's wire format is not (the same class of bug this project has
+     * hit before with strtod() -- see result.c's DECIMAL/FLOAT parsing).
+     * Under an ISO8859-1-family locale, tolower(0xC3) returns 0xE3,
+     * corrupting the first byte of 'À' (U+00C0) instead of leaving it
+     * alone -- confirmed directly, not just suspected: a locale-independent
+     * A-Z check on a UTF-8 name is safe, because every continuation byte in
+     * a multibyte sequence is >= 0x80, outside that range, so this can
+     * never corrupt one -- it just doesn't case-fold non-ASCII letters.
+     * MySQL identifiers are not restricted to ASCII (a UTF-8 alias like
+     * `fooÀbar` is legal and exercised by this file's specs), so that's a
+     * deliberate scope limit, not a "rare in practice" shortcut:
+     * :downcase_keys folds the ASCII range only, on purpose, rather than
+     * taking on full Unicode case-folding. */
     if (downcase_keys && name_length > 0) {
       size_t i;
       char *buf = ALLOCV_N(char, downcase_holder, name_length);
-      for (i = 0; i < name_length; i++)
-        buf[i] = (char)tolower((unsigned char)field_name[i]);
+      for (i = 0; i < name_length; i++) {
+        unsigned char c = (unsigned char)field_name[i];
+        buf[i] = (c >= 'A' && c <= 'Z') ? (char)(c + ('a' - 'A')) : (char)c;
+      }
       field_name = buf;
     }
 

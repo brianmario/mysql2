@@ -2564,21 +2564,26 @@ static VALUE set_connect_timeout(VALUE self, VALUE value) {
 /* call-seq:
  *    client.read_timeout = seconds
  *
- * read_timeout is enforced independently of the underlying client library:
- * do_query (client.c) re-reads the @read_timeout ivar set here on every
- * query and bounds the wait with rb_wait_for_single_fd itself, so this is
- * safe to change on an already-connected client -- unlike every other
+ * On POSIX, read_timeout is enforced independently of the underlying
+ * client library: do_query (client.c, #ifndef _WIN32 only) re-reads the
+ * @read_timeout ivar set here on every query and bounds the wait with
+ * rb_wait_for_single_fd itself, so it's safe to change on an
+ * already-connected client there -- unlike every other
  * mysql_options()-backed setter in this file, it does not need
  * REQUIRE_NOT_CONNECTED. mysql_options(MYSQL_OPT_READ_TIMEOUT) is still
  * called pre-connect, for parity with what the client library itself
- * reports (Client#read_timeout predates this and is unaffected either way),
- * but it's skipped once connected: neither libmysqlclient nor MariaDB
- * Connector/C apply it to an established session (both document
+ * reports, but is skipped once connected: neither libmysqlclient nor
+ * MariaDB Connector/C apply it to an established session (both document
  * mysql_options() as pre-connect-only, and both implementations confirm
  * it: the call only ever stores a struct field, applied to the live
- * connection exactly once, during the initial connect sequence), so calling
- * it here would either raise (REQUIRE_NOT_CONNECTED) or silently do
- * nothing -- worse than just not calling it. */
+ * connection exactly once, during the initial connect sequence).
+ *
+ * Windows has no equivalent to do_query's wait loop at all -- rb_mysql_query
+ * just blocks on rb_mysql_client_async_result there (see the #else branch)
+ * -- so on Windows read_timeout is enforced purely by whatever
+ * mysql_options() applied at connect, same as write_timeout, and a live
+ * change genuinely cannot take effect. Raise there instead of silently
+ * accepting a value that would never do anything. */
 static VALUE set_read_timeout(VALUE self, VALUE value) {
   long int sec;
   GET_CLIENT(self);
@@ -2587,10 +2592,18 @@ static VALUE set_read_timeout(VALUE self, VALUE value) {
   if (sec < 0) {
     rb_raise(cMysql2Error, "read_timeout must be a positive integer, you passed %ld", sec);
   }
-  rb_ivar_set(self, intern_read_timeout, value);
   if (CONNECTED(wrapper)) {
+#ifndef _WIN32
+    rb_ivar_set(self, intern_read_timeout, value);
     return value;
+#else
+    rb_raise(cMysql2Error, "read_timeout cannot be changed on an already-connected client on Windows -- "
+             "there is no independent wait-timeout mechanism there (see do_query in client.c), and neither "
+             "libmysqlclient nor MariaDB Connector/C apply MYSQL_OPT_READ_TIMEOUT to a live connection, only "
+             "at the next connect. Open a new Client instead.");
+#endif
   }
+  rb_ivar_set(self, intern_read_timeout, value);
   return _mysql_client_options(self, MYSQL_OPT_READ_TIMEOUT, value);
 }
 

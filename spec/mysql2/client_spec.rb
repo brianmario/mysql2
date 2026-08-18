@@ -1125,12 +1125,26 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   context "read_timeout=/write_timeout= on a live connection" do
     it "changes read_timeout enforcement mid-session" do
+      # do_query's ivar-based wait loop (client.c) is #ifndef _WIN32 only;
+      # on Windows read_timeout is enforced purely by whatever
+      # mysql_options() applied at connect, same as write_timeout, and a
+      # live change raises instead -- see the Windows-only spec below.
+      skip "not implemented on Windows -- see set_read_timeout in client.c" if RUBY_PLATFORM =~ /mingw|mswin/
+
       client = new_client(read_timeout: 10)
       client.read_timeout = 1
 
       start = clock_time
       expect { client.query("SELECT SLEEP(3)") }.to raise_error(Mysql2::Error::TimeoutError)
       expect(clock_time - start).to be < 2
+    end
+
+    it "raises when read_timeout is changed on an already-connected client on Windows" do
+      skip "read_timeout=/query(read_timeout:) work live on non-Windows -- see the spec above" unless RUBY_PLATFORM =~ /mingw|mswin/
+
+      client = new_client(read_timeout: 10)
+      expect { client.read_timeout = 1 }.to raise_error(Mysql2::Error, /already-connected/)
+      expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
     end
 
     it "raises when write_timeout is changed on an already-connected client" do
@@ -1154,6 +1168,8 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   context "#query per-query :read_timeout / :write_timeout" do
     it "overrides read_timeout for a single query without changing the connection default" do
+      skip "not implemented on Windows -- see set_read_timeout in client.c" if RUBY_PLATFORM =~ /mingw|mswin/
+
       client = new_client(read_timeout: 10)
 
       start = clock_time
@@ -1162,10 +1178,21 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "restores the connection's read_timeout after a per-query override, even without a timeout firing" do
+      skip "not implemented on Windows -- see set_read_timeout in client.c" if RUBY_PLATFORM =~ /mingw|mswin/
+
       client = new_client(read_timeout: 10)
 
       client.query("SELECT SLEEP(1)", read_timeout: 5)
       expect(client.read_timeout).to eql(10)
+    end
+
+    it "raises a per-query :read_timeout on Windows instead of silently not applying it" do
+      skip "read_timeout: works live on non-Windows -- see the specs above" unless RUBY_PLATFORM =~ /mingw|mswin/
+
+      client = new_client(read_timeout: 10)
+      expect { client.query("SELECT 1", read_timeout: 5) }.to raise_error(Mysql2::Error, /already-connected/)
+      expect(client.read_timeout).to eql(10)
+      expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
     end
 
     it "restores the connection's read_timeout after a per-query override raises for another reason" do

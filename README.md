@@ -308,9 +308,10 @@ type of connection to make, with special interpretation you should be aware of:
 `:read_timeout` and `:write_timeout` are asymmetric in how -- and when -- they
 can be changed, because mysql2 enforces them by different mechanisms:
 
-* `:read_timeout` is enforced by mysql2 itself, independent of the
-  underlying client library, so `Client#read_timeout=` can change it on an
-  already-connected client and it takes effect on the very next query:
+* On non-Windows platforms, `:read_timeout` is enforced by mysql2 itself,
+  independent of the underlying client library, so `Client#read_timeout=`
+  can change it on an already-connected client and it takes effect on the
+  very next query:
 
   ``` ruby
   client.read_timeout = 2
@@ -326,7 +327,15 @@ can be changed, because mysql2 enforces them by different mechanisms:
   client.query("SELECT ...", read_timeout: 2)
   ```
 
-* `:write_timeout` has no such mechanism: mysql2's own query-sending call is
+  Windows has no equivalent to the wait loop this relies on -- a query
+  there just blocks until the result is ready, with nothing watching for a
+  timeout independently of the client library -- so `read_timeout` is
+  enforced there the same way `write_timeout` is everywhere (see below):
+  set once, at `Mysql2::Client.new`. `read_timeout=` and the per-query
+  `read_timeout:` option both raise on an already-connected client on
+  Windows, rather than silently accepting a value that would never apply.
+
+* `:write_timeout` has no live mechanism on any platform: mysql2's own query-sending call is
   a single blocking library call with nothing watching it, so enforcement is
   entirely up to the underlying client library's `mysql_options()` --
   which both libmysqlclient and MariaDB Connector/C apply to a connection

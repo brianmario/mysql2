@@ -2156,6 +2156,30 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "query_options[:database] (#437)" do
+    # :database only takes effect at connect time; mutating it in
+    # query_options afterward used to silently do nothing. Rather than
+    # leave a decoy key around, it's dropped from query_options entirely --
+    # #database (always current, kept in sync by #select_db too) is the
+    # supported way to read or change the active database.
+    it "is not present in query_options after connecting" do
+      client = new_client(database: 'test')
+      expect(client.query_options).not_to have_key(:database)
+    end
+
+    it "is not present in query_options even when no database was given" do
+      client = new_client(database: nil)
+      expect(client.query_options).not_to have_key(:database)
+    end
+
+    it "does not reappear in query_options after #select_db" do
+      client = new_client(database: nil)
+      client.select_db(DatabaseCredentials['root']['database'])
+      expect(client.query_options).not_to have_key(:database)
+      expect(client.database).to eq(DatabaseCredentials['root']['database'])
+    end
+  end
+
   context 'database' do
     before(:example) do
       2.times do |i|

@@ -307,6 +307,16 @@ module Mysql2
       # avoid logging sensitive data via #inspect
       @query_options.delete(:password)
       @query_options.delete(:pass)
+
+      # :database is a connect-time-only setting: libmysqlclient never
+      # re-reads it, so leaving it in @query_options would let callers set
+      # query_options[:database] = "x" and see it silently do nothing
+      # (#437). #database always reflects the live, current database
+      # (updated by #select_db too), so it's the correct place to look --
+      # drop the inert copy here rather than let it linger as a decoy.
+      @query_options.delete(:database)
+      @query_options.delete(:dbname)
+      @query_options.delete(:db)
     end
 
     class << self

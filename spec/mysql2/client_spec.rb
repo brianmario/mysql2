@@ -1733,10 +1733,27 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   if RUBY_PLATFORM =~ /mingw|mswin/
-    it "#socket should raise as it's not supported" do
+    # rb_w32_wrap_io_handle wraps the native SOCKET as a CRT file descriptor
+    # (#647), the same technique ruby-pg's Connection#socket_io has used
+    # since 2013. Present on any Ruby this project's CI actually tests.
+    it "#socket should return a Fixnum (file descriptor from C)" do
+      expect(@client.socket).to be_an_instance_of(0.class)
+    end
+
+    it "#socket should require an open connection" do
+      @client.close
       expect do
         @client.socket
-      end.to raise_error(Mysql2::Error, /Raw access to the mysql file descriptor isn't supported on Windows/)
+      end.to raise_error(Mysql2::Error)
+    end
+
+    it "#socket should return the same wrapped fd across repeated calls" do
+      expect(@client.socket).to eql(@client.socket)
+    end
+
+    it "#socket should be usable with IO.for_fd" do
+      io_wrapper = IO.for_fd(@client.socket, autoclose: false)
+      expect(IO.select([io_wrapper], nil, nil, 0)).to be_nil # nothing to read yet
     end
   end
 

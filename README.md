@@ -380,6 +380,7 @@ Notes:
 | MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ |
 
 ✅ means the option is supported with this client library.
+
 ❌ means the option will raise `Mysql2::Error` with this client library.
 
 Runtime client library and TLS feature introspection:

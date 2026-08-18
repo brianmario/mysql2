@@ -26,12 +26,19 @@ module Mysql2
     # follows the same pattern here. If both spellings are given, the newer
     # :tls_* name wins -- the same precedence an explicit :ssl_mode already
     # has over :sslverify.
+    #
+    # :tls_mode/:ssl_mode is different: neither MySQL nor MariaDB has a
+    # "tls-mode" config-file alias for ssl-mode anywhere -- this one is
+    # mysql2's own invention, purely for :tls_* naming consistency. If
+    # upstream ever adds a real --tls-mode/tlsMode with different
+    # semantics, this alias becomes wrong and will need to be revisited.
     TLS_OPTION_ALIASES = {
       tls_key: :sslkey,
       tls_cert: :sslcert,
       tls_ca: :sslca,
       tls_capath: :sslcapath,
       tls_cipher: :sslcipher,
+      tls_mode: :ssl_mode,
     }.freeze
     private_constant :TLS_OPTION_ALIASES
 

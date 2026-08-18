@@ -440,6 +440,14 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
           expect(client.query('SELECT 1 AS one').first['one']).to eql(1)
         end
       end
+
+      it "connects the same using :tls_mode as with :ssl_mode" do
+        aliased_overrides = option_overrides.merge(tls_mode: :required).reject { |k, _| k == :sslverify }
+
+        new_client(aliased_overrides) do |client|
+          expect(client.query('SELECT 1 AS one').first['one']).to eql(1)
+        end
+      end
     end
   end
 
@@ -500,6 +508,12 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
           # the bogus path never reaches a real handshake; the warning precedes it.
         end
       end.not_to output(/were both given with different values/).to_stderr
+    end
+
+    it "warns when :ssl_mode and its :tls_mode alias are given with different values" do
+      expect do
+        new_client(ssl_mode: :required, tls_mode: :disabled)
+      end.to output(/:ssl_mode and :tls_mode were both given with different values; :tls_mode wins/).to_stderr
     end
   end
 

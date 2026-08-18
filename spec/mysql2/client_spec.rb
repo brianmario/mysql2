@@ -21,6 +21,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         new_client(default_file: cnf_file)
       end.not_to raise_error
     end
+
+    it "is not present in query_options after connecting (#493)" do
+      # :default_file/:default_group only take effect at connect time; like
+      # :database (#437), leaving them in query_options would make
+      # Client.default_query_options.merge!(default_file: ...) look like it
+      # configures future connections when it silently doesn't.
+      client = new_client(default_file: cnf_file, default_group: "test")
+      expect(client.query_options).not_to have_key(:default_file)
+      expect(client.query_options).not_to have_key(:default_group)
+    end
   end
 
   it "should raise a Mysql::Error::ConnectionError upon connection failure" do

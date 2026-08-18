@@ -317,6 +317,10 @@ module Mysql2
       @query_options.delete(:database)
       @query_options.delete(:dbname)
       @query_options.delete(:db)
+
+      # :default_file/:default_group: same story as :database above, but with
+      # no live value to read back -- nothing but a decoy (#493).
+      %i[default_file default_group].each { |k| @query_options.delete(k) }
     end
 
     class << self

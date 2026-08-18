@@ -958,6 +958,31 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       expect(test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2000-01-01 11:44:00')
     end
 
+    context "a TIME value outside a single day (#719)" do
+      # Binary-protocol TIME decoding used to ignore MYSQL_TIME.neg entirely,
+      # so a negative TIME silently came back with the wrong sign (positive
+      # instead of negative) rather than nil/raising like the text protocol.
+      before(:context) do
+        new_client do |client|
+          client.query("DROP TABLE IF EXISTS mysql2_time_duration_stmt_test")
+          client.query("CREATE TABLE mysql2_time_duration_stmt_test (t TIME(6))")
+          %w[24:00:00 24:00:01 -01:00:00 838:59:59 -838:59:59 12:34:56.25].each do |t|
+            client.query("INSERT INTO mysql2_time_duration_stmt_test VALUES ('#{t}')")
+          end
+        end
+      end
+
+      after(:context) do
+        new_client { |client| client.query("DROP TABLE IF EXISTS mysql2_time_duration_stmt_test") }
+      end
+
+      it "returns the same duration-anchored Time via a prepared statement as via a plain query" do
+        text = @client.query("SELECT t FROM mysql2_time_duration_stmt_test ORDER BY t").map { |r| r['t'] }
+        stmt = @client.prepare("SELECT t FROM mysql2_time_duration_stmt_test ORDER BY t").execute.map { |r| r['t'] }
+        expect(stmt).to eql(text)
+      end
+    end
+
     it "should return Date for a DATE value" do
       expect(test_result['date_test']).to be_an_instance_of(Date)
       expect(test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')

@@ -303,6 +303,41 @@ type of connection to make, with special interpretation you should be aware of:
 * An IPv4 or IPv6 address will result in a TCP connection.
 * Any other value will be looked up as a hostname for a TCP connection.
 
+### read_timeout and write_timeout
+
+`:read_timeout` and `:write_timeout` are asymmetric in how -- and when -- they
+can be changed, because mysql2 enforces them by different mechanisms:
+
+* `:read_timeout` is enforced by mysql2 itself, independent of the
+  underlying client library, so `Client#read_timeout=` can change it on an
+  already-connected client and it takes effect on the very next query:
+
+  ``` ruby
+  client.read_timeout = 2
+  client.ping
+  client.read_timeout = 600
+  client.query("...")
+  ```
+
+  It can also be overridden for a single query without touching the
+  connection-wide default:
+
+  ``` ruby
+  client.query("SELECT ...", read_timeout: 2)
+  ```
+
+* `:write_timeout` has no such mechanism: mysql2's own query-sending call is
+  a single blocking library call with nothing watching it, so enforcement is
+  entirely up to the underlying client library's `mysql_options()` --
+  which both libmysqlclient and MariaDB Connector/C apply to a connection
+  exactly once, during the initial connect. `mysql_options()` is documented
+  as callable only between `mysql_init()` and `mysql_real_connect()`; on an
+  already-connected handle it doesn't raise, but the value it stores is
+  never read again for that session. Because of this, `write_timeout=` on
+  an already-connected `Client` raises rather than silently doing nothing,
+  and `:write_timeout` isn't accepted as a per-query option at all. Set it
+  once, at `Mysql2::Client.new`.
+
 ### Secure connections with SSL/TLS
 
 The mysql2 gem can configure the underlying MySQL/MariaDB client library to

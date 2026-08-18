@@ -1,6 +1,6 @@
 module Mysql2
   class Client
-    attr_reader :query_options, :read_timeout
+    attr_reader :query_options, :read_timeout, :write_timeout
 
     def self.default_query_options
       @default_query_options ||= {
@@ -233,10 +233,42 @@ module Mysql2
     EMPTY_QUERY_OPTIONS = {}.freeze
     private_constant :EMPTY_QUERY_OPTIONS
 
+    # :read_timeout may be overridden for a single query without changing
+    # the connection-wide default: read_timeout= is safe to call on a live
+    # connection (do_query in client.c re-reads the ivar it sets on every
+    # query), so this brackets it around the call and restores the prior
+    # value afterward. Safe under the fiber-ownership guard: only one fiber
+    # can be mid-query on this connection at a time, so nothing else can
+    # observe the temporarily-overridden value.
+    #
+    # :write_timeout has no per-query equivalent -- and no live equivalent
+    # at all, see write_timeout= -- so it's rejected here rather than
+    # silently accepted and ignored, which would look like it worked.
     def query(sql, options = EMPTY_QUERY_OPTIONS)
-      Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_NEVER) do
-        _query(sql, @query_options.merge(options))
+      # @query_options.merge(options) is also what raises TypeError for an
+      # explicitly nil/false options argument -- do that first, so the keys
+      # checks below never have to special-case a non-Hash options. Checked
+      # against the raw options argument, not the merged/defaulted opts:
+      # @query_options itself can carry :read_timeout (set at Client.new),
+      # which must not be mistaken for a per-call override on every query.
+      opts = @query_options.merge(options)
+
+      if options.key?(:write_timeout)
+        raise ArgumentError, "write_timeout cannot be set per-query, only at Client.new or via write_timeout= " \
+          "before connecting -- mysql2 has no way to enforce a write deadline on an already-connected client"
       end
+
+      read_timeout_overridden = false
+      if options.key?(:read_timeout)
+        prior_read_timeout = @read_timeout
+        self.read_timeout = options[:read_timeout]
+        read_timeout_overridden = true
+      end
+      Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_NEVER) do
+        _query(sql, opts)
+      end
+    ensure
+      @read_timeout = prior_read_timeout if read_timeout_overridden
     end
 
     def query_info

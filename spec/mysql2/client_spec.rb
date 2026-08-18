@@ -1123,6 +1123,71 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(client.read_timeout).to be_nil
   end
 
+  context "read_timeout=/write_timeout= on a live connection" do
+    it "changes read_timeout enforcement mid-session" do
+      client = new_client(read_timeout: 10)
+      client.read_timeout = 1
+
+      start = clock_time
+      expect { client.query("SELECT SLEEP(3)") }.to raise_error(Mysql2::Error::TimeoutError)
+      expect(clock_time - start).to be < 2
+    end
+
+    it "raises when write_timeout is changed on an already-connected client" do
+      # Unlike read_timeout, mysql2 has no enforcement mechanism of its own
+      # for writes; the underlying libraries only apply
+      # MYSQL_OPT_WRITE_TIMEOUT once, during the initial connect (both
+      # libmysqlclient and MariaDB Connector/C -- mysql_options() is
+      # documented as pre-connect-only, and neither implementation reapplies
+      # it to a live session). Raise rather than silently accept a value
+      # that would never take effect.
+      client = new_client
+      expect { client.write_timeout = 5 }.to raise_error(Mysql2::Error, /already-connected/)
+      expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
+    end
+
+    it "exposes write_timeout set at connect time" do
+      client = new_client(write_timeout: 7)
+      expect(client.write_timeout).to eql(7)
+    end
+  end
+
+  context "#query per-query :read_timeout / :write_timeout" do
+    it "overrides read_timeout for a single query without changing the connection default" do
+      client = new_client(read_timeout: 10)
+
+      start = clock_time
+      expect { client.query("SELECT SLEEP(3)", read_timeout: 1) }.to raise_error(Mysql2::Error::TimeoutError)
+      expect(clock_time - start).to be < 2
+    end
+
+    it "restores the connection's read_timeout after a per-query override, even without a timeout firing" do
+      client = new_client(read_timeout: 10)
+
+      client.query("SELECT SLEEP(1)", read_timeout: 5)
+      expect(client.read_timeout).to eql(10)
+    end
+
+    it "restores the connection's read_timeout after a per-query override raises for another reason" do
+      client = new_client(read_timeout: 10)
+
+      expect { client.query("SELECT 1", read_timeout: -1) }.to raise_error(Mysql2::Error, /positive integer/)
+      expect(client.read_timeout).to eql(10)
+      expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
+    end
+
+    it "rejects a per-query :write_timeout instead of silently ignoring it" do
+      client = new_client
+      expect { client.query("SELECT 1", write_timeout: 5) }.to raise_error(ArgumentError, /write_timeout/)
+      expect(client.query("SELECT 1 AS one").first).to eql('one' => 1)
+    end
+
+    it "still raises TypeError for an explicit nil options argument" do
+      client = new_client
+      expect { client.query("SELECT 1", nil) }.to raise_error(TypeError)
+    end
+  end
+
   it "should set default program_name in connect_attrs" do
     skip("DON'T WORRY, THIS TEST PASSES - but PERFORMANCE SCHEMA is not enabled in your MySQL daemon.") unless performance_schema_enabled
     client = new_client

@@ -930,12 +930,9 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     end
 
     it "returns the same Float for a FLOAT value via a prepared statement as via a plain query" do
-      # #1276: a prepared statement's binary-protocol FLOAT decoding used
-      # to upconvert the raw float32 bits to a double directly, surfacing
-      # every digit float32 stores (e.g. 0.3333333432674408) instead of
-      # matching what the same column shows via a plain query, where the
-      # server's own text-protocol formatting already applies (FLT_DIG
-      # significant digits, or FLOAT(M,D)'s declared decimal places).
+      # A FLOAT column's value should read the same regardless of protocol
+      # (#1276): FLT_DIG significant digits with no explicit precision,
+      # or FLOAT(M,D)'s declared decimal places otherwise.
       @client.query "DROP TABLE IF EXISTS mysql2_float_parity_test"
       @client.query "CREATE TABLE mysql2_float_parity_test (a FLOAT, b FLOAT(10,2))"
       @client.query "INSERT INTO mysql2_float_parity_test VALUES (#{1.0 / 3}, 123456.789)"

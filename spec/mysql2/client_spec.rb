@@ -1081,6 +1081,13 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end.to raise_error(Mysql2::Error, /command is not allowed/)
     end
 
+    it "is disabled by default when :local_infile is not given (#1127)" do
+      client = new_client
+      expect do
+        client.query "LOAD DATA LOCAL INFILE 'spec/test_data' INTO TABLE infileTest"
+      end.to raise_error(Mysql2::Error, /command is not allowed/)
+    end
+
     it "should raise an error when a non-existent file is loaded" do
       client = new_client(local_infile: true)
       expect do

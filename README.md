@@ -290,6 +290,12 @@ Mysql2::Client.new(
   )
 ```
 
+`:local_infile` defaults to `false`. Left to the client library's own
+default, `LOAD DATA LOCAL INFILE` is typically enabled, which lets a
+malicious or compromised server read arbitrary files off the client
+machine. Pass `:local_infile => true` to opt back in if you actually use
+it.
+
 ### Connecting to MySQL on localhost and elsewhere
 
 The underlying MySQL client library uses the `:host` parameter to determine the

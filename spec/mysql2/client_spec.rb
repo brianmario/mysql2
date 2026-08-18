@@ -37,6 +37,12 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
   end
 
   it "should connect via TLS" do
+    # have_ssl was removed in newer MySQL (SSL is unconditionally compiled
+    # in there); an empty result set means "assume available", matching the
+    # "context SSL" before(:example) hook's own fallback below.
+    ssl_disabled = @client.query("SHOW VARIABLES LIKE 'have_ssl'").any? { |x| %w[OFF DISABLED].include?(x['Value']) }
+    skip("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
+
     client = new_client(ssl_mode: 'required')
     expect(client.ssl_cipher).not_to be_empty
   end
@@ -419,6 +425,30 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         new_client(option_overrides.merge(tls_version: 'TLSv1.2'))
       end.to raise_error(Mysql2::Error, /tls_version/)
     end
+
+    context "legacy :ssl* / :tls_* option aliasing" do
+      it "connects the same using :tls_key/:tls_cert/:tls_ca as with :sslkey/:sslcert/:sslca" do
+        aliased_overrides = option_overrides
+                            .reject { |k, _| %i[sslkey sslcert sslca].include?(k) }
+                            .merge(
+                              tls_key: option_overrides[:sslkey],
+                              tls_cert: option_overrides[:sslcert],
+                              tls_ca: option_overrides[:sslca],
+                            )
+
+        new_client(aliased_overrides) do |client|
+          expect(client.query('SELECT 1 AS one').first['one']).to eql(1)
+        end
+      end
+
+      it "connects the same using :tls_mode as with :ssl_mode" do
+        aliased_overrides = option_overrides.merge(tls_mode: :required).reject { |k, _| k == :sslverify }
+
+        new_client(aliased_overrides) do |client|
+          expect(client.query('SELECT 1 AS one').first['one']).to eql(1)
+        end
+      end
+    end
   end
 
   context "option coherence warnings" do
@@ -459,6 +489,32 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         new_client
       end.not_to output(/:sslkey and :sslcert only take effect together|:cache_rows is ignored/).to_stderr
     end
+
+    it "warns when a legacy :ssl* option and its :tls_* alias are given with different values" do
+      expect do
+        begin
+          new_client(sslkey: '/path/to/legacy-key.pem', tls_key: '/path/to/new-key.pem', tls_cert: '/path/to/client-cert.pem')
+        rescue Mysql2::Error
+          # the bogus paths never reach a real handshake; the warning precedes it.
+        end
+      end.to output(/:sslkey and :tls_key were both given with different values; :tls_key wins/).to_stderr
+    end
+
+    it "does not warn when a legacy :ssl* option and its :tls_* alias are given the same value" do
+      expect do
+        begin
+          new_client(sslkey: '/path/to/key.pem', tls_key: '/path/to/key.pem', tls_cert: '/path/to/client-cert.pem')
+        rescue Mysql2::Error
+          # the bogus path never reaches a real handshake; the warning precedes it.
+        end
+      end.not_to output(/were both given with different values/).to_stderr
+    end
+
+    it "warns when :ssl_mode and its :tls_mode alias are given with different values" do
+      expect do
+        new_client(ssl_mode: :required, tls_mode: :disabled)
+      end.to output(/:ssl_mode and :tls_mode were both given with different values; :tls_mode wins/).to_stderr
+    end
   end
 
   context "TLS option validation" do
@@ -484,6 +540,14 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       expect do
         new_client(tls_peer_fingerprint: 'ab' * 32)
       end.to raise_error(Mysql2::Error::ConnectionError, /tls_peer_fingerprint/)
+    end
+
+    it "refuses :tls_passphrase on client libraries that have no way to decrypt an encrypted key" do
+      skip "this build supports :tls_passphrase" if Mysql2::Client::TLS_PASSPHRASE_SUPPORTED
+
+      expect do
+        new_client(tls_passphrase: 'secret')
+      end.to raise_error(Mysql2::Error::ConnectionError, /tls_passphrase/)
     end
 
     it "refuses verify_identity outright when this build cannot enforce hostname verification" do

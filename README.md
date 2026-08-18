@@ -303,81 +303,123 @@ type of connection to make, with special interpretation you should be aware of:
 * An IPv4 or IPv6 address will result in a TCP connection.
 * Any other value will be looked up as a hostname for a TCP connection.
 
-### SSL/TLS options
+### Secure connections with SSL/TLS
 
-Setting any of the following options will enable an SSL/TLS connection, but
-only if your MySQL client library and server have been compiled with SSL
-support. MySQL client library defaults will be used for any parameters that are
-left out or set to nil. Relative paths are allowed, and may be required by
-managed hosting providers such as Heroku.
+The mysql2 gem can configure the underlying MySQL/MariaDB client library to
+connect to the database server using a secure SSL/TLS connection. Setting
+any `:tls_*` option enables a secure connection, but `:tls_mode` is the
+option that actually controls whether it's enforced and verified.
 
-``` ruby
-Mysql2::Client.new(
-  # ...options as above...,
-  :sslkey => '/path/to/client-key.pem',
-  :sslcert => '/path/to/client-cert.pem',
-  :sslca => '/path/to/ca-cert.pem',
-  :sslcapath => '/path/to/cacerts',
-  :sslcipher => 'DHE-RSA-AES256-SHA',
-  :sslverify => true, # Equivalent to ssl_mode: :verify_identity (see below)
-  :ssl_mode => :disabled / :preferred / :required / :verify_ca / :verify_identity,
-  )
-```
+There are important differences in SSL/TLS support between MySQL and MariaDB
+versions, and the client library must be compiled with SSL/TLS enabled.
+Depending on your distribution or local build options, it may be linked with
+OpenSSL 1.x, OpenSSL 3.x, GnuTLS, WolfSSL, or Schannel implementations.
 
-For MySQL versions 5.7.11 and higher, use `:ssl_mode` to prefer or require an
-SSL connection and certificate validation; it offers clearer, more granular
-values than `:sslverify` (see below). For details on each of the `:ssl_mode`
-options, see
-[https://dev.mysql.com/doc/refman/8.0/en/connection-options.html](https://dev.mysql.com/doc/refman/8.0/en/connection-options.html#option_general_ssl-mode).
-
-The `:ssl_mode` option will also set the appropriate MariaDB connection flags:
-
-| `:ssl_mode`        | MariaDB option value                                |
-| ---                | ---                                                 |
-| `:disabled`        | MYSQL_OPT_SSL_ENFORCE = 0                           |
-| `:required`        | MYSQL_OPT_SSL_ENFORCE = 1                           |
-| `:verify_ca`       | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1                |
-| `:verify_identity` | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 + mysql2's own hostname verification |
-
-MYSQL_OPT_SSL_VERIFY_SERVER_CERT verifies the CA at most: despite its
-MySQL-derived name, MariaDB Connector/C decides whether to check the
-hostname from the peer address, and never checks it for peers it considers
-local (127.0.0.1, ::1, or socket connections). mysql2 enforces
-`:verify_identity` on MariaDB itself, by registering a TLS
-verification callback (MariaDB Connector/C 3.4+) that verifies the
-certificate chain and the hostname (SAN, wildcard, and IP-address matching
-via OpenSSL) on every connection, local peers included.
-
-Two things worth knowing:
-
-* With `:sslca`/`:sslcapath` left unset, the TLS backend resolves its
-  default trust store natively (OpenSSL's default verify paths,
-  `SSL_CERT_FILE`/`SSL_CERT_DIR`, or the platform certificate store) --
-  publicly-CA-signed servers verify with no CA option passed. Under
-  `:verify_identity`, an unverifiable chain is refused at connect time.
-* If the mysql2 build cannot enforce the hostname check (MariaDB
-  Connector/C older than 3.4, or no OpenSSL headers at build time),
-  `ssl_mode: :verify_identity` raises instead of connecting.
-  `Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION` reports the mechanism
-  in effect: `:native` (libmysqlclient), `:callback` (MariaDB + mysql2's
-  verification callback), or `nil` (unenforceable).
-
-`:sslverify => true` is equivalent to `ssl_mode: :verify_identity`.
-`:ssl_mode` is preferred as it has more nuanced options available.
-An explicit `:ssl_mode` takes precedence over `:sslverify`,
-however conflicting values, e.g. `:sslverify => false` alongside
-`:ssl_mode => :verify_ca` raises an exception, as the two
-would otherwise contradict each other.
-
-MariaDB does not support the `:preferred` option; there's no equivalent to
-fall back to. For more information about SSL/TLS in MariaDB, see
+For more information about SSL/TLS in MariaDB, see
 [https://mariadb.com/kb/en/securing-connections-for-client-and-server/](https://mariadb.com/kb/en/securing-connections-for-client-and-server/)
 and [https://mariadb.com/kb/en/mysql_optionsv/#tls-options](https://mariadb.com/kb/en/mysql_optionsv/#tls-options)
 
+#### Modern best practices
+
+A TLS connection with fully-verified certificate chain, hostname matching the
+certificate, and modern TLS v1.2 or v1.3:
+
+``` ruby
+Mysql2::Client.new(
+  host: 'db.example.com',
+  tls_mode: :verify_identity,
+  tls_version: 'TLSv1.2,TLSv1.3',
+)
+```
+
+Modern recommended MySQL/MariaDB versions are:
+
+* **MySQL 5.7.11+ / 8.0+ LTS / 8.4+ LTS / 9.7+ LTS**: use the
+  [MySQL repository](https://dev.mysql.com/doc/mysql-apt-repo-quick-guide/en/).
+* **MariaDB Connector/C 3.4.3+** bundled with MariaDB 11.4.5+ LTS / 11.8+ LTS / 12.3+ LTS: use the
+  [MariaDB repository](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage).
+
+Clients and servers can be mixed vendors and versions, since both speak the
+same MySQL wire protocol and TLS wire protocol. Several common combinations are
+in the project CI matrix.
+
+#### SSL/TLS options
+
+| Option                  | Deprecated Alias | Default | Purpose
+| ---                     | ---              | ---     | ---
+| `:tls_ca`               | `:sslca`         | None    | /path/to/ca-cert.pem
+| `:tls_capath`           | `:sslcapath`     | System dependent | /path/to/cacerts
+| `:tls_cert`             | `:sslcert`       | None    | /path/to/client-cert.pem
+| `:tls_key`              | `:sslkey`        | None    | /path/to/client-key.pem
+| `:tls_version`          |                  | Varies  | Set the allowed TLS versions, comma separated: TLSv1.1, TLSv1.2, TLSv1.3, etc. All versions of SSL were deprecated by [RFC 7568](https://www.rfc-editor.org/rfc/rfc7568) in 2015, and TLSv1.0/TLSv1.1 by [RFC 8996](https://www.rfc-editor.org/rfc/rfc8996) in 2021. Vendor removal of TLSv1.1 and support addition of TLSv1.3 varies. Within TLSv1.2 and TLSv1.3, newer ECDSA certificates enable faster more secure cipher suites.
+| `:tls_cipher`           |                  | Typically any TLS-compatible cipher suite | Set the allowed TLS ciphers in priority order, colon separated: 'DHE-RSA-AES256-SHA:DHE-RSA-AES256-CCM:!AES128-SHA', etc. Note some ciphers are only available in some TLS versions. Impossible combinations will result in connection failures. See [MySQL: TLS Protocols and Ciphers](https://dev.mysql.com/doc/refman/en/encrypted-connection-protocols-ciphers.html) and [OpenSSL: TLS 1.3 Ciphersuites](https://github.com/openssl/openssl/wiki/TLS1.3#ciphersuites)
+|                         | `:sslverify`     | `false`     | _Deprecated._ Boolean. `true` is equivalent to `:ssl_mode => :verify_identity`.
+| `:tls_mode`             | `:ssl_mode`      | `:preferred` | _Replacement for `:sslverify`._ One of `:disabled`, `:preferred`, `:required`, `:verify_ca`, `:verify_identity`. `:preferred` performs no enforcement and silently falls back to a plaintext connection.
+| `:tls_sni_name`         |                  | None        | Hostname sent during TLS handshake, e.g. `'db.example.com'`. Supported by some proxies that route by hostname. Requires MySQL client library 8.1+; unsupported by MariaDB Connector/C.
+| `:tls_passphrase`       |                  | None        | Passphrase if the `:tls_key` file is password-protected. Only supported by MariaDB Connector/C.
+| `:tls_peer_fingerprint` |                  | None        | Server certificate fingerprint in lieu of CA validation. Only supported by MariaDB Connector/C 3.4+.
+| `:tls_peer_fingerprint_list` |             | None        | /path/to/fingerprints. Only supported by MariaDB Connector/C 3.4+.
+
+Notes:
+- Options will be referred to by the modern `:tls_` prefixes going forward.
+- If both a `:tls_*` option and its deprecated alias are given with different values, `:tls_*` wins and a warning is printed.
+- Relative paths are allowed, and may be required by managed hosting providers such as Heroku.
+- Defaults are typical, but may be different based on MySQL/MariaDB client library or SSL/TLS library build options.
+
+#### Version compatibility
+
+| Client library | `:tls_mode` values | `:verify_identity` | `:tls_version` | `:tls_peer_fingerprint` | `:tls_passphrase` | `:tls_sni_name` |
+| --- | --- | --- | --- | --- | --- | --- |
+| MySQL 5.7.11+ / 8.0.x | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ❌ |
+| MySQL 8.1+ / 8.4.x LTS / 9.7.x LTS | all 5, incl. `:preferred` | ✅ native | ✅ | ❌ | ❌ | ✅ |
+| MariaDB Connector/C 3.3.x | 3 of 5 (`:disabled`/`:required`/`:verify_ca`) | ❌ | ❌ | ❌ | ✅ | ❌ |
+| MariaDB Connector/C 3.4.3+ | 4 of 5, no `:preferred` | ✅ via mysql2's callback | ✅ | ✅ | ✅ | ❌ |
+
+✅ means the option is supported with this client library.
+
+❌ means the option will raise `Mysql2::Error` with this client library.
+
+Runtime client library and TLS feature introspection:
+| Variable                                        | Contents
+| ---                                             | --- |
+|`Mysql2::Client.info[:version]`                  | linked client library version
+|`Mysql2::Client.tls_info`                        | TLS connection information (MariaDB Connector/C 3.4.3+), or nil (MySQL, earlier MariaDB)
+|`Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION` | :native (MySQL), :callback (MariaDB Connector/C 3.4.3+), or nil (unenforceable)
+|`Mysql2::Client::TLS_VERSION_SUPPORTED`          | true/false
+|`Mysql2::Client::TLS_SNI_SUPPORTED`              | true/false
+
+#### TLS verification modes
+
+| `:tls_mode`        | MySQL client behavior                               | MariaDB client behavior
+| ---                | ---                                                 | ---
+| `:disabled`        | no TLS                                              | no TLS
+| `:preferred`       | TLS if available, else quiet fallback to plaintext  | not supported
+| `:required`        | TLS required, no certificate verification           | TLS required, no certificate verification
+| `:verify_ca`       | TLS required, CA chain verified                     | TLS required, CA chain verified -- hostname is NOT checked, even for local peers
+| `:verify_identity` | TLS required, CA chain + hostname verified natively | TLS required, CA chain + hostname verified via mysql2's own verification callback (Connector/C 3.4+)
+
+Notes:
+- With `:tls_ca`/`:tls_capath` unset, the TLS backend resolves its
+  default trust store natively, i.e. using OpenSSL's default verify paths,
+  environment variables `SSL_CERT_FILE`/`SSL_CERT_DIR`, or the platform certificate store.
+- With `:verify_ca` or `:verify_identity`, an unverifiable certificate chain is
+  refused at connect time and an exception is raised, `Mysql2::Error::ConnectionError`.
+- With `:verify_identity`, the hostname must also match the certificate subjectAltName,
+  otherwise the connection is refused and an exception is raised, `Mysql2::Error::ConnectionError`.
+- With `:verify_identity`, if the mysql2 gem is built against a client library
+  that does not support hostname verification, an exception is raised without
+  even attempting the connection. This situation will be noted in the message.
+  Either upgrade the client library, or downgrade the connection to `:verify_ca`
+  and accept some risk of hostname uncertainty. Relying on the CA certificate
+  validation only may be acceptable in your use case at your judgment.
+
+#### Certificate fingerprint pinning
+
 On MariaDB Connector/C 3.4+, the server certificate can be pinned by
-fingerprint instead of a CA -- an alternative trust model to
-`:verify_ca`/`:verify_identity` (the connector runs the fingerprint check
-*instead of* the CA/hostname checks, so combining them raises):
+fingerprint instead of a CA. This is alternative trust model to
+`:verify_ca`/`:verify_identity`, ensuring that the specific certificate
+presented by the server matches one that the client trusts. An exception
+is raised if both CA verification and fingerprint verification are configured.
 
 ``` ruby
 Mysql2::Client.new(
@@ -388,50 +430,43 @@ Mysql2::Client.new(
   )
 ```
 
-On client libraries without pinning support (libmysqlclient, MariaDB
-Connector/C before 3.4) these options raise rather than silently
-connecting unpinned.
+#### Inspecting the TLS session
 
 After connecting, `Client#tls_info` describes the TLS session as the
 client library observed it: negotiated protocol and cipher, the peer
 certificate the server actually presented (subject, issuer, validity,
 SHA-256 fingerprint), the bitmask of verification checks the connector
 recorded as failed (`:verify_status`, decodable with the
-`Mysql2::Client::TLS_VERIFY_*` constants -- note a CA-less pinned
-connection legitimately carries `TLS_VERIFY_TRUST`, since the pin rather
-than the chain is its trust anchor), and whether mysql2's
+`Mysql2::Client::TLS_VERIFY_*` constants, and whether mysql2's
 `:verify_identity` enforcement confirmed chain and hostname verification
 for this connection (`:identity_verified`). It returns `nil` for non-TLS
 connections and on client libraries without the introspection API
 (libmysqlclient, MariaDB Connector/C before 3.4).
 
-To restrict which TLS protocol versions the client will negotiate:
+| Constant                  | Purpose |
+| ---                       | ---     |
+| `TLS_VERIFY_OK`           | No verification failure -- the chain and hostname checks that ran passed.
+| `TLS_VERIFY_TRUST`        | Certificate chain isn't trusted against the configured CA (or, for a CA-less pinned connection, no CA was configured at all -- see [Certificate fingerprint pinning](#certificate-fingerprint-pinning)).
+| `TLS_VERIFY_HOST`         | Hostname doesn't match the certificate's SAN/CN, or no hostname was available to check against.
+| `TLS_VERIFY_FINGERPRINT`  | Server certificate doesn't match a pinned `:tls_peer_fingerprint`.
+| `TLS_VERIFY_PERIOD`       | Certificate is outside its validity period (expired or not yet valid).
+| `TLS_VERIFY_REVOKED`      | Certificate has been revoked.
+| `TLS_VERIFY_UNKNOWN`      | Verification failed for an unspecified reason.
+| `TLS_VERIFY_ERROR`        | mysql2's own hostname-verification refusal -- forced so the connector's local-peer leniency (which would otherwise accept a self-signed certificate with no CA configured) can't complete the connection anyway.
+
+`Client#tls_info` is `nil` on MySQL (libmysqlclient has no C-level introspection
+API), but the server's session status variables are visible to any client
+library, so a query works everywhere `tls_info` doesn't:
 
 ``` ruby
-Mysql2::Client.new(
-  # ...options as above...,
-  :tls_version => 'TLSv1.2,TLSv1.3',
-  )
+client.query("SHOW SESSION STATUS LIKE 'Ssl_%'").each { |row| p row }
+# Ssl_cipher, Ssl_version, etc. -- empty values mean the connection isn't encrypted
 ```
 
-A comma-separated list of TLS versions available on your SSL client library,
-e.g. `'TLSv1.2,TLSv1.3'`. Works identically on MySQL (5.7.10+) and MariaDB
-Connector/C (3.4.3+). Raises `Mysql2::Error` on older client libraries rather
-than silently ignoring the option.
-
-To set the TLS Server Name Indication (SNI) hostname sent during the TLS
-handshake, e.g. when connecting through a proxy that routes by hostname:
-
-``` ruby
-Mysql2::Client.new(
-  # ...options as above...,
-  :tls_sni_name => 'db.example.com',
-  )
-```
-
-This requires MySQL client library 8.1 or higher. On older client libraries
-and all versions of MariaDB, passing this option raises `Mysql2::Error`
-rather than silently connecting without it.
+See MySQL's
+[Monitoring Current Client Session TLS Protocol and Cipher](https://dev.mysql.com/doc/refman/en/encrypted-connection-protocols-ciphers.html#encrypted-connection-protocol-monitoring)
+and MariaDB's
+[Verifying that a Connection is Using TLS](https://mariadb.com/docs/server/security/encryption/data-in-transit-encryption/securing-connections-for-client-and-server#verifying-that-a-connection-is-using-tls).
 
 ### Secure auth
 
@@ -456,7 +491,7 @@ Debian and its derivatives ship a GnuTLS-linked `mariadb-connector-c` by
 default.
 
 Suggested alternatives:
-* Connect over TLS: `:ssl_mode => :required`.
+* Connect over TLS: `:tls_mode => :required`.
 * Connect over a Unix socket instead of TCP: `:socket => '/path/to/mysql.sock'`.
 * Change the server account's authentication plugin, e.g. to
   `mysql_native_password`, if TLS isn't an option. Understand the security
@@ -610,7 +645,7 @@ By default (`automatic_close` is `true`), a `Client` garbage collected in a proc
 Mysql2::Client.new(:automatic_close => false)
 ```
 
-`automatic_close = false` only keeps a **plaintext** connection alive across `fork()`. `fork()` duplicates a TLS connection's OpenSSL session state into two independent copies, and the first real query from either side desyncs the other's: `Aborted_clients` increments on the server, and the stale side sees `Mysql2::Error::ConnectionError: Lost connection to MySQL server during query`. Connect with `:ssl_mode => :disabled` if your application depends on sharing a connection across `fork()`.
+`automatic_close = false` only keeps a **plaintext** connection alive across `fork()`. `fork()` duplicates a TLS connection's OpenSSL session state into two independent copies, and the first real query from either side desyncs the other's: `Aborted_clients` increments on the server, and the stale side sees `Mysql2::Error::ConnectionError: Lost connection to MySQL server during query`. Connect with `:tls_mode => :disabled` if your application depends on sharing a connection across `fork()`.
 
 ## Cascading config
 

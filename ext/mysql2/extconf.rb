@@ -225,6 +225,11 @@ if have_sha2_fingerprint_verification
   have_const('MARIADB_OPT_TLS_PEER_FP_LIST', mysql_h)
 end
 
+# Passphrase for an encrypted :sslkey file (:tls_passphrase). Present in
+# MariaDB Connector/C since at least 3.1 -- unlike fingerprint pinning
+# above, no version-dependent behavior change to gate on.
+have_const('MARIADB_OPT_TLS_PASSPHRASE', mysql_h)
+
 # The ssl_mode: :verify_identity enforcement callback (#879). Everything it
 # needs, or :verify_identity refuses to connect on MariaDB rather than
 # silently skipping hostname verification:

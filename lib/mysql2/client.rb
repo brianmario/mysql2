@@ -19,6 +19,29 @@ module Mysql2
       }
     end
 
+    # :tls_key/:tls_cert/:tls_ca/:tls_capath/:tls_cipher are the modern names
+    # for :sslkey/:sslcert/:sslca/:sslcapath/:sslcipher. MariaDB Connector/C
+    # registers both spellings for its own equivalent option-file settings
+    # (ssl-key and tls-key, ssl-passphrase and tls-passphrase, etc.); mysql2
+    # follows the same pattern here. If both spellings are given, the newer
+    # :tls_* name wins -- the same precedence an explicit :ssl_mode already
+    # has over :sslverify.
+    #
+    # :tls_mode/:ssl_mode is different: neither MySQL nor MariaDB has a
+    # "tls-mode" config-file alias for ssl-mode anywhere -- this one is
+    # mysql2's own invention, purely for :tls_* naming consistency. If
+    # upstream ever adds a real --tls-mode/tlsMode with different
+    # semantics, this alias becomes wrong and will need to be revisited.
+    TLS_OPTION_ALIASES = {
+      tls_key: :sslkey,
+      tls_cert: :sslcert,
+      tls_ca: :sslca,
+      tls_capath: :sslcapath,
+      tls_cipher: :sslcipher,
+      tls_mode: :ssl_mode,
+    }.freeze
+    private_constant :TLS_OPTION_ALIASES
+
     def initialize(opts = {})
       raise Mysql2::Error, "Options parameter must be a Hash" unless opts.is_a? Hash
 
@@ -26,6 +49,8 @@ module Mysql2
       @read_timeout = nil
       @query_options = self.class.default_query_options.dup
       @query_options.merge! opts
+
+      apply_tls_option_aliases(opts)
 
       initialize_ext
 
@@ -156,6 +181,10 @@ module Mysql2
         end
       end
 
+      # Unlocks an encrypted :sslkey file -- unrelated to the verification
+      # models below, so set unconditionally rather than gated on them.
+      self.tls_passphrase = opts[:tls_passphrase].to_s if opts[:tls_passphrase]
+
       return mode unless opts[:tls_peer_fingerprint] || opts[:tls_peer_fingerprint_list]
 
       # Fingerprint pinning and CA/hostname verification are alternative
@@ -225,6 +254,10 @@ module Mysql2
 
     private
 
+    def apply_tls_option_aliases(opts)
+      TLS_OPTION_ALIASES.each { |tls_key, legacy_key| opts[legacy_key] = opts[tls_key] if opts.key?(tls_key) }
+    end
+
     # Warns once per client, before connecting, about option combinations
     # that are incoherent or silently ignored. Warnings only: the connection
     # proceeds exactly as it would have without them.
@@ -232,10 +265,23 @@ module Mysql2
       # The client key and certificate only take effect together. Given one
       # without the other, libmysqlclient silently sends no client certificate
       # and MariaDB Connector/C aborts the connection with a bare TLS error
-      # that never names the real problem.
+      # that never names the real problem. Either option may be given under
+      # its legacy :ssl* name or its :tls_* alias.
       # https://dev.mysql.com/doc/refman/en/using-encrypted-connections.html
+      effective_key = @query_options[:tls_key] || @query_options[:sslkey]
+      effective_cert = @query_options[:tls_cert] || @query_options[:sslcert]
       warn ":sslkey and :sslcert only take effect together; alone, libmysqlclient sends no client certificate and MariaDB Connector/C fails to connect" \
-        if @query_options[:sslkey].nil? != @query_options[:sslcert].nil?
+        if effective_key.nil? != effective_cert.nil?
+
+      # If a legacy :ssl* option and its :tls_* alias are both given with
+      # different values, the :tls_* value silently wins (see
+      # TLS_OPTION_ALIASES); warn so the conflict isn't invisible.
+      TLS_OPTION_ALIASES.each do |tls_key, legacy_key|
+        next unless @query_options.key?(tls_key) && @query_options.key?(legacy_key)
+        next if @query_options[tls_key] == @query_options[legacy_key]
+
+        warn ":#{legacy_key} and :#{tls_key} were both given with different values; :#{tls_key} wins"
+      end
 
       # Streaming results are never cached, so a client-wide :stream default
       # overrides the :cache_rows default on every query (see the per-query

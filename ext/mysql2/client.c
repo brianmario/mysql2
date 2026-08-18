@@ -1102,6 +1102,25 @@ static VALUE rb_set_tls_peer_fingerprint_list(VALUE self, VALUE path) {
 #endif
 }
 
+/* :tls_passphrase -- decrypts an encrypted :sslkey file (MariaDB
+ * Connector/C only; no MYSQL_OPT_* equivalent). Raises on unsupported
+ * builds rather than silently connecting with an unusable key: without
+ * the passphrase the encrypted key can't be loaded, and the caller would
+ * otherwise see only a low-level, unhelpful decryption error from the TLS
+ * handshake instead of a clear reason. */
+static VALUE rb_set_tls_passphrase(VALUE self, VALUE passphrase) {
+#ifdef HAVE_CONST_MARIADB_OPT_TLS_PASSPHRASE
+  GET_CLIENT(self);
+  mysql_options(wrapper->client, MARIADB_OPT_TLS_PASSPHRASE, StringValueCStr(passphrase));
+  return passphrase;
+#else
+  (void)self; (void)passphrase;
+  rb_raise(cMysql2ConnectionError,
+           ":tls_passphrase requires MariaDB Connector/C; this client library (%s) has no way "
+           "to supply a passphrase for an encrypted :sslkey file", mysql_get_client_info());
+#endif
+}
+
 #ifdef CLIENT_CONNECT_ATTRS
 static int opt_connect_attr_add_i(VALUE key, VALUE value, VALUE arg)
 {
@@ -2839,6 +2858,7 @@ void init_mysql2_client(void) {
   rb_define_private_method(cMysql2Client, "ssl_mode=", rb_set_ssl_mode_option, 1);
   rb_define_private_method(cMysql2Client, "tls_peer_fingerprint=", rb_set_tls_peer_fingerprint, 1);
   rb_define_private_method(cMysql2Client, "tls_peer_fingerprint_list=", rb_set_tls_peer_fingerprint_list, 1);
+  rb_define_private_method(cMysql2Client, "tls_passphrase=", rb_set_tls_passphrase, 1);
   rb_define_private_method(cMysql2Client, "enable_cleartext_plugin=", set_enable_cleartext_plugin, 1);
   rb_define_private_method(cMysql2Client, "tls_version=", set_tls_version, 1);
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
@@ -3075,6 +3095,12 @@ void init_mysql2_client(void) {
   rb_const_set(cMysql2Client, rb_intern("TLS_PEER_FINGERPRINT_SUPPORTED"), Qtrue);
 #else
   rb_const_set(cMysql2Client, rb_intern("TLS_PEER_FINGERPRINT_SUPPORTED"), Qfalse);
+#endif
+
+#ifdef HAVE_CONST_MARIADB_OPT_TLS_PASSPHRASE
+  rb_const_set(cMysql2Client, rb_intern("TLS_PASSPHRASE_SUPPORTED"), Qtrue);
+#else
+  rb_const_set(cMysql2Client, rb_intern("TLS_PASSPHRASE_SUPPORTED"), Qfalse);
 #endif
 
   /* The MARIADB_TLS_VERIFY_* bits reported by Client#tls_info's

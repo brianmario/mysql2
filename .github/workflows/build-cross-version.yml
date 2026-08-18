@@ -22,6 +22,15 @@ jobs:
           - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb12.3-client_mariadb11.8-server', client_only: mariadb12.3, services: {mariadb: {image: 'mariadb:11.8', env: {MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes', MARIADB_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
           - {os: ubuntu-24.04, ruby: '3.4', db: 'mysql84-client_mysql97-server', client_only: mysql84, services: {mysql: {image: 'mysql:9.7', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
           - {os: ubuntu-24.04, ruby: '3.4', db: 'mysql97-client_mysql84-server', client_only: mysql97, services: {mysql: {image: 'mysql:8.4', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          # Cross-vendor: a MariaDB Connector/C client against a MySQL server,
+          # e.g. an app whose base image ships libmariadb-dev talking to a
+          # managed MySQL server (RDS and similar). A plain mysql: image
+          # approximates the server's TLS/protocol behavior but isn't RDS
+          # itself -- it doesn't reproduce RDS's own certificate chain.
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb11.8-client_mysql84-server', client_only: mariadb11.8, services: {mysql: {image: 'mysql:8.4', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb11.8-client_mysql97-server', client_only: mariadb11.8, services: {mysql: {image: 'mysql:9.7', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb12.3-client_mysql84-server', client_only: mariadb12.3, services: {mysql: {image: 'mysql:8.4', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
+          - {os: ubuntu-24.04, ruby: '3.4', db: 'mariadb12.3-client_mysql97-server', client_only: mariadb12.3, services: {mysql: {image: 'mysql:9.7', env: {MYSQL_ALLOW_EMPTY_PASSWORD: 'yes', MYSQL_DATABASE: test}, ports: ['3306:3306'], options: '--health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=3s --health-retries=10'}}}
       fail-fast: false
     env:
       BUNDLE_WITHOUT: development

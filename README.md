@@ -211,6 +211,15 @@ client.query("SELECT * FROM users WHERE group='githubbers'", :symbolize_keys => 
 end
 ```
 
+Or with downcased keys, e.g. for a legacy database with inconsistently-cased
+column names -- composes with `:symbolize_keys`:
+
+``` ruby
+client.query("SELECT * FROM users WHERE group='githubbers'", :downcase_keys => true).each do |row|
+  # do something with row, it's ready to rock
+end
+```
+
 You can get the headers, columns, and the field types in the order that they were returned
 by the query like this:
 

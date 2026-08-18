@@ -187,6 +187,26 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(first).to eql(:sym_parity_col)
     end
 
+    it "should downcase field names if :downcase_keys was set to true" do
+      row = @client.query("SELECT 1 AS FooBar, 2 AS `bazQux`", downcase_keys: true).first
+      expect(row).to eql("foobar" => 1, "bazqux" => 2)
+    end
+
+    it "should compose :downcase_keys with :symbolize_keys" do
+      row = @client.query("SELECT 1 AS FooBar", downcase_keys: true, symbolize_keys: true).first
+      expect(row).to eql(foobar: 1)
+    end
+
+    it "should not downcase field names by default" do
+      row = @client.query("SELECT 1 AS FooBar").first
+      expect(row).to eql("FooBar" => 1)
+    end
+
+    it "should only lowercase the ASCII range, leaving non-ASCII bytes in a UTF-8 column name intact" do
+      row = @client.query("SELECT 1 AS `FooÀBar`", downcase_keys: true).first
+      expect(row).to eql("fooÀbar" => 1)
+    end
+
     it "should not permanently pin symbols for dynamically-named columns" do
       require "objspace"
       skip "needs ObjectSpace.count_symbols (CRuby 2.2+)" unless ObjectSpace.respond_to?(:count_symbols)
@@ -569,6 +589,12 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
         result.each(as: :array, symbolize_keys: true) { |_| break } # rubocop:disable Lint/UnreachableLoop
         @client.query("SELECT 1")
         expect(result.fields).to eql(%i[a b])
+      end
+
+      it "should honor per-each downcase_keys in fields" do
+        result = @client.query("SELECT 1 AS FooBar")
+        result.each(as: :array, downcase_keys: true) { |_| }
+        expect(result.fields).to eql(%w[foobar])
       end
 
       it "should keep fields accessible for exhausted empty results" do

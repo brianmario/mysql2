@@ -680,6 +680,12 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
         expect(result.fields).to eql(%i[a b])
       end
 
+      it "should honor downcase_keys in fields" do
+        result = @client.prepare("SELECT 1 AS FooBar").execute(as: :array, downcase_keys: true)
+        result.to_a
+        expect(result.fields).to eql(%w[foobar])
+      end
+
       it "should keep fields accessible for exhausted empty results" do
         result = @client.prepare("SELECT 1 AS a WHERE 1 = 0").execute(as: :array)
         expect(result.to_a).to eql([])
@@ -792,6 +798,13 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       expect(stmt.execute(symbolize_keys: true).first.keys).to eql([:id])
       expect(stmt.execute.first.keys).to eql(["id"])
       expect(stmt.execute(symbolize_keys: true).first.keys).to eql([:id])
+    end
+
+    it "should not reuse field names for an execute with different :downcase_keys" do
+      stmt = @client.prepare "SELECT id AS ID FROM cross_execute_test"
+      expect(stmt.execute(downcase_keys: true).first.keys).to eql(["id"])
+      expect(stmt.execute.first.keys).to eql(["ID"])
+      expect(stmt.execute(downcase_keys: true).first.keys).to eql(["id"])
     end
 
     it "should give each execute's result its own #fields array" do

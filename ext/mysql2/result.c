@@ -1,5 +1,6 @@
 #include <mysql2_ext.h>
 
+#include <ctype.h>
 #include <limits.h>
 #include <string.h>
 
@@ -72,6 +73,7 @@ typedef enum {
 
 typedef struct {
   int symbolizeKeys;
+  int downcaseKeys;
   int asArray;
   int castBool;
   int cacheRows;
@@ -100,7 +102,7 @@ static VALUE opt_time_anchor_utc;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
   intern_civil, intern_new_offset, intern_merge, intern_BigDecimal,
   intern_query_options, intern_plus;
-static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
+static VALUE sym_symbolize_keys, sym_downcase_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
   sym_cache_rows, sym_cast, sym_fast, sym_stream, sym_name, sym_rows_per_gvl_yield,
   sym_no_good_index_used, sym_no_index_used, sym_query_was_slow,
@@ -234,16 +236,19 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper, int fro
        * from the ordinary free path -- rb_ary_dup allocates, which a GC
        * dfree callback must not -- and only for a non-streaming Result:
        * those are materialized and freed entirely inside Statement#execute,
-       * so the array provably carries the execute-time :symbolize_keys and
-       * no user code has run against it. A streaming Result's names are
-       * built under its first #each's options instead, which may differ. */
+       * so the array provably carries the execute-time :symbolize_keys/
+       * :downcase_keys and no user code has run against it. A streaming
+       * Result's names are built under its first #each's options
+       * instead, which may differ. */
       if (!from_dfree_callback && !wrapper->is_streaming && cache_compatible &&
           wrapper->fields != Qnil &&
           (my_ulonglong)RARRAY_LEN(wrapper->fields) == wrapper->numberOfFields &&
           (stmt_wrapper->cached_fields == Qnil ||
-           stmt_wrapper->cached_fields_symbolized != wrapper->fields_symbolized)) {
+           stmt_wrapper->cached_fields_symbolized != wrapper->fields_symbolized ||
+           stmt_wrapper->cached_fields_downcased != wrapper->fields_downcased)) {
         stmt_wrapper->cached_fields = rb_ary_dup(wrapper->fields);
         stmt_wrapper->cached_fields_symbolized = wrapper->fields_symbolized;
+        stmt_wrapper->cached_fields_downcased = wrapper->fields_downcased;
       }
 
       if (wrapper->statement != Qnil) {
@@ -396,7 +401,7 @@ static void *nogvl_stmt_fetch(void *ptr) {
   return (void *)r;
 }
 
-static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbolize_keys) {
+static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbolize_keys, int downcase_keys) {
   VALUE rb_field;
   GET_RESULT(self);
 
@@ -412,6 +417,8 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
     rb_encoding *conn_enc = wrapper->conn_enc;
     size_t name_length;
     const char *name_end;
+    const char *field_name;
+    VALUE downcase_holder = 0;
 
     /* A name that was never cached has to be read from the result, which the
      * force-free of an abandoned stream has already released. Hash-mode rows
@@ -435,33 +442,51 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
      * at the terminator, capped by name_length. */
     name_end = memchr(field->name, '\0', field->name_length);
     name_length = name_end ? (size_t)(name_end - field->name) : field->name_length;
+    field_name = field->name;
+
+    /* :downcase_keys lowercases the ASCII a-z/A-Z range only, byte by byte.
+     * Safe on a UTF-8 name: every continuation byte in a multibyte sequence
+     * is >= 0x80, outside that range, so this can never corrupt one -- it
+     * just doesn't case-fold non-ASCII letters, which is fine since column
+     * and alias names are effectively always ASCII in practice. */
+    if (downcase_keys && name_length > 0) {
+      size_t i;
+      char *buf = ALLOCV_N(char, downcase_holder, name_length);
+      for (i = 0; i < name_length; i++)
+        buf[i] = (char)tolower((unsigned char)field_name[i]);
+      field_name = buf;
+    }
 
     if (symbolize_keys) {
 #ifdef HAVE_RB_CHECK_SYMBOL_CSTR
-      rb_field = rb_check_symbol_cstr(field->name, name_length, rb_utf8_encoding());
+      rb_field = rb_check_symbol_cstr(field_name, name_length, rb_utf8_encoding());
       if (rb_field == Qnil) {
-        rb_field = rb_str_intern(rb_enc_str_new(field->name, name_length, rb_utf8_encoding()));
+        rb_field = rb_str_intern(rb_enc_str_new(field_name, name_length, rb_utf8_encoding()));
       }
 #else
-      rb_field = rb_intern3(field->name, name_length, rb_utf8_encoding());
+      rb_field = rb_intern3(field_name, name_length, rb_utf8_encoding());
       rb_field = ID2SYM(rb_field);
 #endif
     } else {
 #ifdef HAVE_RB_ENC_INTERNED_STR
-      rb_field = rb_enc_interned_str(field->name, name_length, conn_enc);
+      rb_field = rb_enc_interned_str(field_name, name_length, conn_enc);
       if (default_internal_enc && default_internal_enc != conn_enc) {
         rb_field = rb_str_to_interned_str(rb_str_export_to_enc(rb_field, default_internal_enc));
       }
 #else
-      rb_field = rb_enc_str_new(field->name, name_length, conn_enc);
+      rb_field = rb_enc_str_new(field_name, name_length, conn_enc);
       if (default_internal_enc && default_internal_enc != conn_enc) {
         rb_field = rb_str_export_to_enc(rb_field, default_internal_enc);
       }
       rb_obj_freeze(rb_field);
 #endif
     }
+
+    ALLOCV_END(downcase_holder);
+
     rb_ary_store(wrapper->fields, idx, rb_field);
     wrapper->fields_symbolized = symbolize_keys ? 1 : 0;
+    wrapper->fields_downcased = downcase_keys ? 1 : 0;
   }
 
   return rb_field;
@@ -536,8 +561,9 @@ static VALUE rb_mysql_result_fetch_db(VALUE self, unsigned int idx) {
 }
 
 /* Materialize every field name into wrapper->fields at once, honoring the
- * given symbolize_keys. Array mode calls this once per result set, on the
- * first fetched row, before converting any of that row's values.
+ * given symbolize_keys/downcase_keys. Array mode calls this once per
+ * result set, on the first fetched row, before converting any of that
+ * row's values.
  *
  * The first-row, before-any-values timing is load-bearing, not just a fast
  * path: #fields on an abandoned streaming result (force-freed by the next
@@ -552,7 +578,7 @@ static VALUE rb_mysql_result_fetch_db(VALUE self, unsigned int idx) {
  *
  * The caller must ensure wrapper->fields is allocated and the result is not
  * freed. */
-static void rb_mysql_result_materialize_field_names(VALUE self, int symbolize_keys) {
+static void rb_mysql_result_materialize_field_names(VALUE self, int symbolize_keys, int downcase_keys) {
   unsigned int i;
   VALUE fields;
   GET_RESULT(self);
@@ -564,7 +590,7 @@ static void rb_mysql_result_materialize_field_names(VALUE self, int symbolize_ke
 
   if ((my_ulonglong)RARRAY_LEN(fields) != wrapper->numberOfFields) {
     for (i = 0; i < wrapper->numberOfFields; i++) {
-      rb_mysql_result_fetch_field(self, i, symbolize_keys);
+      rb_mysql_result_fetch_field(self, i, symbolize_keys, downcase_keys);
     }
   }
 
@@ -1365,7 +1391,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
    * allocation so an empty result set stays untouched, exactly as it was
    * when the (never-entered) cell loop did the materializing. */
   if (args->asArray) {
-    rb_mysql_result_materialize_field_names(self, args->symbolizeKeys);
+    rb_mysql_result_materialize_field_names(self, args->symbolizeKeys, args->downcaseKeys);
   }
 
   /* cast: false -- every column is string-bound (see
@@ -1379,7 +1405,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   if (args->cast == MYSQL2_CAST_NONE) {
     for (i = 0; i < wrapper->numberOfFields; i++) {
       /* Hash keys only; array-mode names were batch-materialized above. */
-      VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+      VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys, args->downcaseKeys);
       VALUE val;
 
       if (!wrapper->is_null[i] && fields[i].type != MYSQL_TYPE_NULL) {
@@ -1403,7 +1429,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
     /* Hash keys only; array-mode names were batch-materialized above. */
-    VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+    VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys, args->downcaseKeys);
     VALUE val = Qnil;
     MYSQL_TIME *ts;
 
@@ -1701,7 +1727,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
     /* This runs after the NULL-row check above, so it materializes on the
      * first fetched row and an empty result set stays untouched, exactly
      * as it was when the (never-entered) cell loop did the materializing. */
-    rb_mysql_result_materialize_field_names(self, args->symbolizeKeys);
+    rb_mysql_result_materialize_field_names(self, args->symbolizeKeys, args->downcaseKeys);
   } else {
     /* Pre-size to the column count so a row with more than the default
      * number of entries does not have to rehash while being built. */
@@ -1726,7 +1752,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
   if (args->cast == MYSQL2_CAST_NONE) {
     for (i = 0; i < wrapper->numberOfFields; i++) {
       /* Hash keys only; array-mode names were batch-materialized above. */
-      VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+      VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys, args->downcaseKeys);
       VALUE val;
 
       if (row[i] && fields[i].type != MYSQL_TYPE_NULL) {
@@ -1750,7 +1776,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
     /* Hash keys only; array-mode names were batch-materialized above. */
-    VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+    VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys, args->downcaseKeys);
     if (row[i]) {
       VALUE val = Qnil;
       enum enum_field_types type = fields[i].type;
@@ -1983,6 +2009,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
 static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   unsigned int i = 0;
   short int symbolizeKeys = 0;
+  short int downcaseKeys = 0;
   VALUE defaults;
   VALUE fields;
 
@@ -1992,6 +2019,9 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
   Check_Type(defaults, T_HASH);
   if (rb_hash_aref(defaults, sym_symbolize_keys) == Qtrue) {
     symbolizeKeys = 1;
+  }
+  if (rb_hash_aref(defaults, sym_downcase_keys) == Qtrue) {
+    downcaseKeys = 1;
   }
 
   if (wrapper->fields == Qnil) {
@@ -2009,7 +2039,7 @@ static VALUE rb_mysql_result_fetch_fields(VALUE self) {
 
   if ((my_ulonglong)RARRAY_LEN(fields) != wrapper->numberOfFields) {
     for (i=0; i<wrapper->numberOfFields; i++) {
-      rb_mysql_result_fetch_field(self, i, symbolizeKeys);
+      rb_mysql_result_fetch_field(self, i, symbolizeKeys, downcaseKeys);
     }
   }
 
@@ -2233,7 +2263,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   VALUE rows;
   VALUE opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone;
-  int symbolizeKeys, asArray, castBool, cacheRows;
+  int symbolizeKeys, downcaseKeys, asArray, castBool, cacheRows;
   mysql2_cast_mode cast;
   int warnDbTimezone, perEachOpts;
   unsigned long rowsPerGvlYield;
@@ -2265,6 +2295,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
      * conditions are recomputed from the cached (pre-forcing) values below,
      * so they fire on every call exactly as an uncached parse would. */
     symbolizeKeys   = wrapper->each_opts.symbolizeKeys;
+    downcaseKeys    = wrapper->each_opts.downcaseKeys;
     asArray         = wrapper->each_opts.asArray;
     castBool        = wrapper->each_opts.castBool;
     cacheRows       = wrapper->each_opts.cacheRows;
@@ -2281,6 +2312,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     opts = perEachOpts ? rb_funcall(defaults, intern_merge, 1, opts) : defaults;
 
     symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
+    downcaseKeys  = RTEST(rb_hash_aref(opts, sym_downcase_keys));
     asArray       = rb_hash_aref(opts, sym_as) == sym_array;
     castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
     cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
@@ -2339,6 +2371,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
        * unset so the next call re-parses and re-raises just as an uncached
        * one would. */
       wrapper->each_opts.symbolizeKeys   = symbolizeKeys;
+      wrapper->each_opts.downcaseKeys    = downcaseKeys;
       wrapper->each_opts.asArray         = asArray;
       wrapper->each_opts.castBool        = castBool;
       wrapper->each_opts.cacheRows       = cacheRows;
@@ -2396,6 +2429,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   // Backward compat
   args.symbolizeKeys = symbolizeKeys;
+  args.downcaseKeys = downcaseKeys;
   args.asArray = asArray;
   args.castBool = castBool;
   args.cacheRows = cacheRows;
@@ -2575,6 +2609,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->statement = statement;
   wrapper->stmt_metadata_epoch = 0;
   wrapper->fields_symbolized = 0;
+  wrapper->fields_downcased = 0;
   if (statement != Qnil) {
     mysql_stmt_wrapper *stmt_wrapper = DATA_PTR(statement);
     wrapper->stmt_wrapper = stmt_wrapper;
@@ -2610,13 +2645,15 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
     /* Field names are adopted only for a non-streaming Result (a streaming
      * one materializes names under its first #each's options, which may
      * differ from these) and only when they were built under the same
-     * :symbolize_keys. The cache keeps its private master copy; this Result
-     * gets a dup, so mutations of #fields stay its own. */
+     * :symbolize_keys/:downcase_keys. The cache keeps its private master
+     * copy; this Result gets a dup, so mutations of #fields stay its own. */
     if (stmt_wrapper->cached_fields != Qnil &&
         rb_hash_aref(options, sym_stream) != Qtrue &&
-        stmt_wrapper->cached_fields_symbolized == (RTEST(rb_hash_aref(options, sym_symbolize_keys)) ? 1 : 0)) {
+        stmt_wrapper->cached_fields_symbolized == (RTEST(rb_hash_aref(options, sym_symbolize_keys)) ? 1 : 0) &&
+        stmt_wrapper->cached_fields_downcased == (RTEST(rb_hash_aref(options, sym_downcase_keys)) ? 1 : 0)) {
       wrapper->fields = rb_ary_dup(stmt_wrapper->cached_fields);
       wrapper->fields_symbolized = stmt_wrapper->cached_fields_symbolized;
+      wrapper->fields_downcased = stmt_wrapper->cached_fields_downcased;
       wrapper->numberOfFields = stmt_wrapper->cached_field_count;
     }
   } else {
@@ -2684,6 +2721,7 @@ void init_mysql2_result(void) {
   intern_plus         = rb_intern("+");
 
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
+  sym_downcase_keys   = ID2SYM(rb_intern("downcase_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
   sym_local           = ID2SYM(rb_intern("local"));

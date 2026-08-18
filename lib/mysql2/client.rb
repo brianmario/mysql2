@@ -8,6 +8,7 @@ module Mysql2
         async: false,                # don't wait for a result after sending the query, you'll have to monitor the socket yourself then eventually call Mysql2::Client#async_result
         cast_booleans: false,        # cast tinyint(1) fields as true/false in ruby
         symbolize_keys: false,       # return field names as symbols instead of strings
+        downcase_keys: false,        # downcase field names (composes with symbolize_keys)
         database_timezone: :local,   # timezone Mysql2 will assume datetime objects are stored in
         application_timezone: nil,   # timezone Mysql2 will convert to before handing the object back to the caller
         cache_rows: true,            # tells Mysql2 to use its internal row cache for results

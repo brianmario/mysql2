@@ -40,6 +40,7 @@ void mysql2_result_force_free(VALUE self);
 typedef struct {
   int parsed;
   int symbolizeKeys;
+  int downcaseKeys;
   int asArray;
   int castBool;
   int cacheRows;
@@ -109,10 +110,11 @@ typedef struct {
    * silently convert or truncate the new one. 0 and unused without a
    * statement. */
   unsigned long stmt_metadata_epoch;
-  /* Whether wrapper->fields holds symbolized names, recorded as they are
-   * built so the statement cache can refuse to reuse the array for an
-   * execute with a different :symbolize_keys. */
+  /* Whether wrapper->fields holds symbolized/downcased names, recorded as
+   * they are built so the statement cache can refuse to reuse the array
+   * for an execute with a different :symbolize_keys/:downcase_keys. */
   int fields_symbolized;
+  int fields_downcased;
   mysql2_each_opts_cache each_opts;
 } mysql2_result_wrapper;
 

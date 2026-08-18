@@ -38,6 +38,7 @@ typedef struct {
   unsigned long metadata_epoch;
   VALUE cached_fields;
   int cached_fields_symbolized;
+  int cached_fields_downcased;
   MYSQL_BIND *cached_result_buffers;
   my_bool *cached_is_null;
   my_bool *cached_error;

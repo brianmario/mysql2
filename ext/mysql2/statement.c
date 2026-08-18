@@ -260,6 +260,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     stmt_wrapper->metadata_epoch = 0;
     stmt_wrapper->cached_fields = Qnil;
     stmt_wrapper->cached_fields_symbolized = 0;
+    stmt_wrapper->cached_fields_downcased = 0;
     stmt_wrapper->cached_result_buffers = NULL;
     stmt_wrapper->cached_is_null = NULL;
     stmt_wrapper->cached_error = NULL;

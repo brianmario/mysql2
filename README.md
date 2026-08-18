@@ -340,12 +340,8 @@ Modern recommended MySQL/MariaDB versions are:
   [MariaDB repository](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/mariadb-package-repository-setup-and-usage).
 
 Clients and servers can mix vendors, since both speak the same MySQL wire
-protocol. This project's CI verifies a MariaDB Connector/C client connecting
-over TLS to a MySQL server (e.g. an app whose base image ships
-`libmariadb-dev` talking to a managed MySQL server such as RDS); the reverse
-direction (a MySQL client against a MariaDB server) isn't separately tested
-here but is expected to behave the same way, since TLS verification happens
-entirely client-side.
+protocol and TLS wire protocol. Several common combinations are in the
+project CI matrix.
 
 #### SSL/TLS options
 

@@ -1,6 +1,6 @@
 module Mysql2
   class Client
-    attr_reader :query_options, :read_timeout
+    attr_reader :query_options, :read_timeout, :query_timeout
 
     def self.default_query_options
       @default_query_options ||= {
@@ -46,7 +46,7 @@ module Mysql2
       raise Mysql2::Error, "Options parameter must be a Hash" unless opts.is_a? Hash
 
       opts = Mysql2::Util.key_hash_as_symbols(opts)
-      @read_timeout = nil
+      @read_timeout = @query_timeout = nil
       @query_options = self.class.default_query_options.dup
       @query_options.merge! opts
 
@@ -58,13 +58,14 @@ module Mysql2
       opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
 
       # TODO: stricter validation rather than silent massaging
-      %i[reconnect connect_timeout local_infile read_timeout write_timeout default_file default_group secure_auth init_command automatic_close enable_cleartext_plugin default_auth get_server_public_key tls_version].each do |key|
+      %i[reconnect connect_timeout local_infile read_timeout query_timeout write_timeout default_file default_group secure_auth
+         init_command automatic_close enable_cleartext_plugin default_auth get_server_public_key tls_version].each do |key|
         next unless opts.key?(key)
 
         case key
         when :reconnect, :local_infile, :secure_auth, :automatic_close, :enable_cleartext_plugin, :get_server_public_key
           send(:"#{key}=", !!opts[key]) # rubocop:disable Style/DoubleNegation
-        when :connect_timeout, :read_timeout, :write_timeout
+        when :connect_timeout, :read_timeout, :query_timeout, :write_timeout
           send(:"#{key}=", Integer(opts[key])) unless opts[key].nil?
         else
           send(:"#{key}=", opts[key])

@@ -276,6 +276,7 @@ Mysql2::Client.new(
   :flags = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | ..., # not exhaustive, see "Flags option parsing" below
   :encoding = 'utf8mb4',
   :read_timeout = seconds,
+  :query_timeout = seconds,
   :write_timeout = seconds,
   :connect_timeout = seconds,
   :connect_attrs = {:program_name => $PROGRAM_NAME, ...},
@@ -289,6 +290,16 @@ Mysql2::Client.new(
   :init_command => sql
   )
 ```
+
+`:read_timeout` is a per-packet socket timeout, not a deadline for the whole
+query: a large result set arriving as a steady trickle of packets, each one
+comfortably inside `:read_timeout`, can take arbitrarily long in aggregate
+without ever tripping it. `:query_timeout` is a separate, real wall-clock
+cap on the entire query -- waiting for the first response and buffering the
+whole result -- and raises `Mysql2::TimeoutError` if it's exceeded. It's
+enforced by polling `mysql_store_result_nonblocking()`, added in MySQL's
+client library in 8.0.16, so it currently has no effect against MariaDB
+Connector/C, older MySQL client libraries, or on Windows.
 
 ### Connecting to MySQL on localhost and elsewhere
 

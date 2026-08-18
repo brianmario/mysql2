@@ -20,12 +20,15 @@ VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error, cMysql2ConnectionError, cMysql2TimeoutError;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args,
-  intern_current_query_options, intern_read_timeout, intern_values;
+  intern_current_query_options, intern_read_timeout, intern_query_timeout, intern_values;
 
 #define REQUIRE_INITIALIZED(wrapper) \
   if (!wrapper->initialized) { \
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
+
+/* Defined below, needed by store_result_nonblocking_with_deadline further up. */
+static void wait_for_readable_with_timeout(VALUE self, int fd);
 
 #if defined(HAVE_MYSQL_NET_VIO) || defined(HAVE_ST_NET_VIO)
   #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
@@ -1438,10 +1441,15 @@ static void *nogvl_do_result(void *ptr, char use_result) {
   return result;
 }
 
-/* mysql_store_result may (unlikely) read rows off the socket */
+#if !(defined(HAVE_MYSQL_STORE_RESULT_NONBLOCKING) && !defined(_WIN32))
+/* mysql_store_result may (unlikely) read rows off the socket. Only needed as
+ * a fallback where store_result_nonblocking_with_deadline (below) can't be
+ * built -- once that path exists, the shared mysql2_fetch_result_set switch
+ * always takes it instead. */
 static void *nogvl_store_result(void *ptr) {
   return nogvl_do_result(ptr, 0);
 }
+#endif
 
 static void *nogvl_use_result(void *ptr) {
   return nogvl_do_result(ptr, 1);
@@ -1454,6 +1462,58 @@ static void *nogvl_store_result_raw(void *ptr) {
   mysql_client_wrapper *wrapper = ptr;
   return mysql_store_result(wrapper->client);
 }
+
+#if defined(HAVE_MYSQL_STORE_RESULT_NONBLOCKING) && !defined(_WIN32)
+/* Polls mysql_store_result_nonblocking() (added in MySQL 8.0.16) instead of
+ * calling the blocking mysql_store_result(), so :query_timeout can enforce
+ * a real wall-clock deadline across the whole buffering phase (#1091):
+ * :read_timeout only bounds each individual wait_for_readable_with_timeout
+ * poll below, so a large result trickling in packet-by-packet, each arriving
+ * comfortably inside :read_timeout, could otherwise buffer forever without
+ * ever tripping it. Raises directly on deadline -- every caller already
+ * wraps this whole phase in rb_ensure(..., disconnect_and_mark_inactive,
+ * ...), which tears the connection down correctly on any exception raised
+ * here, the same as it already does for Thread#raise/Timeout.timeout
+ * arriving during this phase. */
+static MYSQL_RES *store_result_nonblocking_with_deadline(VALUE self, mysql_client_wrapper *wrapper) {
+  MYSQL_RES *result = NULL;
+  enum net_async_status status;
+  VALUE query_timeout = rb_ivar_get(self, intern_query_timeout);
+  int have_deadline = 0;
+  double deadline = 0;
+
+  if (!NIL_P(query_timeout)) {
+    double now;
+    Check_Type(query_timeout, T_FIXNUM);
+    now = mysql2_monotonic_now();
+    /* A failed clock read (now < 0) leaves the deadline unenforced rather
+     * than raising immediately on a bogus comparison -- the same fail-open
+     * choice query_elapsed's -1 sentinel already makes elsewhere. */
+    if (now >= 0) {
+      have_deadline = 1;
+      deadline = now + FIX2INT(query_timeout);
+    }
+  }
+
+  for (;;) {
+    status = mysql_store_result_nonblocking(wrapper->client, &result);
+    if (status != NET_ASYNC_NOT_READY) {
+      /* Matches nogvl_do_result's own bookkeeping for the blocking call this
+       * replaces: once the result is stored off, this connection is ready
+       * for another command. Skipping this left active_fiber set after a
+       * normal return, which every caller's rb_ensure(..., disconnect_and_
+       * mark_inactive, ...) reads as an abandoned query and tears the
+       * connection down right after a successful one. */
+      wrapper->active_fiber = Qnil;
+      return result;
+    }
+    if (have_deadline && mysql2_monotonic_now() >= deadline) {
+      rb_raise(cMysql2TimeoutError, "Timeout waiting for the full result of the last query. (waited %d seconds)", FIX2INT(query_timeout));
+    }
+    wait_for_readable_with_timeout(self, wrapper->client->net.fd);
+  }
+}
+#endif
 
 /* Shared by async_result (a query's first result set) and store_result (a
  * later one, from a multi-statement batch): fetch the current result set as
@@ -1471,7 +1531,11 @@ static VALUE mysql2_fetch_result_set(VALUE self, mysql_client_wrapper *wrapper, 
      * finishes (or abandons) streaming rows -- see result.c. */
     wrapper->state = MYSQL2_CLIENT_STREAMING;
   } else {
+#if defined(HAVE_MYSQL_STORE_RESULT_NONBLOCKING) && !defined(_WIN32)
+    result = store_result_nonblocking_with_deadline(self, wrapper);
+#else
     result = (MYSQL_RES *)rb_thread_call_without_gvl(nogvl_store_result, wrapper, RUBY_UBF_IO, 0);
+#endif
     /* The whole result set is buffered locally; the connection is free to
      * run another command right away. */
     wrapper->state = MYSQL2_CLIENT_IDLE;
@@ -2575,6 +2639,28 @@ static VALUE set_read_timeout(VALUE self, VALUE value) {
   return _mysql_client_options(self, MYSQL_OPT_READ_TIMEOUT, value);
 }
 
+/* :query_timeout has no mysql_options() counterpart -- MYSQL_OPT_READ_TIMEOUT
+ * is a per-packet socket timeout, not a deadline for the whole call, so a
+ * large result set arriving in a steady trickle of packets (each comfortably
+ * inside :read_timeout) can take arbitrarily long in aggregate without ever
+ * tripping it (#1091). :query_timeout is mysql2's own wall-clock cap on the
+ * entire wait-for-first-packet-plus-buffer-the-whole-result phase, enforced
+ * in C by polling mysql_store_result_nonblocking() -- see
+ * store_result_nonblocking_with_deadline below. It's only enforced where
+ * that nonblocking API exists (MySQL client library 8.0.16+, not MariaDB
+ * Connector/C, not Windows); see check_and_clean_query_options in
+ * lib/mysql2/client.rb for the fallback warning. */
+static VALUE set_query_timeout(VALUE self, VALUE value) {
+  long int sec;
+  Check_Type(value, T_FIXNUM);
+  sec = FIX2INT(value);
+  if (sec < 0) {
+    rb_raise(cMysql2Error, "query_timeout must be a positive integer, you passed %ld", sec);
+  }
+  rb_ivar_set(self, intern_query_timeout, value);
+  return value;
+}
+
 static VALUE set_write_timeout(VALUE self, VALUE value) {
   long int sec;
   Check_Type(value, T_FIXNUM);
@@ -2845,6 +2931,7 @@ void init_mysql2_client(void) {
 
   rb_define_private_method(cMysql2Client, "connect_timeout=", set_connect_timeout, 1);
   rb_define_private_method(cMysql2Client, "read_timeout=", set_read_timeout, 1);
+  rb_define_private_method(cMysql2Client, "query_timeout=", set_query_timeout, 1);
   rb_define_private_method(cMysql2Client, "write_timeout=", set_write_timeout, 1);
   rb_define_private_method(cMysql2Client, "local_infile=", set_local_infile, 1);
   rb_define_private_method(cMysql2Client, "charset_name=", set_charset_name, 1);
@@ -2880,6 +2967,7 @@ void init_mysql2_client(void) {
   intern_new_with_args = rb_intern("new_with_args");
   intern_current_query_options = rb_intern("@current_query_options");
   intern_read_timeout = rb_intern("@read_timeout");
+  intern_query_timeout = rb_intern("@query_timeout");
   intern_values = rb_intern("values");
 
 #ifdef CLIENT_LONG_PASSWORD

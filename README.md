@@ -303,6 +303,32 @@ type of connection to make, with special interpretation you should be aware of:
 * An IPv4 or IPv6 address will result in a TCP connection.
 * Any other value will be looked up as a hostname for a TCP connection.
 
+### Connecting to the first available host
+
+`:host` also accepts an array of hostnames. Each host is attempted in listed
+order, and the first that answers wins:
+
+``` ruby
+client = Mysql2::Client.new(
+  host: ["db1.internal", "db2.internal"],
+  username: "root"
+)
+```
+
+A host that cannot be reached — unresolvable, unreachable, refused, or timed
+out — advances to the next one. Any other failure, such as bad credentials
+or a TLS misconfiguration, raises immediately since it would repeat on every
+host. When every host is unreachable, the raised error names each host's
+failure.
+
+All hosts share the same `:port` and other connection options. Note that
+`:connect_timeout` applies to each attempt separately, so the worst-case
+connect latency multiplies by the number of hosts.
+
+Connecting is the entire scope: an established connection that dies does not
+migrate to another host. Reconnection, topology discovery, and replaying
+session state remain the connection pool's job.
+
 ### Secure connections with SSL/TLS
 
 The mysql2 gem can configure the underlying MySQL/MariaDB client library to

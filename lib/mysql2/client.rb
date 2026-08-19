@@ -108,14 +108,18 @@ module Mysql2
       # Correct the data types before passing these values down to the C level
       user = user.to_s unless user.nil?
       pass = pass.to_s unless pass.nil?
-      host = host.to_s unless host.nil?
       port = port.to_i unless port.nil?
       database = database.to_s unless database.nil?
       socket = socket.to_s unless socket.nil?
       tls_sni_name = tls_sni_name.to_s unless tls_sni_name.nil?
       conn_attrs = parse_connect_attrs(opts[:connect_attrs])
 
-      connect user, pass, host, port, database, socket, flags, conn_attrs, tls_sni_name
+      if host.is_a?(Array)
+        connect_to_first_available_host host.map(&:to_s), user, pass, port, database, socket, flags, conn_attrs, tls_sni_name
+      else
+        host = host.to_s unless host.nil?
+        connect user, pass, host, port, database, socket, flags, conn_attrs, tls_sni_name
+      end
     end
 
     def parse_ssl_mode(mode)
@@ -252,7 +256,50 @@ module Mysql2
       self.class.info
     end
 
+    # Client-library error codes for failures specific to reaching one host
+    # -- unresolvable, unreachable, refused, timed out -- where another host
+    # may still answer. Any other failure (bad credentials, TLS
+    # misconfiguration, protocol mismatch) would repeat identically on every
+    # host, so it stops the attempt loop immediately.
+    HOST_UNREACHABLE_ERROR_CODES = [
+      2001, # CR_SOCKET_CREATE_ERROR
+      2002, # CR_CONNECTION_ERROR
+      2003, # CR_CONN_HOST_ERROR
+      2004, # CR_IPSOCK_ERROR
+      2005, # CR_UNKNOWN_HOST
+      2013, # CR_SERVER_LOST
+    ].freeze
+    private_constant :HOST_UNREACHABLE_ERROR_CODES
+
     private
+
+    # Attempts each host in listed order and connects to the first that
+    # answers, passing `rest` through to #connect as its post-host
+    # arguments (port, database, socket, flags, conn_attrs, tls_sni_name).
+    # Unreachable hosts advance the loop; when every host is unreachable,
+    # re-raises the last failure's class with each host's error named in
+    # the message.
+    #
+    # Worst-case connect latency multiplies by host count: :connect_timeout
+    # applies to each attempt separately.
+    def connect_to_first_available_host(hosts, user, pass, *rest)
+      raise ArgumentError, ":host array must contain at least one host" if hosts.empty?
+
+      failures = []
+      hosts.each do |host|
+        begin
+          return connect(user, pass, host, *rest)
+        rescue Mysql2::Error => e
+          raise unless HOST_UNREACHABLE_ERROR_CODES.include?(e.error_number)
+
+          failures << [host, e]
+        end
+      end
+
+      last_error = failures.last[1]
+      detail = failures.map { |host, error| "#{host}: #{error.message}" }.join("; ")
+      raise last_error.class.new("unable to connect to any host: #{detail}", nil, last_error.error_number, last_error.sql_state)
+    end
 
     def apply_tls_option_aliases(opts)
       TLS_OPTION_ALIASES.each { |tls_key, legacy_key| opts[legacy_key] = opts[tls_key] if opts.key?(tls_key) }

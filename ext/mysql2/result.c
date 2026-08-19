@@ -95,7 +95,7 @@ typedef struct {
 
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE cMysql2Result, cDateTime, cDate;
-static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
+static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_time_day, opt_utc_offset;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
   intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
   intern_query_options, intern_plus;
@@ -910,7 +910,7 @@ static VALUE mysql2_time_from_duration(VALUE db_timezone, int negative,
 
   if (negative) total_usec = -total_usec;
 
-  anchor = rb_funcall(rb_cTime, db_timezone, 7, opt_time_year, opt_time_month, opt_time_month,
+  anchor = rb_funcall(rb_cTime, db_timezone, 7, opt_time_year, opt_time_month, opt_time_day,
                       INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
   offset = rb_rational_new(LL2NUM(total_usec), INT2FIX(1000000));
   return rb_funcall(anchor, intern_plus, 1, offset);
@@ -2681,6 +2681,7 @@ void init_mysql2_result(void) {
   rb_global_variable(&opt_float_zero);
   opt_time_year = INT2NUM(2000);
   opt_time_month = INT2NUM(1);
+  opt_time_day = INT2NUM(1);
   opt_utc_offset = INT2NUM(0);
 
   binaryEncoding = rb_enc_find("binary");

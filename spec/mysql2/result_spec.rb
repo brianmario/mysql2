@@ -258,6 +258,117 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       end
     end
 
+    context "when yielding as: :splat rows" do
+      # Splat rows exist only as block arguments: the cells are cast into the
+      # per-#each scratch buffer and passed via rb_yield_values2, one block
+      # argument per column, with no per-row Array or Hash built at all.
+      it "should yield each row's cells as block arguments" do
+        pairs = []
+        @client.query("SELECT 1 AS a, 'x' AS b UNION SELECT 2, 'y'", as: :splat).each { |a, b| pairs << [a, b] }
+        expect(pairs).to eql([[1, "x"], [2, "y"]])
+      end
+
+      it "should yield cells, not a row container, to a single-parameter block" do
+        seen = []
+        @client.query("SELECT 1 AS a, 'x' AS b", as: :splat).each { |cell| seen << cell }
+        expect(seen).to eql([1])
+      end
+
+      it "should yield every cell in field order for wide rows" do
+        width = 40
+        sql = "SELECT #{Array.new(width) { |i| "#{i} AS c#{i}" }.join(', ')}"
+        cells = nil
+        @client.query(sql, as: :splat).each { |*row| cells = row }
+        expect(cells).to eql((0...width).to_a)
+      end
+
+      it "should yield nil cells in position without ending iteration early" do
+        # A NULL cell must arrive as nil in its argument slot, and an all-NULL
+        # row must never read as the end-of-rows sentinel.
+        rows = []
+        @client.query("SELECT 1 AS a, NULL AS b UNION SELECT NULL, NULL UNION SELECT 3, 'z'", as: :splat)
+               .each { |a, b| rows << [a, b] }
+        expect(rows).to eql([[1, nil], [nil, nil], [3, "z"]])
+      end
+
+      it "should return an empty array from #each instead of rows" do
+        result = @client.query("SELECT 1 UNION SELECT 2", as: :splat)
+        expect(result.each { |_| }).to eql([])
+        expect(result.each).to eql([]) # no block: nothing is materialized either
+      end
+
+      it "should pack rows into Arrays under Enumerable methods built on the multi-value yields" do
+        expect(@client.query("SELECT 1, 'x' UNION SELECT 2, 'y'", as: :splat).to_a).to eql([[1, "x"], [2, "y"]])
+        # A single-column row is a single yielded value, so it arrives bare.
+        expect(@client.query("SELECT 1 UNION SELECT 2", as: :splat).to_a).to eql([1, 2])
+      end
+
+      it "should support re-iterating a live result" do
+        result = @client.query("SELECT 1 AS a UNION SELECT 2", as: :splat)
+        first = []
+        result.each { |v| first << v }
+        second = []
+        result.each { |v| second << v }
+        expect(first).to eql([1, 2])
+        expect(second).to eql([1, 2])
+      end
+
+      it "should raise instead of replaying a freed result" do
+        # :cache_rows is overridden off in splat mode, so a freed result has
+        # nothing to replay from.
+        result = @client.query("SELECT 1 AS a UNION SELECT 2", as: :splat)
+        result.each { |_| }
+        result.free
+        expect { result.each { |_| } }.to raise_error(Mysql2::Error, "Result set has already been freed")
+      end
+
+      it "should raise for a per-each :as => :splat once the result has been freed" do
+        result = @client.query("SELECT 1 AS a UNION SELECT 2")
+        result.to_a # fully cached; C result auto-freed
+        expect { result.each(as: :splat) { |_| } }.to raise_error(Mysql2::Error, "Result set has already been freed")
+      end
+
+      it "should support a per-each :as => :splat override on a live result" do
+        result = @client.query("SELECT 1 AS a, 'x' AS b", cache_rows: false)
+        hashes = []
+        result.each { |row| hashes << row }
+        expect(hashes).to eql([{ "a" => 1, "b" => "x" }])
+        cells = []
+        result.each(as: :splat) { |a, b| cells << [a, b] }
+        expect(cells).to eql([[1, "x"]])
+      end
+
+      it "should yield cells for streaming results" do
+        rows = []
+        @client.query("SELECT 1 AS a, 'x' AS b UNION SELECT 2, 'y'", as: :splat, stream: true, cache_rows: false)
+               .each { |a, b| rows << [a, b] }
+        expect(rows).to eql([[1, "x"], [2, "y"]])
+      end
+
+      it "should compose with :cast => false and :cast => :fast" do
+        raw = []
+        @client.query("SELECT 1 AS a, 2.5 AS t", as: :splat, cast: false).each { |a, t| raw << [a, t] }
+        expect(raw).to eql([%w[1 2.5]])
+        fast = []
+        @client.query("SELECT 1 AS a, DATE('2020-01-02') AS d", as: :splat, cast: :fast).each { |a, d| fast << [a, d] }
+        expect(fast).to eql([[1, "2020-01-02"]])
+      end
+
+      it "should still answer #fields after splat iteration" do
+        result = @client.query("SELECT 1 AS a, 2 AS b", as: :splat)
+        result.each { |_| }
+        expect(result.fields).to eql(%w[a b])
+      end
+
+      it "should raise on prepared statement results" do
+        expect { @client.prepare("SELECT 1").execute(as: :splat) }.to \
+          raise_error(Mysql2::Error, "as: :splat is not supported on prepared statement results")
+        stmt_stream = @client.prepare("SELECT 1").execute(stream: true, cache_rows: false, as: :splat)
+        expect { stmt_stream.each { |_| } }.to \
+          raise_error(Mysql2::Error, "as: :splat is not supported on prepared statement results")
+      end
+    end
+
     it "should cache previously yielded results by default" do
       expect(@result.first.object_id).to eql(@result.first.object_id)
     end

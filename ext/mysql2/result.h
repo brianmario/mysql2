@@ -40,7 +40,7 @@ void mysql2_result_force_free(VALUE self);
 typedef struct {
   int parsed;
   int symbolizeKeys;
-  int asArray;
+  int rowMode; /* a mysql2_row_mode value */
   int castBool;
   int cacheRows;
   int cast;

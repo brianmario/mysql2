@@ -70,9 +70,19 @@ typedef enum {
   MYSQL2_CAST_FAST = 2  /* cast: :fast -- cast cheap types; defer expensive ones as Strings */
 } mysql2_cast_mode;
 
+/* The shape #each produces each row as, parsed from the :as option: only the
+ * exact symbols :array and :splat select those modes, and any other value --
+ * recognized or not -- keeps meaning hash rows, as every non-:array value
+ * always has. */
+typedef enum {
+  MYSQL2_ROW_AS_HASH  = 0, /* as: :hash -- a Hash per row (the default) */
+  MYSQL2_ROW_AS_ARRAY = 1, /* as: :array -- an Array per row */
+  MYSQL2_ROW_AS_SPLAT = 2  /* as: :splat -- cells yielded as block arguments; no per-row container */
+} mysql2_row_mode;
+
 typedef struct {
   int symbolizeKeys;
-  int asArray;
+  mysql2_row_mode rowMode;
   int castBool;
   int cacheRows;
   mysql2_cast_mode cast;
@@ -85,11 +95,13 @@ typedef struct {
    * per row. Changing it mid-iteration therefore no longer affects later rows
    * of that same call; the next #each call observes the new value. */
   rb_encoding *default_internal_enc;
-  /* Array-mode cell scratch: one slot per field, ALLOCV-allocated (so the
-   * VALUEs written into it are GC-visible) once per #each call and reused for
-   * every row. Each row's cells are cast into it and the row is built with a
-   * single rb_ary_new4 instead of one rb_ary_push per cell. NULL in hash mode
-   * and when the fetch functions can never run (freed result). */
+  /* Cell scratch for the container-free row modes: one slot per field,
+   * ALLOCV-allocated (so the VALUEs written into it are GC-visible) once per
+   * #each call and reused for every row. Each row's cells are cast into it;
+   * array mode then builds the row with a single rb_ary_new4 instead of one
+   * rb_ary_push per cell, and splat mode yields straight from it
+   * (rb_yield_values2) without building any per-row container at all. NULL
+   * in hash mode and when the fetch functions can never run (freed result). */
   VALUE *rowScratch;
 } result_each_args;
 
@@ -100,7 +112,7 @@ static VALUE opt_time_anchor_utc;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
   intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
   intern_query_options, intern_plus;
-static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
+static VALUE sym_symbolize_keys, sym_as, sym_array, sym_splat, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
   sym_cache_rows, sym_cast, sym_fast, sym_stream, sym_name, sym_rows_per_gvl_yield,
   sym_no_good_index_used, sym_no_index_used, sym_query_was_slow,
@@ -1197,6 +1209,36 @@ static void rb_mysql_result_alloc_result_buffers(VALUE self, MYSQL_FIELD *fields
   }
 }
 
+/* Finish a row whose cells the fetch loop wrote into args->rowScratch:
+ * array mode materializes them into a new Array; splat mode leaves them in
+ * the scratch for rb_mysql_result_yield_row to pass as block arguments and
+ * returns Qtrue as its row-fetched marker -- never Qnil, which every
+ * consumer treats as the end-of-rows sentinel, so a splat row can never
+ * terminate iteration early. Hash rows never touch the scratch and pass
+ * through unchanged. */
+static VALUE rb_mysql_result_finish_scratch_row(const mysql2_result_wrapper *wrapper, const result_each_args *args, VALUE rowVal) {
+  switch (args->rowMode) {
+    case MYSQL2_ROW_AS_ARRAY:
+      return rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
+    case MYSQL2_ROW_AS_SPLAT:
+      return Qtrue;
+    default:
+      return rowVal;
+  }
+}
+
+/* Yield one fetched row to the iteration block. A splat row's cells are
+ * still in args->rowScratch (its row VALUE is just the Qtrue marker) and
+ * are passed as one block argument per column; the other modes yield the
+ * row object itself. */
+static void rb_mysql_result_yield_row(const mysql2_result_wrapper *wrapper, const result_each_args *args, VALUE row) {
+  if (args->rowMode == MYSQL2_ROW_AS_SPLAT) {
+    rb_yield_values2((int)wrapper->numberOfFields, args->rowScratch);
+  } else {
+    rb_yield(row);
+  }
+}
+
 static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, const result_each_args *args)
 {
   VALUE rowVal = Qnil;
@@ -1221,7 +1263,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
-  if (!args->asArray) {
+  if (args->rowMode == MYSQL2_ROW_AS_HASH) {
 #ifdef HAVE_RB_HASH_NEW_CAPA
     rowVal = rb_hash_new_capa(wrapper->numberOfFields);
 #else
@@ -1346,7 +1388,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
   /* Placed after the fetch above rather than with the wrapper->fields
    * allocation so an empty result set stays untouched, exactly as it was
    * when the (never-entered) cell loop did the materializing. */
-  if (args->asArray) {
+  if (args->rowMode != MYSQL2_ROW_AS_HASH) {
     rb_mysql_result_materialize_field_names(self, args->symbolizeKeys);
   }
 
@@ -1360,8 +1402,8 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
    * handling, and the same key-before-value evaluation order. */
   if (args->cast == MYSQL2_CAST_NONE) {
     for (i = 0; i < wrapper->numberOfFields; i++) {
-      /* Hash keys only; array-mode names were batch-materialized above. */
-      VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+      /* Hash keys only; array/splat-mode names were batch-materialized above. */
+      VALUE field = args->rowMode != MYSQL2_ROW_AS_HASH ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
       VALUE val;
 
       if (!wrapper->is_null[i] && fields[i].type != MYSQL_TYPE_NULL) {
@@ -1371,21 +1413,18 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
         val = Qnil;
       }
 
-      if (args->asArray) {
+      if (args->rowMode != MYSQL2_ROW_AS_HASH) {
         args->rowScratch[i] = val;
       } else {
         rb_hash_aset(rowVal, field, val);
       }
     }
-    if (args->asArray) {
-      rowVal = rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
-    }
-    return rowVal;
+    return rb_mysql_result_finish_scratch_row(wrapper, args, rowVal);
   }
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
-    /* Hash keys only; array-mode names were batch-materialized above. */
-    VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+    /* Hash keys only; array/splat-mode names were batch-materialized above. */
+    VALUE field = args->rowMode != MYSQL2_ROW_AS_HASH ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
     VALUE val = Qnil;
     MYSQL_TIME *ts;
 
@@ -1588,18 +1627,14 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
       }
     }
 
-    if (args->asArray) {
+    if (args->rowMode != MYSQL2_ROW_AS_HASH) {
       args->rowScratch[i] = val;
     } else {
       rb_hash_aset(rowVal, field, val);
     }
   }
 
-  if (args->asArray) {
-    rowVal = rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
-  }
-
-  return rowVal;
+  return rb_mysql_result_finish_scratch_row(wrapper, args, rowVal);
 }
 
 /* Whether a MySQL DECIMAL wire value is zero: sign, digits, '.', digits,
@@ -1660,7 +1695,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
     wrapper->numberOfFields = mysql_num_fields(wrapper->result);
     wrapper->fields = rb_ary_new2(wrapper->numberOfFields);
   }
-  if (args->asArray) {
+  if (args->rowMode != MYSQL2_ROW_AS_HASH) {
     /* This runs after the NULL-row check above, so it materializes on the
      * first fetched row and an empty result set stays untouched, exactly
      * as it was when the (never-entered) cell loop did the materializing. */
@@ -1688,8 +1723,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
    * fetch above). */
   if (args->cast == MYSQL2_CAST_NONE) {
     for (i = 0; i < wrapper->numberOfFields; i++) {
-      /* Hash keys only; array-mode names were batch-materialized above. */
-      VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+      /* Hash keys only; array/splat-mode names were batch-materialized above. */
+      VALUE field = args->rowMode != MYSQL2_ROW_AS_HASH ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
       VALUE val;
 
       if (row[i] && fields[i].type != MYSQL_TYPE_NULL) {
@@ -1699,21 +1734,18 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
         val = Qnil;
       }
 
-      if (args->asArray) {
+      if (args->rowMode != MYSQL2_ROW_AS_HASH) {
         args->rowScratch[i] = val;
       } else {
         rb_hash_aset(rowVal, field, val);
       }
     }
-    if (args->asArray) {
-      rowVal = rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
-    }
-    return rowVal;
+    return rb_mysql_result_finish_scratch_row(wrapper, args, rowVal);
   }
 
   for (i = 0; i < wrapper->numberOfFields; i++) {
-    /* Hash keys only; array-mode names were batch-materialized above. */
-    VALUE field = args->asArray ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
+    /* Hash keys only; array/splat-mode names were batch-materialized above. */
+    VALUE field = args->rowMode != MYSQL2_ROW_AS_HASH ? Qnil : rb_mysql_result_fetch_field(self, i, args->symbolizeKeys);
     if (row[i]) {
       VALUE val = Qnil;
       enum enum_field_types type = fields[i].type;
@@ -1932,23 +1964,20 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
           break;
       }
-      if (args->asArray) {
+      if (args->rowMode != MYSQL2_ROW_AS_HASH) {
         args->rowScratch[i] = val;
       } else {
         rb_hash_aset(rowVal, field, val);
       }
     } else {
-      if (args->asArray) {
+      if (args->rowMode != MYSQL2_ROW_AS_HASH) {
         args->rowScratch[i] = Qnil;
       } else {
         rb_hash_aset(rowVal, field, Qnil);
       }
     }
   }
-  if (args->asArray) {
-    rowVal = rb_ary_new4(wrapper->numberOfFields, args->rowScratch);
-  }
-  return rowVal;
+  return rb_mysql_result_finish_scratch_row(wrapper, args, rowVal);
 }
 
 static VALUE rb_mysql_result_fetch_fields(VALUE self) {
@@ -2107,7 +2136,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
         if (row != Qnil) {
           wrapper->numberOfRows++;
           if (args->block_given) {
-            rb_yield(row);
+            rb_mysql_result_yield_row(wrapper, args, row);
           }
         }
       } while(row != Qnil);
@@ -2183,7 +2212,7 @@ static VALUE rb_mysql_result_each_(VALUE self,
         }
 
         if (args->block_given) {
-          rb_yield(row);
+          rb_mysql_result_yield_row(wrapper, args, row);
         }
       }
       if (wrapper->lastRowProcessed == wrapper->numberOfRows && args->cacheRows) {
@@ -2204,7 +2233,8 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
   VALUE rows;
   VALUE opts, (*fetch_row_func)(VALUE, MYSQL_FIELD *fields, const result_each_args *args);
   ID db_timezone, app_timezone;
-  int symbolizeKeys, asArray, castBool, cacheRows;
+  int symbolizeKeys, castBool, cacheRows;
+  mysql2_row_mode rowMode;
   mysql2_cast_mode cast;
   int warnDbTimezone, perEachOpts;
   unsigned long rowsPerGvlYield;
@@ -2236,7 +2266,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
      * conditions are recomputed from the cached (pre-forcing) values below,
      * so they fire on every call exactly as an uncached parse would. */
     symbolizeKeys   = wrapper->each_opts.symbolizeKeys;
-    asArray         = wrapper->each_opts.asArray;
+    rowMode         = (mysql2_row_mode)wrapper->each_opts.rowMode;
     castBool        = wrapper->each_opts.castBool;
     cacheRows       = wrapper->each_opts.cacheRows;
     cast            = wrapper->each_opts.cast;
@@ -2245,16 +2275,26 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
     db_timezone     = wrapper->each_opts.db_timezone;
     app_timezone    = wrapper->each_opts.app_timezone;
   } else {
-    VALUE dbTz, appTz, rowsPerGvlYieldOpt, castOpt;
+    VALUE dbTz, appTz, rowsPerGvlYieldOpt, castOpt, asOpt;
     VALUE defaults = rb_ivar_get(self, intern_query_options);
     Check_Type(defaults, T_HASH);
 
     opts = perEachOpts ? rb_funcall(defaults, intern_merge, 1, opts) : defaults;
 
     symbolizeKeys = RTEST(rb_hash_aref(opts, sym_symbolize_keys));
-    asArray       = rb_hash_aref(opts, sym_as) == sym_array;
     castBool      = RTEST(rb_hash_aref(opts, sym_cast_booleans));
     cacheRows     = RTEST(rb_hash_aref(opts, sym_cache_rows));
+
+    /* See mysql2_row_mode: only the exact symbols :array and :splat select
+     * those modes; any other :as value keeps meaning hash rows. */
+    asOpt = rb_hash_aref(opts, sym_as);
+    if (asOpt == sym_array) {
+      rowMode = MYSQL2_ROW_AS_ARRAY;
+    } else if (asOpt == sym_splat) {
+      rowMode = MYSQL2_ROW_AS_SPLAT;
+    } else {
+      rowMode = MYSQL2_ROW_AS_HASH;
+    }
 
     /* See mysql2_cast_mode: only the exact symbol :fast selects partial
      * casting; any other truthy value stays full casting. */
@@ -2310,7 +2350,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
        * unset so the next call re-parses and re-raises just as an uncached
        * one would. */
       wrapper->each_opts.symbolizeKeys   = symbolizeKeys;
-      wrapper->each_opts.asArray         = asArray;
+      wrapper->each_opts.rowMode         = (int)rowMode;
       wrapper->each_opts.castBool        = castBool;
       wrapper->each_opts.cacheRows       = cacheRows;
       wrapper->each_opts.cast            = cast;
@@ -2320,6 +2360,20 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
       wrapper->each_opts.app_timezone    = app_timezone;
       wrapper->each_opts.parsed          = 1;
     }
+  }
+
+  if (rowMode == MYSQL2_ROW_AS_SPLAT) {
+    /* Splat rows exist only as block arguments, never as storable objects,
+     * so the mode cannot serve the prepared-statement path, which
+     * materializes and caches every row inside Statement#execute (the
+     * :cache_rows forcing below). And :cache_rows has nothing to store:
+     * it is overridden off -- which also makes a freed splat result
+     * unreplayable, so the freed-result guard below raises instead of
+     * handing hash/array rows to a block expecting splat arguments. */
+    if (wrapper->stmt_wrapper) {
+      rb_raise(cMysql2Error, "as: :splat is not supported on prepared statement results");
+    }
+    cacheRows = 0;
   }
 
   if (wrapper->is_streaming && cacheRows) {
@@ -2367,7 +2421,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   // Backward compat
   args.symbolizeKeys = symbolizeKeys;
-  args.asArray = asArray;
+  args.rowMode = rowMode;
   args.castBool = castBool;
   args.cacheRows = cacheRows;
   args.rowsPerGvlYield = rowsPerGvlYield;
@@ -2388,7 +2442,7 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
    * that is the standard ALLOCV trade, bounded to one buffer per raised
    * iteration because the allocation is per-#each, not per-row. */
   args.rowScratch = NULL;
-  if (asArray && !wrapper->resultFreed) {
+  if (rowMode != MYSQL2_ROW_AS_HASH && !wrapper->resultFreed) {
     args.rowScratch = ALLOCV_N(VALUE, scratch_holder, mysql_num_fields(wrapper->result));
   }
 
@@ -2658,6 +2712,7 @@ void init_mysql2_result(void) {
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
+  sym_splat           = ID2SYM(rb_intern("splat"));
   sym_local           = ID2SYM(rb_intern("local"));
   sym_utc             = ID2SYM(rb_intern("utc"));
   sym_cast_booleans   = ID2SYM(rb_intern("cast_booleans"));

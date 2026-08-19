@@ -703,6 +703,25 @@ Pass the `:as => :array` option to any of the above methods of configuration
 
 The default result type is set to `:hash`, but you can override a previous setting to something else with `:as => :hash`
 
+### Splat block arguments
+
+Pass the `:as => :splat` option to yield each row's values directly as block arguments, without building a per-row Array or Hash at all:
+
+``` ruby
+client.query("SELECT id, name FROM users", :as => :splat).each do |id, name|
+  # ...
+end
+```
+
+Values are cast exactly as in the other modes (`:cast`, `:cast_booleans`, and NULL-as-nil all apply); the only per-row objects are the values themselves. Because the row exists only as block arguments, the mode comes with a block-oriented iteration contract:
+
+* A block with fewer parameters than columns sees the leading values -- `{ |id| ... }` on a two-column result receives just the first column -- exactly like any Ruby block called with multiple arguments. Use `:as => :array` if you want the whole row as one object.
+* Rows are never cached: `:cache_rows` is implicitly disabled, `#each` returns an empty array rather than the rows, and a Result whose underlying result set has been freed cannot be re-iterated (a live one can, as with `:cache_rows => false`).
+* Enumerable methods are built on these multi-value yields: most pack each row into an Array (`#to_a` on a two-column result returns pairs), and a single-column row arrives as its bare value.
+* Prepared statement results are not supported -- they materialize and cache every row up front, which is exactly what splat rows can't do -- and raise `Mysql2::Error`.
+
+Works for buffered and streaming queries alike. On older mysql2 versions an unrecognized `:as` value silently means `:hash`, so check your version before relying on this option.
+
 ### Timezones
 
 Mysql2 now supports two timezone options:

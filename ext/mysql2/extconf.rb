@@ -271,6 +271,7 @@ $CFLAGS << ' -DMYSQL2_VERIFY_IDENTITY_SHIM' if have_verify_identity_shim
 have_func('mysql_ssl_set', mysql_h)
 have_func('mysql_next_result_nonblocking', mysql_h) # Added in MySQL 8.0.16; no MariaDB Connector/C equivalent under this name (see mysql_next_result_start/_cont)
 have_func('mysql_real_escape_string_quote', mysql_h) # Added in MySQL 5.7.6; no MariaDB Connector/C equivalent
+have_func('mysql_reset_connection', mysql_h) # Added in MySQL 5.7.3 and MariaDB Connector/C 3.0.4
 
 ### Compiler flags to help catch errors
 

@@ -1380,4 +1380,191 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       expect(@client.pending_prepared_statement_closes).to eq(0)
     end
   end
+
+  context "#execute_batch" do
+    before(:example) do
+      @client.query 'DROP TABLE IF EXISTS mysql2_stmt_batch_test'
+      @client.query <<-SQL
+        CREATE TABLE mysql2_stmt_batch_test (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          int_col INT,
+          str_col VARCHAR(32),
+          float_col DOUBLE,
+          time_col DATETIME(6),
+          date_col DATE,
+          dec_col DECIMAL(30,3),
+          bool_col TINYINT
+        )
+      SQL
+    end
+
+    after(:example) do
+      @client.query 'DROP TABLE IF EXISTS mysql2_stmt_batch_test'
+    end
+
+    def batch_rows
+      @client.query('SELECT * FROM mysql2_stmt_batch_test ORDER BY id').to_a
+    end
+
+    # The whole contract runs twice: once over COM_STMT_BULK_EXECUTE where
+    # the build and server support it, and once over the per-row fallback
+    # loop, forced by stubbing the capability probe. Client-side behavior --
+    # validation, raise-early ordering, return values, mid-batch server
+    # errors -- must not differ between the two.
+    shared_examples "the execute_batch contract" do
+      def prepare_batch(sql)
+        stmt = @client.prepare(sql)
+        allow(stmt).to receive(:_bulk_execute_supported?).and_return(false) if forced_fallback
+        stmt
+      end
+
+      it "executes every row type-faithfully and returns the summed affected-rows count" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col, str_col, float_col, time_col, date_col, dec_col, bool_col) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        time = Time.local(2026, 6, 7, 8, 9, 10, 654_321)
+        date = Date.new(2011, 2, 3)
+
+        count = stmt.execute_batch(
+          [
+            [1, "one", 1.5, time, date, BigDecimal("123.456"), true],
+            [2, "二", -2.5, time, date, BigDecimal("-1.5"), false],
+            [nil, nil, nil, nil, nil, nil, nil],
+          ],
+        )
+        expect(count).to eq(3)
+
+        rows = batch_rows
+        expect(rows.map { |r| r['int_col'] }).to eq([1, 2, nil])
+        expect(rows.map { |r| r['str_col'] }).to eq(["one", "二", nil])
+        expect(rows.map { |r| r['float_col'] }).to eq([1.5, -2.5, nil])
+        expect(rows.map { |r| r['time_col'] }).to eq([time, time, nil])
+        expect(rows.map { |r| r['date_col'] }).to eq([date, date, nil])
+        expect(rows.map { |r| r['dec_col'] }).to eq([BigDecimal("123.456"), BigDecimal("-1.5"), nil])
+        expect(rows.map { |r| r['bool_col'] }).to eq([1, 0, nil])
+      end
+
+      it "returns 0 and executes nothing for an empty batch" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+        expect(stmt.execute_batch([])).to eq(0)
+        expect(batch_rows).to be_empty
+      end
+
+      it "binds a column holding only nils as NULL for every row" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col, str_col) VALUES (?, ?)')
+        expect(stmt.execute_batch([[nil, "a"], [nil, "b"]])).to eq(2)
+        expect(batch_rows.map { |r| [r['int_col'], r['str_col']] }).to eq([[nil, "a"], [nil, "b"]])
+      end
+
+      it "binds a column mixing 64-bit-overflowing Integers and BigDecimals as DECIMAL" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (dec_col) VALUES (?)')
+        expect(stmt.execute_batch([[2**70], [BigDecimal("1.5")]])).to eq(2)
+        expect(batch_rows.map { |r| r['dec_col'] }).to eq([BigDecimal(2**70), BigDecimal("1.5")])
+      end
+
+      it "sums affected rows across UPDATEs, counting rows that matched nothing as zero" do
+        @client.query "INSERT INTO mysql2_stmt_batch_test (int_col, str_col) VALUES (1, 'a'), (2, 'b')"
+        stmt = prepare_batch('UPDATE mysql2_stmt_batch_test SET str_col = ? WHERE int_col = ?')
+        expect(stmt.execute_batch([["x", 1], ["y", 999]])).to eq(1)
+        expect(batch_rows.map { |r| r['str_col'] }).to eq(%w[x b])
+      end
+
+      it "counts ON DUPLICATE KEY updates the way a per-row execute loop does" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (id, int_col) VALUES (?, ?) ON DUPLICATE KEY UPDATE int_col = ?')
+        expect(stmt.execute_batch([[1, 10, 10], [1, 20, 20], [2, 30, 30]])).to eq(4)
+        expect(batch_rows.map { |r| r['int_col'] }).to eq([20, 30])
+      end
+
+      it "executes a parameterless statement once per empty row" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test () VALUES ()')
+        expect(stmt.execute_batch([[], [], []])).to eq(3)
+        expect(batch_rows.size).to eq(3)
+      end
+
+      it "raises before executing anything when a row's arity doesn't match the parameter count" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+        expect { stmt.execute_batch([[1], [1, 2]]) }.to raise_error(Mysql2::Error, /doesn't match number of arguments \(2\) in row 2/)
+        expect(batch_rows).to be_empty
+      end
+
+      it "raises before executing anything when a column mixes bind types" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+        expect { stmt.execute_batch([[1], [2], ["three"]]) }.to \
+          raise_error(TypeError, /can't bind parameter 1 in row 3: String binds as String, conflicting with the Integer binding established by row 1/)
+        expect(batch_rows).to be_empty
+      end
+
+      it "raises before executing anything when a value has no conversion" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+        expect { stmt.execute_batch([[1], [:nope]]) }.to raise_error(TypeError, /can't bind parameter 1 in row 2: no conversion for Symbol \(:nope\)/)
+        expect(batch_rows).to be_empty
+      end
+
+      it "raises when a row is not an Array" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+        expect { stmt.execute_batch([[1], 2]) }.to raise_error(TypeError, /row 2 is not an Array \(Integer given\)/)
+        expect(batch_rows).to be_empty
+      end
+
+      it "raises when rows is not an Array" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+        expect { stmt.execute_batch(:nope) }.to raise_error(TypeError)
+      end
+
+      it "rejects statements that return a result set, even for an empty batch" do
+        stmt = prepare_batch('SELECT ?')
+        expect { stmt.execute_batch([]) }.to raise_error(Mysql2::Error, /DML/)
+        expect { stmt.execute_batch([[1]]) }.to raise_error(Mysql2::Error, /DML/)
+      end
+
+      it "raises the server's error on a mid-batch failure" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (id) VALUES (?)')
+        expect { stmt.execute_batch([[1], [2], [1], [3]]) }.to raise_error(Mysql2::Error, /[Dd]uplicate entry/)
+
+        # The one behavior the two paths cannot share: a bulk batch is a
+        # single statement server-side, so an error rolls the whole batch
+        # back on a transactional engine, while the per-row loop leaves the
+        # rows before the failure applied. Callers needing the same
+        # visibility everywhere wrap execute_batch in their own transaction.
+        expect(batch_rows.map { |r| r['id'] }).to eq(ids_kept_after_mid_batch_error)
+      end
+
+      it "leaves the statement reusable for ordinary executes and further batches" do
+        stmt = prepare_batch('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+        expect(stmt.execute_batch([[1], [2]])).to eq(2)
+        stmt.execute(3)
+        expect(stmt.affected_rows).to eq(1)
+        expect(stmt.execute_batch([[4]])).to eq(1)
+        expect(batch_rows.map { |r| r['int_col'] }).to eq([1, 2, 3, 4])
+      end
+    end
+
+    context "over the per-row fallback loop" do
+      let(:forced_fallback) { true }
+      let(:ids_kept_after_mid_batch_error) { [1, 2] }
+
+      include_examples "the execute_batch contract"
+    end
+
+    context "over COM_STMT_BULK_EXECUTE" do
+      let(:forced_fallback) { false }
+      let(:ids_kept_after_mid_batch_error) { [] }
+
+      before(:example) do
+        probe = @client.prepare('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+        skip "COM_STMT_BULK_EXECUTE requires a MariaDB Connector/C build and a MariaDB 10.2+ server" unless probe._bulk_execute_supported?
+      end
+
+      include_examples "the execute_batch contract"
+    end
+
+    it "never chooses the bulk protocol for a parameterless statement" do
+      stmt = @client.prepare('INSERT INTO mysql2_stmt_batch_test () VALUES ()')
+      expect(stmt._bulk_execute_supported?).to eq(false)
+    end
+
+    it "raises on a closed statement" do
+      stmt = @client.prepare('INSERT INTO mysql2_stmt_batch_test (int_col) VALUES (?)')
+      stmt.close
+      expect { stmt.execute_batch([[1]]) }.to raise_error(Mysql2::Error, /Invalid statement handle/)
+    end
+  end
 end

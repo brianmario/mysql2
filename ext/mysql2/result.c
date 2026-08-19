@@ -889,11 +889,10 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
 /* MySQL TIME is a signed duration of hour, minute, second, and
  * microseconds, ranging from -838:59:59.999999 to 838:59:59.999999, but
  * Ruby's Time constructor rejects an hour beyond 24 or a negative value.
- * We solve this by taking a Time anchored at 2000-01-01 00:00:00 and
- * adding or subtracting the value converted to seconds -- a plain Integer
- * when there are no microseconds (the common case, and measurably cheaper
- * than a Rational), or an exact Rational when there are, so no microsecond
- * is lost to float rounding. */
+ * We solve this by adding the signed duration to a Time anchored at
+ * 2000-01-01 00:00:00. Duration is converted to an Integer in seconds
+ * or a Rational in microseconds, depending on the precision of the
+ * field. */
 static VALUE mysql2_time_from_duration(VALUE db_timezone, int negative,
                                        unsigned int hour, unsigned int min, unsigned int sec,
                                        unsigned long usec) {

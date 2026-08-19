@@ -726,6 +726,9 @@ becomes `2000-01-02 00:00:01`, `-01:00:00` becomes `1999-12-31 23:00:00`.
 Values within a single day (`00:00:00` to `23:59:59`) land on the
 placeholder date unchanged.
 
+Both plain `TIME` (whole-second precision) and `TIME(N)` up to `TIME(6)`
+(microsecond precision) are supported.
+
 ### Casting "boolean" columns
 
 You can now tell Mysql2 to cast `tinyint(1)` fields to boolean values in Ruby with the `:cast_booleans` option.

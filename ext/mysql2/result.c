@@ -885,34 +885,30 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
   ((tz) == intern_utc && (hour) < 24 && (min) < 60 && (sec) < 60)
 #endif
 
-/* MySQL's TIME is a signed duration, not a time-of-day: it ranges from
- * -838:59:59 to 838:59:59 (elapsed time or an interval between two events,
- * per MySQL's own docs), so constructing it directly as Time.utc/local(...,
- * hour, min, sec, usec) breaks the moment hour reaches 24 or the value is
- * negative -- Time's own constructor rejects out-of-range components (#719).
- *
- * Instead, anchor a Time at year/month/day with all-zero wall-clock
- * components (always valid, never raises) and add the signed duration as an
- * exact Rational offset in seconds. Time#+ operates on the underlying
- * continuous instant, not on calendar fields, so this is immune to
- * leap-year layout (a day is always 86400 seconds, leap year or not) and
- * exact to the microsecond (Rational, never a float). Under :local, a
- * duration crossing a DST boundary is displayed with the wall-clock shift
- * DST implies -- the same behavior any Time + seconds arithmetic in Ruby
- * already has, not something this introduces. The common in-range case
- * (0 <= hour < 24) produces byte-identical output to direct construction. */
+/* MySQL TIME is a signed duration of hour, minute, second, and
+ * microseconds, ranging from -838:59:59.999999 to 838:59:59.999999, but
+ * Ruby's Time constructor rejects an hour beyond 24 or a negative value.
+ * We solve this by creating a Time anchored at 2000-01-01 00:00:00, then
+ * adding or subtracting the value converted to seconds -- a plain Integer
+ * when there are no microseconds (the common case, and measurably cheaper
+ * than a Rational), or an exact Rational when there are, so no microsecond
+ * is lost to float rounding. */
 static VALUE mysql2_time_from_duration(VALUE db_timezone, int negative,
                                        unsigned int hour, unsigned int min, unsigned int sec,
                                        unsigned long usec) {
   VALUE anchor, offset;
-  int64_t total_usec = (int64_t)hour * 3600000000LL + (int64_t)min * 60000000LL +
-                        (int64_t)sec * 1000000LL + (int64_t)usec;
-
-  if (negative) total_usec = -total_usec;
+  int64_t total_sec = (int64_t)hour * 3600 + (int64_t)min * 60 + (int64_t)sec;
 
   anchor = rb_funcall(rb_cTime, db_timezone, 7, opt_time_year, opt_time_month, opt_time_day,
                       INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
-  offset = rb_rational_new(LL2NUM(total_usec), INT2FIX(1000000));
+
+  if (usec == 0) {
+    offset = LL2NUM(negative ? -total_sec : total_sec);
+  } else {
+    int64_t total_usec = total_sec * 1000000LL + (int64_t)usec;
+    if (negative) total_usec = -total_usec;
+    offset = rb_rational_new(LL2NUM(total_usec), INT2FIX(1000000));
+  }
   return rb_funcall(anchor, intern_plus, 1, offset);
 }
 

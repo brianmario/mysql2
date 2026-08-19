@@ -1264,6 +1264,37 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       end
     end
 
+    context "a TIME column declared with fewer than 6 fractional digits" do
+      # MySQL sends exactly the declared precision on the wire (TIME(4)
+      # sends "12:34:56.1234", not zero-padded to 6 digits) -- this pins
+      # that mysql2 still expands it to the right number of microseconds,
+      # matching between protocols.
+      before(:context) do
+        new_client do |client|
+          client.query("DROP TABLE IF EXISTS mysql2_time_precision_test")
+          client.query("CREATE TABLE mysql2_time_precision_test (t TIME(4))")
+          %w[12:34:56.1234 -01:00:00.5].each do |t|
+            client.query("INSERT INTO mysql2_time_precision_test VALUES ('#{t}')")
+          end
+        end
+      end
+
+      after(:context) do
+        new_client { |client| client.query("DROP TABLE IF EXISTS mysql2_time_precision_test") }
+      end
+
+      it "expands the declared precision to the correct microseconds, matching between protocols" do
+        text = @client.query("SELECT t FROM mysql2_time_precision_test ORDER BY t").map { |r| r['t'] }
+        stmt = @client.prepare("SELECT t FROM mysql2_time_precision_test ORDER BY t").execute.map { |r| r['t'] }
+
+        expect(text.map { |t| t.strftime('%Y-%m-%d %H:%M:%S.%6N') }).to eql([
+                                                                              '1999-12-31 22:59:59.500000', # -01:00:00.5
+                                                                              '2000-01-01 12:34:56.123400', # 12:34:56.1234
+                                                                            ])
+        expect(stmt).to eql(text)
+      end
+    end
+
     it "should return Date for a DATE value" do
       expect(test_result['date_test']).to be_an_instance_of(Date)
       expect(test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')

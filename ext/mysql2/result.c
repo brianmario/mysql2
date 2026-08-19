@@ -889,9 +889,7 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
 /* MySQL TIME is a signed duration of hour, minute, second, and
  * microseconds, ranging from -838:59:59.999999 to 838:59:59.999999, but
  * Ruby's Time constructor rejects an hour beyond 24 or a negative value.
- * We solve this by taking a Time anchored at 2000-01-01 00:00:00 (built
- * once at init -- see opt_time_anchor_utc/_local -- since Time#+ never
- * mutates its receiver, so the same anchor is reused every call) and
+ * We solve this by taking a Time anchored at 2000-01-01 00:00:00 and
  * adding or subtracting the value converted to seconds -- a plain Integer
  * when there are no microseconds (the common case, and measurably cheaper
  * than a Rational), or an exact Rational when there are, so no microsecond
@@ -2683,9 +2681,7 @@ void init_mysql2_result(void) {
   opt_time_day = INT2NUM(1);
   opt_utc_offset = INT2NUM(0);
 
-  /* mysql2_time_from_duration's anchor (2000-01-01 00:00:00) is the same
-   * object every call for a given timezone -- Time#+ never mutates its
-   * receiver, so build each one once instead of on every TIME cast. */
+  /* mysql2_time_from_duration's anchor, built once per timezone and reused. */
   opt_time_anchor_utc = rb_funcall(rb_cTime, intern_utc, 7, opt_time_year, opt_time_month, opt_time_day,
                                    INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
   rb_global_variable(&opt_time_anchor_utc); /* never GC */

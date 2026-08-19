@@ -213,6 +213,61 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     @client.query 'DROP TABLE IF EXISTS mysql2_stmt_bind_type_test'
   end
 
+  it "should bind adjacent scalar parameters without overlap" do
+    stmt = @client.prepare 'SELECT ? AS a, ? AS b, ? AS c, ? AS d, ? AS e, ? AS f, ? AS g, ? AS h'
+    time = Time.local(2010, 6, 7, 8, 9, 10, 654321)
+    date = Date.new(2011, 2, 3)
+
+    row = stmt.execute(42, 1.5, true, false, time, "str", date, -0x8000000000000000, as: :array).first
+    expect(row).to eq([42, 1.5, 1, 0, time, "str", date, -0x8000000000000000])
+  end
+
+  it "should not leak the bind buffers when a bind raises mid-parameter-list" do
+    rss_kb = lambda do
+      begin
+        Integer(`ps -o rss= -p #{Process.pid}`)
+      rescue StandardError
+        nil
+      end
+    end
+    skip "resident set size is not measurable on this platform" if rss_kb.call.nil?
+
+    width = 64
+    stmt = @client.prepare "SELECT #{Array.new(width) { '?' }.join(', ')}"
+    args = Array.new(width - 1) { 1 } << :unbindable
+    attempt = lambda do
+      begin
+        stmt.execute(*args)
+        raise "expected the bind to raise"
+      rescue TypeError
+        nil
+      end
+    end
+
+    # Each raise leaves its bind arena to the GC, so collect periodically
+    # to bound how many are outstanding at once: RSS tracks the malloc
+    # high-watermark, and letting thousands of arenas pile up between
+    # collections would measure GC cadence, not leakage. A real leak is
+    # unreachable memory, which no amount of collection frees.
+    batch = lambda do
+      100.times do
+        200.times { attempt.call }
+        GC.start
+      end
+    end
+
+    batch.call # reach the allocator's steady state
+    before = rss_kb.call
+    batch.call
+    growth = rss_kb.call - before
+
+    # Every attempt raises after 63 of the 64 parameters' bind buffers are
+    # populated. Leaking them abandons ~8KB per attempt, well over 100MB
+    # across the 20,000 measured attempts; the steady state stays under
+    # 10MB. The allowance splits the two decisively.
+    expect(growth).to be < 40_960
+  end
+
   it "should keep its result after other query" do
     @client.query 'USE test'
     @client.query 'CREATE TABLE IF NOT EXISTS mysql2_stmt_q(a int)'

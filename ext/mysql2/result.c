@@ -96,6 +96,7 @@ typedef struct {
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE cMysql2Result, cDateTime, cDate;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_time_day, opt_utc_offset;
+static VALUE opt_time_anchor_utc, opt_time_anchor_local;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
   intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
   intern_query_options, intern_plus;
@@ -888,7 +889,9 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
 /* MySQL TIME is a signed duration of hour, minute, second, and
  * microseconds, ranging from -838:59:59.999999 to 838:59:59.999999, but
  * Ruby's Time constructor rejects an hour beyond 24 or a negative value.
- * We solve this by creating a Time anchored at 2000-01-01 00:00:00, then
+ * We solve this by taking a Time anchored at 2000-01-01 00:00:00 (built
+ * once at init -- see opt_time_anchor_utc/_local -- since Time#+ never
+ * mutates its receiver, so the same anchor is reused every call) and
  * adding or subtracting the value converted to seconds -- a plain Integer
  * when there are no microseconds (the common case, and measurably cheaper
  * than a Rational), or an exact Rational when there are, so no microsecond
@@ -899,8 +902,7 @@ static VALUE mysql2_time_from_duration(VALUE db_timezone, int negative,
   VALUE anchor, offset;
   int64_t total_sec = (int64_t)hour * 3600 + (int64_t)min * 60 + (int64_t)sec;
 
-  anchor = rb_funcall(rb_cTime, db_timezone, 7, opt_time_year, opt_time_month, opt_time_day,
-                      INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
+  anchor = (db_timezone == intern_utc) ? opt_time_anchor_utc : opt_time_anchor_local;
 
   if (usec == 0) {
     offset = LL2NUM(negative ? -total_sec : total_sec);
@@ -909,6 +911,7 @@ static VALUE mysql2_time_from_duration(VALUE db_timezone, int negative,
     if (negative) total_usec = -total_usec;
     offset = rb_rational_new(LL2NUM(total_usec), INT2FIX(1000000));
   }
+  /* returns a newly-allocated object, anchor is not mutated */
   return rb_funcall(anchor, intern_plus, 1, offset);
 }
 
@@ -2679,6 +2682,16 @@ void init_mysql2_result(void) {
   opt_time_month = INT2NUM(1);
   opt_time_day = INT2NUM(1);
   opt_utc_offset = INT2NUM(0);
+
+  /* mysql2_time_from_duration's anchor (2000-01-01 00:00:00) is the same
+   * object every call for a given timezone -- Time#+ never mutates its
+   * receiver, so build each one once instead of on every TIME cast. */
+  opt_time_anchor_utc = rb_funcall(rb_cTime, intern_utc, 7, opt_time_year, opt_time_month, opt_time_day,
+                                   INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
+  rb_global_variable(&opt_time_anchor_utc); /* never GC */
+  opt_time_anchor_local = rb_funcall(rb_cTime, intern_local, 7, opt_time_year, opt_time_month, opt_time_day,
+                                     INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
+  rb_global_variable(&opt_time_anchor_local); /* never GC */
 
   binaryEncoding = rb_enc_find("binary");
 }

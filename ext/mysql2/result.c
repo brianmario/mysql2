@@ -1508,9 +1508,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           break;
         case MYSQL_TYPE_TIME:         // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          /* ts->neg carries the sign for MySQL's TIME duration range
-           * (-838:59:59 to 838:59:59); hour/minute/second/second_part are
-           * always its unsigned magnitude (#719). */
+          /* ts->neg is the sign; hour/minute/second/second_part are the unsigned magnitude. */
           val = mysql2_time_from_duration(args->db_timezone, ts->neg, ts->hour, ts->minute, ts->second, ts->second_part);
           if (!NIL_P(args->app_timezone)) {
             if (args->app_timezone == intern_local) {

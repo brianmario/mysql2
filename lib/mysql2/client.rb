@@ -42,10 +42,23 @@ module Mysql2
     }.freeze
     private_constant :TLS_OPTION_ALIASES
 
+    # Passed to a callable :password on every evaluation, so one provider
+    # object can serve many clients and implement its own caching and retry
+    # policy. +attempt+ counts physical connect attempts, starting at 1.
+    PasswordContext = Struct.new(:host, :port, :username, :attempt)
+
     def initialize(opts = {})
       raise Mysql2::Error, "Options parameter must be a Hash" unless opts.is_a? Hash
 
       opts = Mysql2::Util.key_hash_as_symbols(opts)
+
+      # libmysqlclient's auto-reconnect re-authenticates inside the C library
+      # using the password it stored at connect time, so a callable :password
+      # can never intercept that path and rotated credentials would silently
+      # go stale. Refuse the combination.
+      raise ArgumentError, "callable :password is incompatible with reconnect: true; auto-reconnect re-authenticates with the connect-time password, never the callable" \
+        if (opts[:password] || opts[:pass]).respond_to?(:call) && opts[:reconnect]
+
       @read_timeout = nil
       @query_options = self.class.default_query_options.dup
       @query_options.merge! opts
@@ -107,12 +120,12 @@ module Mysql2
 
       # Correct the data types before passing these values down to the C level
       user = user.to_s unless user.nil?
-      pass = pass.to_s unless pass.nil?
       host = host.to_s unless host.nil?
       port = port.to_i unless port.nil?
       database = database.to_s unless database.nil?
       socket = socket.to_s unless socket.nil?
       tls_sni_name = tls_sni_name.to_s unless tls_sni_name.nil?
+      pass = resolve_password(pass, user, host, port)
       conn_attrs = parse_connect_attrs(opts[:connect_attrs])
 
       connect user, pass, host, port, database, socket, flags, conn_attrs, tls_sni_name
@@ -253,6 +266,16 @@ module Mysql2
     end
 
     private
+
+    # A callable :password is evaluated fresh for every physical connect --
+    # never memoized by the driver -- so rotating credentials (AWS RDS IAM
+    # tokens, Vault dynamic secrets) are minted at the moment they're needed.
+    # It runs here in Ruby, with the GVL held, before any network work.
+    # Static values keep the plain to_s treatment.
+    def resolve_password(pass, username, host, port)
+      pass = pass.call(PasswordContext.new(host, port, username, 1).freeze) if pass.respond_to?(:call)
+      pass.nil? ? nil : pass.to_s
+    end
 
     def apply_tls_option_aliases(opts)
       TLS_OPTION_ALIASES.each { |tls_key, legacy_key| opts[legacy_key] = opts[tls_key] if opts.key?(tls_key) }

@@ -2242,6 +2242,92 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(client.inspect).not_to include("secretsecret")
   end
 
+  context "with a callable :password" do
+    let(:fake_client_class) do
+      Class.new(Mysql2::Client) do
+        attr_reader :connect_args
+
+        def connect(*args)
+          @connect_args = args
+        end
+      end
+    end
+
+    it "connects using the password the callable returns" do
+      client = new_client(password: ->(_ctx) { DatabaseCredentials['root']['password'] })
+      expect(client.query('SELECT 1').first.values).to eql([1])
+    end
+
+    it "passes a frozen PasswordContext carrying host, port, username, and attempt number" do
+      seen = nil
+      provider = lambda do |ctx|
+        seen = ctx
+        'tok3n'
+      end
+      client = fake_client_class.new(host: 'db.example.com', port: '13306', username: 'app_user', password: provider)
+
+      expect(seen).to be_an_instance_of(Mysql2::Client::PasswordContext)
+      expect(seen).to be_frozen
+      expect(seen.to_h).to eql(host: 'db.example.com', port: 13_306, username: 'app_user', attempt: 1)
+      expect(client.connect_args[1]).to eql('tok3n')
+    end
+
+    it "accepts any object responding to #call and massages its result like a static password" do
+      provider = Class.new do
+        def call(_ctx)
+          :secret_token
+        end
+      end.new
+
+      client = fake_client_class.new(password: provider)
+      expect(client.connect_args[1]).to eql('secret_token')
+    end
+
+    it "treats a callable returning nil as no password" do
+      client = fake_client_class.new(password: ->(_ctx) { nil })
+      expect(client.connect_args[1]).to be_nil
+    end
+
+    it "re-evaluates the callable for every connect, never memoizing" do
+      calls = 0
+      provider = lambda do |_ctx|
+        calls += 1
+        DatabaseCredentials['root']['password']
+      end
+
+      new_client(password: provider)
+      new_client(password: provider)
+      expect(calls).to eql(2)
+    end
+
+    it "propagates an error raised by the callable before any connection is made" do
+      error_class = Class.new(StandardError)
+      expect do
+        new_client(password: ->(_ctx) { raise error_class, "token minting failed" })
+      end.to raise_error(error_class, "token minting failed")
+    end
+
+    it "raises ArgumentError when combined with reconnect: true" do
+      expect do
+        fake_client_class.new(password: ->(_ctx) { 'tok3n' }, reconnect: true)
+      end.to raise_error(ArgumentError, /reconnect/)
+    end
+
+    it "connects when combined with reconnect: false" do
+      client = fake_client_class.new(password: ->(_ctx) { 'tok3n' }, reconnect: false)
+      expect(client.connect_args[1]).to eql('tok3n')
+    end
+
+    it "does not leak the callable or its result through #inspect" do
+      client_class = Class.new(Mysql2::Client) do
+        def connect(*args); end
+      end
+
+      client = client_class.new(password: ->(_ctx) { 'secretsecret' })
+      expect(client.inspect).not_to include('password', 'secretsecret', 'Proc')
+    end
+  end
+
   it "should not allow concurrent use of #ping" do
     @client.ping
     thread = new_thread { @client.query("SELECT SLEEP(1)") }

@@ -88,6 +88,144 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     expect { result.each { |_| } }.to raise_error(Mysql2::Error, /streaming is true.*to reiterate you must requery/)
   end
 
+  context "GC memory reporting" do
+    # A buffered query pins its whole result set in the client library's own
+    # heap until the C result is freed. That copy is reported to Ruby's GC
+    # via rb_gc_adjust_memory_usage (visible in GC.stat's
+    # :malloc_increase_bytes) and counted by ObjectSpace.memsize_of, with an
+    # exactly-mirrored negative adjustment when the copy is freed.
+    let(:payload) { 1_000_000 }
+    let(:payload_query) { "SELECT REPEAT('x', #{payload}) AS a" }
+
+    before do
+      require "objspace"
+    end
+
+    it "counts the client-side copy of a stored result in ObjectSpace.memsize_of" do
+      result = @client.query payload_query
+      expect(ObjectSpace.memsize_of(result)).to be >= payload
+      result.free
+      expect(ObjectSpace.memsize_of(result)).to be < payload
+    end
+
+    it "keeps the estimate within sane bounds when extrapolating across many rows" do
+      @client.query "CREATE TEMPORARY TABLE gc_report_test (v VARCHAR(2048) NOT NULL)"
+      @client.query "INSERT INTO gc_report_test VALUES #{Array.new(512) { "('#{'y' * 2000}')" }.join(',')}"
+      data_bytes = 512 * 2000
+
+      result = @client.query "SELECT v FROM gc_report_test"
+      expect(ObjectSpace.memsize_of(result)).to be_between(data_bytes, data_bytes * 2)
+      result.free
+      @client.query "DROP TEMPORARY TABLE gc_report_test"
+    end
+
+    it "stops counting the copy once rows are cached and the C result auto-freed" do
+      result = @client.query payload_query
+      result.to_a # cache_rows (the default) frees the C copy at full materialization
+      expect(ObjectSpace.memsize_of(result)).to be < payload
+    end
+
+    it "counts statement result bind buffers in ObjectSpace.memsize_of" do
+      stmt = @client.prepare payload_query
+      result = stmt.execute(stream: true, cache_rows: false)
+      sizes = []
+      result.each { |_row| sizes << ObjectSpace.memsize_of(result) }
+      expect(sizes.max).to be >= payload
+      stmt.close
+    end
+
+    it "adjusts the GC's malloc bookkeeping up at store and back down at free" do
+      skip "needs GC.stat(:malloc_increase_bytes)" unless GC.stat.key?(:malloc_increase_bytes)
+
+      GC.start
+      GC.disable
+      begin
+        # Some Rubies report this counter as mallocs net of frees since the
+        # last GC, clamped at zero, so it can sit far enough underwater to
+        # swallow a payload-sized adjustment whole. Prove a plain malloc of
+        # the same size surfaces before trusting the counter to show ours.
+        probe_base = GC.stat(:malloc_increase_bytes)
+        probe = "x" * payload
+        skip "GC.stat(:malloc_increase_bytes) does not surface malloc growth on this Ruby" \
+          unless GC.stat(:malloc_increase_bytes) - probe_base >= probe.bytesize
+
+        before = GC.stat(:malloc_increase_bytes)
+        result = @client.query payload_query
+        stored = GC.stat(:malloc_increase_bytes)
+        expect(stored - before).to be >= payload
+
+        # Ruby-side allocations from the assertion machinery move the counter
+        # by a few KB of their own, so measure the free's negative adjustment
+        # from its own snapshot and leave allocation-noise headroom.
+        before_free = GC.stat(:malloc_increase_bytes)
+        result.free
+        freed = before_free - GC.stat(:malloc_increase_bytes)
+        expect(freed).to be >= payload - 16_384
+      ensure
+        GC.enable
+      end
+    end
+
+    it "does not report streaming results, whose rows are never client-buffered" do
+      skip "needs GC.stat(:malloc_increase_bytes)" unless GC.stat.key?(:malloc_increase_bytes)
+
+      GC.start
+      GC.disable
+      begin
+        before = GC.stat(:malloc_increase_bytes)
+        result = @client.query payload_query, stream: true, cache_rows: false
+        expect(GC.stat(:malloc_increase_bytes) - before).to be < payload
+        expect(ObjectSpace.memsize_of(result)).to be < payload
+        result.each { |_| } # drain the cursor so the connection is reusable
+      ensure
+        GC.enable
+      end
+    end
+
+    it "balances adjustments exactly across repeated store/free cycles" do
+      skip "needs GC.stat(:malloc_increase_bytes)" unless GC.stat.key?(:malloc_increase_bytes)
+
+      GC.start
+      GC.disable
+      begin
+        before = GC.stat(:malloc_increase_bytes)
+        10.times { @client.query(payload_query).free }
+        drift = GC.stat(:malloc_increase_bytes) - before
+
+        # Each cycle adjusts ~payload up at store and exactly that back down
+        # at free, leaving only small Ruby-side allocations behind; a
+        # one-sided adjustment would accumulate ~payload per cycle.
+        expect(drift).to be < 10 * payload / 2
+      ensure
+        GC.enable
+      end
+    end
+
+    it "nets to zero across a statement execute, whose stored copy is freed at materialization" do
+      skip "needs GC.stat(:malloc_increase_bytes)" unless GC.stat.key?(:malloc_increase_bytes)
+
+      GC.start
+      GC.disable
+      begin
+        stmt = @client.prepare payload_query
+        before = GC.stat(:malloc_increase_bytes)
+        results = Array.new(2) { stmt.execute.to_a }
+        drift = GC.stat(:malloc_increase_bytes) - before
+
+        # Each execute buffers ~payload client-side (adjusted up),
+        # materializes ~payload of Ruby strings, frees the client copy
+        # (adjusted back down), and the first grows a ~payload bind buffer
+        # that later executes adopt: balanced, the counter grows by roughly
+        # 3x payload here, while a one-sided adjustment would leave ~5x.
+        expect(drift).to be < 4 * payload
+        expect(results.first.first["a"].bytesize).to eql(payload)
+        stmt.close
+      ensure
+        GC.enable
+      end
+    end
+  end
+
   it "should keep field_types valid across GC and compaction" do
     result = @client.query "SELECT 1 AS a, 'x' AS b"
     before_types = result.field_types.dup

@@ -37,6 +37,9 @@ have_func('rb_absint_singlebit_p')
 # 2.2+
 have_func('rb_check_symbol_cstr', 'ruby.h')
 
+# 2.4+
+have_func('rb_gc_adjust_memory_usage', 'ruby.h')
+
 # 2.7+
 have_func('rb_gc_mark_movable')
 

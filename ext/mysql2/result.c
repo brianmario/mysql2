@@ -96,7 +96,7 @@ typedef struct {
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE cMysql2Result, cDateTime, cDate;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_time_day, opt_utc_offset;
-static VALUE opt_time_anchor_utc, opt_time_anchor_local;
+static VALUE opt_time_anchor_utc;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
   intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
   intern_query_options, intern_plus;
@@ -899,7 +899,14 @@ static VALUE mysql2_time_from_duration(VALUE db_timezone, int negative,
   VALUE anchor, offset;
   int64_t total_sec = (int64_t)hour * 3600 + (int64_t)min * 60 + (int64_t)sec;
 
-  anchor = (db_timezone == intern_utc) ? opt_time_anchor_utc : opt_time_anchor_local;
+  /* :utc has no environment dependence, so the cached anchor is exact.
+   * :local isn't cacheable the same way: Time.local re-reads ENV['TZ'] on
+   * every call, so a cached anchor would freeze the process's timezone at
+   * whatever it was when this extension loaded, silently going wrong after
+   * any later ENV['TZ'] change. */
+  anchor = (db_timezone == intern_utc) ? opt_time_anchor_utc
+         : rb_funcall(rb_cTime, intern_local, 7, opt_time_year, opt_time_month, opt_time_day,
+                      INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
 
   if (usec == 0) {
     offset = LL2NUM(negative ? -total_sec : total_sec);
@@ -2678,13 +2685,12 @@ void init_mysql2_result(void) {
   opt_time_day = INT2NUM(1);
   opt_utc_offset = INT2NUM(0);
 
-  /* mysql2_time_from_duration's anchor, built once per timezone and reused. */
+  /* mysql2_time_from_duration's :utc anchor, built once and reused -- safe
+   * only because :utc has no environment dependence; see the comment there
+   * on why :local can't be cached the same way. */
   opt_time_anchor_utc = rb_funcall(rb_cTime, intern_utc, 7, opt_time_year, opt_time_month, opt_time_day,
                                    INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
   rb_global_variable(&opt_time_anchor_utc); /* never GC */
-  opt_time_anchor_local = rb_funcall(rb_cTime, intern_local, 7, opt_time_year, opt_time_month, opt_time_day,
-                                     INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
-  rb_global_variable(&opt_time_anchor_local); /* never GC */
 
   binaryEncoding = rb_enc_find("binary");
 }

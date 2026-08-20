@@ -1492,18 +1492,24 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           }
           break;
         case MYSQL_TYPE_FLOAT: {      // float
-          /* Honor the field's declared precision instead of upconverting
-           * raw float32 to a double directly, which surfaces digits
-           * float32 can't distinguish: 6 significant digits by default,
-           * or exactly D decimal places for FLOAT(M,D); decimals == 31
-           * is MySQL's NOT_FIXED_DEC sentinel for "no explicit precision"
-           * (5.7's public mysql_com.h has it, 8.0+ dropped it). Buffer
-           * sized for float32's widest fixed-notation case: 39 integer
-           * digits, 30 decimals, sign, point, NUL. snprintf() here is
-           * Ruby's own ruby_snprintf (ruby/subst.h #defines it) -- always
-           * '.', unlike libc's locale-aware snprintf. rb_cstr_to_dbl() is
-           * the same locale-independent parse Kernel#Float() calls
-           * internally, without a String allocation or method dispatch. */
+          /* The binary format for a FLOAT column is a 32-bit IEEE-754
+           * single-precision float. Ruby Float is always a 64-bit double,
+           * so we need to do a little work to convert the value reliably.
+           * A naive up-cast from float to double will invent high-precision noise.
+           *
+           * FLOAT(M,D) displays up to M digits total, and stores up to D
+           * digits to the right of the decimal point. decimals == 31 is
+           * MySQL's NOT_FIXED_DEC sentinel for "no explicit precision" --
+           * format with 6 significant digits instead, matching FLOAT's
+           * own default display precision.
+           *
+           * Convert float to string using snprintf (actually ruby_snprintf,
+           * which ruby/subst.h #defines snprintf to, and which always uses
+           * '.' as the decimal separator regardless of locale), then parse
+           * the string to Ruby Float with rb_cstr_to_dbl().
+           *
+           * Size the buffer for the worst case: 39 integer digits, 30
+           * decimals, sign, point, NUL. */
           char float_buf[80];
           double float_as_double = (double)(*((float*)result_buffer->buffer));
           if (fields[i].decimals == 31)

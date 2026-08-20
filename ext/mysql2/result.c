@@ -1434,12 +1434,13 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           /* 512 bytes is larger than the worst-case DOUBLE(255,30) plus headroom. */
           char float_buf[512];
           int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)len, str);
-          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf))
+          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf)) {
             rb_raise(cMysql2Error, "FLOAT/DOUBLE value too wide for float_buf (%d bytes)", float_len);
+          }
           double column_as_double = rb_cstr_to_dbl(float_buf, 0);
-          if (column_as_double == 0.000000){
+          if (column_as_double == 0.000000) {
             val = opt_float_zero;
-          }else{
+          } else {
             val = rb_float_new(column_as_double);
           }
           break;
@@ -1518,8 +1519,9 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           int float_len = (fields[i].decimals == 31)
             ? snprintf(float_buf, sizeof(float_buf), "%.6g", float_as_double)
             : snprintf(float_buf, sizeof(float_buf), "%.*f", fields[i].decimals, float_as_double);
-          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf))
+          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf)) {
             rb_raise(cMysql2Error, "FLOAT value too wide for float_buf (%d bytes)", float_len);
+          }
           val = rb_float_new(rb_cstr_to_dbl(float_buf, 0));
           break;
         }
@@ -1799,12 +1801,13 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           /* 512 bytes is larger than the worst-case DOUBLE(255,30) plus headroom. */
           char float_buf[512];
           int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)fieldLengths[i], row[i]);
-          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf))
+          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf)) {
             rb_raise(cMysql2Error, "FLOAT/DOUBLE value too wide for float_buf (%d bytes)", float_len);
+          }
           double column_as_double = rb_cstr_to_dbl(float_buf, 0);
-          if (column_as_double == 0.000000){
+          if (column_as_double == 0.000000) {
             val = opt_float_zero;
-          }else{
+          } else {
             val = rb_float_new(column_as_double);
           }
           break;

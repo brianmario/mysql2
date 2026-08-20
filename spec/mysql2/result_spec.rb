@@ -1072,6 +1072,17 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(test_result['double_test']).to eql(10.3)
     end
 
+    it "does not truncate a wide DOUBLE(M,D) value" do
+      @client.query "DROP TABLE IF EXISTS mysql2_double_wide_test"
+      @client.query "CREATE TABLE mysql2_double_wide_test (a DOUBLE(255,30))"
+      @client.query "INSERT INTO mysql2_double_wide_test VALUES (1e225)"
+      expect(@client.query("SELECT a FROM mysql2_double_wide_test").first['a']).to eql(1e225)
+      @client.query "DROP TABLE mysql2_double_wide_test"
+    end
+
+    # The float handling code must always use '.' as the decimal separator.
+    # These specs guard accidental introduction of locale-specific parsing,
+    # e.g. ',' as decimal separator.
     context "under a locale that uses a comma as the decimal separator" do
       before(:example) do
         @original_locale = CLocale.setlocale(CLocale::LC_NUMERIC, nil)
@@ -2208,6 +2219,18 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(row['date_col']).to eql(Date.new(2010, 4, 4))
     end
 
+    it "does not truncate a wide DOUBLE(M,D) value" do
+      @client.query "DROP TABLE IF EXISTS mysql2_double_wide_test"
+      @client.query "CREATE TABLE mysql2_double_wide_test (a DOUBLE(255,30))"
+      @client.query "INSERT INTO mysql2_double_wide_test VALUES (1e225)"
+      row = @client.query("SELECT a FROM mysql2_double_wide_test", cast: :fast).first
+      expect(row['a']).to eql(1e225)
+      @client.query "DROP TABLE mysql2_double_wide_test"
+    end
+
+    # The float handling code must always use '.' as the decimal separator.
+    # These specs guard accidental introduction of locale-specific parsing,
+    # e.g. ',' as decimal separator.
     context "under a locale that uses a comma as the decimal separator" do
       before(:example) do
         @original_locale = CLocale.setlocale(CLocale::LC_NUMERIC, nil)

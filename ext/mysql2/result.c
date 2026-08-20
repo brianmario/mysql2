@@ -1431,13 +1431,18 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           break;
         case MYSQL_TYPE_FLOAT:
         case MYSQL_TYPE_DOUBLE: {
-          /* Kernel#Float() parses this locale-independently; strtod()
-           * would read '.' according to the current LC_NUMERIC. */
-          VALUE column_as_float = rb_funcall(rb_mKernel, intern_Float, 1, rb_str_new(str, len));
-          if (RFLOAT_VALUE(column_as_float) == 0.000000){
+          /* 512 matches my_fcvt's DOUBLE(255,30) worst case (result.c:1063);
+           * a smaller buffer truncates instead of overflowing, which
+           * rb_cstr_to_dbl() would silently parse as the wrong number. */
+          char float_buf[512];
+          int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)len, str);
+          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf))
+            rb_raise(cMysql2Error, "FLOAT/DOUBLE value too wide for float_buf (%d bytes)", float_len);
+          double column_as_double = rb_cstr_to_dbl(float_buf, 0);
+          if (column_as_double == 0.000000){
             val = opt_float_zero;
           }else{
-            val = column_as_float;
+            val = rb_float_new(column_as_double);
           }
           break;
         }
@@ -1512,10 +1517,11 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
            * decimals, sign, point, NUL. */
           char float_buf[80];
           double float_as_double = (double)(*((float*)result_buffer->buffer));
-          if (fields[i].decimals == 31)
-            snprintf(float_buf, sizeof(float_buf), "%.6g", float_as_double);
-          else
-            snprintf(float_buf, sizeof(float_buf), "%.*f", fields[i].decimals, float_as_double);
+          int float_len = (fields[i].decimals == 31)
+            ? snprintf(float_buf, sizeof(float_buf), "%.6g", float_as_double)
+            : snprintf(float_buf, sizeof(float_buf), "%.*f", fields[i].decimals, float_as_double);
+          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf))
+            rb_raise(cMysql2Error, "FLOAT value too wide for float_buf (%d bytes)", float_len);
           val = rb_float_new(rb_cstr_to_dbl(float_buf, 0));
           break;
         }
@@ -1792,13 +1798,18 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
         case MYSQL_TYPE_FLOAT:      /* FLOAT field */
         case MYSQL_TYPE_DOUBLE: {     /* DOUBLE or REAL field */
-          /* Kernel#Float() parses this locale-independently; strtod()
-           * would read '.' according to the current LC_NUMERIC. */
-          VALUE column_as_float = rb_funcall(rb_mKernel, intern_Float, 1, rb_str_new(row[i], fieldLengths[i]));
-          if (RFLOAT_VALUE(column_as_float) == 0.000000){
+          /* 512 matches my_fcvt's DOUBLE(255,30) worst case (result.c:1063);
+           * a smaller buffer truncates instead of overflowing, which
+           * rb_cstr_to_dbl() would silently parse as the wrong number. */
+          char float_buf[512];
+          int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)fieldLengths[i], row[i]);
+          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf))
+            rb_raise(cMysql2Error, "FLOAT/DOUBLE value too wide for float_buf (%d bytes)", float_len);
+          double column_as_double = rb_cstr_to_dbl(float_buf, 0);
+          if (column_as_double == 0.000000){
             val = opt_float_zero;
           }else{
-            val = column_as_float;
+            val = rb_float_new(column_as_double);
           }
           break;
         }

@@ -944,6 +944,9 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       @client.query "DROP TABLE mysql2_float_parity_test"
     end
 
+    # The float handling code must always use '.' as the decimal separator.
+    # These specs guard accidental introduction of locale-specific parsing,
+    # e.g. ',' as decimal separator.
     context "under a locale that uses a comma as the decimal separator" do
       before(:example) do
         @original_locale = CLocale.setlocale(CLocale::LC_NUMERIC, nil)

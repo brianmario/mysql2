@@ -934,8 +934,8 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       # (#1276): FLT_DIG significant digits with no explicit precision,
       # or FLOAT(M,D)'s declared decimal places otherwise.
       @client.query "DROP TABLE IF EXISTS mysql2_float_parity_test"
-      @client.query "CREATE TABLE mysql2_float_parity_test (a FLOAT, b FLOAT(10,2))"
-      @client.query "INSERT INTO mysql2_float_parity_test VALUES (#{1.0 / 3}, 123456.789)"
+      @client.query "CREATE TABLE mysql2_float_parity_test (a FLOAT, b FLOAT(255,30))"
+      @client.query "INSERT INTO mysql2_float_parity_test VALUES (#{1.0 / 3}, 1e38)"
 
       plain = @client.query("SELECT a, b FROM mysql2_float_parity_test").first
       prepared = @client.prepare("SELECT a, b FROM mysql2_float_parity_test").execute.first

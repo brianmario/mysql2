@@ -1496,15 +1496,15 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
            * raw float32 to a double directly, which surfaces digits
            * float32 can't distinguish: 6 significant digits by default,
            * or exactly D decimal places for FLOAT(M,D); decimals == 31
-           * is MySQL's NOT_FIXED_DEC sentinel for "no explicit
-           * precision" (not in the public headers). Format to a
-           * string, then parse it with rb_cstr_to_dbl() -- Kernel#
-           * Float()'s own locale-independent parser, called directly
-           * to skip a String allocation and a method dispatch.
-           * strtod() would read LC_NUMERIC's decimal separator
-           * instead, misparsing this always-'.' string under a
-           * non-'.' locale. */
-          char float_buf[32];
+           * is MySQL's NOT_FIXED_DEC sentinel for "no explicit precision"
+           * (5.7's public mysql_com.h has it, 8.0+ dropped it). Buffer
+           * sized for float32's widest fixed-notation case: 39 integer
+           * digits, 30 decimals, sign, point, NUL. snprintf() here is
+           * Ruby's own ruby_snprintf (ruby/subst.h #defines it) -- always
+           * '.', unlike libc's locale-aware snprintf. rb_cstr_to_dbl() is
+           * the same locale-independent parse Kernel#Float() calls
+           * internally, without a String allocation or method dispatch. */
+          char float_buf[80];
           double float_as_double = (double)(*((float*)result_buffer->buffer));
           if (fields[i].decimals == 31)
             snprintf(float_buf, sizeof(float_buf), "%.6g", float_as_double);

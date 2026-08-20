@@ -98,7 +98,7 @@ static VALUE cMysql2Result, cDateTime, cDate;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_time_day, opt_utc_offset;
 static VALUE opt_time_anchor_utc;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
-  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
+  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal,
   intern_query_options, intern_plus;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
@@ -2687,7 +2687,6 @@ void init_mysql2_result(void) {
   intern_civil        = rb_intern("civil");
   intern_new_offset   = rb_intern("new_offset");
   intern_BigDecimal   = rb_intern("BigDecimal");
-  intern_Float        = rb_intern("Float");
   intern_query_options = rb_intern("@query_options");
   intern_plus         = rb_intern("+");
 

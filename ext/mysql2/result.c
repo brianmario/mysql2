@@ -1431,9 +1431,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           break;
         case MYSQL_TYPE_FLOAT:
         case MYSQL_TYPE_DOUBLE: {
-          /* 512 matches my_fcvt's DOUBLE(255,30) worst case (result.c:1063);
-           * a smaller buffer truncates instead of overflowing, which
-           * rb_cstr_to_dbl() would silently parse as the wrong number. */
+          /* 512 bytes is larger than the worst-case DOUBLE(255,30) plus headroom. */
           char float_buf[512];
           int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)len, str);
           if (float_len < 0 || (size_t)float_len >= sizeof(float_buf))
@@ -1798,9 +1796,7 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
         case MYSQL_TYPE_FLOAT:      /* FLOAT field */
         case MYSQL_TYPE_DOUBLE: {     /* DOUBLE or REAL field */
-          /* 512 matches my_fcvt's DOUBLE(255,30) worst case (result.c:1063);
-           * a smaller buffer truncates instead of overflowing, which
-           * rb_cstr_to_dbl() would silently parse as the wrong number. */
+          /* 512 bytes is larger than the worst-case DOUBLE(255,30) plus headroom. */
           char float_buf[512];
           int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)fieldLengths[i], row[i]);
           if (float_len < 0 || (size_t)float_len >= sizeof(float_buf))

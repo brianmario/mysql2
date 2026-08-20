@@ -1033,6 +1033,24 @@ static VALUE mysql2_cast_integer(const char *str, unsigned long len) {
   }
 }
 
+/* Parses an snprintf()-formatted buffer with rb_cstr_to_dbl(), raising
+ * instead of silently accepting a formatted value snprintf() truncated. */
+static double mysql2_snprintf_to_dbl(const char *buf, size_t bufsize, int written) {
+  if (written < 0 || (size_t)written >= bufsize) {
+    rb_raise(cMysql2Error, "FLOAT/DOUBLE value too wide for buffer (%d bytes)", written);
+  }
+  return rb_cstr_to_dbl(buf, 0);
+}
+
+/* Shared by the binary and text protocols' FLOAT/DOUBLE cases: copies a
+ * pre-formatted numeric string into a bounded buffer and parses it. */
+static VALUE mysql2_float_from_str(const char *str, unsigned long len, VALUE zero_val) {
+  char float_buf[512]; /* larger than the worst-case DOUBLE(255,30) plus headroom */
+  int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)len, str);
+  double d = mysql2_snprintf_to_dbl(float_buf, sizeof(float_buf), float_len);
+  return (d == 0.000000) ? zero_val : rb_float_new(d);
+}
+
 /* Initial size for variable-length (char[]) result buffers. Wide enough that
  * typical short strings, decimals, enums, and sets never truncate; anything
  * wider grows to fit on first encounter and stays grown. */
@@ -1430,21 +1448,9 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           }
           break;
         case MYSQL_TYPE_FLOAT:
-        case MYSQL_TYPE_DOUBLE: {
-          /* 512 bytes is larger than the worst-case DOUBLE(255,30) plus headroom. */
-          char float_buf[512];
-          int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)len, str);
-          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf)) {
-            rb_raise(cMysql2Error, "FLOAT/DOUBLE value too wide for float_buf (%d bytes)", float_len);
-          }
-          double column_as_double = rb_cstr_to_dbl(float_buf, 0);
-          if (column_as_double == 0.000000) {
-            val = opt_float_zero;
-          } else {
-            val = rb_float_new(column_as_double);
-          }
+        case MYSQL_TYPE_DOUBLE:
+          val = mysql2_float_from_str(str, len, opt_float_zero);
           break;
-        }
         default:
           val = rb_str_new(str, len);
           val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
@@ -1519,10 +1525,7 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           int float_len = (fields[i].decimals == 31)
             ? snprintf(float_buf, sizeof(float_buf), "%.6g", float_as_double)
             : snprintf(float_buf, sizeof(float_buf), "%.*f", fields[i].decimals, float_as_double);
-          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf)) {
-            rb_raise(cMysql2Error, "FLOAT value too wide for float_buf (%d bytes)", float_len);
-          }
-          val = rb_float_new(rb_cstr_to_dbl(float_buf, 0));
+          val = rb_float_new(mysql2_snprintf_to_dbl(float_buf, sizeof(float_buf), float_len));
           break;
         }
         case MYSQL_TYPE_DOUBLE:       // double
@@ -1797,21 +1800,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           }
           break;
         case MYSQL_TYPE_FLOAT:      /* FLOAT field */
-        case MYSQL_TYPE_DOUBLE: {     /* DOUBLE or REAL field */
-          /* 512 bytes is larger than the worst-case DOUBLE(255,30) plus headroom. */
-          char float_buf[512];
-          int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)fieldLengths[i], row[i]);
-          if (float_len < 0 || (size_t)float_len >= sizeof(float_buf)) {
-            rb_raise(cMysql2Error, "FLOAT/DOUBLE value too wide for float_buf (%d bytes)", float_len);
-          }
-          double column_as_double = rb_cstr_to_dbl(float_buf, 0);
-          if (column_as_double == 0.000000) {
-            val = opt_float_zero;
-          } else {
-            val = rb_float_new(column_as_double);
-          }
+        case MYSQL_TYPE_DOUBLE:       /* DOUBLE or REAL field */
+          val = mysql2_float_from_str(row[i], fieldLengths[i], opt_float_zero);
           break;
-        }
         case MYSQL_TYPE_TIME: {     /* TIME field */
           int tokens, negative;
           const char *time_str = row[i];

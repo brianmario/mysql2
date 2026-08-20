@@ -1492,20 +1492,16 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           }
           break;
         case MYSQL_TYPE_FLOAT: {      // float
-          /* Match the text protocol's own formatting for this stored
-           * value rather than upconverting the raw float32 bits to a
-           * double directly, which surfaces digits float32 doesn't
-           * actually distinguish. With no explicit precision, MySQL
-           * formats FLOAT with 6 significant digits; FLOAT(M,D) formats
-           * with exactly D decimal places. fields[i].decimals reports
-           * which applies: 31 is MySQL's NOT_FIXED_DEC sentinel for "no
-           * explicit precision" (not exposed in the public client
-           * headers, hence the literal here), otherwise the declared D.
-           * The formatted string goes through Kernel#Float(), not
-           * strtod(): strtod() reads '.' according to LC_NUMERIC, while
-           * snprintf() here does not, so pairing them misparses under a
-           * non-'.' locale -- the same locale-independence the text
-           * protocol's own parse just below already needs. */
+          /* Honor the field's declared precision instead of upconverting
+           * raw float32 to a double directly, which surfaces digits
+           * float32 can't distinguish. MySQL formats FLOAT with 6
+           * significant digits by default, or exactly D decimal places
+           * for FLOAT(M,D); decimals == 31 is MySQL's NOT_FIXED_DEC
+           * sentinel for "no explicit precision" (not in the public
+           * headers). Parsed via Kernel#Float(), not strtod(): only
+           * strtod() honors LC_NUMERIC's decimal separator, so pairing
+           * it with snprintf() here would misparse under a non-'.'
+           * locale. */
           char float_buf[32];
           double float_as_double = (double)(*((float*)result_buffer->buffer));
           if (fields[i].decimals == 31)

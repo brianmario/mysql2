@@ -1522,9 +1522,12 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
            * decimals, sign, point, NUL. */
           char float_buf[80];
           double float_as_double = (double)(*((float*)result_buffer->buffer));
-          int float_len = (fields[i].decimals == 31)
-            ? snprintf(float_buf, sizeof(float_buf), "%.6g", float_as_double)
-            : snprintf(float_buf, sizeof(float_buf), "%.*f", fields[i].decimals, float_as_double);
+          int float_len;
+          if (fields[i].decimals == 31) {
+            float_len = snprintf(float_buf, sizeof(float_buf), "%.6g", float_as_double);
+          } else {
+            float_len = snprintf(float_buf, sizeof(float_buf), "%.*f", fields[i].decimals, float_as_double);
+          }
           val = rb_float_new(mysql2_snprintf_to_dbl(float_buf, sizeof(float_buf), float_len));
           break;
         }

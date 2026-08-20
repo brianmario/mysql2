@@ -717,6 +717,15 @@ Then, if `:application_timezone` is set to say - `:local` - Mysql2 will then con
 
 Both options only allow two values - `:local` or `:utc` - with the exception that `:application_timezone` can be [and defaults to] nil
 
+A `TIME` column ranges from `-838:59:59` to `838:59:59`. Mysql2 represents
+it as a `Time` offset from a fixed placeholder date (`2000-01-01`, in
+`:utc` or `:local` per `:database_timezone`), rolling that date backward
+or forward as the duration requires: `24:00:01` becomes
+`2000-01-02 00:00:01`, `-01:00:00` becomes `1999-12-31 23:00:00`.
+
+Both plain `TIME` (whole-second precision) and `TIME(N)` up to `TIME(6)`
+(microsecond precision) are supported.
+
 ### Casting "boolean" columns
 
 You can now tell Mysql2 to cast `tinyint(1)` fields to boolean values in Ruby with the `:cast_booleans` option.

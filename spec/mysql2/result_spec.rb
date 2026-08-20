@@ -1230,6 +1230,71 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(test_result['time_test'].strftime("%Y-%m-%d %H:%M:%S")).to eql('2000-01-01 11:44:00')
     end
 
+    context "a TIME value outside a single day (#719)" do
+      # MySQL's TIME is a signed duration (-838:59:59 to 838:59:59), not a
+      # time-of-day -- a negative value or an hour >= 24 used to silently
+      # return nil, or raise ArgumentError, depending on the exact value.
+      # These are represented as a Time offset from the same 2000-01-01
+      # anchor an in-range TIME already uses, rolling the placeholder date
+      # backward or forward as the duration requires.
+      before(:context) do
+        new_client do |client|
+          client.query("DROP TABLE IF EXISTS mysql2_time_duration_test")
+          client.query("CREATE TABLE mysql2_time_duration_test (t TIME(6))")
+          %w[24:00:00 24:00:01 -01:00:00 838:59:59 -838:59:59 12:34:56.25].each do |t|
+            client.query("INSERT INTO mysql2_time_duration_test VALUES ('#{t}')")
+          end
+        end
+      end
+
+      after(:context) do
+        new_client { |client| client.query("DROP TABLE IF EXISTS mysql2_time_duration_test") }
+      end
+
+      it "represents each value as the expected duration-anchored Time" do
+        rows = @client.query("SELECT t FROM mysql2_time_duration_test ORDER BY t").map { |r| r['t'] }
+        expect(rows.map { |t| t.strftime('%Y-%m-%d %H:%M:%S.%6N') }).to eql([
+                                                                              '1999-11-27 01:00:01.000000', # -838:59:59
+                                                                              '1999-12-31 23:00:00.000000', # -01:00:00
+                                                                              '2000-01-01 12:34:56.250000', # 12:34:56.25
+                                                                              '2000-01-02 00:00:00.000000', # 24:00:00
+                                                                              '2000-01-02 00:00:01.000000', # 24:00:01
+                                                                              '2000-02-04 22:59:59.000000', # 838:59:59
+                                                                            ])
+      end
+    end
+
+    context "a TIME column declared with fewer than 6 fractional digits" do
+      # MySQL sends exactly the declared precision on the wire (TIME(4)
+      # sends "12:34:56.1234", not zero-padded to 6 digits) -- this pins
+      # that mysql2 still expands it to the right number of microseconds,
+      # matching between protocols.
+      before(:context) do
+        new_client do |client|
+          client.query("DROP TABLE IF EXISTS mysql2_time_precision_test")
+          client.query("CREATE TABLE mysql2_time_precision_test (t TIME(4))")
+          %w[12:34:56.1234 -01:00:00.5].each do |t|
+            client.query("INSERT INTO mysql2_time_precision_test VALUES ('#{t}')")
+          end
+        end
+      end
+
+      after(:context) do
+        new_client { |client| client.query("DROP TABLE IF EXISTS mysql2_time_precision_test") }
+      end
+
+      it "expands the declared precision to the correct microseconds, matching between protocols" do
+        text = @client.query("SELECT t FROM mysql2_time_precision_test ORDER BY t").map { |r| r['t'] }
+        stmt = @client.prepare("SELECT t FROM mysql2_time_precision_test ORDER BY t").execute.map { |r| r['t'] }
+
+        expect(text.map { |t| t.strftime('%Y-%m-%d %H:%M:%S.%6N') }).to eql([
+                                                                              '1999-12-31 22:59:59.500000', # -01:00:00.5
+                                                                              '2000-01-01 12:34:56.123400', # 12:34:56.1234
+                                                                            ])
+        expect(stmt).to eql(text)
+      end
+    end
+
     it "should return Date for a DATE value" do
       expect(test_result['date_test']).to be_an_instance_of(Date)
       expect(test_result['date_test'].strftime("%Y-%m-%d")).to eql('2010-04-04')
@@ -1934,9 +1999,6 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "re-elects bind types when a later #each switches cast mode mid-stream" do
-      # No temporal columns: the full-cast side of the switch would trip the
-      # pre-existing stmt-path limitation that a TIME outside 00..23 hours
-      # raises in Time.local.
       statement = @client.prepare("SELECT row_id, int_min_col FROM mysql2_cast_false_test ORDER BY row_id")
 
       result = statement.execute(cast: false, stream: true, cache_rows: false)
@@ -2236,9 +2298,6 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "does not treat unrecognized truthy :cast values as :fast on prepared statements" do
-      # No TIME column: under the full cast this select gets, the
-      # pre-existing stmt-path limitation that a TIME outside 00..23 hours
-      # raises in Time.local would trip on time_col.
       row = @client.prepare("SELECT decimal_col, date_col FROM mysql2_cast_fast_test WHERE row_id = 1").execute(cast: :bogus).first
       expect(row['decimal_col']).to eql(BigDecimal("10.3"))
       expect(row['date_col']).to eql(Date.new(2010, 4, 4))

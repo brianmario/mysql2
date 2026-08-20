@@ -95,10 +95,11 @@ typedef struct {
 
 extern VALUE mMysql2, cMysql2Client, cMysql2Error;
 static VALUE cMysql2Result, cDateTime, cDate;
-static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_utc_offset;
+static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_time_day, opt_utc_offset;
+static VALUE opt_time_anchor_utc;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
   intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
-  intern_query_options;
+  intern_query_options, intern_plus;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
   sym_cache_rows, sym_cast, sym_fast, sym_stream, sym_name, sym_rows_per_gvl_yield,
@@ -885,6 +886,37 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
   ((tz) == intern_utc && (hour) < 24 && (min) < 60 && (sec) < 60)
 #endif
 
+/* MySQL TIME is a signed duration of hour, minute, second, and
+ * microseconds, ranging from -838:59:59.999999 to 838:59:59.999999, but
+ * Ruby's Time constructor rejects an hour beyond 24 or a negative value.
+ * We solve this by adding the signed duration to a Time anchored at
+ * 2000-01-01 00:00:00. Duration is converted to an Integer in seconds
+ * or a Rational in microseconds, depending on the precision of the
+ * field. */
+static VALUE mysql2_time_from_duration(VALUE db_timezone, int negative,
+                                       unsigned int hour, unsigned int min, unsigned int sec,
+                                       unsigned long usec) {
+  VALUE anchor, offset;
+  int64_t total_sec = (int64_t)hour * 3600 + (int64_t)min * 60 + (int64_t)sec;
+
+  /* :utc has no environment dependence, so the cached anchor is exact.
+   * :local can't be cached the same way: Time.local re-reads ENV['TZ']
+   * on every call. */
+  anchor = (db_timezone == intern_utc) ? opt_time_anchor_utc
+         : rb_funcall(rb_cTime, intern_local, 7, opt_time_year, opt_time_month, opt_time_day,
+                      INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
+
+  if (usec == 0) {
+    offset = LL2NUM(negative ? -total_sec : total_sec);
+  } else {
+    int64_t total_usec = total_sec * 1000000LL + (int64_t)usec;
+    if (negative) total_usec = -total_usec;
+    offset = rb_rational_new(LL2NUM(total_usec), INT2FIX(1000000));
+  }
+  /* returns a newly-allocated object, anchor is not mutated */
+  return rb_funcall(anchor, intern_plus, 1, offset);
+}
+
 /* Read exactly n decimal digits. Returns 0 (leaving *out untouched) on any
  * non-digit, so callers fall back to the general parser. */
 static inline int mysql2_read_uint(const char *p, int n, unsigned int *out) {
@@ -1481,7 +1513,8 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           break;
         case MYSQL_TYPE_TIME:         // MYSQL_TIME
           ts = (MYSQL_TIME*)result_buffer->buffer;
-          val = rb_funcall(rb_cTime, args->db_timezone, 7, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(ts->hour), UINT2NUM(ts->minute), UINT2NUM(ts->second), ULONG2NUM(ts->second_part));
+          /* ts->neg is the sign; hour/minute/second/second_part are the unsigned magnitude. */
+          val = mysql2_time_from_duration(args->db_timezone, ts->neg, ts->hour, ts->minute, ts->second, ts->second_part);
           if (!NIL_P(args->app_timezone)) {
             if (args->app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);
@@ -1745,7 +1778,8 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           break;
         }
         case MYSQL_TYPE_TIME: {     /* TIME field */
-          int tokens;
+          int tokens, negative;
+          const char *time_str = row[i];
           unsigned int hour=0, min=0, sec=0, msec=0;
           char msec_char[7] = {'0','0','0','0','0','0','\0'};
 
@@ -1755,13 +1789,18 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
             break;
           }
 
-          tokens = sscanf(row[i], "%2u:%2u:%2u.%6s", &hour, &min, &sec, msec_char);
+          negative = (time_str[0] == '-');
+          if (negative) time_str++;
+
+          /* %3u: MySQL's TIME hour ranges up to 838, one digit wider than a
+           * time-of-day's 0-23 (#719). */
+          tokens = sscanf(time_str, "%3u:%2u:%2u.%6s", &hour, &min, &sec, msec_char);
           if (tokens < 3) {
             val = Qnil;
             break;
           }
           msec = msec_char_to_uint(msec_char, sizeof(msec_char));
-          val = rb_funcall(rb_cTime, args->db_timezone, 7, opt_time_year, opt_time_month, opt_time_month, UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
+          val = mysql2_time_from_duration(args->db_timezone, negative, hour, min, sec, msec);
           if (!NIL_P(args->app_timezone)) {
             if (args->app_timezone == intern_local) {
               val = rb_funcall(val, intern_localtime, 0);
@@ -2614,6 +2653,7 @@ void init_mysql2_result(void) {
   intern_BigDecimal   = rb_intern("BigDecimal");
   intern_Float        = rb_intern("Float");
   intern_query_options = rb_intern("@query_options");
+  intern_plus         = rb_intern("+");
 
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));
@@ -2640,7 +2680,14 @@ void init_mysql2_result(void) {
   rb_global_variable(&opt_float_zero);
   opt_time_year = INT2NUM(2000);
   opt_time_month = INT2NUM(1);
+  opt_time_day = INT2NUM(1);
   opt_utc_offset = INT2NUM(0);
+
+  /* mysql2_time_from_duration's :utc anchor, cached here; :local is
+   * rebuilt per call there. */
+  opt_time_anchor_utc = rb_funcall(rb_cTime, intern_utc, 7, opt_time_year, opt_time_month, opt_time_day,
+                                   INT2FIX(0), INT2FIX(0), INT2FIX(0), INT2FIX(0));
+  rb_global_variable(&opt_time_anchor_utc); /* never GC */
 
   binaryEncoding = rb_enc_find("binary");
 }

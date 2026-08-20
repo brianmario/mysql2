@@ -854,7 +854,7 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
   end
 
-  context "row data type mapping" do
+  context "row data type mapping" do # rubocop:disable Metrics/BlockLength
     let(:test_result) { @client.query("SELECT * FROM mysql2_test ORDER BY id DESC LIMIT 1").first }
 
     it "should return nil values for NULL and strings for everything else when :cast is false" do

@@ -290,8 +290,16 @@ Mysql2::Client.new(
   )
 ```
 
-`:local_infile` defaults to `false`. Pass `:local_infile => true` to opt in
-if you need it.
+A few of these options default to something other than `nil`/unset:
+
+| Option            | Default                                                    |
+| ----------------- | ----------------------------------------------------------- |
+| `:connect_timeout` | `120` seconds                                               |
+| `:reconnect`       | `false`                                                      |
+| `:local_infile`    | `false`                                                      |
+| `:encoding`        | `'utf8mb4'`                                                  |
+| `:connect_attrs`   | `{:program_name => $PROGRAM_NAME}`, merged with any attrs you pass |
+| `:secure_auth`     | depends on the server version -- see [Secure auth](#secure-auth) |
 
 ### Connecting to MySQL on localhost and elsewhere
 

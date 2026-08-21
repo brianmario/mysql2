@@ -278,6 +278,8 @@ Mysql2::Client.new(
   :read_timeout = seconds,
   :write_timeout = seconds,
   :connect_timeout = seconds,
+  :kill_on_timeout = true/false,
+  :kill_grace = seconds,
   :connect_attrs = {:program_name => $PROGRAM_NAME, ...},
   :reconnect = true/false,
   :local_infile = true/false,
@@ -302,6 +304,57 @@ type of connection to make, with special interpretation you should be aware of:
 * A value of `"."` on Windows specifies a named-pipe connection.
 * An IPv4 or IPv6 address will result in a TCP connection.
 * Any other value will be looked up as a hostname for a TCP connection.
+
+### Cancelling a runaway query: kill_on_timeout
+
+By default, when a query outlives `:read_timeout` or its thread is interrupted
+(`Timeout.timeout`, `Thread#raise`), mysql2 abandons the connection -- and the
+server keeps executing the query anyway, holding locks and burning CPU until it
+finishes on its own. With `:kill_on_timeout` enabled, mysql2 instead escalates
+the way the mysql CLI's Ctrl-C handler does:
+
+1. Issue `KILL QUERY <thread_id>` from a short-lived helper connection opened
+   with the victim connection's own credentials.
+2. Resume waiting up to `:kill_grace` seconds (default 5) for the server to
+   answer the killed query -- normally `ER_QUERY_INTERRUPTED`, or the query's
+   own result if it finished before the KILL landed. Either way the protocol
+   stream stays in sync and **the connection survives** to run its next query.
+   The original `Mysql2::Error::TimeoutError` (or interrupting exception) is
+   still raised.
+3. Only if the helper can't connect, the KILL fails, or the grace period
+   expires is the connection torn down as before.
+
+``` ruby
+client = Mysql2::Client.new(read_timeout: 5, kill_on_timeout: true)
+```
+
+Both options may also be passed per query:
+
+``` ruby
+client.query("SELECT ...", kill_on_timeout: true, kill_grace: 2)
+```
+
+Notes:
+
+* `KILL QUERY` requires the same user, `SUPER`, or `CONNECTION_ADMIN`; the
+  helper connects with the victim's own credentials, so the same-user path is
+  the default.
+* The thread id used is the one the server assigned at handshake
+  (`Client#thread_id`). The handshake field is 32 bits wide, so on servers
+  whose connection ids exceed 32 bits, run `SELECT CONNECTION_ID()` yourself
+  and issue the KILL from your own connection instead.
+* Not supported on Windows, where the plain teardown behavior is unchanged.
+
+The same machinery is exposed directly, usable from another thread while the
+connection is stuck mid-query:
+
+``` ruby
+client.kill_query      # KILL QUERY <thread_id>: the blocked #query call
+                       # returns its error/result and the connection survives
+client.kill_connection # KILL CONNECTION <thread_id>: hard-kill for a
+                       # connection you are about to throw away, e.g. from a
+                       # connection pool reaper
+```
 
 ### Secure connections with SSL/TLS
 

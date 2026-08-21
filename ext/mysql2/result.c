@@ -443,21 +443,12 @@ static VALUE rb_mysql_result_fetch_field(VALUE self, unsigned int idx, int symbo
     name_length = name_end ? (size_t)(name_end - field->name) : field->name_length;
     field_name = field->name;
 
-    /* :downcase_keys lowercases the ASCII A-Z range only, byte by byte, by
-     * hand rather than via tolower(3): tolower() is locale-dependent, and
-     * MySQL's wire format is not (the same class of bug this project has
-     * hit before with strtod() -- see result.c's DECIMAL/FLOAT parsing).
-     * Under an ISO8859-1-family locale, tolower(0xC3) returns 0xE3,
-     * corrupting the first byte of 'À' (U+00C0) instead of leaving it
-     * alone -- confirmed directly, not just suspected: a locale-independent
-     * A-Z check on a UTF-8 name is safe, because every continuation byte in
-     * a multibyte sequence is >= 0x80, outside that range, so this can
-     * never corrupt one -- it just doesn't case-fold non-ASCII letters.
-     * MySQL identifiers are not restricted to ASCII (a UTF-8 alias like
-     * `fooÀbar` is legal and exercised by this file's specs), so that's a
-     * deliberate scope limit, not a "rare in practice" shortcut:
-     * :downcase_keys folds the ASCII range only, on purpose, rather than
-     * taking on full Unicode case-folding. */
+    /* :downcase_keys lowercases the ASCII A-Z range only, rather than
+     * using tolower() or other locale-dependent or Unicode-aware
+     * functions. MySQL identifiers may be any Basic Multilingual Plane
+     * Unicode character (up to 3-byte UTF-8; 4-byte supplementary
+     * characters are not permitted), but for this feature, only A-Z is
+     * downcased to a-z. */
     if (downcase_keys && name_length > 0) {
       size_t i;
       char *buf = ALLOCV_N(char, downcase_holder, name_length);

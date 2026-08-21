@@ -100,9 +100,12 @@ If you have not done so already, you will need to install the XCode select tools
 `xcode-select --install`.
 
 Later versions of MacOS no longer distribute a linkable OpenSSL library. It is
-common to use Homebrew or MacPorts to install OpenSSL. Make sure that both the
-Ruby runtime and MySQL client libraries are compiled with the same OpenSSL
-family, 3.x, since only one can be loaded at runtime.
+common to use Homebrew or MacPorts to install OpenSSL. Where mysql2 itself
+needs OpenSSL (the `verify_identity` hostname verification callback on MariaDB
+builds), it automatically links the same OpenSSL the MySQL client library
+links, since the two must be the same build; `--with-openssl-dir` overrides
+that choice, and a mismatched pairing is refused at connect time rather than
+crashing (see issue #1575).
 
 ``` sh
 $ brew install openssl@3 zstd
@@ -387,6 +390,7 @@ Runtime client library and TLS feature introspection:
 |`Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION` | :native (MySQL), :callback (MariaDB Connector/C 3.4.3+), or nil (unenforceable)
 |`Mysql2::Client::TLS_VERSION_SUPPORTED`          | true/false
 |`Mysql2::Client::TLS_SNI_SUPPORTED`              | true/false
+|`Mysql2::Client::TLS_OPENSSL_LINKAGE_CHECK`      | true/false -- whether the build checks that mysql2 and the client library resolve to the same loaded OpenSSL before enforcing `:verify_identity`
 
 #### TLS verification modes
 
@@ -412,6 +416,13 @@ Notes:
   Either upgrade the client library, or downgrade the connection to `:verify_ca`
   and accept some risk of hostname uncertainty. Relying on the CA certificate
   validation only may be acceptable in your use case at your judgment.
+- The `:verify_identity` callback verifies the connector's TLS session with the
+  OpenSSL mysql2 linked, which is only sound when both resolve to the same
+  loaded library. If the process holds two different OpenSSL builds -- commonly
+  a Ruby with its own vendored OpenSSL next to a package manager's MariaDB
+  (#1575) -- `:verify_identity` refuses to connect with an error naming both
+  libraries instead of crashing. Rebuilding the gem fixes the pairing, since
+  mysql2 links the client library's own OpenSSL.
 
 #### Certificate fingerprint pinning
 

@@ -1,5 +1,5 @@
 module Mysql2
-  class Client
+  class Client # rubocop:disable Metrics/ClassLength
     attr_reader :query_options, :read_timeout
 
     def self.default_query_options

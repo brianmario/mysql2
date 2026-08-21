@@ -21,6 +21,16 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         new_client(default_file: cnf_file)
       end.not_to raise_error
     end
+
+    it "is not present in query_options after connecting (#493)" do
+      # :default_file/:default_group only take effect at connect time; like
+      # :database (#437), leaving them in query_options would make
+      # Client.default_query_options.merge!(default_file: ...) look like it
+      # configures future connections when it silently doesn't.
+      client = new_client(default_file: cnf_file, default_group: "test")
+      expect(client.query_options).not_to have_key(:default_file)
+      expect(client.query_options).not_to have_key(:default_group)
+    end
   end
 
   it "should raise a Mysql::Error::ConnectionError upon connection failure" do
@@ -147,6 +157,51 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
   it "should have a global default_query_options hash" do
     expect(Mysql2::Client).to respond_to(:default_query_options)
+  end
+
+  it "should have a global default_connect_options hash" do
+    expect(Mysql2::Client).to respond_to(:default_connect_options)
+  end
+
+  it "does not advertise connect-time-only keys in default_query_options" do
+    # :connect_flags only takes effect at connect time; sitting in
+    # default_query_options would invite Client.default_query_options.merge!(connect_flags: ...)
+    # to look like it works when it silently wouldn't (same story as #437/#493).
+    expect(Mysql2::Client.default_query_options).not_to have_key(:connect_flags)
+    expect(Mysql2::Client.default_connect_options).to have_key(:connect_flags)
+  end
+
+  it "does not leave :connect_flags in query_options after connecting" do
+    expect(@client.query_options).not_to have_key(:connect_flags)
+  end
+
+  it "reflects the resolved connect flags in connect_options" do
+    expect(@client.connect_options[:connect_flags]).to be_an(Integer)
+    expect(@client.connect_options[:connect_flags]).not_to be_zero
+  end
+
+  it "honors a global default_connect_options override for future connections" do
+    original = Mysql2::Client.default_connect_options[:connect_flags]
+    begin
+      Mysql2::Client.default_connect_options[:connect_flags] |= Mysql2::Client::FOUND_ROWS
+      client = new_client
+      expect(client.connect_options[:connect_flags] & Mysql2::Client::FOUND_ROWS).not_to be_zero
+    ensure
+      Mysql2::Client.default_connect_options[:connect_flags] = original
+    end
+  end
+
+  it "keeps every connect-time-only option out of query_options, whether or not it's given" do
+    client = new_client(reconnect: true, secure_auth: false, encoding: 'utf8mb4')
+    connect_time_keys = %i[host hostname username user password pass port database dbname db
+                           socket sock tls_sni_name reconnect connect_timeout local_infile
+                           read_timeout write_timeout default_file default_group secure_auth
+                           init_command automatic_close enable_cleartext_plugin default_auth
+                           get_server_public_key tls_version encoding ssl_mode sslkey sslcert
+                           sslca sslcapath sslcipher sslverify tls_key tls_cert tls_ca
+                           tls_capath tls_cipher tls_mode tls_passphrase tls_peer_fingerprint
+                           tls_peer_fingerprint_list connect_attrs flags connect_flags]
+    expect(client.query_options.keys & connect_time_keys).to be_empty
   end
 
   context "SSL" do
@@ -2153,6 +2208,30 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         @client.query("USE test")
         @client.query("DROP DATABASE IF EXISTS #{long_name}")
       end
+    end
+  end
+
+  context "query_options[:database] (#437)" do
+    # :database only takes effect at connect time; mutating it in
+    # query_options afterward used to silently do nothing. Rather than
+    # leave a decoy key around, it's dropped from query_options entirely --
+    # #database (always current, kept in sync by #select_db too) is the
+    # supported way to read or change the active database.
+    it "is not present in query_options after connecting" do
+      client = new_client(database: 'test')
+      expect(client.query_options).not_to have_key(:database)
+    end
+
+    it "is not present in query_options even when no database was given" do
+      client = new_client(database: nil)
+      expect(client.query_options).not_to have_key(:database)
+    end
+
+    it "does not reappear in query_options after #select_db" do
+      client = new_client(database: nil)
+      client.select_db(DatabaseCredentials['root']['database'])
+      expect(client.query_options).not_to have_key(:database)
+      expect(client.database).to eq(DatabaseCredentials['root']['database'])
     end
   end
 

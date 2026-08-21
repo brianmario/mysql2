@@ -1,7 +1,13 @@
 module Mysql2
-  class Client
-    attr_reader :query_options, :read_timeout
+  class Client # rubocop:disable Metrics/ClassLength
+    attr_reader :query_options, :connect_options, :read_timeout
 
+    # Options genuinely re-consulted on every #query call (directly, or via
+    # a per-instance default set here). Connect-time-only settings -- read
+    # once at Client.new and never again -- belong in
+    # .default_connect_options instead, not here: a key that only takes
+    # effect at connect time but lives in query_options looks like a live,
+    # per-query option and silently isn't one (#437, #493).
     def self.default_query_options
       @default_query_options ||= {
         as: :hash,                   # the type of object you want each row back as; also supports :array (an array of values)
@@ -12,10 +18,16 @@ module Mysql2
         application_timezone: nil,   # timezone Mysql2 will convert to before handing the object back to the caller
         cache_rows: true,            # tells Mysql2 to use its internal row cache for results
         rows_per_gvl_yield: 8192,    # buffered rows to materialize between GVL yields; 0 disables yielding
-        connect_flags: REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | CONNECT_ATTRS,
         cast: true,
-        default_file: nil,
-        default_group: nil,
+      }
+    end
+
+    # Options read once at connect time and never re-consulted afterward.
+    # Unlike .default_query_options, these have no live per-query meaning --
+    # changing them after connecting has no effect, by design.
+    def self.default_connect_options
+      @default_connect_options ||= {
+        connect_flags: REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | CONNECT_ATTRS,
       }
     end
 
@@ -42,13 +54,49 @@ module Mysql2
     }.freeze
     private_constant :TLS_OPTION_ALIASES
 
+    # Keys Client.new(...) recognizes as per-query-reactive -- these end up
+    # in @query_options, inherited by every #query call. Anything not
+    # listed here or in SUPPORTED_CONNECT_OPTIONS is silently ignored
+    # rather than raised on (#65's "TODO: stricter validation"), matching
+    # existing behavior for an unrecognized option.
+    SUPPORTED_QUERY_OPTIONS = %i[
+      as async cast cast_booleans symbolize_keys database_timezone
+      application_timezone cache_rows rows_per_gvl_yield stream
+      force_encoding
+    ].freeze
+    private_constant :SUPPORTED_QUERY_OPTIONS
+
+    # Keys Client.new(...) recognizes as connect-time-only -- read once
+    # here, in @connect_options, and never re-consulted afterward. A key
+    # in this list must never also be added to SUPPORTED_QUERY_OPTIONS:
+    # that's exactly the shape of bug #437/#493 fixed.
+    SUPPORTED_CONNECT_OPTIONS = %i[
+      host hostname username user password pass port database dbname db
+      socket sock tls_sni_name reconnect connect_timeout local_infile
+      read_timeout write_timeout default_file default_group secure_auth
+      init_command automatic_close enable_cleartext_plugin default_auth
+      get_server_public_key tls_version encoding ssl_mode sslkey sslcert
+      sslca sslcapath sslcipher sslverify tls_key tls_cert tls_ca
+      tls_capath tls_cipher tls_mode tls_passphrase tls_peer_fingerprint
+      tls_peer_fingerprint_list connect_attrs flags connect_flags
+    ].freeze
+    private_constant :SUPPORTED_CONNECT_OPTIONS
+
     def initialize(opts = {})
       raise Mysql2::Error, "Options parameter must be a Hash" unless opts.is_a? Hash
 
       opts = Mysql2::Util.key_hash_as_symbols(opts)
       @read_timeout = nil
+
+      # Must run before apply_tls_option_aliases: that method overwrites a
+      # legacy :ssl* key's value with its :tls_* equivalent in place, so
+      # @connect_options has to capture both spellings' original values
+      # first, or warn_incoherent_options's alias-mismatch check below
+      # would never see them differ.
       @query_options = self.class.default_query_options.dup
-      @query_options.merge! opts
+      @query_options.merge!(opts.select { |k, _| SUPPORTED_QUERY_OPTIONS.include?(k) })
+      @connect_options = self.class.default_connect_options.dup
+      @connect_options.merge!(opts.select { |k, _| SUPPORTED_CONNECT_OPTIONS.include?(k) })
 
       apply_tls_option_aliases(opts)
 
@@ -60,6 +108,12 @@ module Mysql2
       # Set an explicit default false for LOCAL INFILE support: some client libraries
       # enable it by default, letting a malicious server read files off the client.
       opts[:local_infile] = false unless opts.key?(:local_infile)
+
+      # Both were resolved after @connect_options was already sliced from
+      # opts above; propagate the resolved values so connect_options
+      # reflects what was actually used, not just what the caller passed.
+      @connect_options[:connect_timeout] = opts[:connect_timeout]
+      @connect_options[:local_infile] = opts[:local_infile]
 
       # TODO: stricter validation rather than silent massaging
       %i[reconnect connect_timeout local_infile read_timeout write_timeout default_file default_group secure_auth init_command automatic_close enable_cleartext_plugin default_auth get_server_public_key tls_version].each do |key|
@@ -85,19 +139,7 @@ module Mysql2
       ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
       self.ssl_mode = mode if mode
 
-      flags = case opts[:flags]
-      when Array
-        parse_flags_array(opts[:flags], @query_options[:connect_flags])
-      when String
-        parse_flags_array(opts[:flags].split(' '), @query_options[:connect_flags])
-      when Integer
-        @query_options[:connect_flags] | opts[:flags]
-      else
-        @query_options[:connect_flags]
-      end
-
-      # SSL verify is a connection flag rather than a mysql_ssl_set option
-      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify]
+      flags = resolve_connect_flags(opts)
 
       check_and_clean_query_options
 
@@ -131,6 +173,29 @@ module Mysql2
         return Mysql2::Client.const_get(x) if Mysql2::Client.const_defined?(x)
       end
       warn "Unknown MySQL ssl_mode flag: #{mode}"
+    end
+
+    # Resolves opts[:flags]/:sslverify against @connect_options[:connect_flags]
+    # (the base default) into the final bitmask, and records that resolved
+    # value back into @connect_options -- connect_options should reflect
+    # what was actually used to connect, not just the raw :flags the caller
+    # passed (if any).
+    def resolve_connect_flags(opts)
+      flags = case opts[:flags]
+      when Array
+        parse_flags_array(opts[:flags], @connect_options[:connect_flags])
+      when String
+        parse_flags_array(opts[:flags].split(' '), @connect_options[:connect_flags])
+      when Integer
+        @connect_options[:connect_flags] | opts[:flags]
+      else
+        @connect_options[:connect_flags]
+      end
+
+      # SSL verify is a connection flag rather than a mysql_ssl_set option
+      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify]
+
+      @connect_options[:connect_flags] = flags
     end
 
     def parse_flags_array(flags, initial = 0)
@@ -272,8 +337,8 @@ module Mysql2
       # that never names the real problem. Either option may be given under
       # its legacy :ssl* name or its :tls_* alias.
       # https://dev.mysql.com/doc/refman/en/using-encrypted-connections.html
-      effective_key = @query_options[:tls_key] || @query_options[:sslkey]
-      effective_cert = @query_options[:tls_cert] || @query_options[:sslcert]
+      effective_key = @connect_options[:tls_key] || @connect_options[:sslkey]
+      effective_cert = @connect_options[:tls_cert] || @connect_options[:sslcert]
       warn ":sslkey and :sslcert only take effect together; alone, libmysqlclient sends no client certificate and MariaDB Connector/C fails to connect" \
         if effective_key.nil? != effective_cert.nil?
 
@@ -281,8 +346,8 @@ module Mysql2
       # different values, the :tls_* value silently wins (see
       # TLS_OPTION_ALIASES); warn so the conflict isn't invisible.
       TLS_OPTION_ALIASES.each do |tls_key, legacy_key|
-        next unless @query_options.key?(tls_key) && @query_options.key?(legacy_key)
-        next if @query_options[tls_key] == @query_options[legacy_key]
+        next unless @connect_options.key?(tls_key) && @connect_options.key?(legacy_key)
+        next if @connect_options[tls_key] == @connect_options[legacy_key]
 
         warn ":#{legacy_key} and :#{tls_key} were both given with different values; :#{tls_key} wins"
       end
@@ -297,16 +362,19 @@ module Mysql2
     def check_and_clean_query_options
       warn_incoherent_options
 
-      if %i[user pass hostname dbname db sock].any? { |k| @query_options.key?(k) }
+      if %i[user pass hostname dbname db sock].any? { |k| @connect_options.key?(k) }
         warn "============= WARNING FROM mysql2 ============="
         warn "The options :user, :pass, :hostname, :dbname, :db, and :sock are deprecated and will be removed at some point in the future."
         warn "Instead, please use :username, :password, :host, :port, :database, :socket, :flags for the options."
         warn "============= END WARNING FROM mysql2 ========="
       end
 
-      # avoid logging sensitive data via #inspect
-      @query_options.delete(:password)
-      @query_options.delete(:pass)
+      # avoid logging sensitive data via #inspect. :password/:pass never
+      # entered @query_options in the first place (not in
+      # SUPPORTED_QUERY_OPTIONS), but @connect_options is where they
+      # genuinely live now, so the redaction moves here with them.
+      @connect_options.delete(:password)
+      @connect_options.delete(:pass)
     end
 
     class << self

@@ -301,6 +301,12 @@ A few of these options default to something other than `nil`/unset:
 | `:connect_attrs`   | `{:program_name => $PROGRAM_NAME}`, merged with any attrs you pass |
 | `:secure_auth`     | depends on the server version -- see [Secure auth](#secure-auth) |
 
+`:database` (along with `:host`, `:username`, etc.) only takes effect at
+connect time -- mysql2 doesn't keep a copy of it around afterward, so it's
+never a member of `query_options`. Use `client.select_db(name)` to switch
+databases on an existing connection, and `client.database` to read back the
+one currently selected.
+
 ### Connecting to MySQL on localhost and elsewhere
 
 The underlying MySQL client library uses the `:host` parameter to determine the

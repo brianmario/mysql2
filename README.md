@@ -303,6 +303,55 @@ type of connection to make, with special interpretation you should be aware of:
 * An IPv4 or IPv6 address will result in a TCP connection.
 * Any other value will be looked up as a hostname for a TCP connection.
 
+### Rotating credentials with a callable password
+
+`:password` accepts anything that responds to `call` — a proc, lambda, or
+provider object. The callable is evaluated fresh for every physical connect,
+never cached by the driver, so short-lived credentials such as AWS RDS IAM
+tokens (15-minute lifetime) or Vault dynamic secrets are minted at the moment
+they're needed. It receives a `Mysql2::Client::PasswordContext` with `host`,
+`port`, `username`, and `attempt` (the physical connect attempt number,
+starting at 1), so one provider object can serve many clients:
+
+``` ruby
+provider = lambda do |ctx|
+  Aws::RDS::AuthTokenGenerator.new(credentials: aws_credentials) \
+    .auth_token(region: 'us-east-1', endpoint: "#{ctx.host}:#{ctx.port}", user_name: ctx.username)
+end
+
+client = Mysql2::Client.new(
+  host: 'mydb.cluster-abc123.us-east-1.rds.amazonaws.com',
+  username: 'iam_user',
+  password: provider,
+  enable_cleartext_plugin: true, # RDS IAM sends the token as a cleartext password
+  ssl_mode: :verify_identity,    # never send a cleartext token without TLS
+)
+```
+
+Caching is the provider's job, and the recommended pattern — the same one the
+AWS Advanced JDBC Wrapper implements — is: cache the token keyed by
+host/port/user with a TTL just under the token lifetime, and on an
+authentication failure force-refresh the token and retry the connect once.
+
+``` ruby
+begin
+  client = Mysql2::Client.new(options) # :password provider returns a cached token
+rescue Mysql2::Error => e
+  raise unless e.error_number == 1045 # ER_ACCESS_DENIED_ERROR: cached token may have expired
+
+  provider.refresh! # drop the cached token so the next evaluation mints a new one
+  client = Mysql2::Client.new(options)
+end
+```
+
+A callable `:password` cannot be combined with `reconnect: true` and raises
+`ArgumentError`: libmysqlclient's auto-reconnect re-authenticates inside the
+C library using the password it stored at connect time, so the callable can
+never intercept that path. Reconnect at the application layer instead, where
+constructing a new client evaluates the callable again.
+
+Like a static password, the callable never appears in `#inspect` output.
+
 ### Secure connections with SSL/TLS
 
 The mysql2 gem can configure the underlying MySQL/MariaDB client library to

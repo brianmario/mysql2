@@ -57,11 +57,8 @@ module Mysql2
       # Set default connect_timeout to avoid unlimited retries from signal interruption
       opts[:connect_timeout] = 120 unless opts.key?(:connect_timeout)
 
-      # LOCAL INFILE defaults to disabled: left to the client library's own
-      # default, it's typically enabled, and a server (or a MITM ahead of a
-      # non-verified TLS connection) can abuse LOAD DATA LOCAL INFILE to read
-      # arbitrary files off the client (#1127). Callers who need it must ask
-      # for it explicitly with :local_infile => true.
+      # Set an explicit default false for LOCAL INFILE support: some client libraries
+      # enable it by default, letting a malicious server read files off the client.
       opts[:local_infile] = false unless opts.key?(:local_infile)
 
       # TODO: stricter validation rather than silent massaging

@@ -838,8 +838,6 @@ Prepared statements honor `:cast => false` and `:cast => :fast` too: result colu
 
 ### Async
 
-NOTE: Not supported on Windows.
-
 `Mysql2::Client` takes advantage of the MySQL C API's (undocumented) non-blocking function mysql_send_query for *all* queries.
 But, in order to take full advantage of it in your Ruby code, you can do:
 
@@ -858,6 +856,10 @@ result = client.async_result
 NOTE: Because of the way MySQL's query API works, this method will block until the result is ready.
 So if you really need things to stay async, it's best to just monitor the socket with something like EventMachine.
 If you need multiple query concurrency take a look at using a connection pool.
+
+`Client#socket` (used for the `IO.select`/EventMachine monitoring above) works
+on Windows too: the native `SOCKET` is wrapped as a CRT file descriptor via
+`rb_w32_wrap_io_handle`, present since Ruby 2.0.
 
 ### Query timing
 

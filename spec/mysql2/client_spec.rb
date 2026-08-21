@@ -2033,6 +2033,81 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(@client).to respond_to(:ping)
   end
 
+  context "#reset" do
+    it "should respond to #reset" do
+      expect(@client).to respond_to(:reset)
+    end
+
+    it "returns true on success" do
+      expect(@client.reset).to eql(true)
+    end
+
+    it "clears user variables" do
+      @client.query("SET @mysql2_test_reset_var = 42")
+      expect(@client.query("SELECT @mysql2_test_reset_var AS v").first["v"]).to eql(42)
+
+      @client.reset
+
+      expect(@client.query("SELECT @mysql2_test_reset_var AS v").first["v"]).to be_nil
+    end
+
+    it "rolls back an open transaction" do
+      @client.query("CREATE TABLE mysql2_test_reset (id INT NOT NULL PRIMARY KEY)")
+      begin
+        @client.query("START TRANSACTION")
+        @client.query("INSERT INTO mysql2_test_reset (id) VALUES (1)")
+
+        @client.reset
+
+        expect(@client.query("SELECT COUNT(*) AS n FROM mysql2_test_reset").first["n"]).to eql(0)
+      ensure
+        @client.query("DROP TABLE IF EXISTS mysql2_test_reset")
+      end
+    end
+
+    it "drops temporary tables" do
+      @client.query("CREATE TEMPORARY TABLE mysql2_test_reset_tmp (id INT)")
+
+      @client.reset
+
+      expect { @client.query("SELECT * FROM mysql2_test_reset_tmp") }.to \
+        raise_error(Mysql2::Error, /doesn't exist/)
+    end
+
+    it "marks prepared statements closed so use after reset raises cleanly instead of hitting the server's deallocated handle" do
+      stmt = @client.prepare("SELECT 1")
+
+      @client.reset
+
+      expect(stmt.closed?).to eql(true)
+      # Same error an explicitly closed statement raises (see statement_spec)
+      expect { stmt.execute }.to raise_error(Mysql2::Error, /Invalid statement handle/)
+      expect(@client.prepared_statements).to eq([])
+    end
+
+    it "leaves Statement#close a no-op for statements invalidated by reset" do
+      stmt = @client.prepare("SELECT 1")
+
+      @client.reset
+
+      expect(stmt.close).to be_nil
+    end
+
+    it "supports preparing new statements after reset" do
+      @client.prepare("SELECT 1 AS one")
+
+      @client.reset
+
+      expect(@client.prepare("SELECT 2 AS two").execute.first["two"]).to eql(2)
+    end
+
+    it "raises when the client is closed" do
+      client = new_client
+      client.close
+      expect { client.reset }.to raise_error(Mysql2::Error, "MySQL client is not connected")
+    end
+  end
+
   context "session_track" do
     before(:example) do
       unless Mysql2::Client.const_defined?(:SESSION_TRACK)

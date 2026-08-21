@@ -926,6 +926,32 @@ static VALUE rb_mysql_stmt_close(VALUE self) {
   return Qnil;
 }
 
+/* Close out a statement whose server-side handle no longer exists: Client#reset
+ * sends COM_RESET_CONNECTION, which deallocates every prepared statement on the
+ * connection. This leaves the statement in exactly the state Statement#close
+ * does -- closed flag set, MYSQL_STMT freed and NULLed -- so later use raises
+ * the same clean "Invalid statement handle" error instead of whatever the
+ * client library or server reports for a deallocated handle, and freeing the
+ * client-side MYSQL_STMT here --
+ * rather than leaving it for the GC pending-close queue -- keeps a deferred
+ * COM_STMT_CLOSE from ever carrying a stale statement id that the server (or a
+ * proxy that renumbers ids) may have reassigned to a statement prepared after
+ * the reset. The mysql_stmt_close inside nogvl_stmt_close still sends one
+ * fire-and-forget COM_STMT_CLOSE for the dead id, which servers ignore.
+ *
+ * Runs from ordinary Ruby-level code with the connection idle, right after the
+ * reset round trip completes, so the blocking close is safe here. The caller
+ * (client.c) owns removing the statement from prepared_statements. */
+void rb_mysql_stmt_invalidate(VALUE rb_stmt) {
+  RAW_GET_STATEMENT(rb_stmt);
+
+  if (!stmt_wrapper->closed) {
+    stmt_wrapper->closed = 1;
+    rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+    mysql2_stmt_metadata_cache_clear(stmt_wrapper);
+  }
+}
+
 /* call-seq:
  *    stmt.closed?
  *

@@ -98,7 +98,7 @@ static VALUE cMysql2Result, cDateTime, cDate;
 static VALUE opt_decimal_zero, opt_float_zero, opt_time_year, opt_time_month, opt_time_day, opt_utc_offset;
 static VALUE opt_time_anchor_utc;
 static ID intern_new, intern_utc, intern_local, intern_localtime, intern_local_offset,
-  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal, intern_Float,
+  intern_civil, intern_new_offset, intern_merge, intern_BigDecimal,
   intern_query_options, intern_plus;
 static VALUE sym_symbolize_keys, sym_as, sym_array, sym_database_timezone,
   sym_application_timezone, sym_local, sym_utc, sym_cast_booleans,
@@ -1033,6 +1033,24 @@ static VALUE mysql2_cast_integer(const char *str, unsigned long len) {
   }
 }
 
+/* Parses an snprintf()-formatted buffer with rb_cstr_to_dbl(), raising
+ * instead of silently accepting a formatted value snprintf() truncated. */
+static double mysql2_snprintf_to_dbl(const char *buf, size_t bufsize, int written) {
+  if (written < 0 || (size_t)written >= bufsize) {
+    rb_raise(cMysql2Error, "FLOAT/DOUBLE value too wide for buffer (%d bytes)", written);
+  }
+  return rb_cstr_to_dbl(buf, 0);
+}
+
+/* Shared by the binary and text protocols' FLOAT/DOUBLE cases: copies a
+ * pre-formatted numeric string into a bounded buffer and parses it. */
+static VALUE mysql2_float_from_str(const char *str, unsigned long len, VALUE zero_val) {
+  char float_buf[512]; /* larger than the worst-case DOUBLE(255,30) plus headroom */
+  int float_len = snprintf(float_buf, sizeof(float_buf), "%.*s", (int)len, str);
+  double d = mysql2_snprintf_to_dbl(float_buf, sizeof(float_buf), float_len);
+  return (d == 0.000000) ? zero_val : rb_float_new(d);
+}
+
 /* Initial size for variable-length (char[]) result buffers. Wide enough that
  * typical short strings, decimals, enums, and sets never truncate; anything
  * wider grows to fit on first encounter and stays grown. */
@@ -1430,17 +1448,9 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
           }
           break;
         case MYSQL_TYPE_FLOAT:
-        case MYSQL_TYPE_DOUBLE: {
-          /* Kernel#Float() parses this locale-independently; strtod()
-           * would read '.' according to the current LC_NUMERIC. */
-          VALUE column_as_float = rb_funcall(rb_mKernel, intern_Float, 1, rb_str_new(str, len));
-          if (RFLOAT_VALUE(column_as_float) == 0.000000){
-            val = opt_float_zero;
-          }else{
-            val = column_as_float;
-          }
+        case MYSQL_TYPE_DOUBLE:
+          val = mysql2_float_from_str(str, len, opt_float_zero);
           break;
-        }
         default:
           val = rb_str_new(str, len);
           val = mysql2_set_field_string_encoding(val, fields[i], default_internal_enc, conn_enc, wrapper->forced_enc);
@@ -1491,9 +1501,36 @@ static VALUE rb_mysql_result_fetch_row_stmt(VALUE self, MYSQL_FIELD * fields, co
             val = LL2NUM(*((long long int*)result_buffer->buffer));
           }
           break;
-        case MYSQL_TYPE_FLOAT:        // float
-          val = rb_float_new((double)(*((float*)result_buffer->buffer)));
+        case MYSQL_TYPE_FLOAT: {      // float
+          /* The binary format for a FLOAT column is a 32-bit IEEE-754
+           * single-precision float. Ruby Float is always a 64-bit double,
+           * so we need to do a little work to convert the value reliably.
+           * A naive up-cast from float to double will invent high-precision noise.
+           *
+           * FLOAT(M,D) displays up to M digits total, and stores up to D
+           * digits to the right of the decimal point. decimals == 31 is
+           * MySQL's NOT_FIXED_DEC sentinel for "no explicit precision" --
+           * format with 6 significant digits instead, matching FLOAT's
+           * own default display precision.
+           *
+           * Convert float to string using snprintf (actually ruby_snprintf,
+           * which ruby/subst.h #defines snprintf to, and which always uses
+           * '.' as the decimal separator regardless of locale), then parse
+           * the string to Ruby Float with rb_cstr_to_dbl().
+           *
+           * Size the buffer for the worst case: 39 integer digits, 30
+           * decimals, sign, point, NUL. */
+          char float_buf[80];
+          double float_as_double = (double)(*((float*)result_buffer->buffer));
+          int float_len;
+          if (fields[i].decimals == 31) {
+            float_len = snprintf(float_buf, sizeof(float_buf), "%.6g", float_as_double);
+          } else {
+            float_len = snprintf(float_buf, sizeof(float_buf), "%.*f", fields[i].decimals, float_as_double);
+          }
+          val = rb_float_new(mysql2_snprintf_to_dbl(float_buf, sizeof(float_buf), float_len));
           break;
+        }
         case MYSQL_TYPE_DOUBLE:       // double
           val = rb_float_new((double)(*((double*)result_buffer->buffer)));
           break;
@@ -1766,17 +1803,9 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
           }
           break;
         case MYSQL_TYPE_FLOAT:      /* FLOAT field */
-        case MYSQL_TYPE_DOUBLE: {     /* DOUBLE or REAL field */
-          /* Kernel#Float() parses this locale-independently; strtod()
-           * would read '.' according to the current LC_NUMERIC. */
-          VALUE column_as_float = rb_funcall(rb_mKernel, intern_Float, 1, rb_str_new(row[i], fieldLengths[i]));
-          if (RFLOAT_VALUE(column_as_float) == 0.000000){
-            val = opt_float_zero;
-          }else{
-            val = column_as_float;
-          }
+        case MYSQL_TYPE_DOUBLE:       /* DOUBLE or REAL field */
+          val = mysql2_float_from_str(row[i], fieldLengths[i], opt_float_zero);
           break;
-        }
         case MYSQL_TYPE_TIME: {     /* TIME field */
           int tokens, negative;
           const char *time_str = row[i];
@@ -2651,7 +2680,6 @@ void init_mysql2_result(void) {
   intern_civil        = rb_intern("civil");
   intern_new_offset   = rb_intern("new_offset");
   intern_BigDecimal   = rb_intern("BigDecimal");
-  intern_Float        = rb_intern("Float");
   intern_query_options = rb_intern("@query_options");
   intern_plus         = rb_intern("+");
 

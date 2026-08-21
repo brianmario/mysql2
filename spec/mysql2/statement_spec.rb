@@ -1,4 +1,5 @@
 require './spec/spec_helper'
+require 'clocale'
 
 RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
   before(:example) do
@@ -925,7 +926,45 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
 
     it "should return Float for a FLOAT value" do
       expect(test_result['float_test']).to be_an_instance_of(Float)
-      expect(test_result['float_test']).to be_within(1e-5).of(10.3)
+      expect(test_result['float_test']).to eql(10.3)
+    end
+
+    it "returns the same Float for a FLOAT value via a prepared statement as via a plain query" do
+      # A FLOAT column's value should read the same regardless of protocol
+      # (#1276): FLT_DIG significant digits with no explicit precision,
+      # or FLOAT(M,D)'s declared decimal places otherwise.
+      @client.query "DROP TABLE IF EXISTS mysql2_float_parity_test"
+      @client.query "CREATE TABLE mysql2_float_parity_test (a FLOAT, b FLOAT(255,30))"
+      @client.query "INSERT INTO mysql2_float_parity_test VALUES (#{1.0 / 3}, 1e38)"
+
+      plain = @client.query("SELECT a, b FROM mysql2_float_parity_test").first
+      prepared = @client.prepare("SELECT a, b FROM mysql2_float_parity_test").execute.first
+
+      expect(prepared).to eql(plain)
+      @client.query "DROP TABLE mysql2_float_parity_test"
+    end
+
+    # The float handling code must always use '.' as the decimal separator.
+    # These specs guard accidental introduction of locale-specific parsing,
+    # e.g. ',' as decimal separator.
+    context "under a locale that uses a comma as the decimal separator" do
+      before(:example) do
+        @original_locale = CLocale.setlocale(CLocale::LC_NUMERIC, nil)
+        begin
+          CLocale.setlocale(CLocale::LC_NUMERIC, "de_DE.UTF-8")
+        rescue RuntimeError
+          skip "de_DE.UTF-8 locale not installed on this system"
+        end
+      end
+
+      after(:example) do
+        CLocale.setlocale(CLocale::LC_NUMERIC, @original_locale) if @original_locale
+      end
+
+      it "should return the correct Float for a FLOAT value" do
+        result = @client.prepare("SELECT CAST(2.7 AS FLOAT) AS val").execute
+        expect(result.first['val']).to eql(2.7)
+      end
     end
 
     it "should return Float for a DOUBLE value" do

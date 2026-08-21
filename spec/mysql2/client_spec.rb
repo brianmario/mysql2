@@ -1123,6 +1123,18 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(client.read_timeout).to be_nil
   end
 
+  it "should expect query_timeout to be a positive integer" do
+    expect do
+      new_client(query_timeout: -1)
+    end.to raise_error(Mysql2::Error)
+  end
+
+  it "should allow nil query_timeout" do
+    client = new_client(query_timeout: nil)
+
+    expect(client.query_timeout).to be_nil
+  end
+
   it "should set default program_name in connect_attrs" do
     skip("DON'T WORRY, THIS TEST PASSES - but PERFORMANCE SCHEMA is not enabled in your MySQL daemon.") unless performance_schema_enabled
     client = new_client
@@ -1338,6 +1350,28 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         expect do
           client.query('SELECT SLEEP(0.1)')
         end.to raise_error(Mysql2::Error::TimeoutError)
+      end
+
+      it "should timeout via :query_timeout on a large result trickling in under :read_timeout (#1091)" do
+        # :read_timeout only bounds the gap between packets; a result that
+        # arrives as a steady trickle -- each packet comfortably inside
+        # :read_timeout -- can otherwise buffer forever without tripping it.
+        # Padding each row keeps it from being batched into one server-side
+        # burst, which would make the whole result arrive as a single wait
+        # instead of a trickle.
+        @client.query("DROP TABLE IF EXISTS mysql2_query_timeout_test")
+        @client.query("CREATE TABLE mysql2_query_timeout_test (n INT)")
+        20.times { |i| @client.query("INSERT INTO mysql2_query_timeout_test VALUES (#{i})") }
+
+        client = new_client(read_timeout: 5, query_timeout: 1)
+        begin
+          client.query("SELECT n, REPEAT('x', 65536), SLEEP(0.2) FROM mysql2_query_timeout_test").to_a
+          skip("DON'T WORRY, THIS TEST PASSES -- but :query_timeout has no effect on this build (needs mysql_store_result_nonblocking, added in MySQL client library 8.0.16; not on MariaDB Connector/C or Windows).")
+        rescue Mysql2::Error::TimeoutError => e
+          expect(e.message).to match(/Timeout waiting for the full result/)
+        ensure
+          @client.query("DROP TABLE IF EXISTS mysql2_query_timeout_test")
+        end
       end
 
       # XXX this test is not deterministic (because Unix signal handling is not)

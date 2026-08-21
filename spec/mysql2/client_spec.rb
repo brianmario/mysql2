@@ -159,6 +159,38 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(Mysql2::Client).to respond_to(:default_query_options)
   end
 
+  it "should have a global default_connect_options hash" do
+    expect(Mysql2::Client).to respond_to(:default_connect_options)
+  end
+
+  it "does not advertise connect-time-only keys in default_query_options" do
+    # :connect_flags only takes effect at connect time; sitting in
+    # default_query_options would invite Client.default_query_options.merge!(connect_flags: ...)
+    # to look like it works when it silently wouldn't (same story as #437/#493).
+    expect(Mysql2::Client.default_query_options).not_to have_key(:connect_flags)
+    expect(Mysql2::Client.default_connect_options).to have_key(:connect_flags)
+  end
+
+  it "does not leave :connect_flags in query_options after connecting" do
+    expect(@client.query_options).not_to have_key(:connect_flags)
+  end
+
+  it "reflects the resolved connect flags in connect_options" do
+    expect(@client.connect_options[:connect_flags]).to be_an(Integer)
+    expect(@client.connect_options[:connect_flags]).not_to be_zero
+  end
+
+  it "honors a global default_connect_options override for future connections" do
+    original = Mysql2::Client.default_connect_options[:connect_flags]
+    begin
+      Mysql2::Client.default_connect_options[:connect_flags] |= Mysql2::Client::FOUND_ROWS
+      client = new_client
+      expect(client.connect_options[:connect_flags] & Mysql2::Client::FOUND_ROWS).not_to be_zero
+    ensure
+      Mysql2::Client.default_connect_options[:connect_flags] = original
+    end
+  end
+
   context "SSL" do
     before(:example) do
       ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"

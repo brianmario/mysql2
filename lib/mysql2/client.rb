@@ -1,7 +1,13 @@
 module Mysql2
   class Client # rubocop:disable Metrics/ClassLength
-    attr_reader :query_options, :read_timeout
+    attr_reader :query_options, :connect_options, :read_timeout
 
+    # Options genuinely re-consulted on every #query call (directly, or via
+    # a per-instance default set here). Connect-time-only settings -- read
+    # once at Client.new and never again -- belong in
+    # .default_connect_options instead, not here: a key that only takes
+    # effect at connect time but lives in query_options looks like a live,
+    # per-query option and silently isn't one (#437, #493).
     def self.default_query_options
       @default_query_options ||= {
         as: :hash,                   # the type of object you want each row back as; also supports :array (an array of values)
@@ -12,10 +18,16 @@ module Mysql2
         application_timezone: nil,   # timezone Mysql2 will convert to before handing the object back to the caller
         cache_rows: true,            # tells Mysql2 to use its internal row cache for results
         rows_per_gvl_yield: 8192,    # buffered rows to materialize between GVL yields; 0 disables yielding
-        connect_flags: REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | CONNECT_ATTRS,
         cast: true,
-        default_file: nil,
-        default_group: nil,
+      }
+    end
+
+    # Options read once at connect time and never re-consulted afterward.
+    # Unlike .default_query_options, these have no live per-query meaning --
+    # changing them after connecting has no effect, by design.
+    def self.default_connect_options
+      @default_connect_options ||= {
+        connect_flags: REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | CONNECT_ATTRS,
       }
     end
 
@@ -49,6 +61,8 @@ module Mysql2
       @read_timeout = nil
       @query_options = self.class.default_query_options.dup
       @query_options.merge! opts
+      @connect_options = self.class.default_connect_options.dup
+      @connect_options.merge!(opts.slice(*@connect_options.keys))
 
       apply_tls_option_aliases(opts)
 
@@ -85,19 +99,7 @@ module Mysql2
       ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
       self.ssl_mode = mode if mode
 
-      flags = case opts[:flags]
-      when Array
-        parse_flags_array(opts[:flags], @query_options[:connect_flags])
-      when String
-        parse_flags_array(opts[:flags].split(' '), @query_options[:connect_flags])
-      when Integer
-        @query_options[:connect_flags] | opts[:flags]
-      else
-        @query_options[:connect_flags]
-      end
-
-      # SSL verify is a connection flag rather than a mysql_ssl_set option
-      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify]
+      flags = resolve_connect_flags(opts)
 
       check_and_clean_query_options
 
@@ -131,6 +133,29 @@ module Mysql2
         return Mysql2::Client.const_get(x) if Mysql2::Client.const_defined?(x)
       end
       warn "Unknown MySQL ssl_mode flag: #{mode}"
+    end
+
+    # Resolves opts[:flags]/:sslverify against @connect_options[:connect_flags]
+    # (the base default) into the final bitmask, and records that resolved
+    # value back into @connect_options -- connect_options should reflect
+    # what was actually used to connect, not just the raw :flags the caller
+    # passed (if any).
+    def resolve_connect_flags(opts)
+      flags = case opts[:flags]
+      when Array
+        parse_flags_array(opts[:flags], @connect_options[:connect_flags])
+      when String
+        parse_flags_array(opts[:flags].split(' '), @connect_options[:connect_flags])
+      when Integer
+        @connect_options[:connect_flags] | opts[:flags]
+      else
+        @connect_options[:connect_flags]
+      end
+
+      # SSL verify is a connection flag rather than a mysql_ssl_set option
+      flags |= SSL_VERIFY_SERVER_CERT if opts[:sslverify]
+
+      @connect_options[:connect_flags] = flags
     end
 
     def parse_flags_array(flags, initial = 0)
@@ -321,6 +346,10 @@ module Mysql2
       # :default_file/:default_group: same story as :database above, but with
       # no live value to read back -- nothing but a decoy (#493).
       %i[default_file default_group].each { |k| @query_options.delete(k) }
+
+      # :connect_flags now lives in @connect_options; drop the blanket-merge
+      # copy here so it doesn't linger as a second, stale source of truth.
+      @query_options.delete(:connect_flags)
     end
 
     class << self

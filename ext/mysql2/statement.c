@@ -805,6 +805,568 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   return resultObj;
 }
 
+/* Column classifications for Statement#execute_batch. Values classify with
+ * the same Ruby-type mapping Statement#execute uses to pick a MYSQL_BIND
+ * buffer type. execute_batch additionally requires every non-nil value in a
+ * column to classify identically, because a bulk execute sends one type
+ * header per column for the whole batch -- and the loop fallback enforces
+ * the same rule so a batch behaves identically on every build and server. */
+enum mysql2_batch_type {
+  MYSQL2_BATCH_NONE = 0, /* no non-nil value seen yet */
+  MYSQL2_BATCH_LONGLONG,
+  MYSQL2_BATCH_DOUBLE,
+  MYSQL2_BATCH_TINY,
+  MYSQL2_BATCH_DATETIME,
+  MYSQL2_BATCH_DATE,
+  MYSQL2_BATCH_STRING,
+  MYSQL2_BATCH_DECIMAL
+};
+
+static const char *mysql2_batch_type_names[] = {
+  "NULL", "Integer", "Float", "boolean", "Time", "Date", "String", "DECIMAL",
+};
+
+/* Classify one execute_batch value and convert it to the form the bind step
+ * consumes: strings and BigDecimals (and Integers beyond 64 bits, which bind
+ * as DECIMAL strings) are exported to the connection encoding; Time/DateTime/
+ * Date are packed into MYSQL_TIME bytes carried in a Ruby string; integers,
+ * floats, and booleans pass through as-is. Raises TypeError for anything
+ * Statement#execute couldn't bind, annotated with the value's position. */
+static enum mysql2_batch_type mysql2_batch_classify(VALUE v, VALUE *prepared, rb_encoding *conn_enc, unsigned long row, unsigned long col) {
+  *prepared = v;
+
+  switch (TYPE(v)) {
+    case T_FIXNUM:
+      return MYSQL2_BATCH_LONGLONG;
+    case T_BIGNUM:
+      {
+        LONG_LONG num;
+        if (my_big2ll(v, &num) == 0) {
+          return MYSQL2_BATCH_LONGLONG;
+        }
+        /* The bignum was larger than we can fit in LONG_LONG, send it as a string */
+        *prepared = rb_str_new_frozen(rb_str_export_to_enc(rb_big2str(v, 10), conn_enc));
+        return MYSQL2_BATCH_DECIMAL;
+      }
+    case T_FLOAT:
+      return MYSQL2_BATCH_DOUBLE;
+    case T_STRING:
+      /* rb_str_export_to_enc returns the caller's own string when its
+       * encoding already matches, and the bulk path reads each string's
+       * length twice -- once sizing the arena, once filling it -- so pin
+       * both length and bytes with a frozen copy-on-write shadow that a
+       * mutation of the original can't reach. */
+      *prepared = rb_str_new_frozen(rb_str_export_to_enc(v, conn_enc));
+      return MYSQL2_BATCH_STRING;
+    case T_TRUE:
+    case T_FALSE:
+      return MYSQL2_BATCH_TINY;
+    default:
+      if (CLASS_OF(v) == rb_cTime || CLASS_OF(v) == cDateTime) {
+        MYSQL_TIME t;
+
+        memset(&t, 0, sizeof(MYSQL_TIME));
+        t.neg = 0;
+
+        if (CLASS_OF(v) == rb_cTime) {
+          t.second_part = FIX2INT(rb_funcall(v, intern_usec, 0));
+        } else {
+          // sec_fraction is an exact Rational; keep the multiply in
+          // Rational-space and only truncate to an integer at the end,
+          // so no floating-point error can creep into the microseconds.
+          VALUE usec = rb_funcall(rb_funcall(v, intern_sec_fraction, 0), intern_mul, 1, INT2FIX(1000000));
+          t.second_part = NUM2ULONG(rb_funcall(usec, intern_truncate, 0));
+        }
+
+        t.second = FIX2INT(rb_funcall(v, intern_sec, 0));
+        t.minute = FIX2INT(rb_funcall(v, intern_min, 0));
+        t.hour = FIX2INT(rb_funcall(v, intern_hour, 0));
+        t.day = FIX2INT(rb_funcall(v, intern_day, 0));
+        t.month = FIX2INT(rb_funcall(v, intern_month, 0));
+        t.year = FIX2INT(rb_funcall(v, intern_year, 0));
+
+        *prepared = rb_str_new((const char *)&t, sizeof(MYSQL_TIME));
+        return MYSQL2_BATCH_DATETIME;
+      } else if (CLASS_OF(v) == cDate) {
+        MYSQL_TIME t;
+
+        memset(&t, 0, sizeof(MYSQL_TIME));
+        t.second_part = 0;
+        t.neg = 0;
+        t.day = FIX2INT(rb_funcall(v, intern_day, 0));
+        t.month = FIX2INT(rb_funcall(v, intern_month, 0));
+        t.year = FIX2INT(rb_funcall(v, intern_year, 0));
+
+        *prepared = rb_str_new((const char *)&t, sizeof(MYSQL_TIME));
+        return MYSQL2_BATCH_DATE;
+      } else if (CLASS_OF(v) == cBigDecimal) {
+        /* DECIMAL values travel as their string representation, same as
+         * Statement#execute. */
+        *prepared = rb_str_new_frozen(rb_str_export_to_enc(rb_funcall(v, intern_to_s, 0), conn_enc));
+        return MYSQL2_BATCH_DECIMAL;
+      } else {
+        int state = 0;
+        VALUE inspect = rb_protect(rb_inspect, v, &state);
+        if (!state && rb_str_strlen(inspect) > 40) {
+          inspect = rb_str_substr(inspect, 0, 40);
+          rb_str_cat2(inspect, "...");
+        }
+        /* An inspect that raised, or inspect output holding a NUL byte
+         * (which rb_raise's PRIsVALUE formatting rejects), still gets the
+         * TypeError -- just without the value. */
+        if (state || memchr(RSTRING_PTR(inspect), '\0', RSTRING_LEN(inspect))) {
+          rb_raise(rb_eTypeError, "can't bind parameter %lu in row %lu: no conversion for %s",
+                   col + 1, row + 1, rb_obj_classname(v));
+        }
+        rb_raise(rb_eTypeError, "can't bind parameter %lu in row %lu: no conversion for %s (%" PRIsVALUE ")",
+                 col + 1, row + 1, rb_obj_classname(v), inspect);
+      }
+  }
+}
+
+/* Raise unless the prepared statement is DML. Statements returning result
+ * sets have no bulk protocol (COM_STMT_BULK_EXECUTE refuses them
+ * server-side), so execute_batch rejects them up front -- client-side,
+ * before anything executes, identically on the bulk and fallback paths. */
+static void mysql2_batch_require_dml(MYSQL_STMT *stmt) {
+  if (mysql_stmt_field_count(stmt) > 0) {
+    rb_raise(cMysql2Error, "execute_batch is for DML statements (INSERT/UPDATE/DELETE); this statement returns a result set");
+  }
+}
+
+/* Validate the execute_batch contract for rows and convert each value to
+ * the form the bulk bind step consumes: rows must be an Array of Arrays,
+ * each row exactly ncols long, and every non-nil value in a column must
+ * classify as one bind type. Returns the converted values as a flat
+ * row-major Ruby array; fills col_types with each column's unified type,
+ * anchor_rows with the row that established it, and str_bytes with each
+ * string-typed column's summed byte length. Nothing here touches the
+ * statement handle or the wire, so a raise leaves the connection untouched
+ * -- and a batch that would raise here raises identically whether it then
+ * executes as one COM_STMT_BULK_EXECUTE or as a Ruby-level execute loop. */
+static VALUE mysql2_batch_validate(VALUE rows, unsigned long ncols, rb_encoding *conn_enc,
+                                   enum mysql2_batch_type *col_types, unsigned long *anchor_rows,
+                                   unsigned long *str_bytes) {
+  unsigned long nrows, r, c;
+  VALUE prepared;
+
+  Check_Type(rows, T_ARRAY);
+  nrows = (unsigned long)RARRAY_LEN(rows);
+
+  for (c = 0; c < ncols; c++) {
+    col_types[c] = MYSQL2_BATCH_NONE;
+    anchor_rows[c] = 0;
+    str_bytes[c] = 0;
+  }
+
+  prepared = rb_ary_new2((long)(nrows * ncols));
+
+  for (r = 0; r < nrows; r++) {
+    VALUE row = rb_ary_entry(rows, (long)r);
+    if (!RB_TYPE_P(row, T_ARRAY)) {
+      rb_raise(rb_eTypeError, "row %lu is not an Array (%s given)", r + 1, rb_obj_classname(row));
+    }
+    if ((unsigned long)RARRAY_LEN(row) != ncols) {
+      rb_raise(cMysql2Error, "Bind parameter count (%lu) doesn't match number of arguments (%ld) in row %lu",
+               ncols, RARRAY_LEN(row), r + 1);
+    }
+
+    for (c = 0; c < ncols; c++) {
+      VALUE v = rb_ary_entry(row, (long)c);
+      if (NIL_P(v)) {
+        rb_ary_push(prepared, Qnil);
+      } else {
+        VALUE conv;
+        enum mysql2_batch_type tag = mysql2_batch_classify(v, &conv, conn_enc, r, c);
+        if (col_types[c] == MYSQL2_BATCH_NONE) {
+          col_types[c] = tag;
+          anchor_rows[c] = r;
+        } else if (col_types[c] != tag) {
+          rb_raise(rb_eTypeError,
+                   "can't bind parameter %lu in row %lu: %s binds as %s, conflicting with the %s binding established by row %lu",
+                   c + 1, r + 1, rb_obj_classname(v), mysql2_batch_type_names[tag],
+                   mysql2_batch_type_names[col_types[c]], anchor_rows[c] + 1);
+        }
+        if (tag == MYSQL2_BATCH_STRING || tag == MYSQL2_BATCH_DECIMAL) {
+          str_bytes[c] += (unsigned long)RSTRING_LEN(conv);
+        }
+        rb_ary_push(prepared, conv);
+      }
+    }
+  }
+
+  return prepared;
+}
+
+/* call-seq: stmt._validate_batch(rows) # => nil
+ *
+ * Enforce the execute_batch contract without executing anything. The
+ * Ruby-level fallback loop runs this before its first execute, so a batch
+ * that would raise client-side under COM_STMT_BULK_EXECUTE raises
+ * identically -- with no row yet executed -- on builds and servers without
+ * bulk support.
+ */
+static VALUE rb_mysql_stmt_validate_batch(VALUE self, VALUE rows) {
+  unsigned long ncols;
+  enum mysql2_batch_type *col_types = NULL;
+  unsigned long *anchor_rows = NULL;
+  unsigned long *str_bytes = NULL;
+  rb_encoding *conn_enc;
+  GET_STATEMENT(self);
+  GET_CLIENT(stmt_wrapper->client);
+
+  mysql2_batch_require_dml(stmt_wrapper->stmt);
+
+  conn_enc = rb_to_encoding(wrapper->encoding);
+  ncols = mysql_stmt_param_count(stmt_wrapper->stmt);
+  if (ncols > 0) {
+    col_types = alloca(ncols * sizeof(*col_types));
+    anchor_rows = alloca(ncols * sizeof(*anchor_rows));
+    str_bytes = alloca(ncols * sizeof(*str_bytes));
+  }
+  mysql2_batch_validate(rows, ncols, conn_enc, col_types, anchor_rows, str_bytes);
+
+  return Qnil;
+}
+
+#ifdef BULK_EXECUTE_SUPPORT
+/* The library's own MARIADB_STMT_BULK_SUPPORTED macro reads a MYSQL member
+ * whose struct definition is private to the library; mariadb_get_infov is
+ * the public spelling of the same server-capability probe. */
+static int mysql2_bulk_execute_supported(MYSQL *client) {
+  unsigned long server_caps = 0;
+  unsigned long extended_caps = 0;
+
+  if (client == NULL ||
+      mariadb_get_infov(client, MARIADB_CONNECTION_SERVER_CAPABILITIES, &server_caps) ||
+      mariadb_get_infov(client, MARIADB_CONNECTION_EXTENDED_SERVER_CAPABILITIES, &extended_caps)) {
+    return 0;
+  }
+
+  /* A MariaDB-family server (CLIENT_MYSQL off) advertising bulk operations
+   * in its extended capabilities -- the same test the library applies
+   * before generating a COM_STMT_BULK_EXECUTE request. */
+  return !(server_caps & CLIENT_MYSQL) &&
+         (extended_caps & (unsigned long)(MARIADB_CLIENT_STMT_BULK_OPERATIONS >> 32)) != 0;
+}
+#endif
+
+/* call-seq: stmt._bulk_execute_supported? # => true or false
+ *
+ * True when this statement can execute a batch as a single
+ * COM_STMT_BULK_EXECUTE command: the client library was built with the
+ * MariaDB bulk API, the server advertises MARIADB_CLIENT_STMT_BULK_OPERATIONS
+ * (MariaDB 10.2+), and the statement binds at least one parameter (the bulk
+ * protocol rejects parameterless commands). Statement#execute_batch consults
+ * this to pick between the bulk command and its per-row fallback loop.
+ */
+static VALUE rb_mysql_stmt_bulk_execute_supported_p(VALUE self) {
+  GET_STATEMENT(self);
+#ifdef BULK_EXECUTE_SUPPORT
+  return (mysql_stmt_param_count(stmt_wrapper->stmt) > 0 &&
+          mysql2_bulk_execute_supported(stmt_wrapper->stmt->mysql)) ? Qtrue : Qfalse;
+#else
+  return Qfalse;
+#endif
+}
+
+#ifdef BULK_EXECUTE_SUPPORT
+
+/* Bump-allocation within the batch arena: every sub-array is rounded up to
+ * 8-byte alignment, which satisfies every type placed there. */
+#define MYSQL2_BATCH_ALIGN(n) (((size_t)(n) + 7) & ~(size_t)7)
+
+/* call-seq: stmt._execute_bulk(rows) # => Integer
+ *
+ * Execute the prepared statement once per row of rows as a single
+ * COM_STMT_BULK_EXECUTE round trip, returning the batch's summed
+ * affected-rows count from its one OK packet. Callers guard with
+ * _bulk_execute_supported?; Statement#execute_batch is the public face.
+ *
+ * Values for the whole batch are converted up front (mysql2_batch_validate,
+ * which may raise, allocates only GC-managed memory) and then copied into a
+ * single arena holding the MYSQL_BIND array plus each column's value,
+ * pointer, length, and indicator arrays. The copy phase makes no Ruby API
+ * calls that can raise, so the arena's post-execute xfree calls are the
+ * complete set. NULLs travel per value as STMT_INDICATOR_NULL, never via a
+ * column's type header.
+ */
+static VALUE rb_mysql_stmt_execute_bulk(VALUE self, VALUE rows) {
+  MYSQL_STMT *stmt;
+  MYSQL_BIND *bind_buffers;
+  unsigned long ncols, nrows, r, c;
+  enum mysql2_batch_type *col_types;
+  unsigned long *anchor_rows;
+  unsigned long *str_bytes;
+  VALUE prepared;
+  VALUE execute_ok;
+  unsigned int array_size;
+  unsigned int reset_array_size = 0;
+  my_ulonglong affected;
+  char *arena, *cursor;
+  size_t arena_size;
+  struct nogvl_stmt_execute_args execute_args;
+  rb_encoding *conn_enc;
+
+  GET_STATEMENT(self);
+  GET_CLIENT(stmt_wrapper->client);
+
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "execute a statement");
+  }
+
+  /* We're about to issue a new command on this connection: a safe point to
+   * close out any statements that were GC'd while it was last busy and to
+   * free any abandoned result sets -- see rb_mysql_stmt_execute. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
+  conn_enc = rb_to_encoding(wrapper->encoding);
+
+  stmt = stmt_wrapper->stmt;
+  ncols = mysql_stmt_param_count(stmt);
+
+  mysql2_batch_require_dml(stmt);
+  if (ncols == 0) {
+    rb_raise(cMysql2Error, "COM_STMT_BULK_EXECUTE requires at least one bind parameter");
+  }
+
+  col_types = alloca(ncols * sizeof(*col_types));
+  anchor_rows = alloca(ncols * sizeof(*anchor_rows));
+  str_bytes = alloca(ncols * sizeof(*str_bytes));
+  prepared = mysql2_batch_validate(rows, ncols, conn_enc, col_types, anchor_rows, str_bytes);
+
+  nrows = (unsigned long)RARRAY_LEN(rows);
+  if (nrows == 0) {
+    return INT2FIX(0);
+  }
+  if (nrows > UINT_MAX) {
+    rb_raise(cMysql2Error, "Batch is too large for STMT_ATTR_ARRAY_SIZE (%lu rows)", nrows);
+  }
+
+  /* Size the arena. Column layouts follow what Connector/C's bulk request
+   * generation reads for each buffer type (ma_get_buffer_offset): fixed-size
+   * types are contiguous value arrays indexed by row; date/time and
+   * string-family types are arrays of per-row pointers, strings paired with
+   * a per-row length array. Every column carries a per-value indicator
+   * array. An all-nil column binds as MYSQL_TYPE_STRING whose every
+   * indicator is STMT_INDICATOR_NULL, so its type header is never acted
+   * on. */
+  arena_size = MYSQL2_BATCH_ALIGN(ncols * sizeof(MYSQL_BIND));
+  for (c = 0; c < ncols; c++) {
+    arena_size += MYSQL2_BATCH_ALIGN(nrows); /* indicators */
+    switch (col_types[c]) {
+      case MYSQL2_BATCH_LONGLONG:
+        arena_size += MYSQL2_BATCH_ALIGN(nrows * sizeof(LONG_LONG));
+        break;
+      case MYSQL2_BATCH_DOUBLE:
+        arena_size += MYSQL2_BATCH_ALIGN(nrows * sizeof(double));
+        break;
+      case MYSQL2_BATCH_TINY:
+        arena_size += MYSQL2_BATCH_ALIGN(nrows);
+        break;
+      case MYSQL2_BATCH_DATETIME:
+      case MYSQL2_BATCH_DATE:
+        arena_size += MYSQL2_BATCH_ALIGN(nrows * sizeof(MYSQL_TIME *)) +
+                      MYSQL2_BATCH_ALIGN(nrows * sizeof(MYSQL_TIME));
+        break;
+      case MYSQL2_BATCH_NONE:
+      case MYSQL2_BATCH_STRING:
+      case MYSQL2_BATCH_DECIMAL:
+        arena_size += MYSQL2_BATCH_ALIGN(nrows * sizeof(char *)) +
+                      MYSQL2_BATCH_ALIGN(nrows * sizeof(unsigned long)) +
+                      MYSQL2_BATCH_ALIGN(str_bytes[c]);
+        break;
+    }
+  }
+
+  arena = xcalloc(1, arena_size);
+  cursor = arena;
+
+  bind_buffers = (MYSQL_BIND *)(void *)cursor;
+  cursor += MYSQL2_BATCH_ALIGN(ncols * sizeof(MYSQL_BIND));
+
+  for (c = 0; c < ncols; c++) {
+    /* xcalloc zeroed the indicators: 0 is STMT_INDICATOR_NONE. */
+    char *indicators = cursor;
+    cursor += MYSQL2_BATCH_ALIGN(nrows);
+    bind_buffers[c].u.indicator = indicators;
+
+    switch (col_types[c]) {
+      case MYSQL2_BATCH_LONGLONG:
+        {
+          LONG_LONG *values = (LONG_LONG *)(void *)cursor;
+          cursor += MYSQL2_BATCH_ALIGN(nrows * sizeof(LONG_LONG));
+          bind_buffers[c].buffer_type = MYSQL_TYPE_LONGLONG;
+          bind_buffers[c].buffer = values;
+          for (r = 0; r < nrows; r++) {
+            VALUE v = rb_ary_entry(prepared, (long)(r * ncols + c));
+            if (NIL_P(v)) {
+              indicators[r] = STMT_INDICATOR_NULL;
+            } else if (FIXNUM_P(v)) {
+              values[r] = FIX2LONG(v);
+            } else {
+              LONG_LONG num = 0;
+              (void)my_big2ll(v, &num); /* validated to fit */
+              values[r] = num;
+            }
+          }
+        }
+        break;
+      case MYSQL2_BATCH_DOUBLE:
+        {
+          double *values = (double *)(void *)cursor;
+          cursor += MYSQL2_BATCH_ALIGN(nrows * sizeof(double));
+          bind_buffers[c].buffer_type = MYSQL_TYPE_DOUBLE;
+          bind_buffers[c].buffer = values;
+          for (r = 0; r < nrows; r++) {
+            VALUE v = rb_ary_entry(prepared, (long)(r * ncols + c));
+            if (NIL_P(v)) {
+              indicators[r] = STMT_INDICATOR_NULL;
+            } else {
+              values[r] = RFLOAT_VALUE(v);
+            }
+          }
+        }
+        break;
+      case MYSQL2_BATCH_TINY:
+        {
+          signed char *values = (signed char *)(void *)cursor;
+          cursor += MYSQL2_BATCH_ALIGN(nrows);
+          bind_buffers[c].buffer_type = MYSQL_TYPE_TINY;
+          bind_buffers[c].buffer = values;
+          for (r = 0; r < nrows; r++) {
+            VALUE v = rb_ary_entry(prepared, (long)(r * ncols + c));
+            if (NIL_P(v)) {
+              indicators[r] = STMT_INDICATOR_NULL;
+            } else {
+              values[r] = (v == Qtrue) ? 1 : 0;
+            }
+          }
+        }
+        break;
+      case MYSQL2_BATCH_DATETIME:
+      case MYSQL2_BATCH_DATE:
+        {
+          MYSQL_TIME **ptrs = (MYSQL_TIME **)(void *)cursor;
+          MYSQL_TIME *values;
+          cursor += MYSQL2_BATCH_ALIGN(nrows * sizeof(MYSQL_TIME *));
+          values = (MYSQL_TIME *)(void *)cursor;
+          cursor += MYSQL2_BATCH_ALIGN(nrows * sizeof(MYSQL_TIME));
+          bind_buffers[c].buffer_type = (col_types[c] == MYSQL2_BATCH_DATETIME) ? MYSQL_TYPE_DATETIME : MYSQL_TYPE_DATE;
+          bind_buffers[c].buffer = ptrs;
+          for (r = 0; r < nrows; r++) {
+            VALUE v = rb_ary_entry(prepared, (long)(r * ncols + c));
+            if (NIL_P(v)) {
+              indicators[r] = STMT_INDICATOR_NULL;
+            } else {
+              memcpy(&values[r], RSTRING_PTR(v), sizeof(MYSQL_TIME));
+              ptrs[r] = &values[r];
+            }
+          }
+        }
+        break;
+      case MYSQL2_BATCH_NONE:
+      case MYSQL2_BATCH_STRING:
+      case MYSQL2_BATCH_DECIMAL:
+        {
+          char **ptrs = (char **)(void *)cursor;
+          unsigned long *lengths;
+          char *bytes;
+          cursor += MYSQL2_BATCH_ALIGN(nrows * sizeof(char *));
+          lengths = (unsigned long *)(void *)cursor;
+          cursor += MYSQL2_BATCH_ALIGN(nrows * sizeof(unsigned long));
+          bytes = cursor;
+          cursor += MYSQL2_BATCH_ALIGN(str_bytes[c]);
+          bind_buffers[c].buffer_type = (col_types[c] == MYSQL2_BATCH_DECIMAL) ? MYSQL_TYPE_NEWDECIMAL : MYSQL_TYPE_STRING;
+          bind_buffers[c].buffer = ptrs;
+          bind_buffers[c].length = lengths;
+          for (r = 0; r < nrows; r++) {
+            VALUE v = rb_ary_entry(prepared, (long)(r * ncols + c));
+            if (NIL_P(v)) {
+              indicators[r] = STMT_INDICATOR_NULL;
+            } else {
+              unsigned long len = (unsigned long)RSTRING_LEN(v);
+              memcpy(bytes, RSTRING_PTR(v), len);
+              ptrs[r] = bytes;
+              lengths[r] = len;
+              bytes += len;
+            }
+          }
+        }
+        break;
+    }
+  }
+
+  /* Abandon/reap once more, right before the network write below: the value
+   * conversion above allocates and can trigger the GC sweep that abandons a
+   * different stream on this connection -- see rb_mysql_stmt_execute. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
+  // copies bind_buffers into internal storage
+  if (mysql_stmt_bind_param(stmt, bind_buffers)) {
+    xfree(arena);
+    rb_raise_mysql2_stmt_error(stmt_wrapper);
+  }
+
+  array_size = (unsigned int)nrows;
+  if (mysql_stmt_attr_set(stmt, STMT_ATTR_ARRAY_SIZE, &array_size)) {
+    xfree(arena);
+    rb_raise(cMysql2Error, "Unable to set STMT_ATTR_ARRAY_SIZE for bulk execution");
+  }
+
+  // From here through reading the response, the connection is BUSY: a
+  // Statement freed elsewhere during this window must not be allowed to
+  // write COM_STMT_CLOSE to this socket. See rb_mysql_stmt_execute.
+  wrapper->state = MYSQL2_CLIENT_QUERYING;
+  execute_args.stmt = stmt;
+  execute_ok = (VALUE)rb_thread_call_without_gvl(nogvl_stmt_execute, &execute_args, RUBY_UBF_IO, 0);
+
+  /* Statement attributes persist on the handle across executes: clear the
+   * array size on every outcome, before anything can raise, so a later
+   * plain #execute on this statement doesn't go out as a bulk command. */
+  (void)mysql_stmt_attr_set(stmt, STMT_ATTR_ARRAY_SIZE, &reset_array_size);
+
+  /* mysql_stmt_execute serialized the values into the request (or failed);
+   * either way the bind arrays are done with. */
+  xfree(arena);
+
+  wrapper->state = MYSQL2_CLIENT_IDLE;
+
+  if (execute_ok == Qfalse) {
+    rb_raise_mysql2_stmt_error(stmt_wrapper);
+  }
+
+  /* The batch's one OK packet carries the affected-rows sum for every
+   * parameter set. DML returns no result set, so there is nothing further
+   * to read or store. */
+  affected = mysql_stmt_affected_rows(stmt);
+  if (affected == (my_ulonglong)-1) {
+    rb_raise_mysql2_stmt_error(stmt_wrapper);
+  }
+
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
+  RB_GC_GUARD(prepared);
+  RB_GC_GUARD(rows);
+
+  return ULL2NUM(affected);
+}
+
+#else /* BULK_EXECUTE_SUPPORT */
+
+static VALUE rb_mysql_stmt_execute_bulk(VALUE self, VALUE rows) {
+  (void)self;
+  (void)rows;
+  rb_raise(cMysql2Error, "This mysql2 build has no COM_STMT_BULK_EXECUTE support");
+}
+
+#endif /* BULK_EXECUTE_SUPPORT */
+
 /* call-seq: stmt.fields # => array
  *
  * Returns a list of fields that will be returned by this statement.
@@ -954,6 +1516,9 @@ void init_mysql2_statement(void) {
   rb_define_method(cMysql2Statement, "param_count", rb_mysql_stmt_param_count, 0);
   rb_define_method(cMysql2Statement, "field_count", rb_mysql_stmt_field_count, 0);
   rb_define_method(cMysql2Statement, "_execute", rb_mysql_stmt_execute, -1);
+  rb_define_method(cMysql2Statement, "_execute_bulk", rb_mysql_stmt_execute_bulk, 1);
+  rb_define_method(cMysql2Statement, "_validate_batch", rb_mysql_stmt_validate_batch, 1);
+  rb_define_method(cMysql2Statement, "_bulk_execute_supported?", rb_mysql_stmt_bulk_execute_supported_p, 0);
   rb_define_method(cMysql2Statement, "fields", rb_mysql_stmt_fields, 0);
   rb_define_method(cMysql2Statement, "last_id", rb_mysql_stmt_last_id, 0);
   rb_define_method(cMysql2Statement, "affected_rows", rb_mysql_stmt_affected_rows, 0);

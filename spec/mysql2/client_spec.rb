@@ -191,6 +191,19 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  it "keeps every connect-time-only option out of query_options, whether or not it's given" do
+    client = new_client(reconnect: true, secure_auth: false, encoding: 'utf8mb4')
+    connect_time_keys = %i[host hostname username user password pass port database dbname db
+                           socket sock tls_sni_name reconnect connect_timeout local_infile
+                           read_timeout write_timeout default_file default_group secure_auth
+                           init_command automatic_close enable_cleartext_plugin default_auth
+                           get_server_public_key tls_version encoding ssl_mode sslkey sslcert
+                           sslca sslcapath sslcipher sslverify tls_key tls_cert tls_ca
+                           tls_capath tls_cipher tls_mode tls_passphrase tls_peer_fingerprint
+                           tls_peer_fingerprint_list connect_attrs flags connect_flags]
+    expect(client.query_options.keys & connect_time_keys).to be_empty
+  end
+
   context "SSL" do
     before(:example) do
       ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"

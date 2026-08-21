@@ -78,6 +78,15 @@ typedef struct {
    * negative when no reading applies (e.g. Client#store_result results).
    * Exposed as #query_time. */
   double query_time;
+  /* Bytes of client-library heap this Result pins, as reported to Ruby's
+   * GC: the estimated size of the mysql_store_result /
+   * mysql_stmt_store_result copy, computed at Result creation and adjusted
+   * +N then, and read back for an exactly-mirrored -N when the underlying
+   * result is freed -- so the paired adjustments always balance, whatever
+   * the estimator returns. Zero for streaming results (rows are never
+   * client-buffered) and once the underlying result has been freed. Also
+   * counted by rb_mysql_result_memsize. */
+  size_t reported_size;
   my_ulonglong numberOfFields;
   my_ulonglong numberOfRows;
   unsigned long lastRowProcessed;

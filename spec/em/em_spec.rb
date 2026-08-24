@@ -109,6 +109,59 @@ begin
       end
     end
 
+    context ':read_timeout' do
+      it "fails the deferable with Mysql2::Error::TimeoutError when the server doesn't respond in time" do
+        errors = []
+        EM.run do
+          client = Mysql2::EM::Client.new DatabaseCredentials['root'].merge(read_timeout: 1)
+          defer = client.query "SELECT SLEEP(3)"
+          defer.callback do
+            # This _shouldn't_ be run, but it is needed to prevent the specs
+            # from freezing if this test fails.
+            EM.stop_event_loop
+          end
+          defer.errback do |err|
+            errors << err
+            EM.stop_event_loop
+          end
+        end
+        expect(errors.length).to eq(1)
+        expect(errors.first).to be_a(Mysql2::Error::TimeoutError)
+      end
+
+      it "discards the connection after a timeout, rather than leaving a pending response to desync the next query" do
+        client = Mysql2::EM::Client.new DatabaseCredentials['root'].merge(read_timeout: 1)
+        EM.run do
+          defer = client.query "SELECT SLEEP(3)"
+          defer.errback { EM.stop_event_loop }
+          defer.callback { EM.stop_event_loop }
+        end
+        expect(client.closed?).to be true
+      end
+
+      it "leaves the connection usable after a real query error (not a timeout)" do
+        client = Mysql2::EM::Client.new DatabaseCredentials['root'].merge(read_timeout: 5)
+        errors = []
+        results = []
+        EM.run do
+          defer = client.query "SELECT * FROM this_table_does_not_exist"
+          defer.errback do |err|
+            errors << err
+            defer2 = client.query "SELECT 1 AS one"
+            defer2.callback do |result|
+              results << result.first
+              client.close
+              EM.stop_event_loop
+            end
+          end
+          defer.callback { EM.stop_event_loop }
+        end
+        expect(errors.length).to eq(1)
+        expect(errors.first).not_to be_a(Mysql2::Error::TimeoutError)
+        expect(results).to eq([{ "one" => 1 }])
+      end
+    end
+
     it "should not raise error when closing client with no query running" do
       callbacks_run = []
       EM.run do

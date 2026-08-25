@@ -183,6 +183,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
 
   it "keeps string bind bytes stable while GC compacts during setup" do
     skip "GC compaction is unavailable" unless GC.respond_to?(:auto_compact=)
+    skip "GC stress with auto compaction crashes Ruby 3.0 on Windows" if Gem.win_platform? && RUBY_VERSION.start_with?("3.0.")
 
     statement = @client.prepare("SELECT ? AS bind_one, ? AS bind_two")
     old_auto_compact = GC.auto_compact

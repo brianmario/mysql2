@@ -50,6 +50,18 @@ typedef struct {
   ID app_timezone; /* Qnil when no conversion applies, as in result_each_args */
 } mysql2_each_opts_cache;
 
+/* One proven timezone-offset band for the :local DATETIME fast path: within
+ * [lo, hi] the zone offset is known to be off, proven under the TZ value
+ * described by tz_state (-1: no proof yet; 0: proven with TZ unset; 1:
+ * proven under the string in tz). Empty when lo > hi. */
+typedef struct {
+  time_t lo;
+  time_t hi;
+  long off;
+  int tz_state;
+  char tz[64];
+} mysql2_local_band;
+
 typedef struct {
   VALUE fields;
   VALUE fieldTypes;
@@ -67,6 +79,10 @@ typedef struct {
    * runs charset_name=), so this never goes stale; caching it avoids a
    * rb_to_encoding() call per row fetch. */
   rb_encoding *conn_enc;
+  /* :local DATETIME fast-path offset-band cache; owned by this result so
+   * concurrently iterated results never evict each other's proof. See
+   * mysql2_local_time in result.c. */
+  mysql2_local_band local_band;
   /* The :force_encoding query option, unwrapped once at Result creation;
    * NULL when the option wasn't given. When set, string values are retagged
    * with this encoding -- bytes unchanged -- instead of taking the

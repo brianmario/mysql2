@@ -163,12 +163,37 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     expect(Mysql2::Client).to respond_to(:default_connect_options)
   end
 
-  it "does not advertise connect-time-only keys in default_query_options" do
-    # :connect_flags only takes effect at connect time; sitting in
-    # default_query_options would invite Client.default_query_options.merge!(connect_flags: ...)
-    # to look like it works when it silently wouldn't (same story as #437/#493).
-    expect(Mysql2::Client.default_query_options).not_to have_key(:connect_flags)
+  it "keeps :connect_flags in default_query_options only as a deprecated fallback" do
+    # It's a real Integer, not removed outright, so the still-common
+    # `Client.default_query_options[:connect_flags] |= SOME_FLAG` idiom
+    # keeps computing a valid bitmask -- but it never reaches
+    # @query_options (see below), and Client.new only reads it as a
+    # fallback when it differs from the untouched default.
+    expect(Mysql2::Client.default_query_options[:connect_flags]).to be_an(Integer)
     expect(Mysql2::Client.default_connect_options).to have_key(:connect_flags)
+  end
+
+  it "honors the deprecated Client.default_query_options[:connect_flags] fallback, with a warning" do
+    original = Mysql2::Client.default_query_options[:connect_flags]
+    begin
+      Mysql2::Client.default_query_options[:connect_flags] |= Mysql2::Client::FOUND_ROWS
+      client = nil
+      expect { client = new_client }.to output(/default_query_options\[:connect_flags\] is deprecated/).to_stderr
+      expect(client.connect_options[:connect_flags] & Mysql2::Client::FOUND_ROWS).not_to be_zero
+    ensure
+      Mysql2::Client.default_query_options[:connect_flags] = original
+    end
+  end
+
+  it "prefers an explicit connect_flags: over the deprecated default_query_options fallback" do
+    original = Mysql2::Client.default_query_options[:connect_flags]
+    begin
+      Mysql2::Client.default_query_options[:connect_flags] |= Mysql2::Client::FOUND_ROWS
+      client = new_client(connect_flags: 99)
+      expect(client.connect_options[:connect_flags]).to eql(99)
+    ensure
+      Mysql2::Client.default_query_options[:connect_flags] = original
+    end
   end
 
   it "does not leave :connect_flags in query_options after connecting" do

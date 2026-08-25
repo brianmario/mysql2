@@ -526,6 +526,18 @@ The string form will be split on whitespace and parsed as with the array form:
 Plain flags are added to the default flags, while flags prefixed with `-`
 (minus) are removed from the default flags.
 
+To change the base flags every future connection starts from (rather than
+passing `:flags` to each `Client.new` call), set
+`Mysql2::Client.default_connect_options[:connect_flags]`:
+
+``` ruby
+Mysql2::Client.default_connect_options[:connect_flags] |= Mysql2::Client::MULTI_STATEMENTS
+```
+
+(`Mysql2::Client.default_query_options[:connect_flags]` is the same idea
+under its old name -- still read as a deprecated fallback, but
+`default_connect_options` is the current one.)
+
 ### Using Active Record's database.yml
 
 Active Record typically reads its configuration from a file named `database.yml` or an environment variable `DATABASE_URL`.

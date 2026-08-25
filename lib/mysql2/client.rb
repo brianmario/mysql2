@@ -2,6 +2,12 @@ module Mysql2
   class Client # rubocop:disable Metrics/ClassLength
     attr_reader :query_options, :connect_options, :read_timeout
 
+    # The pre-connect_options default base for :connect_flags -- shared so
+    # default_query_options' legacy fallback entry (below) and
+    # default_connect_options' real one can never drift apart.
+    DEFAULT_CONNECT_FLAGS = REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | CONNECT_ATTRS
+    private_constant :DEFAULT_CONNECT_FLAGS
+
     # Options genuinely re-consulted on every #query call (directly, or via
     # a per-instance default set here). Connect-time-only settings -- read
     # once at Client.new and never again -- belong in
@@ -19,6 +25,15 @@ module Mysql2
         cache_rows: true,            # tells Mysql2 to use its internal row cache for results
         rows_per_gvl_yield: 8192,    # buffered rows to materialize between GVL yields; 0 disables yielding
         cast: true,
+        # Deprecated fallback only -- Client.new reads this and warns if it
+        # differs from DEFAULT_CONNECT_FLAGS, but :connect_flags itself is
+        # not a supported query option and never reaches @query_options.
+        # Kept as a real Integer (not simply removed) so the still-common
+        # `Client.default_query_options[:connect_flags] |= SOME_FLAG` idiom
+        # keeps computing a valid bitmask instead of corrupting into `true`
+        # (NilClass#| on a since-removed nil default). Use
+        # .default_connect_options[:connect_flags] instead.
+        connect_flags: DEFAULT_CONNECT_FLAGS,
       }
     end
 
@@ -27,7 +42,7 @@ module Mysql2
     # changing them after connecting has no effect, by design.
     def self.default_connect_options
       @default_connect_options ||= {
-        connect_flags: REMEMBER_OPTIONS | LONG_PASSWORD | LONG_FLAG | TRANSACTIONS | PROTOCOL_41 | SECURE_CONNECTION | CONNECT_ATTRS,
+        connect_flags: DEFAULT_CONNECT_FLAGS,
       }
     end
 
@@ -93,10 +108,7 @@ module Mysql2
       # @connect_options has to capture both spellings' original values
       # first, or warn_incoherent_options's alias-mismatch check below
       # would never see them differ.
-      @query_options = self.class.default_query_options.dup
-      @query_options.merge!(opts.select { |k, _| SUPPORTED_QUERY_OPTIONS.include?(k) })
-      @connect_options = self.class.default_connect_options.dup
-      @connect_options.merge!(opts.select { |k, _| SUPPORTED_CONNECT_OPTIONS.include?(k) })
+      build_query_and_connect_options(opts)
 
       apply_tls_option_aliases(opts)
 
@@ -173,6 +185,35 @@ module Mysql2
         return Mysql2::Client.const_get(x) if Mysql2::Client.const_defined?(x)
       end
       warn "Unknown MySQL ssl_mode flag: #{mode}"
+    end
+
+    # Splits opts into @query_options/@connect_options by whitelist.
+    # Both class-level defaults hashes are filtered through the same
+    # whitelist as opts, not just .dup'd: Client.default_query_options is
+    # public, mutable state, so a stray key set directly on the class hash
+    # (not passed to Client.new) must not bypass the split either.
+    def build_query_and_connect_options(opts)
+      @query_options = self.class.default_query_options.select { |k, _| SUPPORTED_QUERY_OPTIONS.include?(k) }
+      @query_options.merge!(opts.select { |k, _| SUPPORTED_QUERY_OPTIONS.include?(k) })
+      @connect_options = self.class.default_connect_options.select { |k, _| SUPPORTED_CONNECT_OPTIONS.include?(k) }
+      @connect_options.merge!(opts.select { |k, _| SUPPORTED_CONNECT_OPTIONS.include?(k) })
+
+      apply_legacy_connect_flags_fallback(opts)
+    end
+
+    # Deprecated fallback for Client.default_query_options[:connect_flags]
+    # |= SOME_FLAG, a real-world idiom (predates .default_connect_options)
+    # for setting a global default connect flags value. An explicit
+    # connect_flags: passed to this Client.new call always wins -- this
+    # only fills in the class-level default's own base.
+    def apply_legacy_connect_flags_fallback(opts)
+      return if opts.key?(:connect_flags)
+
+      legacy = self.class.default_query_options[:connect_flags]
+      return if legacy == DEFAULT_CONNECT_FLAGS
+
+      warn "Client.default_query_options[:connect_flags] is deprecated and will stop being read in a future version; use Client.default_connect_options[:connect_flags] instead"
+      @connect_options[:connect_flags] = legacy
     end
 
     # Resolves opts[:flags]/:sslverify against @connect_options[:connect_flags]

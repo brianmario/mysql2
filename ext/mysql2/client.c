@@ -144,6 +144,7 @@ struct nogvl_select_db_args {
 };
 
 static VALUE rb_mysql_client_close(VALUE self);
+static VALUE release_claim_or_disconnect(VALUE completionval);
 
 /*
  * ssl_mode: :verify_identity enforcement for MariaDB Connector/C.
@@ -907,9 +908,36 @@ static void rb_mysql_client_set_active_fiber(VALUE self, bool closing) {
     // mark this connection active
     wrapper->active_fiber = fiber_current;
   } else if (wrapper->active_fiber == fiber_current) {
-    if (!closing) {
+    /* Closing an async text query from its owner is supported. A generic
+     * command may be inside a user conversion callback, though, and closing
+     * it here would free the MYSQL/MYSQL_STMT still on that same C stack. */
+    if (!closing || wrapper->state == MYSQL2_CLIENT_COMMAND) {
       rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
     }
+  } else {
+    VALUE inspect = rb_inspect(wrapper->active_fiber);
+    const char *thr = StringValueCStr(inspect);
+
+    rb_raise(cMysql2Error, "This connection is in use by: %s", thr);
+  }
+}
+
+void mysql2_client_claim(VALUE self) {
+  rb_mysql_client_set_active_fiber(self, false);
+}
+
+void mysql2_client_check_idle(VALUE self) {
+  VALUE fiber_current = rb_fiber_current();
+  GET_CLIENT(self);
+
+  if (NIL_P(wrapper->active_fiber)) {
+    if (wrapper->state == MYSQL2_CLIENT_IDLE) {
+      return;
+    }
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
+  }
+  if (wrapper->active_fiber == fiber_current) {
+    rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
   } else {
     VALUE inspect = rb_inspect(wrapper->active_fiber);
     const char *thr = StringValueCStr(inspect);
@@ -1329,8 +1357,9 @@ static VALUE rb_mysql_client_closed(VALUE self) {
  *
  * @return [nil]
  */
-static VALUE rb_mysql_client_discard(VALUE self) {
-  GET_CLIENT(self);
+static VALUE do_discard(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
+  mysql_client_wrapper *wrapper = completion->wrapper;
 
   if (wrapper->initialized && !wrapper->closed) {
 #ifndef _WIN32
@@ -1359,7 +1388,20 @@ static VALUE rb_mysql_client_discard(VALUE self) {
     rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
   }
 
+  completion->completed = 1;
   return Qnil;
+}
+
+static VALUE rb_mysql_client_discard(VALUE self) {
+  struct query_completion completion;
+  GET_CLIENT(self);
+
+  completion.wrapper = wrapper;
+  completion.completed = 0;
+
+  rb_mysql_client_set_active_fiber(self, true);
+  return rb_ensure(do_discard, (VALUE)&completion,
+                   release_claim_or_disconnect, (VALUE)&completion);
 }
 
 double mysql2_monotonic_now(void) {
@@ -1519,9 +1561,15 @@ static VALUE rb_mysql_client_async_result(VALUE self) {
   double query_elapsed;
   GET_CLIENT(self);
 
-  /* if we're not waiting on a result, do nothing */
+  /* Only a text query has a result for this method to read. Other commands
+   * use the same ownership guard but must not be mistaken for an async query
+   * merely because their active_fiber is non-nil. */
   if (NIL_P(wrapper->active_fiber))
     return Qnil;
+  if (wrapper->state != MYSQL2_CLIENT_QUERYING) {
+    mysql2_client_check_idle(self);
+    return Qnil;
+  }
 
   REQUIRE_CONNECTED(wrapper);
   read_args.mysql = wrapper->client;
@@ -1662,21 +1710,20 @@ static VALUE disconnect_and_mark_inactive(VALUE self) {
   return Qnil;
 }
 
-/* rb_ensure companion for the fiber-claimed command methods that release the
- * GVL mid-command (select_db, next_result, abandon_results!): releases the
- * claim on every kind of unwind, so no raise -- or Thread#exit -- between
+/* Shared cleanup for fiber-claimed commands that release the GVL: releases
+ * the claim on every kind of unwind, so no raise -- or Thread#exit -- between
  * claim and release can leave the connection permanently reporting "This
  * connection is in use by". When the body never reached its completion mark,
  * an interrupt landed mid-exchange and the connection may be stuck
  * mid-protocol, so it also gets invalidated, same as an interrupted query.
  * Bodies mark completion before raising a server-reported error: that reply
  * finished the round trip, so the connection itself is still usable. */
-static VALUE release_claim_or_disconnect(VALUE completionval) {
-  struct query_completion *completion = (void *)completionval;
-  mysql_client_wrapper *wrapper = completion->wrapper;
-
-  if (completion->completed) {
+void mysql2_client_finish_claim(mysql_client_wrapper *wrapper, int reusable) {
+  if (reusable) {
     wrapper->active_fiber = Qnil;
+    if (wrapper->state == MYSQL2_CLIENT_COMMAND) {
+      wrapper->state = MYSQL2_CLIENT_IDLE;
+    }
   } else {
 #ifndef _WIN32
     invalidate_after_interrupted_query(wrapper);
@@ -1689,6 +1736,12 @@ static VALUE release_claim_or_disconnect(VALUE completionval) {
     }
 #endif
   }
+}
+
+static VALUE release_claim_or_disconnect(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
+
+  mysql2_client_finish_claim(completion->wrapper, completion->completed);
 
   return Qnil;
 }
@@ -2369,7 +2422,7 @@ static VALUE mysql2_next_result_body(VALUE argsval) {
    * on another thread getting GC'd during that window must not be allowed
    * to enqueue-and-flush a close over this same socket mid-command. See
    * the QUERYING/IDLE bracket rb_mysql_query uses for the same reason. */
-  wrapper->state = MYSQL2_CLIENT_QUERYING;
+  wrapper->state = MYSQL2_CLIENT_COMMAND;
 
 #if defined(HAVE_MYSQL_NEXT_RESULT_NONBLOCKING) && !defined(_WIN32)
   {
@@ -2733,13 +2786,27 @@ static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
  *
  * Returns an array of prepared statement objects.
  */
-static VALUE rb_mysql_client_prepared_statements_read(VALUE self) {
-  GET_CLIENT(self);
+static VALUE do_prepared_statements_read(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
+  mysql_client_wrapper *wrapper = completion->wrapper;
 
   mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
+  completion->completed = 1;
 
   return rb_funcall(wrapper->prepared_statements, intern_values, 0);
+}
+
+static VALUE rb_mysql_client_prepared_statements_read(VALUE self) {
+  struct query_completion completion;
+  GET_CLIENT(self);
+
+  completion.wrapper = wrapper;
+  completion.completed = 0;
+
+  rb_mysql_client_set_active_fiber(self, false);
+  return rb_ensure(do_prepared_statements_read, (VALUE)&completion,
+                   release_claim_or_disconnect, (VALUE)&completion);
 }
 
 /* call-seq:

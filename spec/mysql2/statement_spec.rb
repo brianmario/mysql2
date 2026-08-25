@@ -27,6 +27,11 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(statement).to be_an_instance_of(Mysql2::Statement)
   end
 
+  it "releases the client after a completed prepare error" do
+    expect { @client.prepare("NOT VALID SQL") }.to raise_error(Mysql2::Error)
+    expect(@client.query("SELECT 1 AS value").first).to eq("value" => 1)
+  end
+
   it "should raise an exception when server disconnects" do
     @client.close
     expect { @client.prepare 'SELECT 1' }.to raise_error(Mysql2::Error)
@@ -51,6 +56,107 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
   it "should let us execute our statement" do
     statement = @client.prepare 'SELECT 1'
     expect(statement.execute).not_to eq(nil)
+  end
+
+  it "claims the client while #execute is in flight" do
+    statement = @client.prepare("SELECT SLEEP(0.3) AS waited")
+    thread = new_thread { statement.execute.first }
+    thread.join(0.1)
+
+    expect(thread).to be_alive
+    expect { @client.query("SELECT 1") }.to \
+      raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value).to eq("waited" => 0)
+    expect(@client.query("SELECT 1 AS value").first).to eq("value" => 1)
+  end
+
+  [
+    [:async_result, []],
+    [:discard!, []],
+    [:prepare, ["SELECT 3"]],
+    [:prepared_statements, []],
+  ].each do |method, arguments|
+    it "rejects Client##{method} while #execute is in flight" do
+      statement = @client.prepare("SELECT SLEEP(0.3) AS waited")
+      thread = new_thread { statement.execute.first }
+      thread.join(0.1)
+
+      expect(thread).to be_alive
+      expect { @client.public_send(method, *arguments) }.to \
+        raise_error(Mysql2::Error, /This connection is in use by/)
+      expect(thread.value).to eq("waited" => 0)
+      expect(@client.query("SELECT 1 AS value").first).to eq("value" => 1)
+    end
+  end
+
+  it "rejects Statement#close while #execute is in flight" do
+    statement = @client.prepare("SELECT SLEEP(0.3) AS waited")
+    other_statement = @client.prepare("SELECT 2 AS value")
+    thread = new_thread { statement.execute.first }
+    thread.join(0.1)
+
+    expect(thread).to be_alive
+    expect { statement.close }.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect { other_statement.close }.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value).to eq("waited" => 0)
+    expect(statement).not_to be_closed
+    expect(other_statement).not_to be_closed
+  end
+
+  it "rejects Statement handle getters while #execute is in flight" do
+    statement = @client.prepare("SELECT SLEEP(0.3) AS waited")
+    thread = new_thread { statement.execute.first }
+    thread.join(0.1)
+
+    getters = %i[affected_rows field_count fields last_id param_count]
+    expect(thread).to be_alive
+    getters.each do |getter|
+      expect { statement.public_send(getter) }.to \
+        raise_error(Mysql2::Error, /This connection is in use by/)
+    end
+    expect(thread.value).to eq("waited" => 0)
+  end
+
+  it "rejects #execute while another Fiber owns the client" do
+    statement = @client.prepare("SELECT 2 AS value")
+    thread = new_thread { @client.query("SELECT SLEEP(0.3) AS waited").first }
+    thread.join(0.1)
+
+    expect(thread).to be_alive
+    expect { statement.execute }.to \
+      raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value).to eq("waited" => 0)
+    expect(statement.execute.first).to eq("value" => 2)
+  end
+
+  it "releases the client after a completed execute error" do
+    @client.query("CREATE TEMPORARY TABLE mysql2_execute_error (id INT PRIMARY KEY)")
+    statement = @client.prepare("INSERT INTO mysql2_execute_error (id) VALUES (?)")
+    statement.execute(1)
+
+    expect { statement.execute(1) }.to raise_error(Mysql2::Error)
+    expect(@client.query("SELECT COUNT(*) AS count FROM mysql2_execute_error").first).to eq("count" => 1)
+  end
+
+  it "keeps string bind bytes stable while GC compacts during setup" do
+    skip "GC compaction is unavailable" unless GC.respond_to?(:auto_compact=)
+
+    statement = @client.prepare("SELECT ? AS first_value, ? AS second_value")
+    old_auto_compact = GC.auto_compact
+    old_stress = GC.stress
+    begin
+      GC.auto_compact = true
+      GC.stress = true
+      result = statement.execute(
+        "é".encode(Encoding::ISO_8859_1),
+        "ß".encode(Encoding::ISO_8859_1),
+      ).first
+    ensure
+      GC.stress = old_stress
+      GC.auto_compact = old_auto_compact
+    end
+
+    expect(result).to eq("first_value" => "é", "second_value" => "ß")
   end
 
   it "should raise an exception without a block" do

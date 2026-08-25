@@ -239,12 +239,30 @@ static void *nogvl_prepare_statement(void *ptr) {
   }
 }
 
-VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
+static int mysql2_stmt_error_is_transport(unsigned int error_number);
+
+struct new_statement_call {
+  VALUE rb_client;
+  VALUE sql;
+  mysql_client_wrapper *client_wrapper;
+  int reusable;
+};
+
+static VALUE finish_new_statement(VALUE callval) {
+  struct new_statement_call *call = (void *)callval;
+
+  mysql2_client_finish_claim(call->client_wrapper, call->reusable);
+  return Qnil;
+}
+
+static VALUE do_mysql_stmt_new(VALUE callval) {
+  struct new_statement_call *call = (void *)callval;
+  VALUE rb_client = call->rb_client;
+  VALUE sql = call->sql;
+  mysql_client_wrapper *client_wrapper = call->client_wrapper;
   mysql_stmt_wrapper *stmt_wrapper;
   VALUE rb_stmt;
   rb_encoding *conn_enc;
-
-  Check_Type(sql, T_STRING);
 
 #ifdef NEW_TYPEDDATA_WRAPPER
   rb_stmt = TypedData_Make_Struct(cMysql2Statement, mysql_stmt_wrapper, &rb_mysql_statement_type, stmt_wrapper);
@@ -269,7 +287,7 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     /* Keep a handle to the Client to ensure it doesn't get garbage collected first */
     stmt_wrapper->client = rb_client;
     if (rb_client != Qnil) {
-      stmt_wrapper->client_wrapper = DATA_PTR(rb_client);
+      stmt_wrapper->client_wrapper = client_wrapper;
       stmt_wrapper->client_wrapper->refcount++;
 
       /* We're about to prepare on this connection: a safe point to close
@@ -277,9 +295,12 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
        * free any abandoned result sets left over from a stream that was
        * dropped mid-iteration -- including one still live (not yet
        * collected by GC), which the reap below alone wouldn't catch. */
-      mysql2_abandon_active_stream(stmt_wrapper->client_wrapper);
-      mysql2_reap_pending_result_frees(stmt_wrapper->client_wrapper);
-      mysql2_reap_pending_stmt_closes(stmt_wrapper->client_wrapper);
+      call->reusable = 0;
+      mysql2_abandon_active_stream(client_wrapper);
+      mysql2_reap_pending_result_frees(client_wrapper);
+      mysql2_reap_pending_stmt_closes(client_wrapper);
+      client_wrapper->state = MYSQL2_CLIENT_COMMAND;
+      call->reusable = 1;
     } else {
       stmt_wrapper->client_wrapper = NULL;
     }
@@ -304,9 +325,12 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     args.sql_ptr = RSTRING_PTR(args.sql);
     args.sql_len = RSTRING_LEN(args.sql);
 
+    call->reusable = 0;
     if ((VALUE)rb_thread_call_without_gvl(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
+      call->reusable = !mysql2_stmt_error_is_transport(mysql_stmt_errno(stmt_wrapper->stmt));
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
+    call->reusable = 1;
   }
 
   // Stash a reference to this statement handle into the Client to prevent
@@ -324,12 +348,28 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
   return rb_stmt;
 }
 
+VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
+  struct new_statement_call call;
+  GET_CLIENT(rb_client);
+
+  Check_Type(sql, T_STRING);
+  call.rb_client = rb_client;
+  call.sql = sql;
+  call.client_wrapper = wrapper;
+  call.reusable = 1;
+
+  mysql2_client_claim(rb_client);
+  return rb_ensure(do_mysql_stmt_new, (VALUE)&call,
+                   finish_new_statement, (VALUE)&call);
+}
+
 /* call-seq: stmt.param_count # => Numeric
  *
  * Returns the number of parameters the prepared statement expects.
  */
 static VALUE rb_mysql_stmt_param_count(VALUE self) {
   GET_STATEMENT(self);
+  mysql2_client_check_idle(stmt_wrapper->client);
 
   return ULL2NUM(mysql_stmt_param_count(stmt_wrapper->stmt));
 }
@@ -340,6 +380,7 @@ static VALUE rb_mysql_stmt_param_count(VALUE self) {
  */
 static VALUE rb_mysql_stmt_field_count(VALUE self) {
   GET_STATEMENT(self);
+  mysql2_client_check_idle(stmt_wrapper->client);
 
   return UINT2NUM(mysql_stmt_field_count(stmt_wrapper->stmt));
 }
@@ -363,29 +404,75 @@ static void *nogvl_stmt_execute(void *ptr) {
 
 static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length_buffer, VALUE string) {
   unsigned long length;
-
-  bind_buffer->buffer = RSTRING_PTR(string);
+  void *bytes;
 
   length = RSTRING_LEN(string);
+  bytes = xmalloc(length == 0 ? 1 : length);
+  if (length > 0) {
+    memcpy(bytes, RSTRING_PTR(string), length);
+  }
+
+  bind_buffer->buffer = bytes;
   bind_buffer->buffer_length = length;
   *length_buffer = length;
 
   bind_buffer->length = length_buffer;
 }
 
-/* Free each bind_buffer[i].buffer except when params_enc is non-nil, this means
- * the buffer is a Ruby string pointer and not our memory to manage.
- */
-#define FREE_BINDS                                          \
-  for (i = 0; i < bind_count; i++) {                        \
-    if (bind_buffers[i].buffer && NIL_P(params_enc[i])) {   \
-      xfree(bind_buffers[i].buffer);                        \
-    }                                                       \
-  }                                                         \
-  if (argc > 0) {                                           \
-    xfree(bind_buffers);                                    \
-    xfree(length_buffers);                                  \
+struct execute_statement_call {
+  int argc;
+  VALUE *argv;
+  VALUE self;
+  mysql_client_wrapper *client_wrapper;
+  MYSQL_BIND *bind_buffers;
+  unsigned long *length_buffers;
+  unsigned long bind_count;
+  int claimed;
+  int reusable;
+};
+
+static void free_execute_binds(struct execute_statement_call *call) {
+  unsigned long i;
+
+  if (call->bind_buffers) {
+    for (i = 0; i < call->bind_count; i++) {
+      if (call->bind_buffers[i].buffer) {
+        xfree(call->bind_buffers[i].buffer);
+      }
+    }
+    xfree(call->bind_buffers);
+    call->bind_buffers = NULL;
   }
+  if (call->length_buffers) {
+    xfree(call->length_buffers);
+    call->length_buffers = NULL;
+  }
+}
+
+static VALUE finish_execute_statement(VALUE callval) {
+  struct execute_statement_call *call = (void *)callval;
+
+  free_execute_binds(call);
+  if (call->claimed) {
+    mysql2_client_finish_claim(call->client_wrapper, call->reusable);
+    call->claimed = 0;
+  }
+
+  return Qnil;
+}
+
+/* Draining an abandoned stream or deferred free can itself touch the wire.
+ * Until every drain returns, an interrupt leaves protocol completion unknown. */
+static void prepare_connection_for_statement(struct execute_statement_call *call) {
+  mysql_client_wrapper *wrapper = call->client_wrapper;
+
+  call->reusable = 0;
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+  wrapper->state = MYSQL2_CLIENT_COMMAND;
+  call->reusable = 1;
+}
 
 /* return 0 if the given bignum can cast as LONG_LONG, otherwise 1 */
 static int my_big2ll(VALUE bignum, LONG_LONG *ptr)
@@ -432,11 +519,32 @@ overflow:
   return 1;
 }
 
+/* Client-library errors do not prove that the server reply was consumed.
+ * Server errors do: mysql_stmt_execute has read the complete error packet, so
+ * the connection can be released for another command. */
+static int mysql2_stmt_error_is_transport(unsigned int error_number) {
+#if defined(CR_MIN_ERROR) && defined(CR_MAX_ERROR)
+  if (error_number >= CR_MIN_ERROR && error_number <= CR_MAX_ERROR) {
+    return 1;
+  }
+#endif
+#if defined(CER_MIN_ERROR) && defined(CER_MAX_ERROR)
+  if (error_number >= CER_MIN_ERROR && error_number <= CER_MAX_ERROR) {
+    return 1;
+  }
+#endif
+  return error_number == 0;
+}
+
 /* call-seq: stmt.execute
  *
  * Executes the current prepared statement, returns +result+.
  */
-static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
+static VALUE do_execute_statement(VALUE callval) {
+  struct execute_statement_call *call = (void *)callval;
+  int argc = call->argc;
+  VALUE *argv = call->argv;
+  VALUE self = call->self;
   MYSQL_BIND *bind_buffers = NULL;
   unsigned long *length_buffers = NULL;
   unsigned long bind_count;
@@ -446,7 +554,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   VALUE opts;
   VALUE current;
   VALUE resultObj;
-  VALUE *params_enc = NULL;
   int is_streaming;
   struct nogvl_stmt_execute_args execute_args;
   double query_start, query_elapsed;
@@ -455,6 +562,10 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
   GET_STATEMENT(self);
   GET_CLIENT(stmt_wrapper->client);
+
+  call->client_wrapper = wrapper;
+  mysql2_client_claim(stmt_wrapper->client);
+  call->claimed = 1;
 
   if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
     mysql2_warn_forked_without_reconnect(wrapper, "execute a statement");
@@ -468,14 +579,13 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
    * fully drained. That must happen before we touch stmt below again.
    * mysql2_abandon_active_stream handles the still-live case (not yet
    * collected by GC), which the reap below alone wouldn't catch. */
-  mysql2_abandon_active_stream(wrapper);
-  mysql2_reap_pending_result_frees(wrapper);
-  mysql2_reap_pending_stmt_closes(wrapper);
+  prepare_connection_for_statement(call);
 
   conn_enc = rb_to_encoding(wrapper->encoding);
 
   stmt = stmt_wrapper->stmt;
   bind_count = mysql_stmt_param_count(stmt);
+  call->bind_count = bind_count;
 
   // Get count of ordinary arguments, and extract hash opts/keyword arguments
   // Use a local scope to avoid leaking the temporary count variable
@@ -536,14 +646,13 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
   // setup any bind variables in the query
   if (bind_count > 0) {
-    // Scratch space for string encoding exports, allocate on the stack
-    params_enc = alloca(sizeof(VALUE) * bind_count);
-    bind_buffers = xcalloc(bind_count, sizeof(MYSQL_BIND));
-    length_buffers = xcalloc(bind_count, sizeof(unsigned long));
+    call->bind_buffers = xcalloc(bind_count, sizeof(MYSQL_BIND));
+    call->length_buffers = xcalloc(bind_count, sizeof(unsigned long));
+    bind_buffers = call->bind_buffers;
+    length_buffers = call->length_buffers;
 
     for (i = 0; i < bind_count; i++) {
       bind_buffers[i].buffer = NULL;
-      params_enc[i] = Qnil;
 
       switch (TYPE(argv[i])) {
         case T_NIL:
@@ -569,9 +678,10 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
               *(LONG_LONG*)(bind_buffers[i].buffer) = num;
             } else {
               /* The bignum was larger than we can fit in LONG_LONG, send it as a string */
+              VALUE encoded;
               bind_buffers[i].buffer_type = MYSQL_TYPE_NEWDECIMAL;
-              params_enc[i] = rb_str_export_to_enc(rb_big2str(argv[i], 10), conn_enc);
-              set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
+              encoded = rb_str_export_to_enc(rb_big2str(argv[i], 10), conn_enc);
+              set_buffer_for_string(&bind_buffers[i], &length_buffers[i], encoded);
             }
           }
           break;
@@ -582,10 +692,10 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
           break;
         case T_STRING:
           bind_buffers[i].buffer_type = MYSQL_TYPE_STRING;
-
-          params_enc[i] = argv[i];
-          params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
-          set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
+          {
+            VALUE encoded = rb_str_export_to_enc(argv[i], conn_enc);
+            set_buffer_for_string(&bind_buffers[i], &length_buffers[i], encoded);
+          }
           break;
         case T_TRUE:
           bind_buffers[i].buffer_type = MYSQL_TYPE_TINY;
@@ -652,9 +762,8 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
             // and the client side.
             VALUE rb_val_as_string = rb_funcall(argv[i], intern_to_s, 0);
 
-            params_enc[i] = rb_val_as_string;
-            params_enc[i] = rb_str_export_to_enc(params_enc[i], conn_enc);
-            set_buffer_for_string(&bind_buffers[i], &length_buffers[i], params_enc[i]);
+            rb_val_as_string = rb_str_export_to_enc(rb_val_as_string, conn_enc);
+            set_buffer_for_string(&bind_buffers[i], &length_buffers[i], rb_val_as_string);
           } else {
             int state = 0;
             VALUE inspect = rb_protect(rb_inspect, argv[i], &state);
@@ -678,7 +787,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
     // copies bind_buffers into internal storage
     if (mysql_stmt_bind_param(stmt, bind_buffers)) {
-      FREE_BINDS;
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
   }
@@ -699,14 +807,12 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   if (is_streaming) {
     unsigned long type = CURSOR_TYPE_READ_ONLY;
     if (mysql_stmt_attr_set(stmt, STMT_ATTR_CURSOR_TYPE, &type)) {
-      FREE_BINDS;
       rb_raise(cMysql2Error, "Unable to stream prepared statement, could not set CURSOR_TYPE_READ_ONLY");
     }
     // Set unconditionally: statement attributes persist on the handle
     // across executes, so stream: true must restore the one-row default
     // after an earlier stream: {size: N} execute on the same statement.
     if (mysql_stmt_attr_set(stmt, STMT_ATTR_PREFETCH_ROWS, &prefetch_rows)) {
-      FREE_BINDS;
       rb_raise(cMysql2Error, "Unable to stream prepared statement, could not set STMT_ATTR_PREFETCH_ROWS");
     }
   }
@@ -719,22 +825,21 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   // earlier checks up top can't see that yet, and leaving it undrained here
   // would desync the protocol once this command's bytes hit the wire ahead
   // of the old stream's rows.
-  mysql2_abandon_active_stream(wrapper);
-  mysql2_reap_pending_result_frees(wrapper);
-  mysql2_reap_pending_stmt_closes(wrapper);
+  prepare_connection_for_statement(call);
 
   // From here through mysql_stmt_result_metadata/mysql_stmt_store_result,
   // the connection is BUSY: a Statement freed elsewhere during this window
   // must not be allowed to write COM_STMT_CLOSE to this socket. See
   // mysql2_enqueue_pending_stmt_close / mysql2_reap_pending_stmt_closes.
-  wrapper->state = MYSQL2_CLIENT_QUERYING;
+  wrapper->state = MYSQL2_CLIENT_COMMAND;
+  call->reusable = 0;
 
   query_start = mysql2_monotonic_now();
   execute_args.stmt = stmt;
 
   if ((VALUE)rb_thread_call_without_gvl(nogvl_stmt_execute, &execute_args, RUBY_UBF_IO, 0) == Qfalse) {
-    FREE_BINDS;
     wrapper->state = MYSQL2_CLIENT_IDLE;
+    call->reusable = !mysql2_stmt_error_is_transport(mysql_stmt_errno(stmt));
     rb_raise_mysql2_stmt_error(stmt_wrapper);
   }
 
@@ -747,35 +852,36 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   query_elapsed = (query_start < 0 || execute_args.query_end < 0)
     ? -1 : execute_args.query_end - query_start;
 
-  FREE_BINDS;
+  free_execute_binds(call);
 
   metadata = mysql_stmt_result_metadata(stmt);
   if (metadata == NULL) {
     wrapper->state = MYSQL2_CLIENT_IDLE;
     if (mysql_stmt_errno(stmt) != 0) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
-      wrapper->active_fiber = Qnil;
+      call->reusable = !mysql2_stmt_error_is_transport(mysql_stmt_errno(stmt));
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     // no data and no error, so query was not a SELECT
-    mysql2_reap_pending_result_frees(wrapper);
-    mysql2_reap_pending_stmt_closes(wrapper);
+    call->reusable = 1;
+    prepare_connection_for_statement(call);
     return Qnil;
   }
 
   if (!is_streaming) {
     // receive the whole result set from the server
     if (mysql_stmt_store_result(stmt)) {
+      unsigned int error_number = mysql_stmt_errno(stmt);
       mysql_free_result(metadata);
       wrapper->state = MYSQL2_CLIENT_IDLE;
+      call->reusable = !mysql2_stmt_error_is_transport(error_number);
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
-    wrapper->active_fiber = Qnil;
     // The whole result set is buffered locally; free to reap and to run
     // another command right away.
     wrapper->state = MYSQL2_CLIENT_IDLE;
-    mysql2_reap_pending_result_frees(wrapper);
-    mysql2_reap_pending_stmt_closes(wrapper);
+    call->reusable = 1;
+    prepare_connection_for_statement(call);
   } else {
     // A cursor is now open on the server; leave the connection BUSY until
     // the Result finishes (or abandons) streaming rows -- see result.c.
@@ -795,6 +901,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
    * abandoned instead of exhausted -- see mysql2_abandon_active_stream. */
   if (is_streaming) {
     wrapper->active_streaming_result = resultObj;
+    call->reusable = 1;
   }
 
   if (!is_streaming) {
@@ -805,11 +912,47 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   return resultObj;
 }
 
+/* call-seq: stmt.execute
+ *
+ * Executes the current prepared statement, returns +result+.
+ */
+static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
+  struct execute_statement_call call;
+
+  MEMZERO(&call, struct execute_statement_call, 1);
+  call.argc = argc;
+  call.argv = argv;
+  call.self = self;
+  call.reusable = 1;
+
+  return rb_ensure(do_execute_statement, (VALUE)&call,
+                   finish_execute_statement, (VALUE)&call);
+}
+
 /* call-seq: stmt.fields # => array
  *
  * Returns a list of fields that will be returned by this statement.
  */
-static VALUE rb_mysql_stmt_fields(VALUE self) {
+struct statement_handle_access {
+  VALUE self;
+  mysql_client_wrapper *client_wrapper;
+  MYSQL_RES *metadata;
+};
+
+static VALUE finish_statement_handle_access(VALUE accessval) {
+  struct statement_handle_access *access = (void *)accessval;
+
+  if (access->metadata) {
+    mysql_free_result(access->metadata);
+    access->metadata = NULL;
+  }
+  mysql2_client_finish_claim(access->client_wrapper, 1);
+  return Qnil;
+}
+
+static VALUE do_mysql_stmt_fields(VALUE accessval) {
+  struct statement_handle_access *access = (void *)accessval;
+  VALUE self = access->self;
   MYSQL_FIELD *fields;
   MYSQL_RES *metadata;
   unsigned int field_count;
@@ -818,7 +961,6 @@ static VALUE rb_mysql_stmt_fields(VALUE self) {
   MYSQL_STMT* stmt;
   rb_encoding *default_internal_enc, *conn_enc;
   GET_STATEMENT(self);
-  GET_CLIENT(stmt_wrapper->client);
   stmt = stmt_wrapper->stmt;
 
   default_internal_enc = rb_default_internal_encoding();
@@ -831,12 +973,12 @@ static VALUE rb_mysql_stmt_fields(VALUE self) {
   if (metadata == NULL) {
     if (mysql_stmt_errno(stmt) != 0) {
       // either CR_OUT_OF_MEMORY or CR_UNKNOWN_ERROR. both fatal.
-      wrapper->active_fiber = Qnil;
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
     // no data and no error, so query was not a SELECT
     return Qnil;
   }
+  access->metadata = metadata;
 
   fields      = mysql_fetch_fields(metadata);
   field_count = mysql_stmt_field_count(stmt);
@@ -862,7 +1004,23 @@ static VALUE rb_mysql_stmt_fields(VALUE self) {
   }
 
   mysql_free_result(metadata);
+  access->metadata = NULL;
   return field_list;
+}
+
+static VALUE rb_mysql_stmt_fields(VALUE self) {
+  struct statement_handle_access access;
+  GET_STATEMENT(self);
+
+  access.self = self;
+  access.client_wrapper = stmt_wrapper->client_wrapper;
+  access.metadata = NULL;
+
+  mysql2_client_check_idle(stmt_wrapper->client);
+  mysql2_client_claim(stmt_wrapper->client);
+  stmt_wrapper->client_wrapper->state = MYSQL2_CLIENT_COMMAND;
+  return rb_ensure(do_mysql_stmt_fields, (VALUE)&access,
+                   finish_statement_handle_access, (VALUE)&access);
 }
 
 /* call-seq:
@@ -872,6 +1030,7 @@ static VALUE rb_mysql_stmt_fields(VALUE self) {
  */
 static VALUE rb_mysql_stmt_last_id(VALUE self) {
   GET_STATEMENT(self);
+  mysql2_client_check_idle(stmt_wrapper->client);
   return ULL2NUM(mysql_stmt_insert_id(stmt_wrapper->stmt));
 }
 
@@ -880,7 +1039,7 @@ static VALUE rb_mysql_stmt_last_id(VALUE self) {
  *
  * Returns the number of rows changed, deleted, or inserted.
  */
-static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
+static VALUE do_mysql_stmt_affected_rows(VALUE self) {
   my_ulonglong affected;
   GET_STATEMENT(self);
 
@@ -892,6 +1051,21 @@ static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
   return ULL2NUM(affected);
 }
 
+static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
+  struct statement_handle_access access;
+  GET_STATEMENT(self);
+
+  access.self = self;
+  access.client_wrapper = stmt_wrapper->client_wrapper;
+  access.metadata = NULL;
+
+  mysql2_client_check_idle(stmt_wrapper->client);
+  mysql2_client_claim(stmt_wrapper->client);
+  stmt_wrapper->client_wrapper->state = MYSQL2_CLIENT_COMMAND;
+  return rb_ensure(do_mysql_stmt_affected_rows, self,
+                   finish_statement_handle_access, (VALUE)&access);
+}
+
 /* call-seq:
  *    stmt.close
  *
@@ -899,31 +1073,65 @@ static VALUE rb_mysql_stmt_affected_rows(VALUE self) {
  * than waiting for the garbage collector. Useful if you're managing your
  * own prepared statement cache.
  */
-static VALUE rb_mysql_stmt_close(VALUE self) {
-  RAW_GET_STATEMENT(self);
+struct close_statement_call {
+  mysql_stmt_wrapper *stmt_wrapper;
+  mysql_client_wrapper *client_wrapper;
+  int reusable;
+};
 
-  if (!stmt_wrapper->closed) {
-      GET_CLIENT(stmt_wrapper->client);
+static VALUE finish_close_statement(VALUE callval) {
+  struct close_statement_call *call = (void *)callval;
 
-      /* Ordinary Ruby-level call, not GC/dfree: a safe point to also close
-       * out any other statements that were GC'd while the connection was
-       * last busy. Abandon/reap pending result frees first: this statement
-       * itself may have an abandoned streaming result on it -- still live
-       * (mysql2_abandon_active_stream) or already queued
-       * (mysql2_reap_pending_result_frees) -- and that must be drained
-       * before nogvl_stmt_close below frees the same MYSQL_STMT* out from
-       * under it. */
-      mysql2_abandon_active_stream(wrapper);
-      mysql2_reap_pending_result_frees(wrapper);
-      mysql2_reap_pending_stmt_closes(wrapper);
+  mysql2_client_finish_claim(call->client_wrapper, call->reusable);
+  return Qnil;
+}
 
-      stmt_wrapper->closed = 1;
-      rb_hash_delete(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper));
-      rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
-      mysql2_stmt_metadata_cache_clear(stmt_wrapper);
-  }
+static VALUE do_close_statement(VALUE callval) {
+  struct close_statement_call *call = (void *)callval;
+  mysql_stmt_wrapper *stmt_wrapper = call->stmt_wrapper;
+  mysql_client_wrapper *wrapper = call->client_wrapper;
+
+  /* Ordinary Ruby-level call, not GC/dfree: a safe point to also close
+   * out any other statements that were GC'd while the connection was
+   * last busy. Abandon/reap pending result frees first: this statement
+   * itself may have an abandoned streaming result on it -- still live
+   * (mysql2_abandon_active_stream) or already queued
+   * (mysql2_reap_pending_result_frees) -- and that must be drained
+   * before nogvl_stmt_close below frees the same MYSQL_STMT* out from
+   * under it. */
+  call->reusable = 0;
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+  wrapper->state = MYSQL2_CLIENT_COMMAND;
+  call->reusable = 1;
+
+  rb_hash_delete(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper));
+  stmt_wrapper->closed = 1;
+
+  call->reusable = 0;
+  rb_thread_call_without_gvl(nogvl_stmt_close, stmt_wrapper, RUBY_UBF_IO, 0);
+  call->reusable = 1;
+  mysql2_stmt_metadata_cache_clear(stmt_wrapper);
 
   return Qnil;
+}
+
+static VALUE rb_mysql_stmt_close(VALUE self) {
+  struct close_statement_call call;
+  RAW_GET_STATEMENT(self);
+
+  if (stmt_wrapper->closed) {
+    return Qnil;
+  }
+
+  call.stmt_wrapper = stmt_wrapper;
+  call.client_wrapper = stmt_wrapper->client_wrapper;
+  call.reusable = 1;
+
+  mysql2_client_claim(stmt_wrapper->client);
+  return rb_ensure(do_close_statement, (VALUE)&call,
+                   finish_close_statement, (VALUE)&call);
 }
 
 /* call-seq:

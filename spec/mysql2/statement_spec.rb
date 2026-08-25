@@ -117,6 +117,49 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(thread.value).to eq("waited" => 0)
   end
 
+  it "rejects same-Fiber teardown while constructing a streaming Result" do
+    client = @client
+    attempts = {}
+    statement = client.prepare("SELECT 1 AS value UNION SELECT 2")
+
+    trace = TracePoint.new(:c_call) do |event|
+      next unless event.method_id == :initialize && event.self.is_a?(Mysql2::Result)
+
+      trace.disable
+      %i[close discard!].each do |method|
+        begin
+          client.public_send(method)
+        rescue Mysql2::Error => e
+          attempts[method] = e.message
+        end
+      end
+    end
+
+    begin
+      trace.enable
+      result = statement.execute(stream: true, cache_rows: false)
+    ensure
+      trace.disable
+    end
+
+    expect(attempts.keys).to eq(%i[close discard!])
+    attempts.each_value do |message|
+      expect(message).to match(/still waiting for a result/)
+    end
+    expect(result.to_a).to eq([{ "value" => 1 }, { "value" => 2 }])
+    expect(client.query("SELECT 3 AS value").first).to eq("value" => 3)
+  end
+
+  it "does not inspect or reap prepared statements while a stream is open" do
+    statement = @client.prepare("SELECT 1 AS value UNION SELECT 2")
+    result = statement.execute(stream: true, cache_rows: false)
+
+    expect { @client.prepared_statements }.to \
+      raise_error(Mysql2::Error, /still waiting for a result/)
+    expect(result.to_a).to eq([{ "value" => 1 }, { "value" => 2 }])
+    expect(@client.prepared_statements).to include(statement)
+  end
+
   it "rejects #execute while another Fiber owns the client" do
     statement = @client.prepare("SELECT 2 AS value")
     thread = new_thread { @client.query("SELECT SLEEP(0.3) AS waited").first }
@@ -141,7 +184,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
   it "keeps string bind bytes stable while GC compacts during setup" do
     skip "GC compaction is unavailable" unless GC.respond_to?(:auto_compact=)
 
-    statement = @client.prepare("SELECT ? AS first_value, ? AS second_value")
+    statement = @client.prepare("SELECT ? AS bind_one, ? AS bind_two")
     old_auto_compact = GC.auto_compact
     old_stress = GC.stress
     begin
@@ -156,7 +199,7 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
       GC.auto_compact = old_auto_compact
     end
 
-    expect(result).to eq("first_value" => "é", "second_value" => "ß")
+    expect(result).to eq("bind_one" => "é", "bind_two" => "ß")
   end
 
   it "should raise an exception without a block" do

@@ -908,10 +908,11 @@ static void rb_mysql_client_set_active_fiber(VALUE self, bool closing) {
     // mark this connection active
     wrapper->active_fiber = fiber_current;
   } else if (wrapper->active_fiber == fiber_current) {
-    /* Closing an async text query from its owner is supported. A generic
-     * command may be inside a user conversion callback, though, and closing
-     * it here would free the MYSQL/MYSQL_STMT still on that same C stack. */
-    if (!closing || wrapper->state == MYSQL2_CLIENT_COMMAND) {
+    /* Closing an async text query from its owner is supported. Every other
+     * claimed phase may be inside a user callback -- including prepared
+     * result construction after a streaming cursor has opened -- so closing
+     * there would free the MYSQL/MYSQL_STMT still on that same C stack. */
+    if (!closing || wrapper->state != MYSQL2_CLIENT_QUERYING) {
       rb_raise(cMysql2Error, "This connection is still waiting for a result, try again once you have the result");
     }
   } else {
@@ -2804,7 +2805,11 @@ static VALUE rb_mysql_client_prepared_statements_read(VALUE self) {
   completion.wrapper = wrapper;
   completion.completed = 0;
 
+  /* Reaping may send COM_STMT_CLOSE or drain an abandoned result. Do not do
+   * either while a live streaming Result still owns the connection. */
+  mysql2_client_check_idle(self);
   rb_mysql_client_set_active_fiber(self, false);
+  wrapper->state = MYSQL2_CLIENT_COMMAND;
   return rb_ensure(do_prepared_statements_read, (VALUE)&completion,
                    release_claim_or_disconnect, (VALUE)&completion);
 }

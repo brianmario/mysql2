@@ -907,14 +907,24 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
  * On a wrong guess the probe's own tm_gmtoff supplies the correction, and
  * one more round-trip settles it.
  *
- * Correctness near transitions is handled by refusal, not resolution: a
- * result is served only when the zone offset is provably constant across
- * [t - window, t + window] (one localtime_r at each end). Inside that
- * stable band a nonexistent wall time (spring-forward gap) cannot verify
- * and an ambiguous one (fall-back fold) cannot exist, with no assumption
- * about the transition's size or direction -- half-hour and negative-DST
- * zones are covered by construction. Near a transition the caller falls
- * back to Time.local, byte-identical with the funcall path.
+ * Correctness near transitions is handled by refusal, not resolution. A
+ * result is served only when the zone offset is provably constant at five
+ * probes spaced MYSQL2_LOCAL_PROBE_STEP apart across [t - span, t + span],
+ * and t additionally sits at least MYSQL2_LOCAL_SERVE_MARGIN inside the
+ * proven band. The margin is what makes an ambiguous wall time
+ * unservable: serving the wrong side of a fall-back fold requires a
+ * transition within one fold-width of t, and the margin covers the
+ * largest backward step in any zone's [1970, 2038) history (7 hours,
+ * Antarctica/Vostok 1994; next largest 3) four times over. The probe
+ * spacing makes the refusal sound for any zone whose transitions sit more
+ * than one step apart -- all of tzdata and every implicit-rule TZ string.
+ * Explicit-rule TZ strings (a comma in the value) never prime a band at
+ * all, because their ,start,end tail is the one user-reachable syntax
+ * that can place a canceling fold/gap pair between adjacent probes, where
+ * no finite sampling can detect it -- densifying the probes cannot fix
+ * that, so those zones simply keep the funcall. Near any detected
+ * transition the caller likewise falls back to Time.local,
+ * byte-identical with the funcall path.
  *
  * Serving is also bounded to wall-clock years [1970, 2038), because
  * outside that range Ruby and the C library disagree in some zones even
@@ -931,17 +941,22 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
  * and concurrently iterated results keep independent proofs instead of
  * evicting each other's. The cache is written under the GVL (this path
  * never releases it). Serving compares the live TZ string against the
- * memoized copy. It does not compare pointers, because setenv can reuse
- * the same allocation for a new value; and offset equality alone cannot
- * distinguish two zones that share an offset but disagree inside a fold.
- * A changed TZ re-routes into re-proving; staleness costs probes, never a
- * wrong answer.
+ * memoized copy. It does not
+ * compare pointers, because setenv can reuse the same allocation for a
+ * new value; and offset equality alone cannot distinguish two zones that
+ * share an offset but disagree inside a fold. A changed TZ re-routes into
+ * re-proving; staleness costs probes, never a wrong answer.
  *
  * The remaining Qnil cases mirror mysql2_utc_time: an epoch outside
  * time_t, an out-of-range subsecond, plus a TZ value too long to memoize. */
-#define MYSQL2_LOCAL_STABLE_WINDOW (54 * 3600) /* clears any real DST step and fold width */
+/* Probe spacing is sound for any zone whose transitions sit more than one
+ * step apart; the observed minimum spacing between transitions across all
+ * tzdata zones in [1970, 2038) is 6.9 days (America/Cambridge_Bay, 2000;
+ * tzdata 2026c). */
+#define MYSQL2_LOCAL_PROBE_STEP   (42 * 3600)
+#define MYSQL2_LOCAL_PROBE_SPAN   (2 * MYSQL2_LOCAL_PROBE_STEP)
 /* The margin bounds how close to a proven band's edge a value may be
- * served, so a transition hiding just past a window endpoint cannot make
+ * served, so a transition hiding just past the outermost probe cannot make
  * an in-band wall time ambiguous: the largest backward step in any zone's
  * [1970, 2038) history is 7 hours (Antarctica/Vostok, 1994; next largest
  * 3), and the margin covers it four times over. */
@@ -967,7 +982,7 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
   const int64_t wall = mysql2_days_from_civil((int64_t)year, month, day) * 86400LL
                        + hour * 3600 + min * 60 + sec;
   int64_t guess;
-  time_t t, edge;
+  time_t t;
   int attempt, in_band, tz_same;
 
   if (usec >= 1000000UL) return Qnil;
@@ -1007,9 +1022,19 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
             t >= wrapper->local_band.lo + MYSQL2_LOCAL_SERVE_MARGIN &&
             t <= wrapper->local_band.hi - MYSQL2_LOCAL_SERVE_MARGIN;
   if (!in_band) {
-    /* Prove the offset constant across the window around t, then memoize
-     * the band. Refuse anything near a transition (gap, fold, or a
-     * mid-window offset step) rather than resolving it.
+    /* Prove the offset constant at every probe around t, then memoize the
+     * band. Refuse anything near a transition (gap, fold, or an offset
+     * step between probes) rather than resolving it.
+     *
+     * An explicit-rule TZ string never primes at all. Zone names and
+     * paths cannot contain a comma, and a rule string without one
+     * (EST5EDT) falls to the implementation's default rules, whose
+     * transitions sit months apart -- but the explicit ,start,end tail is
+     * the one user-reachable syntax that can place a canceling fold/gap
+     * pair between adjacent probes, where no finite sampling can detect
+     * it. Those zones take the funcall for every cell. The residual is a
+     * hand-compiled TZif whose footer encodes such a pair -- someone
+     * replacing their own system zone files -- which is out of scope.
      *
      * The tzset is unconditional, not gated on the TZ string differing
      * from the band's: localtime_r is not required to notice a changed TZ
@@ -1020,10 +1045,11 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
      * the live string; refreshing first makes the proof and the string
      * agree. Serving from an already-proven band needs no refresh: a
      * stale offset fails the in_band check above and lands here. */
-    struct tm lo, hi;
-    const int64_t lo64 = (int64_t)t - MYSQL2_LOCAL_STABLE_WINDOW;
-    const int64_t hi64 = (int64_t)t + MYSQL2_LOCAL_STABLE_WINDOW;
-    if ((int64_t)(time_t)lo64 != lo64 || (int64_t)(time_t)hi64 != hi64) return Qnil;
+    struct tm probe;
+    int64_t p64;
+    time_t p;
+    int k;
+    if (tz != NULL && strchr(tz, ',') != NULL) return Qnil;
     tzset();
     if (localtime_r(&t, &chk) == NULL) return Qnil;
     if (chk.tm_year != (int)year - 1900 || chk.tm_mon != (int)month - 1 ||
@@ -1031,13 +1057,16 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
         chk.tm_min != (int)min || chk.tm_sec != (int)sec ||
         chk.tm_gmtoff >= 86400 || chk.tm_gmtoff <= -86400)
       return Qnil;
-    edge = (time_t)lo64;
-    if (localtime_r(&edge, &lo) == NULL) return Qnil;
-    edge = (time_t)hi64;
-    if (localtime_r(&edge, &hi) == NULL) return Qnil;
-    if (lo.tm_gmtoff != chk.tm_gmtoff || hi.tm_gmtoff != chk.tm_gmtoff) return Qnil;
-    wrapper->local_band.lo = (time_t)lo64;
-    wrapper->local_band.hi = (time_t)hi64;
+    for (k = -2; k <= 2; k++) {
+      if (k == 0) continue; /* t itself is already verified in chk */
+      p64 = (int64_t)t + (int64_t)k * MYSQL2_LOCAL_PROBE_STEP;
+      p = (time_t)p64;
+      if ((int64_t)p != p64) return Qnil;
+      if (localtime_r(&p, &probe) == NULL) return Qnil;
+      if (probe.tm_gmtoff != chk.tm_gmtoff) return Qnil;
+    }
+    wrapper->local_band.lo = (time_t)((int64_t)t - MYSQL2_LOCAL_PROBE_SPAN);
+    wrapper->local_band.hi = (time_t)((int64_t)t + MYSQL2_LOCAL_PROBE_SPAN);
     wrapper->local_band.off = chk.tm_gmtoff;
     if (tz != NULL) {
       memcpy(wrapper->local_band.tz, tz, tz_len + 1);
@@ -1045,7 +1074,7 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
     } else {
       wrapper->local_band.tz_state = 0;
     }
-    /* t is the band's center, window - margin = 24h inside the serve
+    /* t is the band's center, span - margin = 54h inside the serve
      * interior, so a freshly proven band always serves its own center. */
   }
 

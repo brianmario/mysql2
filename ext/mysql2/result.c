@@ -935,17 +935,21 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
  * -01:00 to Ruby, -02:00 to libc). Both sides are internally consistent,
  * so no round-trip can arbitrate; the funcall owns both tails.
  *
- * The proven band, its offset, and the TZ environment value it was proven
- * under are memoized on the result wrapper: datetime columns cluster in
- * time, so in the common case each cell costs exactly one localtime_r,
- * and concurrently iterated results keep independent proofs instead of
- * evicting each other's. The cache is written under the GVL (this path
+ * Proven bands -- their ranges, offsets, and the TZ environment value
+ * each was proven under -- are memoized on the result wrapper, two of
+ * them so a result whose datetime columns live in different eras (a
+ * drifted created_at/updated_at pair) keeps both proofs alive instead of
+ * re-proving on every row. Datetime values cluster within a column, so
+ * in the common case each cell costs one localtime_r plus a band check
+ * over at most two candidates, and concurrently iterated results keep
+ * independent proofs. The cache is written under the GVL (this path
  * never releases it). Serving compares the live TZ string against the
- * memoized copy. It does not
- * compare pointers, because setenv can reuse the same allocation for a
- * new value; and offset equality alone cannot distinguish two zones that
- * share an offset but disagree inside a fold. A changed TZ re-routes into
- * re-proving; staleness costs probes, never a wrong answer.
+ * band's memoized copy -- never pointers, because setenv can reuse the
+ * same allocation for a new value, and offset equality alone cannot
+ * distinguish two zones that share an offset but disagree inside a fold.
+ * A changed TZ re-routes into re-proving; staleness costs probes, never
+ * a wrong answer. A result whose consecutive cells outrun the bands
+ * entirely retires to the funcall for its remainder.
  *
  * The remaining Qnil cases mirror mysql2_utc_time: an epoch outside
  * time_t, an out-of-range subsecond, plus a TZ value too long to memoize. */
@@ -979,22 +983,34 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
   struct tm chk;
   const char *tz;
   size_t tz_len;
+  mysql2_local_band *band;
   const int64_t wall = mysql2_days_from_civil((int64_t)year, month, day) * 86400LL
                        + hour * 3600 + min * 60 + sec;
   int64_t guess;
   time_t t;
-  int attempt, in_band, tz_same;
+  int attempt, in_band, b, bi;
 
   if (usec >= 1000000UL) return Qnil;
   if (year < MYSQL2_LOCAL_SERVE_YEAR_MIN || year >= MYSQL2_LOCAL_SERVE_YEAR_MAX) return Qnil;
+  if (wrapper->local_fast_retired) return Qnil;
 
   tz = getenv("TZ");
   tz_len = tz ? strlen(tz) : 0;
-  if (tz != NULL && tz_len >= sizeof(wrapper->local_band.tz)) return Qnil;
-  tz_same = tz != NULL ? (wrapper->local_band.tz_state == 1 && strcmp(wrapper->local_band.tz, tz) == 0)
-                       : wrapper->local_band.tz_state == 0;
+  if (tz != NULL && (tz_len >= sizeof(wrapper->local_bands[0].tz) ||
+                     tz_len >= sizeof(wrapper->local_refused_tz))) return Qnil;
+  /* An explicit-rule TZ string never primes (see the note in the prove
+   * block); once refused it is memoized so every later cell pays one
+   * strcmp here instead of a verify round-trip and a failed prime. */
+  if (tz != NULL) {
+    if (wrapper->local_refused_tz_set && strcmp(wrapper->local_refused_tz, tz) == 0) return Qnil;
+    if (strchr(tz, ',') != NULL) {
+      memcpy(wrapper->local_refused_tz, tz, tz_len + 1);
+      wrapper->local_refused_tz_set = 1;
+      return Qnil;
+    }
+  }
 
-  guess = wall - wrapper->local_band.off;
+  guess = wall - wrapper->local_bands[wrapper->local_band_mru].off;
   for (attempt = 0; attempt < 2; attempt++) {
     t = (time_t)guess;
     if ((int64_t)t != guess) return Qnil;
@@ -1018,9 +1034,21 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
    * +/-14 hours; anything past a day is Time.local's to interpret. */
   if (chk.tm_gmtoff >= 86400 || chk.tm_gmtoff <= -86400) return Qnil;
 
-  in_band = tz_same && chk.tm_gmtoff == wrapper->local_band.off &&
-            t >= wrapper->local_band.lo + MYSQL2_LOCAL_SERVE_MARGIN &&
-            t <= wrapper->local_band.hi - MYSQL2_LOCAL_SERVE_MARGIN;
+  in_band = 0;
+  for (b = 0; b < MYSQL2_LOCAL_BAND_COUNT; b++) {
+    bi = (wrapper->local_band_mru + b) % MYSQL2_LOCAL_BAND_COUNT;
+    band = &wrapper->local_bands[bi];
+    if (chk.tm_gmtoff == band->off &&
+        t >= band->lo + MYSQL2_LOCAL_SERVE_MARGIN &&
+        t <= band->hi - MYSQL2_LOCAL_SERVE_MARGIN &&
+        (tz != NULL ? (band->tz_state == 1 && strcmp(band->tz, tz) == 0)
+                    : band->tz_state == 0)) {
+      wrapper->local_band_mru = bi;
+      wrapper->local_reprove_streak = 0;
+      in_band = 1;
+      break;
+    }
+  }
   if (!in_band) {
     /* Prove the offset constant at every probe around t, then memoize the
      * band. Refuse anything near a transition (gap, fold, or an offset
@@ -1049,7 +1077,15 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
     int64_t p64;
     time_t p;
     int k;
-    if (tz != NULL && strchr(tz, ',') != NULL) return Qnil;
+    /* A result whose consecutive datetime cells sit in more eras than
+     * there are bands would re-prove on every cell and lose to the
+     * funcall it replaces. Enough consecutive proofs with no band hit
+     * between them retires the fast path for the rest of this result,
+     * bounding that worst case near funcall cost. */
+    if (++wrapper->local_reprove_streak > 8) {
+      wrapper->local_fast_retired = 1;
+      return Qnil;
+    }
     tzset();
     if (localtime_r(&t, &chk) == NULL) return Qnil;
     if (chk.tm_year != (int)year - 1900 || chk.tm_mon != (int)month - 1 ||
@@ -1065,15 +1101,20 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
       if (localtime_r(&p, &probe) == NULL) return Qnil;
       if (probe.tm_gmtoff != chk.tm_gmtoff) return Qnil;
     }
-    wrapper->local_band.lo = (time_t)((int64_t)t - MYSQL2_LOCAL_PROBE_SPAN);
-    wrapper->local_band.hi = (time_t)((int64_t)t + MYSQL2_LOCAL_PROBE_SPAN);
-    wrapper->local_band.off = chk.tm_gmtoff;
+    /* Memoize into the least-recently-used band so a second era in the
+     * same result keeps the first era's proof alive alongside it. */
+    bi = (wrapper->local_band_mru + 1) % MYSQL2_LOCAL_BAND_COUNT;
+    band = &wrapper->local_bands[bi];
+    band->lo = (time_t)((int64_t)t - MYSQL2_LOCAL_PROBE_SPAN);
+    band->hi = (time_t)((int64_t)t + MYSQL2_LOCAL_PROBE_SPAN);
+    band->off = chk.tm_gmtoff;
     if (tz != NULL) {
-      memcpy(wrapper->local_band.tz, tz, tz_len + 1);
-      wrapper->local_band.tz_state = 1;
+      memcpy(band->tz, tz, tz_len + 1);
+      band->tz_state = 1;
     } else {
-      wrapper->local_band.tz_state = 0;
+      band->tz_state = 0;
     }
+    wrapper->local_band_mru = bi;
     /* t is the band's center, span - margin = 54h inside the serve
      * interior, so a freshly proven band always serves its own center. */
   }
@@ -2760,10 +2801,19 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->numberOfRows = 0;
   wrapper->lastRowProcessed = 0;
   wrapper->resultFreed = 0;
-  wrapper->local_band.lo = 1; /* empty band */
-  wrapper->local_band.hi = 0;
-  wrapper->local_band.off = 0;
-  wrapper->local_band.tz_state = -1; /* no proof yet */
+  {
+    int b;
+    for (b = 0; b < MYSQL2_LOCAL_BAND_COUNT; b++) {
+      wrapper->local_bands[b].lo = 1; /* empty band */
+      wrapper->local_bands[b].hi = 0;
+      wrapper->local_bands[b].off = 0;
+      wrapper->local_bands[b].tz_state = -1; /* no proof yet */
+    }
+  }
+  wrapper->local_band_mru = 0;
+  wrapper->local_refused_tz_set = 0;
+  wrapper->local_reprove_streak = 0;
+  wrapper->local_fast_retired = 0;
   wrapper->result = r;
   wrapper->fields = Qnil;
   wrapper->fieldTypes = Qnil;

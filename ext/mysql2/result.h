@@ -51,7 +51,7 @@ typedef struct {
 } mysql2_each_opts_cache;
 
 /* One proven timezone-offset band for the :local DATETIME fast path: within
- * [lo, hi] the zone offset is known to be off, proven under the TZ value
+ * [lo, hi] the zone offset is known to equal off, proven under the TZ value
  * described by tz_state (-1: no proof yet; 0: proven with TZ unset; 1:
  * proven under the string in tz). Empty when lo > hi. */
 typedef struct {
@@ -61,6 +61,11 @@ typedef struct {
   int tz_state;
   char tz[64];
 } mysql2_local_band;
+
+/* Two bands cover a result whose datetime columns live in different eras --
+ * created_at and updated_at drifted apart being the common case -- without
+ * the columns evicting each other's proof on every row. */
+#define MYSQL2_LOCAL_BAND_COUNT 2
 
 typedef struct {
   VALUE fields;
@@ -79,10 +84,20 @@ typedef struct {
    * runs charset_name=), so this never goes stale; caching it avoids a
    * rb_to_encoding() call per row fetch. */
   rb_encoding *conn_enc;
-  /* :local DATETIME fast-path offset-band cache; owned by this result so
-   * concurrently iterated results never evict each other's proof. See
-   * mysql2_local_time in result.c. */
-  mysql2_local_band local_band;
+  /* :local DATETIME fast-path state; owned by this result so concurrently
+   * iterated results never share or evict each other's proofs. See
+   * mysql2_local_time in result.c. local_band_mru indexes the band that
+   * served most recently; local_refused_tz memoizes an explicit-rule TZ
+   * value so refusing it costs one strcmp per cell instead of a probe
+   * attempt; local_reprove_streak counts consecutive proofs with no band
+   * hit between them, and once it passes the retire threshold
+   * local_fast_retired sends the rest of the result to the funcall. */
+  mysql2_local_band local_bands[MYSQL2_LOCAL_BAND_COUNT];
+  int local_band_mru;
+  int local_refused_tz_set;
+  char local_refused_tz[64];
+  int local_reprove_streak;
+  int local_fast_retired;
   /* The :force_encoding query option, unwrapped once at Result creation;
    * NULL when the option wasn't given. When set, string values are retagged
    * with this encoding -- bytes unchanged -- instead of taking the

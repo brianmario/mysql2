@@ -1553,11 +1553,11 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should not serve the wrong side of a fold from the edge of a proven offset band" do
-      # The first query proves an offset band whose far edge reaches into the
-      # 2025-11-02 Denver fold's first (MDT) hour. The ambiguous 01:30 then
-      # round-trips as MDT inside that band, but Time.local resolves it to
-      # the later (MST) instant -- the fast path must decline, not serve the
-      # stale side.
+      # The primer sits close enough to the 2025-11-02 Denver fold that its
+      # own +84h probe crosses the transition, so the prime is refused and
+      # both rows take the funcall -- near-transition refusal parity. The
+      # primed-band-edge case itself is pinned by the 01:15 margin spec
+      # below, whose primer genuinely proves.
       with_tz('America/Denver') do
         rows = @client.query("SELECT t FROM (SELECT 1 i, CAST('2025-10-30 19:59:00' AS DATETIME) t " \
                              "UNION ALL SELECT 2, CAST('2025-11-02 01:30:00' AS DATETIME)) x ORDER BY i",
@@ -1618,15 +1618,17 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should decline the widest real fold in tzdata (Vostok 1994, seven hours)" do
-      # Antarctica/Vostok fell back seven hours on 1994-01-31 (station
-      # closure), the largest backward step in any zone's [1970, 2038)
-      # history. The priming query's band reaches the fold's +07 side, and
-      # the ambiguous 20:00 must still come back as Time.local's pick.
+      # Antarctica/Vostok fell back seven hours on 1994-01-31 17:00 UT
+      # (station closure), the largest backward step in any zone's
+      # [1970, 2038) history. The primer proves a band whose high edge
+      # stays below the transition, and the ambiguous 17:30 then sits in
+      # the margin zone: Ruby picks the -00 side, so only the serve margin
+      # separates a primed band from serving +07.
       with_tz('Antarctica/Vostok') do
-        rows = @client.query("SELECT t FROM (SELECT 1 i, CAST('1994-01-29 15:00:00' AS DATETIME) t " \
-                             "UNION ALL SELECT 2, CAST('1994-01-31 20:00:00' AS DATETIME)) x ORDER BY i",
+        rows = @client.query("SELECT t FROM (SELECT 1 i, CAST('1994-01-28 08:00:00' AS DATETIME) t " \
+                             "UNION ALL SELECT 2, CAST('1994-01-31 17:30:00' AS DATETIME)) x ORDER BY i",
                              database_timezone: :local,).to_a
-        expected = Time.local(1994, 1, 31, 20, 0, 0)
+        expected = Time.local(1994, 1, 31, 17, 30, 0)
         expect(rows[1]['t']).to eql(expected)
         expect(rows[1]['t'].utc_offset).to eql(expected.utc_offset)
       end
@@ -1657,6 +1659,10 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       # assertion: the fallback dispatches through Time.local, the fast
       # path never does, and a spy tells them apart.
       with_tz('America/Denver') do
+        # Align libc zone state with the just-changed ENV['TZ'] (see the
+        # drifted-pair spec) so the dispatch counts below are exact on
+        # libcs whose localtime_r skips the implicit tzset.
+        @client.query("SELECT CAST('2026-01-15 12:00:00' AS DATETIME) AS w", database_timezone: :local).first['w']
         {
           '1969-12-31 23:59:59' => 1, # last pre-window instant: funcall
           '1970-01-01 00:00:00' => 0, # first served instant
@@ -1699,7 +1705,7 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
           next unless rows.length == 1
 
           ENV['TZ'] = 'UTC'
-          Time.now # forces tzset: libc zone state moves to UTC
+          Time.now.utc_offset # decomposition forces tzset: libc zone state moves to UTC
           ENV['TZ'] = 'America/Denver' # string restored; libc state may still be UTC
         end
         expected = Time.local(2026, 6, 16, 12, 0, 0)
@@ -1718,6 +1724,75 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
         expected = Time.local(2026, 1, 2, 0, 0, 0)
         expect(actual).to eql(expected)
         expect(actual.utc_offset).to eql(expected.utc_offset)
+      end
+    end
+
+    it "should normalize ALLOW_INVALID_DATES values exactly as Time.local does" do
+      # Feb 30 reaches the fast path as plausible components; the round-trip
+      # disagrees with the input, the cell declines, and the funcall's
+      # normalized Time.local result comes back -- one dispatch, mirroring
+      # the :utc suite's pin of its own invalid-dates handling.
+      with_tz('America/Denver') do
+        @client.query("SET SESSION sql_mode = 'ALLOW_INVALID_DATES'")
+        calls = 0
+        allow(Time).to receive(:local).and_wrap_original do |m, *args|
+          calls += 1
+          m.call(*args)
+        end
+        actual = @client.query("SELECT CAST('2024-02-30 06:30:00' AS DATETIME) AS t", database_timezone: :local).first['t']
+        RSpec::Mocks.space.proxy_for(Time).reset
+        expected = Time.local(2024, 2, 30, 6, 30, 0)
+        expect(calls).to eql(1), "expected exactly one Time.local dispatch, saw #{calls}"
+        expect(actual).to eql(expected)
+        expect(actual.utc_offset).to eql(expected.utc_offset)
+      end
+    end
+
+    it "should keep both eras of a drifted created_at/updated_at pair on the fast path" do
+      # Two datetime columns half a year apart alternate on every row. Two
+      # memoized bands hold one era each, so after the two proofs every
+      # cell serves without a Time.local dispatch; a single-band cache
+      # would re-prove on every cell and the retirement guard would then
+      # push the remainder to the funcall.
+      with_tz('America/Denver') do
+        # Align libc's zone state with the just-changed ENV['TZ'] before
+        # counting: on libcs that skip the implicit tzset in localtime_r, a
+        # UTC-shaped wall clock can falsely verify against stale state on
+        # the first cell after a TZ change, and the prove-path's re-verify
+        # then correctly routes that one cell to the funcall.
+        @client.query("SELECT CAST('2026-01-10 07:00:00' AS DATETIME) AS w", database_timezone: :local).first['w']
+        eras = Array.new(8) { |i| "SELECT #{i} i, CAST('2026-01-10 08:00:00' AS DATETIME) a, CAST('2026-07-10 09:00:00' AS DATETIME) b" }
+        sql = "SELECT a, b FROM (#{eras.join(' UNION ALL ')}) x ORDER BY i"
+        calls = 0
+        allow(Time).to receive(:local).and_wrap_original do |m, *args|
+          calls += 1
+          m.call(*args)
+        end
+        rows = @client.query(sql, database_timezone: :local).to_a
+        RSpec::Mocks.space.proxy_for(Time).reset
+        expect(calls).to eql(0), "expected zero Time.local dispatches, saw #{calls}" if Mysql2::Result::LOCAL_DATETIME_FAST_PATH
+        rows.each do |r|
+          expect(r['a']).to eql(Time.local(2026, 1, 10, 8, 0, 0))
+          expect(r['b']).to eql(Time.local(2026, 7, 10, 9, 0, 0))
+        end
+      end
+    end
+
+    it "should stay correct when a result outruns the band cache entirely" do
+      # Twelve consecutive cells in twelve different eras exceed what the
+      # bands can hold; the fast path retires to the funcall for the
+      # remainder of the result, and every value must still match
+      # Time.local exactly.
+      with_tz('America/Denver') do
+        literals = (1..12).map { |m| format('20%<y>02d-%<m>02d-15 12:00:00', y: 10 + m, m: ((m * 5) % 12) + 1) }
+        selects = literals.each_with_index.map { |l, i| "SELECT #{i} i, CAST('#{l}' AS DATETIME) t" }
+        sql = "SELECT t FROM (#{selects.join(' UNION ALL ')}) x ORDER BY i"
+        rows = @client.query(sql, database_timezone: :local).to_a
+        rows.each_with_index do |r, i|
+          y, mo, d, h, mi, s = literals[i].scan(/\d+/).map(&:to_i)
+          expected = Time.local(y, mo, d, h, mi, s)
+          expect(r['t']).to eql(expected), "#{literals[i]}: expected #{expected.inspect}, got #{r['t'].inspect}"
+        end
       end
     end
 

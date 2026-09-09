@@ -4,6 +4,91 @@ begin
   require 'mysql2/em'
 
   RSpec.describe Mysql2::EM::Client do
+    let(:fiber_tracking_client_class) do
+      Class.new(described_class) do
+        attr_reader :async_result_fiber
+
+        def async_result
+          @async_result_fiber = Fiber.current
+          super
+        end
+      end
+    end
+
+    it "should consume plain async query results on the reactor Fiber" do
+      client = nil
+      query_fiber = nil
+      result = nil
+      error = nil
+
+      begin
+        EM.run do
+          query_fiber = Fiber.current
+          client = fiber_tracking_client_class.new DatabaseCredentials['root']
+          deferred = client.query "SELECT 1 AS plain_query"
+          deferred.callback do |value|
+            result = value.first
+            client.close
+            EM.stop_event_loop
+          end
+          deferred.errback do |value|
+            error = value
+            client.close
+            EM.stop_event_loop
+          end
+        end
+
+        raise error if error
+
+        expect(client.async_result_fiber).to equal(query_fiber)
+        expect(result).to eq('plain_query' => 1)
+      ensure
+        client.close if client && !client.closed?
+      end
+    end
+
+    it "should complete a Fiber-issued query from the reactor Fiber" do
+      client = nil
+      query_fiber = nil
+      outcome = nil
+
+      begin
+        # The reactor runs on a disposable thread: the cross-Fiber resume below
+        # suspends the reactor's root Fiber deep inside the reactor, and on some
+        # Rubies conservative GC keeps scanning that stale stack region for the
+        # rest of the process, pinning unrelated objects created by later specs
+        # (client_spec's dangling-connections GC spec finds their leaked
+        # connections). A disposable thread takes that stack with it.
+        Thread.new do
+          EM.run do
+            Fiber.new do
+              query_fiber = Fiber.current
+              client = fiber_tracking_client_class.new DatabaseCredentials['root']
+              deferred = client.query "SELECT 1 AS fiber_query"
+
+              # This is the handoff used by Fiber wrappers such as em-synchrony:
+              # the application Fiber yields until the reactor callback resumes it.
+              deferred.callback { |value| query_fiber.resume([:success, value]) }
+              deferred.errback { |error| query_fiber.resume([:failure, error]) }
+              outcome = Fiber.yield
+
+              client.close
+              EM.stop_event_loop
+            end.resume
+          end
+        end.join
+
+        status, value = outcome
+        raise value if status == :failure
+
+        expect(status).to eq(:success)
+        expect(client.async_result_fiber).not_to equal(query_fiber)
+        expect(value.first).to eq('fiber_query' => 1)
+      ensure
+        client.close if client && !client.closed?
+      end
+    end
+
     it "should support async queries" do
       results = []
       EM.run do

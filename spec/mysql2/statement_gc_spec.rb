@@ -38,6 +38,7 @@ RSpec.describe 'prepared statement collection' do
   end
 
   it 'does not flush collected handles when inspected during an async query' do
+    skip 'async: true is synchronous on Windows -- see rb_mysql_query in client.c' if RUBY_PLATFORM =~ /mingw|mswin/
     ready = Queue.new
     release = Queue.new
     worker = new_thread do

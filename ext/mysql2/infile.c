@@ -26,10 +26,13 @@ typedef struct
 static int
 mysql2_local_infile_init(void **ptr, const char *filename, void *userdata)
 {
-  mysql2_local_infile_data *data = malloc(sizeof(mysql2_local_infile_data));
+  mysql2_local_infile_data *data;
+  *ptr = NULL;
+  data = malloc(sizeof(mysql2_local_infile_data));
   if (!data) return 1;
 
   *ptr = data;
+  data->fd = -1;
   data->error[0] = 0;
   data->wrapper = userdata;
 
@@ -39,6 +42,11 @@ mysql2_local_infile_init(void **ptr, const char *filename, void *userdata)
     return 1;
   }
 
+  /* Not retried on EINTR: the whole LOAD DATA LOCAL round trip runs without
+   * the GVL under RUBY_UBF_IO, whose only way to cancel a blocked open or
+   * read is the signal that makes it fail with EINTR. Reporting that failure
+   * lets the client library abandon the transfer and the pending Ruby
+   * exception surface. */
   data->fd = open(filename, O_RDONLY);
   if (data->fd < 0) {
     snprintf(data->error, ERROR_LEN, "%s: %s", strerror(errno), filename);
@@ -61,6 +69,8 @@ mysql2_local_infile_read(void *ptr, char *buf, unsigned int buf_len)
   int count;
   mysql2_local_infile_data *data = (mysql2_local_infile_data *)ptr;
 
+  /* See the open() note in mysql2_local_infile_init: an EINTR here is how a
+   * blocked transfer gets cancelled, so it is reported, not retried. */
   count = (int)read(data->fd, buf, buf_len);
   if (count < 0) {
     snprintf(data->error, ERROR_LEN, "%s: %s", strerror(errno), data->filename);

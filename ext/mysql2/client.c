@@ -20,7 +20,8 @@ VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error, cMysql2ConnectionError, cMysql2TimeoutError;
 static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args,
-  intern_current_query_options, intern_read_timeout, intern_values;
+  intern_current_query_options, intern_read_timeout, intern_values, intern_getobj;
+static VALUE cWeakRefError;
 
 #define REQUIRE_INITIALIZED(wrapper) \
   if (!wrapper->initialized) { \
@@ -2728,18 +2729,37 @@ static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
   return stmt;
 }
 
+static VALUE rb_mysql_client_weak_statement(VALUE reference) {
+  return rb_funcall(reference, intern_getobj, 0);
+}
+
+static VALUE rb_mysql_client_collected_statement(VALUE unused, VALUE error) {
+  return Qnil;
+}
+
 /* call-seq:
  *    client.prepared_statements
  *
- * Returns an array of prepared statement objects.
+ * Returns an array of live prepared statement objects without flushing
+ * deferred native cleanup.
  */
 static VALUE rb_mysql_client_prepared_statements_read(VALUE self) {
+  VALUE references, statements;
+  long i;
   GET_CLIENT(self);
 
-  mysql2_reap_pending_result_frees(wrapper);
-  mysql2_reap_pending_stmt_closes(wrapper);
-
-  return rb_funcall(wrapper->prepared_statements, intern_values, 0);
+  /* Introspection may run while an async query or stream owns the socket;
+   * only a later protocol-safe command may reap the collected handles. */
+  references = rb_funcall(wrapper->prepared_statements, intern_values, 0);
+  statements = rb_ary_new2(RARRAY_LEN(references));
+  for (i = 0; i < RARRAY_LEN(references); i++) {
+    VALUE statement = rb_rescue2(rb_mysql_client_weak_statement, rb_ary_entry(references, i),
+                                rb_mysql_client_collected_statement, Qnil, cWeakRefError, (VALUE)0);
+    if (!NIL_P(statement)) rb_ary_push(statements, statement);
+    RB_GC_GUARD(statement);
+  }
+  RB_GC_GUARD(references);
+  return statements;
 }
 
 /* call-seq:
@@ -2881,6 +2901,9 @@ void init_mysql2_client(void) {
   intern_current_query_options = rb_intern("@current_query_options");
   intern_read_timeout = rb_intern("@read_timeout");
   intern_values = rb_intern("values");
+  intern_getobj = rb_intern("__getobj__");
+  cWeakRefError = rb_const_get(rb_const_get(rb_cObject, rb_intern("WeakRef")), rb_intern("RefError"));
+  rb_global_variable(&cWeakRefError);
 
 #ifdef CLIENT_LONG_PASSWORD
   rb_const_set(cMysql2Client, rb_intern("LONG_PASSWORD"),

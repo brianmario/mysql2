@@ -45,7 +45,7 @@ typedef struct mysql2_pending_result_free {
 typedef struct {
   VALUE encoding;
   VALUE active_fiber; /* rb_fiber_current() or Qnil */
-  VALUE prepared_statements;
+  VALUE prepared_statements; /* native wrapper address => WeakRef to Statement */
   /* The Mysql2::Result for the currently open streaming cursor (state ==
    * MYSQL2_CLIENT_STREAMING), or Qnil. pending_result_frees only ever gets
    * populated once GC has actually collected an abandoned streaming

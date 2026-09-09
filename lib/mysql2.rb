@@ -1,5 +1,6 @@
 require 'date'
 require 'bigdecimal'
+require 'weakref'
 
 # Load libmariadb.dll before requiring mysql2/mysql2.so
 # This gives a chance to be flexible about the load path

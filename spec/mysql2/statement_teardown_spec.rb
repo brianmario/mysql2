@@ -62,8 +62,6 @@ RSpec.describe 'prepared statement teardown' do
         script = <<-'RUBY'
           require 'mysql2'
           require 'yaml'
-          require 'fiddle'
-          counter = Fiddle::Function.new(Fiddle::Handle::DEFAULT['mysql2_test_live_statements'], [], Fiddle::TYPE_LONG)
           Thread.new do
             connection = Mysql2::Client.new(YAML.load_file('spec/configuration.yml')['root'])
             5.times do
@@ -82,14 +80,24 @@ RSpec.describe 'prepared statement teardown' do
             nil
           end.join
           GC.start
-          raise "unreleased native statements: #{counter.call}" unless counter.call == 0
+          File.open(ENV.fetch('MYSQL2_STATEMENT_LIFETIME_REPORT'), 'a') { |report| report.puts 'checkpoint' }
         RUBY
         library_file = $LOADED_FEATURES.find { |path| path.end_with?('/lib/mysql2.rb') }
         extension_file = $LOADED_FEATURES.find { |path| path.end_with?('/mysql2/mysql2.bundle') }
+        report = File.join(@probe_directory, "#{mode}.log")
         command = [RbConfig.ruby, "-I#{File.dirname(library_file)}",
                    "-I#{File.dirname(File.dirname(extension_file))}", '-e', script, mode,]
-        output, status = Open3.capture2e({ 'DYLD_INSERT_LIBRARIES' => @probe_library }, *command)
+        environment = { 'DYLD_INSERT_LIBRARIES' => @probe_library, 'MYSQL2_STATEMENT_LIFETIME_REPORT' => report }
+        output, status = Open3.capture2e(environment, *command)
         expect(status.success?).to eq(true), output
+        events = File.exist?(report) ? File.readlines(report, chomp: true) : []
+        checkpoint = events.index('checkpoint')
+        expect(checkpoint).not_to be_nil, output
+        before_checkpoint = events.first(checkpoint)
+        # Five prepares per scenario. A zero count means the interposer never
+        # took effect, which must not read as "nothing leaked".
+        expect(before_checkpoint.count('init')).to eq(5)
+        expect(before_checkpoint.count('close')).to eq(5)
       end
     end
   end

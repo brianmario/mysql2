@@ -91,13 +91,16 @@ RSpec.describe 'prepared statement teardown' do
         output, status = Open3.capture2e(environment, *command)
         expect(status.success?).to eq(true), output
         events = File.exist?(report) ? File.readlines(report, chomp: true) : []
+        # The interposer reports its own failures on the child's stderr, so a
+        # count mismatch must show that output alongside the events.
+        diagnostic = "events: #{events.inspect}\n#{output}"
         checkpoint = events.index('checkpoint')
-        expect(checkpoint).not_to be_nil, output
+        expect(checkpoint).not_to be_nil, diagnostic
         before_checkpoint = events.first(checkpoint)
         # Five prepares per scenario. A zero count means the interposer never
         # took effect, which must not read as "nothing leaked".
-        expect(before_checkpoint.count('init')).to eq(5)
-        expect(before_checkpoint.count('close')).to eq(5)
+        expect(before_checkpoint.count('init')).to eq(5), diagnostic
+        expect(before_checkpoint.count('close')).to eq(5), diagnostic
       end
     end
   end

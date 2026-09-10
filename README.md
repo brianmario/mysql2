@@ -301,6 +301,12 @@ A few of these options default to something other than `nil`/unset:
 | `:connect_attrs`   | `{:program_name => $PROGRAM_NAME}`, merged with any attrs you pass |
 | `:secure_auth`     | depends on the server version -- see [Secure auth](#secure-auth) |
 
+`:database` (along with `:host`, `:username`, etc.) only takes effect at
+connect time -- mysql2 doesn't keep a copy of it around afterward, so it's
+never a member of `query_options`. Use `client.select_db(name)` to switch
+databases on an existing connection, and `client.database` to read back the
+one currently selected.
+
 ### Connecting to MySQL on localhost and elsewhere
 
 The underlying MySQL client library uses the `:host` parameter to determine the
@@ -519,6 +525,18 @@ to specify several flags.
 The string form will be split on whitespace and parsed as with the array form:
 Plain flags are added to the default flags, while flags prefixed with `-`
 (minus) are removed from the default flags.
+
+To change the base flags every future connection starts from (rather than
+passing `:flags` to each `Client.new` call), set
+`Mysql2::Client.default_connect_options[:connect_flags]`:
+
+``` ruby
+Mysql2::Client.default_connect_options[:connect_flags] |= Mysql2::Client::MULTI_STATEMENTS
+```
+
+(`Mysql2::Client.default_query_options[:connect_flags]` is the same idea
+under its old name -- still read as a deprecated fallback, but
+`default_connect_options` is the current one.)
 
 ### Using Active Record's database.yml
 

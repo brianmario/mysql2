@@ -3,7 +3,8 @@
 #include <string.h>
 
 extern VALUE mMysql2, cMysql2Error;
-static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate;
+static VALUE cMysql2Statement, cBigDecimal, cDateTime, cDate, cWeakRef;
+static ID intern_new;
 static VALUE sym_stream, sym_size, intern_new_with_args, intern_each, intern_to_s, intern_merge_bang;
 static VALUE intern_sec_fraction, intern_usec, intern_sec, intern_min, intern_hour, intern_day, intern_month, intern_year,
   intern_query_options, intern_mul, intern_truncate;
@@ -309,16 +310,12 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     }
   }
 
-  // Stash a reference to this statement handle into the Client to prevent
-  // premature garbage collection.
-  //
-  // A statement can either be free explicitly or when the client object is
-  // torn down. Freeing a statement handle at any other time causes protocol
-  // traffic that might happen while the connection state is set for another
-  // operation.
+  /* Native closes are deferred by dfree; the registry must not keep
+   * otherwise unreachable statements alive until the connection closes. */
   {
+    VALUE reference = rb_funcall(cWeakRef, intern_new, 1, rb_stmt);
     GET_CLIENT(rb_client);
-    rb_hash_aset(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper), rb_stmt);
+    rb_hash_aset(wrapper->prepared_statements, ULL2NUM((unsigned long long)stmt_wrapper), reference);
   }
 
   return rb_stmt;
@@ -938,6 +935,10 @@ static VALUE rb_mysql_stmt_closed_p(VALUE self) {
 }
 
 void init_mysql2_statement(void) {
+  cWeakRef = rb_const_get(rb_cObject, rb_intern("WeakRef"));
+  rb_global_variable(&cWeakRef);
+  intern_new = rb_intern("new");
+
   cDate = rb_const_get(rb_cObject, rb_intern("Date"));
   rb_global_variable(&cDate);
 

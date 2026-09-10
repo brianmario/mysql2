@@ -92,6 +92,18 @@ typedef struct {
   unsigned long pending_stmt_close_count; /* O(1) mirror of the list above, for Client#pending_prepared_statement_closes */
   mysql2_pending_result_free *pending_result_frees;
   unsigned long pending_result_free_count;
+#ifdef _WIN32
+  /* Client#socket on Windows: a native SOCKET isn't a CRT file descriptor,
+   * so it has to be registered with rb_w32_wrap_io_handle() before Ruby can
+   * see it as one. wrapped_native_fd is the raw net.fd value last wrapped
+   * (-1 if never); wrapped_ruby_fd is the CRT fd rb_w32_wrap_io_handle
+   * returned for it (-1 if unwrapped or never wrapped). Re-wrapping is only
+   * needed if the two drift apart -- e.g. after libmysqlclient's own
+   * internal reconnect swaps the underlying socket without mysql2 ever
+   * seeing nogvl_close run. */
+  int wrapped_native_fd;
+  int wrapped_ruby_fd;
+#endif
 } mysql_client_wrapper;
 
 extern const rb_data_type_t rb_mysql_client_type;

@@ -11,6 +11,9 @@
 #ifndef _MSC_VER
 #include <unistd.h>
 #endif
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <fcntl.h>
 #include "wait_for_single_fd.h"
 
@@ -26,6 +29,12 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
   if (!wrapper->initialized) { \
     rb_raise(cMysql2Error, "MySQL client is not initialized"); \
   }
+
+#if defined(_WIN32) && defined(HAVE_RB_W32_WRAP_IO_HANDLE)
+/* Defined below, alongside rb_mysql_client_socket; needed here by the
+ * #close/#discard! call sites further up the file. */
+static void mysql2_win32_unwrap_socket(mysql_client_wrapper *wrapper);
+#endif
 
 #if defined(HAVE_MYSQL_NET_VIO) || defined(HAVE_ST_NET_VIO)
   #define CONNECTED(wrapper) (wrapper->client->net.vio != NULL && wrapper->client->net.fd != -1)
@@ -894,6 +903,10 @@ static VALUE allocate(VALUE klass) {
   wrapper->pending_stmt_close_count = 0;
   wrapper->pending_result_frees = NULL;
   wrapper->pending_result_free_count = 0;
+#ifdef _WIN32
+  wrapper->wrapped_native_fd = -1;
+  wrapper->wrapped_ruby_fd = -1;
+#endif
 
   return obj;
 }
@@ -1291,6 +1304,9 @@ static VALUE rb_mysql_client_close(VALUE self) {
   mysql2_drop_pending_stmt_closes(wrapper);
 
   if (wrapper->client) {
+#if defined(_WIN32) && defined(HAVE_RB_W32_WRAP_IO_HANDLE)
+    mysql2_win32_unwrap_socket(wrapper);
+#endif
     rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
   }
 
@@ -1340,6 +1356,9 @@ static VALUE rb_mysql_client_discard(VALUE self) {
      * share sockets across fork() here anyway. Close the socket outright
      * without a QUIT, same as disconnect_and_mark_inactive. */
     if (CONNECTED(wrapper)) {
+#ifdef HAVE_RB_W32_WRAP_IO_HANDLE
+      mysql2_win32_unwrap_socket(wrapper);
+#endif
       close(wrapper->client->net.fd);
       wrapper->client->net.fd = -1;
     }
@@ -2066,9 +2085,53 @@ static VALUE rb_mysql_client_socket(VALUE self) {
   return INT2NUM(wrapper->client->net.fd);
 }
 #else
-static VALUE rb_mysql_client_socket(RB_MYSQL_UNUSED VALUE self) {
-  rb_raise(cMysql2Error, "Raw access to the mysql file descriptor isn't supported on Windows");
+#ifdef HAVE_RB_W32_WRAP_IO_HANDLE
+/* A native SOCKET isn't a CRT file descriptor, so it has to be registered
+ * with rb_w32_wrap_io_handle() before Ruby's IO layer (IO.for_fd,
+ * IO.select, rb_wait_for_single_fd) can use it -- the same technique
+ * ruby-pg's Connection#socket_io has shipped since 2013. Memoized on the
+ * wrapper (wrapped_native_fd/wrapped_ruby_fd) rather than re-wrapped on
+ * every call: each wrap consumes a slot in the CRT's fd table, and never
+ * releasing a stale one would leak that table over repeated calls. Only
+ * re-wraps if the underlying net.fd has actually changed since the last
+ * call, which covers libmysqlclient's own internal reconnect swapping the
+ * socket out without mysql2 ever seeing nogvl_close run. */
+static VALUE rb_mysql_client_socket(VALUE self) {
+  int native_fd;
+  GET_CLIENT(self);
+  REQUIRE_CONNECTED(wrapper);
+
+  native_fd = (int)wrapper->client->net.fd;
+  if (wrapper->wrapped_native_fd != native_fd) {
+    if (wrapper->wrapped_ruby_fd != -1) {
+      rb_w32_unwrap_io_handle(wrapper->wrapped_ruby_fd);
+    }
+    wrapper->wrapped_ruby_fd = rb_w32_wrap_io_handle((HANDLE)(intptr_t)native_fd, O_RDWR | O_BINARY);
+    wrapper->wrapped_native_fd = native_fd;
+  }
+  return INT2NUM(wrapper->wrapped_ruby_fd);
 }
+
+/* Releases the CRT fd table slot claimed by rb_mysql_client_socket above,
+ * if any. Must run with the GVL held, before the underlying net.fd it
+ * wraps becomes invalid -- callers are the ordinary Ruby-level #close/
+ * #discard! paths, never a dfree/GC-sweep callback (rb_w32_unwrap_io_handle
+ * is not documented safe there, so an unwrap during GC finalization is
+ * skipped rather than risked; the CRT slot is leaked in that case, same
+ * tradeoff decr_mysql2_client already accepts for other per-connection
+ * client-side resources it can't safely reclaim during a sweep). */
+static void mysql2_win32_unwrap_socket(mysql_client_wrapper *wrapper) {
+  if (wrapper->wrapped_ruby_fd != -1) {
+    rb_w32_unwrap_io_handle(wrapper->wrapped_ruby_fd);
+    wrapper->wrapped_ruby_fd = -1;
+    wrapper->wrapped_native_fd = -1;
+  }
+}
+#else
+static VALUE rb_mysql_client_socket(RB_MYSQL_UNUSED VALUE self) {
+  rb_raise(cMysql2Error, "Raw access to the mysql file descriptor requires Ruby 2.0+ (rb_w32_wrap_io_handle) on Windows");
+}
+#endif
 #endif
 
 /* call-seq:

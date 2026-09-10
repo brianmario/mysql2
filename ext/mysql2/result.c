@@ -656,7 +656,8 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
           https://github.com/mysql/mysql-server/blob/ea7d2e2d16ac03afdd9cb72a972a95981107bf51/sql/field.cc#L2246
         */
         // DECIMAL's max precision is 65 digits, so this narrowing is safe for any field the server actually sent.
-        precision = (int)(field->length - (field->decimals > 0 ? 2 : 1));
+        precision = (int)(field->length - (field->decimals > 0 ? 1 : 0) -
+                          ((field->flags & UNSIGNED_FLAG) ? 0 : 1));
         rb_field_type = rb_sprintf("decimal(%d,%d)", precision, field->decimals);
         break;
       case MYSQL_TYPE_STRING:       // char[]

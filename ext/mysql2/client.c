@@ -631,6 +631,13 @@ static void invalidate_socket(mysql_client_wrapper *wrapper)
 
 void mysql2_enqueue_pending_stmt_close(mysql_client_wrapper *wrapper, MYSQL_STMT *stmt, uintptr_t wrapper_key)
 {
+  /* mysql_close detaches statement handles; their remaining cleanup is
+   * local and safe during GC, with no future connection command required. */
+  if (wrapper->closed) {
+    mysql_stmt_close(stmt);
+    return;
+  }
+
   /* Deliberately plain malloc(), not Ruby's xmalloc(): this runs from a
    * dfree callback, which can fire during a GC sweep. xmalloc() may itself
    * try to trigger a GC run on allocation failure, and doing that while a
@@ -669,9 +676,8 @@ void mysql2_reap_pending_stmt_closes(mysql_client_wrapper *wrapper)
   }
 }
 
-/* See client.h: used by Client#close, which deliberately skips the
- * mysql_stmt_close() network round trips above -- the connection is going
- * away regardless -- but still needs the Ruby-visible bookkeeping cleared. */
+/* mysql_close must have detached these handles before they can be freed
+ * without protocol I/O, including when called from a GC callback. */
 void mysql2_drop_pending_stmt_closes(mysql_client_wrapper *wrapper)
 {
   mysql2_pending_stmt_close *node = wrapper->pending_stmt_closes;
@@ -680,7 +686,7 @@ void mysql2_drop_pending_stmt_closes(mysql_client_wrapper *wrapper)
 
   while (node) {
     mysql2_pending_stmt_close *next = node->next;
-    rb_hash_delete(wrapper->prepared_statements, ULL2NUM((unsigned long long)node->wrapper_key));
+    mysql_stmt_close(node->stmt);
     free(node);
     node = next;
   }
@@ -824,30 +830,12 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
   }
 #endif
 
-  /* Any statements queued for a deferred close are moot: mysql_close()
-   * below already releases all of this session's prepared statements on
-   * the server, and this may itself be running during a GC sweep, so we
-   * must not touch prepared_statements (a Ruby Hash) or attempt any more
-   * network I/O here -- just drop the list. */
-  {
-    mysql2_pending_stmt_close *node = wrapper->pending_stmt_closes;
-    while (node) {
-      mysql2_pending_stmt_close *next = node->next;
-      free(node); /* plain free(): this too can run during a GC sweep */
-      node = next;
-    }
-    wrapper->pending_stmt_closes = NULL;
-    wrapper->pending_stmt_close_count = 0;
-  }
+  nogvl_close(wrapper);
+  mysql2_drop_pending_stmt_closes(wrapper);
 
-  /* Same reasoning for any not-yet-drained result sets: mysql_close() below
-   * is about to invalidate the connection those MYSQL_RES/MYSQL_STMT
-   * pointers belong to, and this may itself be running during a GC sweep,
-   * so no network I/O and no VM calls -- just drop the list. This does leak
-   * the client-side MYSQL_RES memory, same tradeoff already accepted above
-   * for statement handles -- but only here, where we have no other choice.
-   * The ordinary-Ruby-level Client#close path below does not take this
-   * shortcut: see mysql2_reap_pending_result_frees at that call site. */
+  /* Deferred result cleanup remains separate: the connection has been
+   * invalidated and this may be a GC callback. The ordinary Client#close
+   * path drains these results before disconnecting. */
   {
     mysql2_pending_result_free *node = wrapper->pending_result_frees;
     while (node) {
@@ -859,7 +847,6 @@ void decr_mysql2_client(mysql_client_wrapper *wrapper)
     wrapper->pending_result_free_count = 0;
   }
 
-  nogvl_close(wrapper);
   xfree(wrapper->client);
   xfree(wrapper);
 }
@@ -1288,11 +1275,12 @@ static VALUE rb_mysql_client_close(VALUE self) {
    * safe point, this one was just missing it. */
   mysql2_abandon_active_stream(wrapper);
   mysql2_reap_pending_result_frees(wrapper);
-  mysql2_drop_pending_stmt_closes(wrapper);
 
   if (wrapper->client) {
     rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
   }
+  mysql2_drop_pending_stmt_closes(wrapper);
+  rb_hash_clear(wrapper->prepared_statements);
 
   wrapper->active_fiber = Qnil;
 
@@ -1355,8 +1343,9 @@ static VALUE rb_mysql_client_discard(VALUE self) {
      * tradeoff decr_mysql2_client accepts. */
     mysql2_abandon_active_stream(wrapper);
     mysql2_reap_pending_result_frees(wrapper);
-    mysql2_drop_pending_stmt_closes(wrapper);
     rb_thread_call_without_gvl(nogvl_close, wrapper, RUBY_UBF_IO, 0);
+    mysql2_drop_pending_stmt_closes(wrapper);
+    rb_hash_clear(wrapper->prepared_statements);
   }
 
   return Qnil;

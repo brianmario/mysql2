@@ -2240,7 +2240,11 @@ static VALUE rb_mysql_result_each(int argc, VALUE * argv, VALUE self) {
 
   GET_RESULT(self);
 
-  if (wrapper->stmt_wrapper && wrapper->stmt_wrapper->closed) {
+  /* A buffered prepared result was materialized by Statement#execute and
+   * replays from its cached rows without the native statement; a stream
+   * still needs it. */
+  if (wrapper->stmt_wrapper && wrapper->stmt_wrapper->closed &&
+      (!wrapper->resultFreed || wrapper->is_streaming)) {
     rb_raise(cMysql2Error, "Statement handle already closed");
   }
 

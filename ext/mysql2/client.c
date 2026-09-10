@@ -527,7 +527,17 @@ VALUE rb_raise_mysql2_error(mysql_client_wrapper *wrapper) {
   VALUE rb_sql_state = rb_str_new2(mysql_sqlstate(wrapper->client));
   VALUE e;
 
-  rb_enc_associate(rb_error_msg, rb_utf8_encoding());
+  /* The server converts its error messages to character_set_results, the
+   * connection charset this wrapper tracks. Client-library errors (CR_*,
+   * 2000-2999) are ASCII English with caller-supplied text interpolated as
+   * given, so they keep the UTF-8 tag, as does anything raised before a
+   * charset is set. */
+  unsigned int errno_value = mysql_errno(wrapper->client);
+  if (NIL_P(wrapper->encoding) || (errno_value >= 2000 && errno_value < 3000)) {
+    rb_enc_associate(rb_error_msg, rb_utf8_encoding());
+  } else {
+    rb_enc_associate(rb_error_msg, rb_to_encoding(wrapper->encoding));
+  }
   rb_enc_associate(rb_sql_state, rb_usascii_encoding());
 
   e = rb_funcall(cMysql2Error, intern_new_with_args, 4,

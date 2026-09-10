@@ -2141,6 +2141,9 @@ static VALUE rb_mysql_result_each_(VALUE self,
         }
       } while(row != Qnil);
 
+      /* A callback may have freed this stream and installed its successor. */
+      if (wrapper->resultFreed) return wrapper->rows;
+
       rb_mysql_result_cache_metadata_and_free(self);
       wrapper->streamingComplete = 1;
 

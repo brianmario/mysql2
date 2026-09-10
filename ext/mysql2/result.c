@@ -884,6 +884,261 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
  * where plain epoch arithmetic would silently wrap them. */
 #define MYSQL2_UTC_FAST_PATH_OK(tz, hour, min, sec) \
   ((tz) == intern_utc && (hour) < 24 && (min) < 60 && (sec) < 60)
+
+/* The :local fast path additionally needs localtime_r and the BSD
+ * tm_gmtoff member; platforms without them (Windows CRT lacks both) keep
+ * every :local DATETIME on the funcall path. */
+#if defined(HAVE_RB_TIME_TIMESPEC_NEW) && defined(HAVE_LOCALTIME_R) && defined(HAVE_STRUCT_TM_TM_GMTOFF)
+#define MYSQL2_LOCAL_FAST_PATH 1
+#endif
+
+#ifdef MYSQL2_LOCAL_FAST_PATH
+/* Time construction for :local results -- the gem's default timezone --
+ * equivalent to Time.local(year, month, day, hour, min, sec, usec) for wall
+ * times away from a zone transition, without the varargs dispatch,
+ * per-argument boxing, and repeated offset search of the funcall path.
+ *
+ * The mechanism is offset-guess-and-verify built on localtime_r alone:
+ * mktime is deliberately not used (it re-derives the zone state on every
+ * call and measures slower than the entire funcall path it would replace,
+ * where localtime_r reads cached zone data). The wall clock becomes a
+ * UTC-shaped epoch via days_from_civil; subtracting the zone offset gives a
+ * candidate instant, and one localtime_r round-trip proves or refutes it.
+ * On a wrong guess the probe's own tm_gmtoff supplies the correction, and
+ * one more round-trip settles it.
+ *
+ * Correctness near transitions is handled by refusal, not resolution. A
+ * result is served only when the zone offset is provably constant at five
+ * probes spaced MYSQL2_LOCAL_PROBE_STEP apart across [t - span, t + span],
+ * and t additionally sits at least MYSQL2_LOCAL_SERVE_MARGIN inside the
+ * proven band. The margin is what makes an ambiguous wall time
+ * unservable: serving the wrong side of a fall-back fold requires a
+ * transition within one fold-width of t, and the margin covers the
+ * largest backward step in any zone's [1970, 2038) history (7 hours,
+ * Antarctica/Vostok 1994; next largest 3) four times over. The probe
+ * spacing makes the refusal sound for any zone whose transitions sit more
+ * than one step apart -- all of tzdata and every implicit-rule TZ string.
+ * Explicit-rule TZ strings (a comma in the value) never prime a band at
+ * all, because their ,start,end tail is the one user-reachable syntax
+ * that can place a canceling fold/gap pair between adjacent probes, where
+ * no finite sampling can detect it -- densifying the probes cannot fix
+ * that, so those zones simply keep the funcall. Near any detected
+ * transition the caller likewise falls back to Time.local,
+ * byte-identical with the funcall path.
+ *
+ * Serving is also bounded to wall-clock years [1970, 2038), because
+ * outside that range Ruby and the C library disagree in some zones even
+ * away from transitions: below it tzdata answers in seconds-precision
+ * Local Mean Time while Ruby maps through a congruent modern year (year
+ * 1000 in Denver: four seconds apart), and from 2038 the two interpret a
+ * zone's post-table extension rule differently (America/Nuuk 2038-04-15:
+ * -01:00 to Ruby, -02:00 to libc). Both sides are internally consistent,
+ * so no round-trip can arbitrate; the funcall owns both tails.
+ *
+ * Proven bands -- their ranges, offsets, and the TZ environment value
+ * each was proven under -- are memoized on the result wrapper, two of
+ * them so a result whose datetime columns live in different eras (a
+ * drifted created_at/updated_at pair) keeps both proofs alive instead of
+ * re-proving on every row. Datetime values cluster within a column, so
+ * in the common case each cell costs one localtime_r plus a band check
+ * over at most two candidates, and concurrently iterated results keep
+ * independent proofs. The cache is written under the GVL (this path
+ * never releases it). Serving compares the live TZ string against the
+ * band's memoized copy -- never pointers, because setenv can reuse the
+ * same allocation for a new value, and offset equality alone cannot
+ * distinguish two zones that share an offset but disagree inside a fold.
+ * A changed TZ re-routes into re-proving; staleness costs probes, never
+ * a wrong answer. A result whose consecutive cells outrun the bands
+ * entirely retires to the funcall for its remainder.
+ *
+ * The remaining Qnil cases mirror mysql2_utc_time: an epoch outside
+ * time_t, an out-of-range subsecond, plus a TZ value too long to memoize. */
+/* Probe spacing is sound for any zone whose transitions sit more than one
+ * step apart; the observed minimum spacing between transitions across all
+ * tzdata zones in [1970, 2038) is 6.9 days (America/Cambridge_Bay, 2000;
+ * tzdata 2026c). */
+#define MYSQL2_LOCAL_PROBE_STEP   (42 * 3600)
+#define MYSQL2_LOCAL_PROBE_SPAN   (2 * MYSQL2_LOCAL_PROBE_STEP)
+/* The margin bounds how close to a proven band's edge a value may be
+ * served, so a transition hiding just past the outermost probe cannot make
+ * an in-band wall time ambiguous: the largest backward step in any zone's
+ * [1970, 2038) history is 7 hours (Antarctica/Vostok, 1994; next largest
+ * 3), and the margin covers it four times over. */
+#define MYSQL2_LOCAL_SERVE_MARGIN (30 * 3600)
+/* Serve window bounds on the wall-clock year. Outside them Ruby and libc
+ * disagree in some zones even away from transitions, so the funcall owns
+ * both tails. Measured by a dense differential (Time.local vs localtime_r,
+ * all 418 zone.tab zones x every year 1970-2039 x every month, 351,120
+ * cases, tzdata 2026c): every steady-state disagreement is >= 2038,
+ * confined to America/Nuuk, America/Scoresbysund, Asia/Gaza, Asia/Hebron;
+ * below 1970 tzdata answers in seconds-precision Local Mean Time while
+ * Ruby maps through a congruent modern year. Re-measure when tzdata moves. */
+#define MYSQL2_LOCAL_SERVE_YEAR_MIN 1970
+#define MYSQL2_LOCAL_SERVE_YEAR_MAX 2038 /* exclusive */
+static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
+                               unsigned int year, unsigned int month, unsigned int day,
+                               unsigned int hour, unsigned int min, unsigned int sec,
+                               unsigned long usec) {
+  struct timespec ts;
+  struct tm chk;
+  const char *tz;
+  size_t tz_len;
+  mysql2_local_band *band;
+  const int64_t wall = mysql2_days_from_civil((int64_t)year, month, day) * 86400LL
+                       + hour * 3600 + min * 60 + sec;
+  int64_t guess;
+  time_t t;
+  int attempt, in_band, b, bi;
+
+  if (usec >= 1000000UL) return Qnil;
+  if (year < MYSQL2_LOCAL_SERVE_YEAR_MIN || year >= MYSQL2_LOCAL_SERVE_YEAR_MAX) return Qnil;
+  if (wrapper->local_fast_retired) return Qnil;
+
+  tz = getenv("TZ");
+  tz_len = tz ? strlen(tz) : 0;
+  if (tz != NULL && (tz_len >= sizeof(wrapper->local_bands[0].tz) ||
+                     tz_len >= sizeof(wrapper->local_refused_tz))) return Qnil;
+  /* An explicit-rule TZ string never primes (see the note in the prove
+   * block); once refused it is memoized so every later cell pays one
+   * strcmp here instead of a verify round-trip and a failed prime. */
+  if (tz != NULL) {
+    if (wrapper->local_refused_tz_set && strcmp(wrapper->local_refused_tz, tz) == 0) return Qnil;
+    if (strchr(tz, ',') != NULL) {
+      memcpy(wrapper->local_refused_tz, tz, tz_len + 1);
+      wrapper->local_refused_tz_set = 1;
+      return Qnil;
+    }
+  }
+
+  guess = wall - wrapper->local_bands[wrapper->local_band_mru].off;
+  for (attempt = 0; attempt < 2; attempt++) {
+    t = (time_t)guess;
+    if ((int64_t)t != guess) return Qnil;
+    if (localtime_r(&t, &chk) == NULL) return Qnil;
+    if (chk.tm_year == (int)year - 1900 && chk.tm_mon == (int)month - 1 &&
+        chk.tm_mday == (int)day && chk.tm_hour == (int)hour &&
+        chk.tm_min == (int)min && chk.tm_sec == (int)sec)
+      break;
+    /* Wrong offset (cold cache, cluster moved, or TZ changed): the probe
+     * itself says what the offset is near this instant. A second miss
+     * means the wall time has no instant at this offset either -- the
+     * spring-forward gap, or a transition closer than the probe -- so
+     * decline. */
+    guess = wall - chk.tm_gmtoff;
+  }
+  if (attempt == 2) return Qnil;
+
+  /* POSIX rule strings permit offsets up to +/-24:59:59, and beyond one
+   * day Ruby's own wall-clock mapping stops round-tripping, so no libc
+   * agreement can imply Time.local parity there. Real zones stay within
+   * +/-14 hours; anything past a day is Time.local's to interpret. */
+  if (chk.tm_gmtoff >= 86400 || chk.tm_gmtoff <= -86400) return Qnil;
+
+  in_band = 0;
+  for (b = 0; b < MYSQL2_LOCAL_BAND_COUNT; b++) {
+    bi = (wrapper->local_band_mru + b) % MYSQL2_LOCAL_BAND_COUNT;
+    band = &wrapper->local_bands[bi];
+    if (chk.tm_gmtoff == band->off &&
+        t >= band->lo + MYSQL2_LOCAL_SERVE_MARGIN &&
+        t <= band->hi - MYSQL2_LOCAL_SERVE_MARGIN &&
+        (tz != NULL ? (band->tz_state == 1 && strcmp(band->tz, tz) == 0)
+                    : band->tz_state == 0)) {
+      wrapper->local_band_mru = bi;
+      wrapper->local_reprove_streak = 0;
+      in_band = 1;
+      break;
+    }
+  }
+  if (!in_band) {
+    /* Prove the offset constant at every probe around t, then memoize the
+     * band. Refuse anything near a transition (gap, fold, or an offset
+     * step between probes) rather than resolving it.
+     *
+     * An explicit-rule TZ string never primes at all. Zone names and
+     * paths cannot contain a comma, and a rule string without one
+     * (EST5EDT) falls to the implementation's default rules, whose
+     * transitions sit months apart -- but the explicit ,start,end tail is
+     * the one user-reachable syntax that can place a canceling fold/gap
+     * pair between adjacent probes, where no finite sampling can detect
+     * it. Those zones take the funcall for every cell. The residual is a
+     * hand-compiled TZif whose footer encodes such a pair -- someone
+     * replacing their own system zone files -- which is out of scope.
+     *
+     * The tzset is unconditional, not gated on the TZ string differing
+     * from the band's: localtime_r is not required to notice a changed TZ
+     * (glibc's never does -- it skips the implicit tzset that plain
+     * localtime performs), and libc's zone state can have moved and moved
+     * back through values this function never observed. Proving a band
+     * from stale zone state would memoize another zone's offsets under
+     * the live string; refreshing first makes the proof and the string
+     * agree. Serving from an already-proven band needs no refresh: a
+     * stale offset fails the in_band check above and lands here. */
+    struct tm probe;
+    int64_t p64;
+    time_t p;
+    int k;
+    /* A result whose consecutive datetime cells sit in more eras than
+     * there are bands would re-prove on every cell and lose to the
+     * funcall it replaces. Enough consecutive proofs with no band hit
+     * between them retires the fast path for the rest of this result,
+     * bounding that worst case near funcall cost. */
+    if (++wrapper->local_reprove_streak > 8) {
+      wrapper->local_fast_retired = 1;
+      return Qnil;
+    }
+    tzset();
+    if (localtime_r(&t, &chk) == NULL) return Qnil;
+    if (chk.tm_year != (int)year - 1900 || chk.tm_mon != (int)month - 1 ||
+        chk.tm_mday != (int)day || chk.tm_hour != (int)hour ||
+        chk.tm_min != (int)min || chk.tm_sec != (int)sec ||
+        chk.tm_gmtoff >= 86400 || chk.tm_gmtoff <= -86400)
+      return Qnil;
+    for (k = -2; k <= 2; k++) {
+      if (k == 0) continue; /* t itself is already verified in chk */
+      p64 = (int64_t)t + (int64_t)k * MYSQL2_LOCAL_PROBE_STEP;
+      p = (time_t)p64;
+      if ((int64_t)p != p64) return Qnil;
+      if (localtime_r(&p, &probe) == NULL) return Qnil;
+      if (probe.tm_gmtoff != chk.tm_gmtoff) return Qnil;
+    }
+    /* Memoize into the least-recently-used band so a second era in the
+     * same result keeps the first era's proof alive alongside it. */
+    bi = (wrapper->local_band_mru + 1) % MYSQL2_LOCAL_BAND_COUNT;
+    band = &wrapper->local_bands[bi];
+    band->lo = (time_t)((int64_t)t - MYSQL2_LOCAL_PROBE_SPAN);
+    band->hi = (time_t)((int64_t)t + MYSQL2_LOCAL_PROBE_SPAN);
+    band->off = chk.tm_gmtoff;
+    if (tz != NULL) {
+      memcpy(band->tz, tz, tz_len + 1);
+      band->tz_state = 1;
+    } else {
+      band->tz_state = 0;
+    }
+    wrapper->local_band_mru = bi;
+    /* t is the band's center, span - margin = 54h inside the serve
+     * interior, so a freshly proven band always serves its own center. */
+  }
+
+  ts.tv_sec = t;
+  ts.tv_nsec = (long)(usec * 1000UL);
+  /* INT_MAX is rb_time_timespec_new's documented sentinel for "local time"
+   * (INT_MAX - 1 means UTC) -- see the note on mysql2_utc_time above.
+   *
+   * The sentinel defers zone decomposition to the value's first accessor,
+   * where Time.local performs it at construction. The instant is identical
+   * either way; the difference is observable only when ENV['TZ'] changes
+   * between materialization and first access, in which case this value
+   * renders its wall clock under the newer zone. Decomposition is most of
+   * Time.local's per-cell cost, so pinning it here (one accessor funcall)
+   * would surrender the fast path's entire margin -- measured, not
+   * estimated. */
+  return rb_time_timespec_new(&ts, INT_MAX);
+}
+
+/* Same wall-clock bounds rationale as the :utc gate above. */
+#define MYSQL2_LOCAL_FAST_PATH_OK(tz, hour, min, sec) \
+  ((tz) == intern_local && (hour) < 24 && (min) < 60 && (sec) < 60)
+#endif /* MYSQL2_LOCAL_FAST_PATH */
 #endif
 
 /* MySQL TIME is a signed duration of hour, minute, second, and
@@ -1893,15 +2148,24 @@ static VALUE rb_mysql_result_fetch_row(VALUE self, MYSQL_FIELD * fields, const r
                 /* month/day lower bounds were validated above; the upper bounds
                  * keep a corrupt value from producing a silently-wrong epoch
                  * instead of the ArgumentError Time.utc would raise. */
-                if (MYSQL2_UTC_FAST_PATH_OK(args->db_timezone, hour, min, sec) && month <= 12 && day <= 31) {
-                  val = mysql2_utc_time(year, month, day, hour, min, sec, msec);
-                }
-                if (!NIL_P(val)) {
-                  /* Already UTC, so app_timezone :utc needs no conversion. */
-                  if (args->app_timezone == intern_local) {
-                    val = rb_funcall(val, intern_localtime, 0);
+                if (month <= 12 && day <= 31) {
+                  if (MYSQL2_UTC_FAST_PATH_OK(args->db_timezone, hour, min, sec)) {
+                    val = mysql2_utc_time(year, month, day, hour, min, sec, msec);
+                    /* Already UTC, so app_timezone :utc needs no conversion. */
+                    if (!NIL_P(val) && args->app_timezone == intern_local) {
+                      val = rb_funcall(val, intern_localtime, 0);
+                    }
+#ifdef MYSQL2_LOCAL_FAST_PATH
+                  } else if (MYSQL2_LOCAL_FAST_PATH_OK(args->db_timezone, hour, min, sec)) {
+                    val = mysql2_local_time(wrapper, year, month, day, hour, min, sec, msec);
+                    /* Already local, so app_timezone :local needs no conversion. */
+                    if (!NIL_P(val) && args->app_timezone == intern_utc) {
+                      val = rb_funcall(val, intern_utc, 0);
+                    }
+#endif
                   }
-                } else
+                }
+                if (NIL_P(val))
 #endif
                 {
                   val = rb_funcall(rb_cTime, args->db_timezone, 7, UINT2NUM(year), UINT2NUM(month), UINT2NUM(day), UINT2NUM(hour), UINT2NUM(min), UINT2NUM(sec), UINT2NUM(msec));
@@ -2537,6 +2801,19 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->numberOfRows = 0;
   wrapper->lastRowProcessed = 0;
   wrapper->resultFreed = 0;
+  {
+    int b;
+    for (b = 0; b < MYSQL2_LOCAL_BAND_COUNT; b++) {
+      wrapper->local_bands[b].lo = 1; /* empty band */
+      wrapper->local_bands[b].hi = 0;
+      wrapper->local_bands[b].off = 0;
+      wrapper->local_bands[b].tz_state = -1; /* no proof yet */
+    }
+  }
+  wrapper->local_band_mru = 0;
+  wrapper->local_refused_tz_set = 0;
+  wrapper->local_reprove_streak = 0;
+  wrapper->local_fast_retired = 0;
   wrapper->result = r;
   wrapper->fields = Qnil;
   wrapper->fieldTypes = Qnil;
@@ -2661,6 +2938,16 @@ void init_mysql2_result(void) {
   rb_global_variable(&cMysql2Result);
 
   rb_define_method(cMysql2Result, "each", rb_mysql_result_each, -1);
+
+  /* True when this build constructs :local DATETIME values without the
+   * per-cell Time.local funcall (needs rb_time_timespec_new, localtime_r,
+   * and struct tm.tm_gmtoff). Behavior is identical either way; the
+   * constant lets tests and diagnostics tell which path a platform runs. */
+#ifdef MYSQL2_LOCAL_FAST_PATH
+  rb_define_const(cMysql2Result, "LOCAL_DATETIME_FAST_PATH", Qtrue);
+#else
+  rb_define_const(cMysql2Result, "LOCAL_DATETIME_FAST_PATH", Qfalse);
+#endif
   rb_define_method(cMysql2Result, "fields", rb_mysql_result_fetch_fields, 0);
   rb_define_method(cMysql2Result, "tables", rb_mysql_result_fetch_tables, 0);
   rb_define_method(cMysql2Result, "dbs", rb_mysql_result_fetch_dbs, 0);

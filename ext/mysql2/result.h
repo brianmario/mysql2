@@ -89,9 +89,10 @@ typedef struct {
    * mysql2_local_time in result.c. local_band_mru indexes the band that
    * served most recently; local_refused_tz memoizes a TZ value that may
    * not prime, so refusing it costs one strcmp per cell instead of the
-   * screen; local_reprove_streak counts consecutive proofs with no band
-   * hit between them, and once it passes the retire threshold
-   * local_fast_retired sends the rest of the result to the funcall. */
+   * screen; local_reprove_streak counts consecutive cells that needed a
+   * proof or failed to verify, with no band hit between them, and once it
+   * passes the retire threshold local_fast_retired sends the rest of the
+   * result to the funcall. */
   mysql2_local_band local_bands[MYSQL2_LOCAL_BAND_COUNT];
   int local_band_mru;
   int local_refused_tz_set;

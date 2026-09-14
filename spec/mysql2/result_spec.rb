@@ -1634,19 +1634,61 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       end
     end
 
-    it "should refuse explicit-rule TZ strings, whose crafted pairs no probing can see" do
+    it "should refuse TZ strings other than zone names, zone paths, and fixed offsets" do
       # XST0XDT1,M1.1.0/1,M1.1.0/3 is an inverted-DST rule string putting a
       # canceling fold/gap pair three hours apart -- inside any finite probe
-      # spacing, where sampling cannot prove fold-absence. The comma tail is
-      # the tell (zone names and paths never contain one), so these zones
-      # never prime a band and every value takes the funcall.
-      with_tz('XST0XDT1,M1.1.0/1,M1.1.0/3') do
-        rows = @client.query("SELECT t FROM (SELECT 1 i, CAST('2026-01-03 12:00:00' AS DATETIME) t " \
-                             "UNION ALL SELECT 2, CAST('2026-01-04 00:30:00' AS DATETIME)) x ORDER BY i",
+      # spacing, where sampling cannot prove fold-absence. C libraries find
+      # such pairs in other spellings too: glibc accepts dates without
+      # commas and with a sign or space after M, and turns text left over
+      # after an offset into a zone that changes twice around New Year, as
+      # musl does for a DST zone without dates; macOS parses a first name
+      # that runs into '/' as part of a POSIX string when no zone file
+      # matches it. So all of these take the funcall. The dispatch count
+      # checks the refusal itself, since a C library that rejects a spelling
+      # or reads it as having no rules agrees with Time.local either way.
+      [
+        'XST0XDT1,M1.1.0/1,M1.1.0/3', 'XST0XDT1,3/1,3/3', 'XST0XDT1M1.1.0/1M1.1.0/3', 'XST0XDT1J4/1J4/3',
+        'XST0XDT1M+1.1.0/1M+1.1.0/3', 'XST0XDT1M 1.1.0/1M 1.1.0/3', 'XST0XDT3', '<XST>0<XDT>1,M1.1.0/1,M1.1.0/3',
+        'XST/XST0XDT1,M1.1.0/1,M1.1.0/3', 'XST/XST5XDT', 'EST5:', 'EST5:00:00:00',
+      ].each do |zone|
+        with_tz(zone) do
+          calls = 0
+          allow(Time).to receive(:local).and_wrap_original do |m, *args|
+            calls += 1
+            m.call(*args)
+          end
+          rows = @client.query("SELECT t FROM (SELECT 1 i, CAST('2026-01-03 12:00:00' AS DATETIME) t " \
+                               "UNION ALL SELECT 2, CAST('2026-01-04 00:30:00' AS DATETIME)) x ORDER BY i",
+                               database_timezone: :local,).to_a
+          RSpec::Mocks.space.proxy_for(Time).reset
+          expect(calls).to eql(2), "#{zone}: expected both cells to take Time.local, saw #{calls} dispatches"
+          expected = Time.local(2026, 1, 4, 0, 30, 0)
+          expect(rows[1]['t']).to eql(expected), "#{zone}: expected #{expected.inspect}, got #{rows[1]['t'].inspect}"
+          expect(rows[1]['t'].utc_offset).to eql(expected.utc_offset)
+        end
+      end
+    end
+
+    it "should still serve a fixed-offset TZ string from the fast path" do
+      # The refusal above leaves a well-formed fixed offset alone: with
+      # nothing after it, no C library has transitions to fill in.
+      with_tz('<+0530>-5:30') do
+        # Align libc zone state with the just-changed ENV['TZ'] first (see the
+        # drifted-pair spec), so the first row below proves rather than falls back.
+        @client.query("SELECT CAST('2026-01-15 12:00:00' AS DATETIME) AS w", database_timezone: :local).first['w']
+        calls = 0
+        allow(Time).to receive(:local).and_wrap_original do |m, *args|
+          calls += 1
+          m.call(*args)
+        end
+        rows = @client.query("SELECT t FROM (SELECT 1 i, CAST('2026-02-01 08:00:00' AS DATETIME) t " \
+                             "UNION ALL SELECT 2, CAST('2026-02-02 09:30:00' AS DATETIME)) x ORDER BY i",
                              database_timezone: :local,).to_a
-        expected = Time.local(2026, 1, 4, 0, 30, 0)
-        expect(rows[1]['t']).to eql(expected)
-        expect(rows[1]['t'].utc_offset).to eql(expected.utc_offset)
+        RSpec::Mocks.space.proxy_for(Time).reset
+        expect(calls).to eql(Mysql2::Result::LOCAL_DATETIME_FAST_PATH ? 0 : 2), "saw #{calls} Time.local dispatches"
+        expect(rows[0]['t']).to eql(Time.local(2026, 2, 1, 8, 0, 0))
+        expect(rows[1]['t']).to eql(Time.local(2026, 2, 2, 9, 30, 0))
+        expect(rows[1]['t'].utc_offset).to eql(Time.local(2026, 2, 2, 9, 30, 0).utc_offset)
       end
     end
 

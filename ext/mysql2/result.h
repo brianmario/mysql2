@@ -87,9 +87,9 @@ typedef struct {
   /* :local DATETIME fast-path state; owned by this result so concurrently
    * iterated results never share or evict each other's proofs. See
    * mysql2_local_time in result.c. local_band_mru indexes the band that
-   * served most recently; local_refused_tz memoizes an explicit-rule TZ
-   * value so refusing it costs one strcmp per cell instead of a probe
-   * attempt; local_reprove_streak counts consecutive proofs with no band
+   * served most recently; local_refused_tz memoizes a TZ value that may
+   * not prime, so refusing it costs one strcmp per cell instead of the
+   * screen; local_reprove_streak counts consecutive proofs with no band
    * hit between them, and once it passes the retire threshold
    * local_fast_retired sends the rest of the result to the funcall. */
   mysql2_local_band local_bands[MYSQL2_LOCAL_BAND_COUNT];

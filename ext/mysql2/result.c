@@ -917,14 +917,16 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
  * largest backward step in any zone's [1970, 2038) history (7 hours,
  * Antarctica/Vostok 1994; next largest 3) four times over. The probe
  * spacing makes the refusal sound for any zone whose transitions sit more
- * than one step apart -- all of tzdata and every implicit-rule TZ string.
- * Explicit-rule TZ strings (a comma in the value) never prime a band at
- * all, because their ,start,end tail is the one user-reachable syntax
- * that can place a canceling fold/gap pair between adjacent probes, where
- * no finite sampling can detect it -- densifying the probes cannot fix
- * that, so those zones simply keep the funcall. Near any detected
- * transition the caller likewise falls back to Time.local,
- * byte-identical with the funcall path.
+ * than one step apart -- all of tzdata.
+ * A TZ value primes a band only when mysql2_tz_can_prime accepts it: a
+ * zone name, a zone path, or a fixed offset. Any other value can be a POSIX
+ * string whose transitions the C library derives, and those can place a
+ * canceling fold/gap pair between adjacent probes, where no finite sampling
+ * can detect it -- densifying the probes cannot fix that, so those zones
+ * simply keep the funcall. The residual is a hand-compiled zone file that
+ * encodes such a pair -- someone replacing their own system zone files --
+ * which is out of scope. Near any detected transition the caller likewise
+ * falls back to Time.local, byte-identical with the funcall path.
  *
  * Serving is also bounded to wall-clock years [1970, 2038), because
  * outside that range Ruby and the C library disagree in some zones even
@@ -975,6 +977,47 @@ static VALUE mysql2_utc_time(unsigned int year, unsigned int month, unsigned int
  * Ruby maps through a congruent modern year. Re-measure when tzdata moves. */
 #define MYSQL2_LOCAL_SERVE_YEAR_MIN 1970
 #define MYSQL2_LOCAL_SERVE_YEAR_MAX 2038 /* exclusive */
+/* Whether a TZ value may prime a band (see the design note above): a zone
+ * name, a zone path (a '/' right after the first name), or an offset shaped
+ * [+-]digits[:digits[:digits]] with nothing after it, with or without a name
+ * before it. In a path, whatever follows the first digit must be such an
+ * offset. It does not look
+ * for rule dates instead, because C libraries disagree about which
+ * spellings carry rules: glibc accepts dates without commas and with a sign
+ * or space after M, and turns text left over after an offset (EST5:) into a
+ * zone that changes twice around New Year, as musl does for a DST zone
+ * without dates. A path is held to the offset rule because tzcode-based
+ * libcs (macOS, FreeBSD) parse a value that loads no zone file as a POSIX
+ * string whose first name may contain '/'. This is a screen, not a parser,
+ * so it also turns away a few legacy zone names such as EST5EDT, which only
+ * costs them the fast path. */
+static int mysql2_tz_can_prime(const char *tz) {
+  const char *p = tz;
+  int group;
+  if (*p == ':') p++;
+  if (*p == '<') {
+    p = strchr(p, '>');
+    if (p == NULL) return 0;
+    p++;
+  } else {
+    while ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z')) p++;
+  }
+  if (*p == '/') {
+    while (*p != '\0' && (*p < '0' || *p > '9')) p++;
+    if (*p == '\0') return 1;
+  } else {
+    if (*p == '\0') return 1;
+    if (*p == '+' || *p == '-') p++;
+  }
+  for (group = 0; group < 3; group++) {
+    if (*p < '0' || *p > '9') return 0;
+    while (*p >= '0' && *p <= '9') p++;
+    if (*p == '\0') return 1;
+    if (*p != ':') return 0;
+    p++;
+  }
+  return 0;
+}
 static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
                                unsigned int year, unsigned int month, unsigned int day,
                                unsigned int hour, unsigned int min, unsigned int sec,
@@ -998,12 +1041,11 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
   tz_len = tz ? strlen(tz) : 0;
   if (tz != NULL && (tz_len >= sizeof(wrapper->local_bands[0].tz) ||
                      tz_len >= sizeof(wrapper->local_refused_tz))) return Qnil;
-  /* An explicit-rule TZ string never primes (see the note in the prove
-   * block); once refused it is memoized so every later cell pays one
-   * strcmp here instead of a verify round-trip and a failed prime. */
+  /* A TZ value that may not prime is refused before any verify, and once
+   * refused it is memoized so every later cell pays one strcmp here. */
   if (tz != NULL) {
     if (wrapper->local_refused_tz_set && strcmp(wrapper->local_refused_tz, tz) == 0) return Qnil;
-    if (strchr(tz, ',') != NULL) {
+    if (!mysql2_tz_can_prime(tz)) {
       memcpy(wrapper->local_refused_tz, tz, tz_len + 1);
       wrapper->local_refused_tz_set = 1;
       return Qnil;
@@ -1054,15 +1096,8 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
      * band. Refuse anything near a transition (gap, fold, or an offset
      * step between probes) rather than resolving it.
      *
-     * An explicit-rule TZ string never primes at all. Zone names and
-     * paths cannot contain a comma, and a rule string without one
-     * (EST5EDT) falls to the implementation's default rules, whose
-     * transitions sit months apart -- but the explicit ,start,end tail is
-     * the one user-reachable syntax that can place a canceling fold/gap
-     * pair between adjacent probes, where no finite sampling can detect
-     * it. Those zones take the funcall for every cell. The residual is a
-     * hand-compiled TZif whose footer encodes such a pair -- someone
-     * replacing their own system zone files -- which is out of scope.
+     * Only a TZ value mysql2_tz_can_prime accepts reaches this block; the
+     * design note above says why no other value may prime.
      *
      * The tzset is unconditional, not gated on the TZ string differing
      * from the band's: localtime_r is not required to notice a changed TZ

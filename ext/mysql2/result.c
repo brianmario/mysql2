@@ -1018,6 +1018,13 @@ static int mysql2_tz_can_prime(const char *tz) {
   }
   return 0;
 }
+/* Counts one cell the bands could not serve and reports whether the fast
+ * path is now retired for the rest of the result (see the note in the prove
+ * block of mysql2_local_time). */
+static int mysql2_local_count_miss(mysql2_result_wrapper *wrapper) {
+  if (++wrapper->local_reprove_streak > 8) wrapper->local_fast_retired = 1;
+  return wrapper->local_fast_retired;
+}
 static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
                                unsigned int year, unsigned int month, unsigned int day,
                                unsigned int hour, unsigned int min, unsigned int sec,
@@ -1068,7 +1075,13 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
      * decline. */
     guess = wall - chk.tm_gmtoff;
   }
-  if (attempt == 2) return Qnil;
+  if (attempt == 2) {
+    /* A wall time that verifies at neither offset counts toward retirement
+     * like a proof does, so a result made of such cells stops paying these
+     * round-trips. */
+    mysql2_local_count_miss(wrapper);
+    return Qnil;
+  }
 
   /* POSIX rule strings permit offsets up to +/-24:59:59, and beyond one
    * day Ruby's own wall-clock mapping stops round-tripping, so no libc
@@ -1115,13 +1128,11 @@ static VALUE mysql2_local_time(mysql2_result_wrapper *wrapper,
     int k;
     /* A result whose consecutive datetime cells sit in more eras than
      * there are bands would re-prove on every cell and lose to the
-     * funcall it replaces. Enough consecutive proofs with no band hit
-     * between them retires the fast path for the rest of this result,
-     * bounding that worst case near funcall cost. */
-    if (++wrapper->local_reprove_streak > 8) {
-      wrapper->local_fast_retired = 1;
-      return Qnil;
-    }
+     * funcall it replaces. Enough consecutive cells with no band hit --
+     * each one a proof here or a wall time that failed to verify above --
+     * retires the fast path for the rest of this result, bounding that
+     * worst case near funcall cost. */
+    if (mysql2_local_count_miss(wrapper)) return Qnil;
     tzset();
     if (localtime_r(&t, &chk) == NULL) return Qnil;
     if (chk.tm_year != (int)year - 1900 || chk.tm_mon != (int)month - 1 ||

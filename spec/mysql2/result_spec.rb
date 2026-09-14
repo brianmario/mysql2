@@ -1903,6 +1903,44 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       end
     end
 
+    it "should count wall times that fail to verify toward retirement, placed like proofs" do
+      # 02:00-02:59 does not exist in Denver on 2026-03-08, so those cells
+      # verify at neither offset and take the funcall. They count toward
+      # retirement like proofs: after seven of them the next cell still
+      # proves a band and serves; after eight, that cell's proof retires the
+      # fast path for the rest of the result.
+      with_tz('America/Denver') do
+        # Align libc zone state with the just-changed ENV['TZ'] first (see the
+        # drifted-pair spec), so the gap cells fail to verify for the gap's
+        # own reason rather than against the previous zone.
+        @client.query("SELECT CAST('2026-01-15 12:00:00' AS DATETIME) AS w", database_timezone: :local).first['w']
+        [7, 8].each do |gaps|
+          literals = Array.new(gaps) { |i| format('2026-03-08 02:%<m>02d:00', m: i * 7) } + ['2026-03-15 12:00:00', '2026-03-15 12:00:01']
+          selects = literals.each_with_index.map { |l, i| "SELECT #{i} i, CAST('#{l}' AS DATETIME) t" }
+          calls = 0
+          allow(Time).to receive(:local).and_wrap_original do |m, *args|
+            calls += 1
+            m.call(*args)
+          end
+          rows = []
+          per_row = []
+          @client.query("SELECT t FROM (#{selects.join(' UNION ALL ')}) x ORDER BY i",
+                        database_timezone: :local, cache_rows: false, stream: true,).each do |row|
+            per_row << (calls - per_row.sum)
+            rows << row
+          end
+          RSpec::Mocks.space.proxy_for(Time).reset
+          tail = gaps == 7 ? [0, 0] : [1, 1]
+          expected = Mysql2::Result::LOCAL_DATETIME_FAST_PATH ? ([1] * gaps) + tail : [1] * (gaps + 2)
+          expect(per_row).to eql(expected), "#{gaps} gap cells: saw #{per_row.inspect}"
+          rows.each_with_index do |r, i|
+            y, mo, d, h, mi, sec = literals[i].scan(/\d+/).map(&:to_i)
+            expect(r['t']).to eql(Time.local(y, mo, d, h, mi, sec))
+          end
+        end
+      end
+    end
+
     it "should build clustered DATETIME values without the funcall path's allocations" do
       # Proves the fast path actually runs (the parity specs above would
       # also pass if every value quietly fell back to the funcall). The

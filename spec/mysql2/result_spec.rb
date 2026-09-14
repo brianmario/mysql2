@@ -1518,8 +1518,8 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should resolve a spring-forward gap exactly as Time.local does" do
-      # 02:30 does not exist in Denver on 2026-03-08; mktime would normalize
-      # it, so the fast path declines and the funcall's answer comes back.
+      # 02:30 does not exist in Denver on 2026-03-08. No instant round-trips
+      # to it, so the fast path declines and Time.local's answer comes back.
       with_tz('America/Denver') do
         actual = @client.query("SELECT CAST('2026-03-08 02:30:00' AS DATETIME) AS t", database_timezone: :local).first['t']
         expect(actual).to eql(Time.local(2026, 3, 8, 2, 30, 0))
@@ -1529,8 +1529,8 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
 
     it "should resolve a fall-back fold exactly as Time.local does, offset included" do
       # 01:30 happens twice in Denver on 2026-11-01. Time.local owns the
-      # pick; the fast path must detect the ambiguity and decline, not ship
-      # mktime's implementation-defined choice.
+      # pick; the fast path must detect the ambiguity and decline rather
+      # than choose a side itself.
       with_tz('America/Denver') do
         actual = @client.query("SELECT CAST('2026-11-01 01:30:00' AS DATETIME) AS t", database_timezone: :local).first['t']
         expected = Time.local(2026, 11, 1, 1, 30, 0)
@@ -1729,9 +1729,9 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "should serve exactly [1970, 2038) and hand both tails to Time.local" do
-      # The window bounds are measured, not chosen: below 1970 tzdata
-      # answers in Local Mean Time where Ruby maps through congruent modern
-      # years; from 2038, post-table extension rules diverge in four zones.
+      # The window bounds are measured, not chosen: below 1970 some zones
+      # differ in their mean-time periods; from 2038, post-table
+      # extension rules diverge in four zones.
       # Values agree on both sides of each bound here (the window is
       # deliberately conservative), so pinning the PLACEMENT needs a path
       # assertion: the fallback dispatches through Time.local, the fast

@@ -263,6 +263,20 @@ static void rb_mysql_result_free_result(mysql2_result_wrapper * wrapper, int fro
     } else {
       mysql_free_result(wrapper->result);
     }
+
+#ifdef HAVE_RB_GC_ADJUST_MEMORY_USAGE
+    /* Hand back exactly the bytes reported to the GC at store time --
+     * reading the stashed value keeps the negative adjustment the mirror
+     * image of the positive one, whatever the estimator said. Safe from the
+     * GC dfree path: a negative adjustment only decrements the GC's malloc
+     * bookkeeping (atomically, floored at zero) and can never itself start
+     * a collection. */
+    if (wrapper->reported_size > 0) {
+      rb_gc_adjust_memory_usage(-(ssize_t)wrapper->reported_size);
+      wrapper->reported_size = 0;
+    }
+#endif
+
     wrapper->resultFreed = 1;
   }
 }
@@ -301,6 +315,19 @@ static void rb_mysql_result_free(void *ptr) {
 static size_t rb_mysql_result_memsize(const void * wrapper) {
   const mysql2_result_wrapper * w = wrapper;
   size_t memsize = sizeof(*w);
+  /* The client library's heap copy of the stored result: zero while
+   * streaming and once the underlying result has been freed. */
+  memsize += w->reported_size;
+  /* Statement result bind buffers: the per-field MYSQL_BIND array, its
+   * is_null/error/length side arrays, and each field's value buffer. */
+  if (w->result_buffers) {
+    unsigned int i;
+    memsize += (size_t)w->numberOfFields
+             * (sizeof(MYSQL_BIND) + 2 * sizeof(my_bool) + sizeof(unsigned long));
+    for (i = 0; i < w->numberOfFields; i++) {
+      memsize += w->result_buffers[i].buffer_length;
+    }
+  }
   if (w->stmt_wrapper) {
     memsize += sizeof(*w->stmt_wrapper);
   }
@@ -2523,6 +2550,92 @@ static VALUE rb_mysql_result_query_time(VALUE self) {
   return wrapper->query_time < 0 ? Qnil : DBL2NUM(wrapper->query_time);
 }
 
+#ifdef HAVE_RB_GC_ADJUST_MEMORY_USAGE
+/* Largest size the paired rb_gc_adjust_memory_usage(+N)/(-N) calls can
+ * express: the adjustment parameter is a signed ssize_t. */
+#define MYSQL2_MAX_REPORTED_SIZE ((size_t)-1 >> 1)
+
+/* Estimate the bytes mysql_store_result copied into the client library's
+ * own heap for a buffered text-protocol result. Per row, both
+ * libmysqlclient and MariaDB Connector/C allocate a MYSQL_ROWS list node, a
+ * (fields + 1)-slot cell-pointer array, and the NUL-terminated cell data.
+ * Cell bytes are measured through mysql_fetch_lengths on a log-scaled
+ * sample of rows and extrapolated to the full row count, in the spirit of
+ * pg's pg_result.c sampler: the store just paid O(data) to buffer the rows,
+ * and sizing them shouldn't cost a second full scan. The sampling pass
+ * advances the stored result's cursor with mysql_fetch_row -- pointer
+ * chasing over local memory, no I/O and no error path -- and rewinds with
+ * mysql_data_seek, leaving the result exactly as adopted. The caller must
+ * pass a fully stored (non-streaming) result. */
+static size_t rb_mysql_result_estimate_heap_size(MYSQL_RES *result) {
+  const my_ulonglong num_rows = mysql_num_rows(result);
+  const unsigned int num_fields = mysql_num_fields(result);
+  double size = (double)num_fields * sizeof(MYSQL_FIELD);
+
+  if (num_rows > 0) {
+    my_ulonglong i, target, stride;
+    my_ulonglong sampled = 0;
+    unsigned long long sampled_bytes = 0;
+
+    /* 16 sampled rows per power of two of row count, capped at every row:
+     * results up to a few hundred rows are summed exactly; a million-row
+     * result probes ~320 of them. */
+    target = 0;
+    { my_ulonglong n = num_rows; while (n > 0) { target += 16; n >>= 1; } }
+    if (target > num_rows) target = num_rows;
+    stride = num_rows / target;
+
+    for (i = 0; i < num_rows && mysql_fetch_row(result) != NULL; i++) {
+      if (i % stride == 0) {
+        const unsigned long *lengths = mysql_fetch_lengths(result);
+
+        if (lengths != NULL) {
+          unsigned int f;
+          for (f = 0; f < num_fields; f++) {
+            sampled_bytes += lengths[f];
+          }
+          sampled++;
+        }
+      }
+    }
+    mysql_data_seek(result, 0);
+
+    /* Extrapolate the sampled cell bytes to all rows, then add the fixed
+     * per-row costs: the list node, the cell-pointer array, and one NUL
+     * terminator per cell. Accumulated in double so a huge result cannot
+     * overflow the intermediate products; clamped below. */
+    if (sampled > 0) {
+      size += (double)sampled_bytes * ((double)num_rows / (double)sampled);
+    }
+    size += (double)num_rows * (sizeof(MYSQL_ROWS) + (num_fields + 1) * sizeof(char *) + num_fields);
+  }
+
+  return size >= (double)MYSQL2_MAX_REPORTED_SIZE ? MYSQL2_MAX_REPORTED_SIZE : (size_t)size;
+}
+
+/* Estimate the bytes mysql_stmt_store_result copied into the client
+ * library's own heap for a buffered binary-protocol result by walking the
+ * statement's row list: one MYSQL_ROWS node per row, allocated together
+ * with that row's wire packet, whose length both libmysqlclient
+ * (add_binary_row) and MariaDB Connector/C (mthd_stmt_read_all_rows) record
+ * in MYSQL_ROWS.length as they buffer it. MYSQL_STMT and its result member
+ * are declared in both clients' public headers -- the free path already
+ * reaches into the struct the same way for stmt->bind_result_done. The
+ * separately allocated metadata MYSQL_RES rides along in the fields term.
+ * The caller must pass a statement whose result was just stored
+ * (non-streaming). */
+static size_t rb_mysql_stmt_estimate_heap_size(MYSQL_STMT *stmt, unsigned int num_fields) {
+  const MYSQL_ROWS *row;
+  size_t size = num_fields * sizeof(MYSQL_FIELD);
+
+  for (row = stmt->result.data; row != NULL; row = row->next) {
+    size += sizeof(MYSQL_ROWS) + row->length;
+  }
+
+  return size > MYSQL2_MAX_REPORTED_SIZE ? MYSQL2_MAX_REPORTED_SIZE : size;
+}
+#endif /* HAVE_RB_GC_ADJUST_MEMORY_USAGE */
+
 /* Mysql2::Result */
 VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_RES *r, VALUE statement, double query_time) {
   VALUE obj;
@@ -2566,6 +2679,7 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
   wrapper->is_null = NULL;
   wrapper->error = NULL;
   wrapper->length = NULL;
+  wrapper->reported_size = 0;
   /* Plain assignment only: nothing in this function may raise (post-#1463
    * streaming lifecycle). The parse itself happens in the first
    * argument-less #each. */
@@ -2646,6 +2760,26 @@ VALUE rb_mysql_result_to_obj(VALUE client, VALUE encoding, VALUE options, MYSQL_
     VALUE forced = rb_hash_aref(options, sym_force_encoding);
     wrapper->forced_enc = NIL_P(forced) ? NULL : rb_to_encoding(forced);
   }
+
+#ifdef HAVE_RB_GC_ADJUST_MEMORY_USAGE
+  /* Report the client library's freshly stored heap copy of this result to
+   * Ruby's GC, which otherwise never sees it: malloc-driven GC pacing would
+   * let a process holding large results grow its RSS unbounded without ever
+   * provoking a major collection. The estimate is stashed on the wrapper
+   * and handed back, negated, when the underlying result is freed
+   * (rb_mysql_result_free_result), so the two adjustments balance exactly.
+   * Streaming results are exempt: their rows are never client-buffered.
+   * Estimation and adjustment cannot raise and cannot themselves trigger a
+   * collection, keeping this function's no-raise contract. */
+  if (!wrapper->is_streaming) {
+    if (wrapper->stmt_wrapper) {
+      wrapper->reported_size = rb_mysql_stmt_estimate_heap_size(wrapper->stmt_wrapper->stmt, mysql_num_fields(r));
+    } else {
+      wrapper->reported_size = rb_mysql_result_estimate_heap_size(r);
+    }
+    rb_gc_adjust_memory_usage((ssize_t)wrapper->reported_size);
+  }
+#endif
 
   return obj;
 }

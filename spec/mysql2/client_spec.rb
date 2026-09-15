@@ -31,6 +31,67 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end.to raise_error(Mysql2::Error::ConnectionError)
   end
 
+  context "connecting with an array of hosts" do
+    # RFC 6761 reserves .invalid: resolvers must return a name error, so
+    # these hosts fail fast with CR_UNKNOWN_HOST without touching the network.
+
+    it "connects to the first host that answers when earlier hosts are unreachable" do
+      client = new_client('host' => ['unreachable.invalid', DatabaseCredentials['root']['host']], 'connect_timeout' => 5)
+      expect(client.query("SELECT 1 AS one").first).to eq("one" => 1)
+    end
+
+    it "connects to the first host without trying the rest when it answers" do
+      client = new_client('host' => [DatabaseCredentials['root']['host'], 'unreachable.invalid'])
+      expect(client.query("SELECT 1 AS one").first).to eq("one" => 1)
+    end
+
+    it "treats a one-element array like a single host" do
+      client = new_client('host' => [DatabaseCredentials['root']['host']])
+      expect(client.query("SELECT 1 AS one").first).to eq("one" => 1)
+    end
+
+    it "attempts hosts in listed order and stops at the first success" do
+      attempted = []
+      allow_any_instance_of(described_class).to receive(:connect) do |_client, _user, _pass, host, *_rest|
+        attempted << host
+        raise Mysql2::Error::ConnectionError.new("simulated unreachable host", nil, 2003, "HY000") if attempted.size == 1
+      end
+
+      described_class.new(DatabaseCredentials['root'].merge('host' => %w[first.example second.example third.example]))
+      expect(attempted).to eq(%w[first.example second.example])
+    end
+
+    it "raises with each host's failure named when every host is unreachable" do
+      expect do
+        new_client('host' => %w[first-down.invalid second-down.invalid], 'connect_timeout' => 5)
+      end.to raise_error(Mysql2::Error::ConnectionError) { |error|
+        expect(error.message).to match(/first-down\.invalid: /).and match(/second-down\.invalid: /)
+        expect(error.error_number).to eq(2005) # CR_UNKNOWN_HOST
+      }
+    end
+
+    it "fails fast on an authentication error without trying later hosts" do
+      expect do
+        begin
+          new_client('host' => [DatabaseCredentials['root']['host'], 'never-tried.invalid'], 'username' => 'asdfasdf8d2h', 'password' => 'asdfasdfw42')
+        rescue Mysql2::Error => e
+          raise unless e.message.include?('mysql_native_password')
+
+          skip("Native password is not supported")
+        end
+      end.to raise_error(Mysql2::Error::ConnectionError) { |error|
+        expect(error.error_number).to eq(1045) # ER_ACCESS_DENIED_ERROR
+        expect(error.message).not_to include('never-tried.invalid')
+      }
+    end
+
+    it "rejects an empty host array" do
+      expect do
+        new_client('host' => [])
+      end.to raise_error(ArgumentError, /at least one host/)
+    end
+  end
+
   it "should connect over a Unix socket" do
     client = new_socket_client
     expect(client.query("SELECT 1 AS one").first).to eq("one" => 1)

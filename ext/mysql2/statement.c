@@ -373,19 +373,45 @@ static void set_buffer_for_string(MYSQL_BIND* bind_buffer, unsigned long *length
   bind_buffer->length = length_buffer;
 }
 
-/* Free each bind_buffer[i].buffer except when params_enc is non-nil, this means
- * the buffer is a Ruby string pointer and not our memory to manage.
- */
-#define FREE_BINDS                                          \
-  for (i = 0; i < bind_count; i++) {                        \
-    if (bind_buffers[i].buffer && NIL_P(params_enc[i])) {   \
-      xfree(bind_buffers[i].buffer);                        \
-    }                                                       \
-  }                                                         \
-  if (argc > 0) {                                           \
-    xfree(bind_buffers);                                    \
-    xfree(length_buffers);                                  \
-  }
+/* A fixed-size slot large enough, and aligned strictly enough, for any
+ * scalar bind value. String-typed params (T_STRING, oversized T_BIGNUM,
+ * BigDecimal) never occupy their slot: their bind buffers alias Ruby
+ * string memory held live in params_enc instead. */
+typedef union {
+  long fixnum;
+  LONG_LONG bigint;
+  double dbl;
+  signed char tiny;
+  MYSQL_TIME time;
+} mysql2_bind_scalar;
+
+/* All bind-time allocations for one execute -- the MYSQL_BIND array, the
+ * length array, and one scalar slot per parameter -- live in a single
+ * arena owned by a hidden Ruby object. That ownership is what makes the
+ * bind loop raise-safe: an unbindable param type, a Time/DateTime/Date
+ * subclass raising from its field readers, or NoMemoryError unwinds out
+ * of rb_mysql_stmt_execute with the arena still attached to its owner,
+ * and the GC frees it. The success path releases the arena eagerly once
+ * mysql_stmt_execute has serialized the values. */
+static void rb_mysql_bind_arena_free(void *ptr) {
+  xfree(ptr);
+}
+
+#ifdef NEW_TYPEDDATA_WRAPPER
+static const rb_data_type_t rb_mysql_bind_arena_type = {
+  "rb_mysql_bind_arena",
+  {
+    NULL,
+    rb_mysql_bind_arena_free,
+    NULL,
+  },
+  0,
+  0,
+#ifdef RUBY_TYPED_FREE_IMMEDIATELY
+  RUBY_TYPED_FREE_IMMEDIATELY,
+#endif
+};
+#endif
 
 /* return 0 if the given bignum can cast as LONG_LONG, otherwise 1 */
 static int my_big2ll(VALUE bignum, LONG_LONG *ptr)
@@ -439,6 +465,8 @@ overflow:
 static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   MYSQL_BIND *bind_buffers = NULL;
   unsigned long *length_buffers = NULL;
+  mysql2_bind_scalar *scalar_slots = NULL;
+  VALUE bind_arena = Qnil;
   unsigned long bind_count;
   unsigned long i;
   MYSQL_STMT *stmt;
@@ -446,7 +474,10 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   VALUE opts;
   VALUE current;
   VALUE resultObj;
-  VALUE *params_enc = NULL;
+  /* Exported string params are kept live (and pinned) by these stack
+   * slots while bind buffers alias their memory; volatile so the stores
+   * cannot be discarded as unread. */
+  volatile VALUE *params_enc = NULL;
   int is_streaming;
   struct nogvl_stmt_execute_args execute_args;
   double query_start, query_elapsed;
@@ -538,11 +569,26 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   if (bind_count > 0) {
     // Scratch space for string encoding exports, allocate on the stack
     params_enc = alloca(sizeof(VALUE) * bind_count);
-    bind_buffers = xcalloc(bind_count, sizeof(MYSQL_BIND));
-    length_buffers = xcalloc(bind_count, sizeof(unsigned long));
+
+    /* Arena layout: scalar slots, then the MYSQL_BIND array, then the
+     * length array -- descending alignment, so each array is naturally
+     * aligned. xcalloc gives the MYSQL_BIND entries the zeroed state
+     * mysql_stmt_bind_param expects (NULL buffer, is_null, length).
+     * mysql_stmt_bind_param copies the MYSQL_BIND array but not the
+     * buffers it points to, so the arena stays live until
+     * mysql_stmt_execute has serialized the values. */
+#ifdef NEW_TYPEDDATA_WRAPPER
+    bind_arena = TypedData_Wrap_Struct(0, &rb_mysql_bind_arena_type, NULL);
+#else
+    bind_arena = Data_Wrap_Struct(0, NULL, rb_mysql_bind_arena_free, NULL);
+#endif
+    DATA_PTR(bind_arena) = xcalloc(bind_count,
+        sizeof(mysql2_bind_scalar) + sizeof(MYSQL_BIND) + sizeof(unsigned long));
+    scalar_slots = DATA_PTR(bind_arena);
+    bind_buffers = (MYSQL_BIND *)(void *)(scalar_slots + bind_count);
+    length_buffers = (unsigned long *)(void *)(bind_buffers + bind_count);
 
     for (i = 0; i < bind_count; i++) {
-      bind_buffers[i].buffer = NULL;
       params_enc[i] = Qnil;
 
       switch (TYPE(argv[i])) {
@@ -552,11 +598,11 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
         case T_FIXNUM:
 #if SIZEOF_INT < SIZEOF_LONG
           bind_buffers[i].buffer_type = MYSQL_TYPE_LONGLONG;
-          bind_buffers[i].buffer = xmalloc(sizeof(long long int));
+          bind_buffers[i].buffer = &scalar_slots[i];
           *(long*)(bind_buffers[i].buffer) = FIX2LONG(argv[i]);
 #else
           bind_buffers[i].buffer_type = MYSQL_TYPE_LONG;
-          bind_buffers[i].buffer = xmalloc(sizeof(int));
+          bind_buffers[i].buffer = &scalar_slots[i];
           *(long*)(bind_buffers[i].buffer) = FIX2INT(argv[i]);
 #endif
           break;
@@ -565,7 +611,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
             LONG_LONG num;
             if (my_big2ll(argv[i], &num) == 0) {
               bind_buffers[i].buffer_type = MYSQL_TYPE_LONGLONG;
-              bind_buffers[i].buffer = xmalloc(sizeof(long long int));
+              bind_buffers[i].buffer = &scalar_slots[i];
               *(LONG_LONG*)(bind_buffers[i].buffer) = num;
             } else {
               /* The bignum was larger than we can fit in LONG_LONG, send it as a string */
@@ -577,7 +623,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
           break;
         case T_FLOAT:
           bind_buffers[i].buffer_type = MYSQL_TYPE_DOUBLE;
-          bind_buffers[i].buffer = xmalloc(sizeof(double));
+          bind_buffers[i].buffer = &scalar_slots[i];
           *(double*)(bind_buffers[i].buffer) = NUM2DBL(argv[i]);
           break;
         case T_STRING:
@@ -589,12 +635,12 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
           break;
         case T_TRUE:
           bind_buffers[i].buffer_type = MYSQL_TYPE_TINY;
-          bind_buffers[i].buffer = xmalloc(sizeof(signed char));
+          bind_buffers[i].buffer = &scalar_slots[i];
           *(signed char*)(bind_buffers[i].buffer) = 1;
           break;
         case T_FALSE:
           bind_buffers[i].buffer_type = MYSQL_TYPE_TINY;
-          bind_buffers[i].buffer = xmalloc(sizeof(signed char));
+          bind_buffers[i].buffer = &scalar_slots[i];
           *(signed char*)(bind_buffers[i].buffer) = 0;
           break;
         default:
@@ -604,7 +650,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
             VALUE rb_time = argv[i];
 
             bind_buffers[i].buffer_type = MYSQL_TYPE_DATETIME;
-            bind_buffers[i].buffer = xmalloc(sizeof(MYSQL_TIME));
+            bind_buffers[i].buffer = &scalar_slots[i];
 
             memset(&t, 0, sizeof(MYSQL_TIME));
             t.neg = 0;
@@ -632,7 +678,7 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
             VALUE rb_time = argv[i];
 
             bind_buffers[i].buffer_type = MYSQL_TYPE_DATE;
-            bind_buffers[i].buffer = xmalloc(sizeof(MYSQL_TIME));
+            bind_buffers[i].buffer = &scalar_slots[i];
 
             memset(&t, 0, sizeof(MYSQL_TIME));
             t.second_part = 0;
@@ -678,7 +724,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
 
     // copies bind_buffers into internal storage
     if (mysql_stmt_bind_param(stmt, bind_buffers)) {
-      FREE_BINDS;
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
   }
@@ -699,14 +744,12 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   if (is_streaming) {
     unsigned long type = CURSOR_TYPE_READ_ONLY;
     if (mysql_stmt_attr_set(stmt, STMT_ATTR_CURSOR_TYPE, &type)) {
-      FREE_BINDS;
       rb_raise(cMysql2Error, "Unable to stream prepared statement, could not set CURSOR_TYPE_READ_ONLY");
     }
     // Set unconditionally: statement attributes persist on the handle
     // across executes, so stream: true must restore the one-row default
     // after an earlier stream: {size: N} execute on the same statement.
     if (mysql_stmt_attr_set(stmt, STMT_ATTR_PREFETCH_ROWS, &prefetch_rows)) {
-      FREE_BINDS;
       rb_raise(cMysql2Error, "Unable to stream prepared statement, could not set STMT_ATTR_PREFETCH_ROWS");
     }
   }
@@ -733,7 +776,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   execute_args.stmt = stmt;
 
   if ((VALUE)rb_thread_call_without_gvl(nogvl_stmt_execute, &execute_args, RUBY_UBF_IO, 0) == Qfalse) {
-    FREE_BINDS;
     wrapper->state = MYSQL2_CLIENT_IDLE;
     rb_raise_mysql2_stmt_error(stmt_wrapper);
   }
@@ -747,7 +789,14 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
   query_elapsed = (query_start < 0 || execute_args.query_end < 0)
     ? -1 : execute_args.query_end - query_start;
 
-  FREE_BINDS;
+  /* The bound values are on the wire; release the arena now rather than
+   * waiting for the GC to collect its owner. Raise paths -- in the bind
+   * loop and after it -- skip this and leave the free to the GC. */
+  if (!NIL_P(bind_arena)) {
+    xfree(DATA_PTR(bind_arena));
+    DATA_PTR(bind_arena) = NULL;
+  }
+  RB_GC_GUARD(bind_arena);
 
   metadata = mysql_stmt_result_metadata(stmt);
   if (metadata == NULL) {

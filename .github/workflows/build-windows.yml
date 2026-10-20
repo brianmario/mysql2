@@ -14,6 +14,7 @@ jobs:
           # (mysqld.exe, mysql.exe on PATH), but no running instance -- same as
           # a fresh local dev machine, so set it up the same way ci/setup.sh
           # does for the other platforms rather than relying on a service.
+          - {os: windows-2025, ruby: '4.0'}
           - {os: windows-2025, ruby: '3.4'}
           - {os: windows-2022, ruby: '3.0'}
       fail-fast: false

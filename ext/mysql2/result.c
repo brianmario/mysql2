@@ -652,8 +652,10 @@ static VALUE rb_mysql_result_fetch_field_type(VALUE self, unsigned int idx) {
       case MYSQL_TYPE_DECIMAL:      // char[]
       case MYSQL_TYPE_NEWDECIMAL:   // char[]
         /*
-          Handle precision similar to this line from mysql's code:
-          https://github.com/mysql/mysql-server/blob/ea7d2e2d16ac03afdd9cb72a972a95981107bf51/sql/field.cc#L2246
+          Recover the declared precision from the display length, mirroring
+          my_decimal_length_to_precision() in MySQL's include/my_decimal.h and
+          MariaDB's sql/my_decimal.h: drop one position for the decimal point
+          when there is a scale, and one for the sign unless the column is UNSIGNED.
         */
         // DECIMAL's max precision is 65 digits, so this narrowing is safe for any field the server actually sent.
         precision = (int)(field->length - (field->decimals > 0 ? 1 : 0) -

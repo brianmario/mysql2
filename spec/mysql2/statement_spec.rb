@@ -719,6 +719,26 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "#field_types" do
+    it "should return declared precision for signed and unsigned decimal columns" do
+      @client.query('CREATE TEMPORARY TABLE decimal_precision (a DECIMAL(10,2) UNSIGNED, b DECIMAL(10,0) UNSIGNED, c DECIMAL(10,2), d DECIMAL(10,0))')
+      result = @client.prepare('SELECT * FROM decimal_precision').execute
+      expect(result.field_types).to eql(%w[decimal(10,2) decimal(10,0) decimal(10,2) decimal(10,0)])
+    end
+
+    it "should return maximum precision for unsigned decimal columns" do
+      @client.query('CREATE TEMPORARY TABLE decimal_max_precision (a DECIMAL(65,0) UNSIGNED, b DECIMAL(65,30) UNSIGNED)')
+      result = @client.prepare('SELECT * FROM decimal_max_precision').execute
+      expect(result.field_types).to eql(%w[decimal(65,0) decimal(65,30)])
+    end
+
+    it "should return precision for decimal literals" do
+      # The server marks a non-negative decimal literal as unsigned.
+      result = @client.prepare('SELECT 1.5, -1.5, 12345.678').execute
+      expect(result.field_types).to eql(%w[decimal(2,1) decimal(2,1) decimal(8,3)])
+    end
+  end
+
   context "metadata cached across executes" do
     # A statement caches its metadata-derived artifacts (field-name array,
     # result bind buffers) between executes, re-reading and validating the

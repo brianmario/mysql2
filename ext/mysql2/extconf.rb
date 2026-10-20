@@ -55,6 +55,11 @@ have_func('rb_time_timespec_new', 'ruby.h')
 # Monotonic clock for Result#query_time (gettimeofday fallback otherwise)
 have_func('clock_gettime', 'time.h')
 
+# 2.0+ on Windows: lets Client#socket wrap a native SOCKET as a CRT file
+# descriptor there too, the same technique ruby-pg's Connection#socket_io
+# has used since 2013 (github.com/ged/ruby-pg@84a1bb7fa40b590014dd0258).
+have_func('rb_w32_wrap_io_handle') if RUBY_PLATFORM =~ /mingw|mswin/
+
 ### Find OpenSSL library
 
 # User-specified OpenSSL if explicitly specified

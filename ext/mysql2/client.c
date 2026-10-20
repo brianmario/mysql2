@@ -2172,7 +2172,8 @@ static VALUE do_select_db(VALUE argsval) {
  *    client.select_db(name)
  *
  * Causes the database specified by +name+ to become the default (current)
- * database on the connection specified by mysql.
+ * database on the connection specified by mysql. Use #database to read it
+ * back afterward.
  */
 static VALUE rb_mysql_client_select_db(VALUE self, VALUE db)
 {

@@ -661,6 +661,24 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
       expect(result.field_types).to eql(expected_types)
     end
 
+    it "should return declared precision for signed and unsigned decimal columns" do
+      @client.query('CREATE TEMPORARY TABLE decimal_precision (a DECIMAL(10,2) UNSIGNED, b DECIMAL(10,0) UNSIGNED, c DECIMAL(10,2), d DECIMAL(10,0))')
+      result = @client.query('SELECT * FROM decimal_precision')
+      expect(result.field_types).to eql(%w[decimal(10,2) decimal(10,0) decimal(10,2) decimal(10,0)])
+    end
+
+    it "should return maximum precision for unsigned decimal columns" do
+      @client.query('CREATE TEMPORARY TABLE decimal_max_precision (a DECIMAL(65,0) UNSIGNED, b DECIMAL(65,30) UNSIGNED)')
+      result = @client.query('SELECT * FROM decimal_max_precision')
+      expect(result.field_types).to eql(%w[decimal(65,0) decimal(65,30)])
+    end
+
+    it "should return precision for decimal literals" do
+      # The server marks a non-negative decimal literal as unsigned.
+      result = @client.query('SELECT 1.5, -1.5, 12345.678')
+      expect(result.field_types).to eql(%w[decimal(2,1) decimal(2,1) decimal(8,3)])
+    end
+
     it "should return json type" do
       result = @client.query("SELECT JSON_OBJECT('key', 'value')")
       expect(result.field_types).to eql(['json'])

@@ -37,10 +37,17 @@ static ssize_t test_read(int fd, void *buf, size_t length) {
 }
 static int test_close(int fd) { assert(fd == 42); closed_count++; return 0; }
 
+/* A libc may already define some of these as macros (older glibc does for
+ * strdup), so undefine each one before shadowing it. */
+#undef malloc
 #define malloc test_malloc
+#undef strdup
 #define strdup test_strdup
+#undef open
 #define open test_open
+#undef read
 #define read test_read
+#undef close
 #define close test_close
 #ifndef MYSQL2_INFILE_SOURCE
 #define MYSQL2_INFILE_SOURCE "../../../ext/mysql2/infile.c"

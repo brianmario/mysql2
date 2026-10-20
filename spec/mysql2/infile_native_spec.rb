@@ -13,7 +13,7 @@ RSpec.describe 'LOCAL INFILE native error recovery' do
     @native_binary = File.join(@native_directory, 'infile-regression')
     source = File.expand_path('../native/infile/regression.c', __dir__)
     include_dir = File.dirname(source)
-    driver = ENV.fetch('MYSQL2_INFILE_SOURCE', File.expand_path('../../ext/mysql2/infile.c', __dir__))
+    driver = File.expand_path('../../ext/mysql2/infile.c', __dir__)
     command = Shellwords.split(RbConfig::CONFIG.fetch('CC')) +
               ['-I', include_dir, "-DMYSQL2_INFILE_SOURCE=\"#{driver}\"", source, '-o', @native_binary]
     output, status = Open3.capture2e(*command)

@@ -219,6 +219,35 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  it "uses the deprecated default_query_options[:connect_flags] as the whole base, so clearing a default flag works" do
+    original = Mysql2::Client.default_query_options[:connect_flags]
+    begin
+      Mysql2::Client.instance_variable_set(:@legacy_connect_flags_warned, false)
+      Mysql2::Client.default_query_options[:connect_flags] &= ~Mysql2::Client::LONG_FLAG
+      client = nil
+      expect { client = new_client }.to output(/deprecated/).to_stderr
+      expect(client.connect_options[:connect_flags] & Mysql2::Client::LONG_FLAG).to be_zero
+    ensure
+      Mysql2::Client.default_query_options[:connect_flags] = original
+      Mysql2::Client.instance_variable_set(:@legacy_connect_flags_warned, false)
+    end
+  end
+
+  it "drops stray keys set directly on the class-level default hashes" do
+    begin
+      Mysql2::Client.default_query_options[:default_file] = '/nonexistent/my.cnf'
+      Mysql2::Client.default_connect_options[:symbolize_keys] = true
+      client = new_client
+      expect(client.query_options).not_to have_key(:default_file)
+      expect(client.connect_options).not_to have_key(:default_file)
+      expect(client.connect_options).not_to have_key(:symbolize_keys)
+      expect(client.query_options[:symbolize_keys]).to be false
+    ensure
+      Mysql2::Client.default_query_options.delete(:default_file)
+      Mysql2::Client.default_connect_options.delete(:symbolize_keys)
+    end
+  end
+
   it "prefers an explicit connect_flags: over the deprecated default_query_options fallback" do
     original = Mysql2::Client.default_query_options[:connect_flags]
     begin

@@ -78,11 +78,6 @@ typedef struct {
    * verification against the live TLS session. Reported by Client#tls_info
    * as :identity_verified. */
   int tls_identity_verified;
-  /* ssl_mode: :required on the MYSQL_OPT_SSL_ENFORCE path: Connector/C falls
-   * back to plaintext when the server offers no TLS and verification is off,
-   * on connect and on auto-reconnect alike, so mysql2_client_require_tls
-   * refuses a connection that negotiated no cipher. */
-  int tls_required;
   MYSQL *client;
   mysql2_client_state_t state;
   /* The pid that established this connection (set on every successful
@@ -186,12 +181,6 @@ void mysql2_abandon_active_stream(mysql_client_wrapper *wrapper);
  * Windows, which has no fork(). Safe to call from anywhere, including a
  * dfree callback -- just compares two plain ints. */
 int mysql2_forked_without_reconnect(mysql_client_wrapper *wrapper);
-
-/* ssl_mode: :required without native SSL_MODE_*: closes the client and
- * raises Mysql2::Error::ConnectionError if its live connection negotiated
- * no TLS, e.g. after an auto-reconnect fell back to plaintext. A no-op for
- * every other ssl_mode. */
-void mysql2_client_require_tls(VALUE self);
 
 /* Prints the [WARN] explaining a forked-without-reconnect connection to
  * stderr, naming the command about to be attempted (e.g. "send a query").

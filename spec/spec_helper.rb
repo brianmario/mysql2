@@ -6,6 +6,17 @@ require 'fiber'
 
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
 
+# MariaDB Connector/C 3.4.0-3.4.2, and 3.4+ runtimes under a gem built
+# without mysql2's TLS verification callback, refuse ssl_mode: :required,
+# which they could only enforce after login (#1613). Specs that want TLS
+# without certificate verification use :preferred there instead, which
+# negotiates the same TLS.
+REQUIRED_TLS_UNENFORCEABLE = Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION.nil? && Mysql2::Client.info[:id] >= 30400
+NON_VERIFYING_TLS_MODE = REQUIRED_TLS_UNENFORCEABLE ? :preferred : :required
+DatabaseCredentials.each_value do |creds|
+  creds['ssl_mode'] = NON_VERIFYING_TLS_MODE.to_s if creds.is_a?(Hash) && creds['ssl_mode'].to_s == 'required'
+end
+
 if GC.respond_to?(:verify_compaction_references)
   # This method was added in Ruby 3.0.0. Calling it this way asks the GC to
   # move objects around, helping to find object movement bugs.

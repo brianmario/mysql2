@@ -307,7 +307,6 @@ VALUE rb_mysql_stmt_new(VALUE rb_client, VALUE sql) {
     if ((VALUE)rb_thread_call_without_gvl(nogvl_prepare_statement, &args, RUBY_UBF_IO, 0) == Qfalse) {
       rb_raise_mysql2_stmt_error(stmt_wrapper);
     }
-    mysql2_client_require_tls(rb_client);
   }
 
   // Stash a reference to this statement handle into the Client to prevent
@@ -749,7 +748,6 @@ static VALUE rb_mysql_stmt_execute(int argc, VALUE *argv, VALUE self) {
     ? -1 : execute_args.query_end - query_start;
 
   FREE_BINDS;
-  mysql2_client_require_tls(stmt_wrapper->client);
 
   metadata = mysql_stmt_result_metadata(stmt);
   if (metadata == NULL) {

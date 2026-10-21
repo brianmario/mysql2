@@ -43,7 +43,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     ssl_disabled = @client.query("SHOW VARIABLES LIKE 'have_ssl'").any? { |x| %w[OFF DISABLED].include?(x['Value']) }
     skip("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
 
-    client = new_client(ssl_mode: 'required')
+    client = new_client(ssl_mode: NON_VERIFYING_TLS_MODE)
     expect(client.ssl_cipher).not_to be_empty
   end
 
@@ -202,11 +202,17 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     mysql_native_verify = (50703...50711).cover?(version) || (60103...60200).cover?(version)
     verify_identity_unenforceable = version >= 30000 && !mysql_native_verify && Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION.nil?
 
+    # The same builds refuse :required, which they could only enforce after
+    # login (#1613).
+    required_unenforceable = REQUIRED_TLS_UNENFORCEABLE
+
     # MySQL and MariaDB and all versions of Connector/C
     ssl_modes.each do |ssl_mode|
       it "should set ssl_mode option #{ssl_mode}" do
         skip "this build refuses verify_identity rather than skipping the hostname check (#879)" \
           if ssl_mode == :verify_identity && verify_identity_unenforceable
+        skip "this build refuses :required rather than falling back to plaintext before login (#1613)" \
+          if ssl_mode == :required && required_unenforceable
 
         options = {
           ssl_mode: ssl_mode,
@@ -252,6 +258,9 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
         # Cleared, forwards the handshake untouched: a server offering TLS.
         attr_accessor :strip
+        # Bytes the client sent after a handshake that offered no TLS: its
+        # login, if it fell back to plaintext.
+        attr_reader :plaintext_client_bytes
 
         def initialize(real_host, real_port)
           @server = TCPServer.new('127.0.0.1', 0)
@@ -259,6 +268,14 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
           @real_port = real_port
           @threads = []
           @strip = true
+          @plaintext_client_bytes = 0
+          @open_sessions = 0
+        end
+
+        # Waits for every proxied session to end, so the byte count is final.
+        def wait_closed(timeout = 5)
+          deadline = Time.now + timeout
+          sleep 0.01 while @open_sessions > 0 && Time.now < deadline
         end
 
         def port
@@ -275,17 +292,20 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end
 
         def handle(client_sock)
+          @open_sessions += 1
+          stripped = strip
           upstream = TCPSocket.new(@real_host, @real_port)
-          client_sock.write(strip_ssl(upstream))
+          client_sock.write(strip_ssl(upstream, stripped))
           # Either side hanging up ends the session for both, as a real
           # server's would: the ensure below closes the other socket.
           done = Queue.new
           [
-            Thread.new { pump(client_sock, upstream, done) },
+            Thread.new { pump(client_sock, upstream, done) { |n| @plaintext_client_bytes += n if stripped } },
             Thread.new { pump(upstream, client_sock, done) },
           ].each { |t| @threads << t }
           done.pop
         ensure
+          @open_sessions -= 1
           [client_sock, upstream].compact.each do |sock|
             begin
               sock.close
@@ -298,10 +318,10 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         # HandshakeV10: protocol version byte, NUL-terminated server version,
         # 4-byte thread id, 8 scramble bytes, 1 filler byte, then the low 16
         # capability bits.
-        def strip_ssl(upstream)
+        def strip_ssl(upstream, stripped)
           header = upstream.read(4)
           payload = upstream.read(header.unpack('V').first & 0xffffff)
-          return header + payload unless strip
+          return header + payload unless stripped
 
           offset = payload.index("\0", 1) + 1 + 4 + 8 + 1
           payload[offset, 2] = [payload[offset, 2].unpack('v').first & ~CLIENT_SSL].pack('v')
@@ -309,7 +329,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end
 
         def pump(src, dst, done)
-          loop { dst.write(src.readpartial(4096)) }
+          loop do
+            data = src.readpartial(4096)
+            yield data.bytesize if block_given?
+            dst.write(data)
+          end
         rescue IOError, Errno::ECONNRESET, Errno::EPIPE
           nil
         ensure
@@ -352,6 +376,8 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       it "connects over TLS without verifying the certificate with :required" do
+        skip "this build refuses :required" if required_unenforceable
+
         new_client(unverified_options.merge(ssl_mode: :required)) do |client|
           expect(client.ssl_cipher).not_to be_empty
         end
@@ -365,10 +391,20 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end
       end
 
-      it "refuses with :required when the server offers no TLS" do
+      it "refuses :required outright on builds that could only enforce it after login" do
+        skip "this build enforces :required before login" unless required_unenforceable
+
+        expect do
+          new_client(unverified_options.merge(ssl_mode: :required))
+        end.to raise_error(Mysql2::Error::ConnectionError, /:required cannot be enforced before login/)
+      end
+
+      it "refuses with :required before login when the server offers no TLS" do
         expect do
           new_client('host' => '127.0.0.1', 'port' => stripping_proxy_port, ssl_mode: :required)
         end.to raise_error(Mysql2::Error::ConnectionError, /TLS|SSL/)
+        @stripping_proxy.wait_closed
+        expect(@stripping_proxy.plaintext_client_bytes).to eq(0)
       end
 
       [
@@ -376,7 +412,9 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         [:ping],
         [:prepare, 'SELECT 1'],
       ].each do |command, *args|
-        it "refuses with :required when #{command} auto-reconnects to a server that offers no TLS" do
+        it "refuses with :required before login when #{command} auto-reconnects to a server that offers no TLS" do
+          skip "this build refuses :required" if required_unenforceable
+
           port = stripping_proxy_port
           @stripping_proxy.strip = false
           client = new_client('host' => '127.0.0.1', 'port' => port, ssl_mode: :required, reconnect: true)
@@ -396,14 +434,11 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
               end
             end
 
-            if Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION == :native
-              # libmysqlclient refuses the plaintext reconnect itself, and
-              # surfaces that as an SSL error, a lost connection, or a false
-              # ping -- whichever it is, no command may succeed.
-              expect(outcomes).to all(be_a(Mysql2::Error).or(be(false)))
-            else
-              expect(outcomes).to include(a_kind_of(Mysql2::Error::ConnectionError).and(having_attributes(message: /TLS|SSL/)))
-            end
+            # The reconnect is refused before login: no command succeeds, and
+            # nothing reaches a server that offered no TLS.
+            expect(outcomes).to all(be_a(Mysql2::Error).or(be(false)))
+            @stripping_proxy.wait_closed
+            expect(@stripping_proxy.plaintext_client_bytes).to eq(0)
           ensure
             client.close
           end
@@ -599,7 +634,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       it "connects the same using :tls_mode as with :ssl_mode" do
-        aliased_overrides = option_overrides.merge(tls_mode: :required).reject { |k, _| k == :sslverify }
+        aliased_overrides = option_overrides.merge(tls_mode: NON_VERIFYING_TLS_MODE).reject { |k, _| k == :sslverify }
 
         new_client(aliased_overrides) do |client|
           expect(client.query('SELECT 1 AS one').first['one']).to eql(1)
@@ -738,7 +773,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "does not refuse sslverify: false combined with a non-verifying ssl_mode" do
-      expect { Klient.new(sslverify: false, ssl_mode: :required) }.not_to raise_error
+      expect { Klient.new(sslverify: false, ssl_mode: NON_VERIFYING_TLS_MODE) }.not_to raise_error
       expect { Klient.new(sslverify: false) }.not_to raise_error
     end
 
@@ -764,7 +799,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
 
     it "lets an explicit ssl_mode win over sslverify: true" do
-      expect { Klient.new(sslverify: true, ssl_mode: :required) }.not_to raise_error
+      expect { Klient.new(sslverify: true, ssl_mode: NON_VERIFYING_TLS_MODE) }.not_to raise_error
     end
   end
 
@@ -1559,7 +1594,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end
 
       it 'connection-corrupting timeouts in #execute over TLS may or may not break the connection' do
-        client = new_client(ssl_mode: 'required')
+        client = new_client(ssl_mode: NON_VERIFYING_TLS_MODE)
 
         # attempt to break the connection
         stmt = client.prepare('SELECT SLEEP(?)')
@@ -1620,7 +1655,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         end
 
         it "interrupting a query over TLS may raise or hang, depending on the platform/OpenSSL build" do
-          client = new_client(ssl_mode: 'required')
+          client = new_client(ssl_mode: NON_VERIFYING_TLS_MODE)
 
           # A plain Timeout.timeout around the query isn't safe to use here:
           # if the interrupt is defeated (see comment above), it would just

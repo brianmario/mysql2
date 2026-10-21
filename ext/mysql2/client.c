@@ -147,24 +147,6 @@ struct nogvl_select_db_args {
 
 static VALUE rb_mysql_client_close(VALUE self);
 
-/* ssl_mode: :required on the MYSQL_OPT_SSL_ENFORCE path. Connector/C
- * refuses a server that offers no TLS only when verifying, and falls back
- * to plaintext otherwise -- on the initial connect and on every
- * auto-reconnect, which replays the same options. Called after connect and
- * after each command that can reconnect underneath us (query, ping,
- * prepare, execute): a live connection without a cipher is closed, and the
- * client with it. Credentials, and the command itself, have already
- * crossed the wire by then -- this stops the session, not the leak. */
-void mysql2_client_require_tls(VALUE self) {
-  GET_CLIENT(self);
-
-  if (wrapper->tls_required && CONNECTED(wrapper) && mysql_get_ssl_cipher(wrapper->client) == NULL) {
-    wrapper->state = MYSQL2_CLIENT_IDLE;
-    rb_mysql_client_close(self);
-    rb_raise(cMysql2ConnectionError, "ssl_mode: :required, but the server did not negotiate TLS");
-  }
-}
-
 /*
  * ssl_mode: :verify_identity enforcement for MariaDB Connector/C.
  *
@@ -338,7 +320,50 @@ static int mysql2_tls_verification_callback(void *vctls, unsigned int flags) {
   return 0;
 }
 
+/* ssl_mode: :required on Connector/C. The connector refuses a server that
+ * offers no TLS before sending the login packet only when verification is
+ * on (plugins/auth/my_auth.c); with it off, it falls back to plaintext and
+ * logs in there, on connect and on every auto-reconnect alike. So :required
+ * turns verification on and registers this callback in place of the
+ * connector's verifier: it accepts any certificate, clearing the status the
+ * handshake recorded exactly as the connector's own verifier does when told
+ * to skip verification (ma_pvio_tls_verify_server_cert). TLS is required,
+ * the certificate is not checked -- which is what :required means. */
+static int mysql2_tls_accept_any_callback(void *vctls, unsigned int flags) {
+  mysql2_mariadb_tls_head *ctls = (mysql2_mariadb_tls_head *)vctls;
+  MYSQL *mysql;
+
+  (void)flags;
+
+  if (ctls == NULL || ctls->pvio == NULL ||
+      (void *)ctls->pvio->ctls != vctls ||
+      (mysql = ctls->pvio->mysql) == NULL ||
+      mysql->net.pvio != ctls->pvio)
+    return 1; /* layout mismatch: refuse, as mysql2_tls_verification_callback does */
+
+  mysql->net.tls_verify_status = 0;
+  return 0;
+}
+
 #endif /* MYSQL2_VERIFY_IDENTITY_SHIM */
+
+#ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
+/* Whether a :tls_peer_fingerprint(_list) pin is set: the connector refuses
+ * a server without TLS before login for a pinned connection, and replacing
+ * its verifier would drop the pin. */
+static int mysql2_tls_pinned(MYSQL *client) {
+#if defined(HAVE_CONST_MARIADB_OPT_TLS_PEER_FP) && defined(HAVE_CONST_MARIADB_OPT_TLS_PEER_FP_LIST)
+  const char *fp = NULL, *fp_list = NULL;
+
+  mysql_get_optionv(client, MARIADB_OPT_TLS_PEER_FP, (void *)&fp);
+  mysql_get_optionv(client, MARIADB_OPT_TLS_PEER_FP_LIST, (void *)&fp_list);
+  return (fp != NULL && fp[0] != '\0') || (fp_list != NULL && fp_list[0] != '\0');
+#else
+  (void)client;
+  return 0;
+#endif
+}
+#endif
 
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
@@ -358,7 +383,7 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   /* For these versions, map from the options we're exposing to Ruby to the constant available:
    *   ssl_mode: :verify_identity to MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1
    *   ssl_mode: :verify_ca to MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1
-   *   ssl_mode: :required to MYSQL_OPT_SSL_ENFORCE = 1, MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 0
+   *   ssl_mode: :required to MYSQL_OPT_SSL_ENFORCE = 1, MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 with an accept-any-certificate callback (Connector/C 3.4.3+), or an empty MARIADB_OPT_TLS_PEER_FP (before 3.4)
    *   ssl_mode: :preferred to MYSQL_OPT_SSL_ENFORCE = 1, MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 0 (Connector/C only)
    *   ssl_mode: :disabled to MYSQL_OPT_SSL_ENFORCE = 0, MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 0
    */
@@ -445,13 +470,48 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
       /* Connector/C 3.4 verifies the server certificate by default, and a
        * verifying connection forces TLS on regardless of
-       * MYSQL_OPT_SSL_ENFORCE. None of these modes verify, so clear it. */
+       * MYSQL_OPT_SSL_ENFORCE. None of these modes check the certificate,
+       * so clear it; :required turns it back on below, with a callback. */
       if (result == 0) {
         my_bool verify = 0;
         result = mysql_options(wrapper->client, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
       }
 #endif
-      wrapper->tls_required = (val == SSL_MODE_REQUIRED);
+      /* Connector/C refuses a server that offers no TLS before login only
+       * when verifying the certificate or when a fingerprint option is set
+       * (plugins/auth/my_auth.c); with neither, it logs in over plaintext,
+       * on connect and on every auto-reconnect. :required therefore needs
+       * one of them without actually checking the certificate:
+       * - Connector/C 3.4+: verification on, through a callback that
+       *   accepts any certificate.
+       * - Connector/C before 3.4: an empty fingerprint. The login check
+       *   only tests that the option is set, and the fingerprint
+       *   comparison in ma_pvio_start_ssl skips an empty one.
+       * Anywhere else :required refuses to connect at all. */
+      if (result == 0 && val == SSL_MODE_REQUIRED && mariadb_family && !mysql2_tls_pinned(wrapper->client)) {
+#ifdef MYSQL2_VERIFY_IDENTITY_SHIM
+        my_bool verify = 1;
+        if (mysql_options(wrapper->client, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify) != 0 ||
+            mysql_options(wrapper->client, MARIADB_OPT_TLS_VERIFICATION_CALLBACK,
+                          (const void *)mysql2_tls_accept_any_callback) != 0)
+          rb_raise(cMysql2ConnectionError,
+                   "ssl_mode: :required cannot be enforced before login: the runtime client "
+                   "library (%s) rejected the TLS verification callback, which needs MariaDB "
+                   "Connector/C 3.4+ at runtime as well as at gem build time. Use ssl_mode: "
+                   ":verify_ca, or :preferred to accept a plaintext fallback.", version_str);
+#else
+#ifdef MYSQL2_HAVE_TLS_PEER_FP_OPTION
+        /* 3.4 runs an empty fingerprint through its fingerprint check */
+        if (version >= 30400 ||
+            mysql_options(wrapper->client, MARIADB_OPT_TLS_PEER_FP, "") != 0)
+#endif
+          rb_raise(cMysql2ConnectionError,
+                   "ssl_mode: :required cannot be enforced before login with this client library "
+                   "(%s): it falls back to plaintext when the server offers no TLS. Use ssl_mode: "
+                   ":verify_ca, or :preferred to accept a plaintext fallback, or rebuild mysql2 "
+                   "against MariaDB Connector/C 3.4.3+.", version_str);
+#endif
+      }
       return INT2NUM(result);
     }
 #endif
@@ -918,7 +978,6 @@ static VALUE allocate(VALUE klass) {
   wrapper->closed = 1; /* will be set false after calling mysql_real_connect */
   wrapper->tls_verify_identity = 0;
   wrapper->tls_identity_verified = 0;
-  wrapper->tls_required = 0;
   wrapper->refcount = 1;
   wrapper->affected_rows = -1;
   wrapper->query_start = 0;
@@ -1289,8 +1348,6 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
     wrapper->tls_identity_verified = 1;
   }
 #endif
-
-  mysql2_client_require_tls(self);
 
   return self;
 }
@@ -1850,7 +1907,6 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 #ifndef _WIN32
   rb_ensure(do_send_query, (VALUE)&args, disconnect_query_if_incomplete, (VALUE)&args.completion);
   (void)RB_GC_GUARD(sql);
-  mysql2_client_require_tls(self);
 
   if (rb_hash_aref(current, sym_async) == Qtrue) {
     return Qnil;
@@ -1867,7 +1923,6 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 #else
   do_send_query((VALUE)&args);
   (void)RB_GC_GUARD(sql);
-  mysql2_client_require_tls(self);
 
   /* this will just block until the result is ready */
   return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
@@ -2291,19 +2346,18 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
 
-  VALUE result;
 #ifndef _WIN32
-  result = rb_rescue2(do_ping, (VALUE)wrapper, disconnect_and_raise, self, rb_eException, (VALUE)0);
+  return rb_rescue2(do_ping, (VALUE)wrapper, disconnect_and_raise, self, rb_eException, (VALUE)0);
 #else
+  VALUE result = Qnil;
   if (!CONNECTED(wrapper)) {
     result = Qfalse;
   } else {
     result = (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
   }
   wrapper->active_fiber = Qnil;
-#endif
-  mysql2_client_require_tls(self);
   return result;
+#endif
 }
 
 /* call-seq:

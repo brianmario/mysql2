@@ -405,7 +405,7 @@ Runtime client library and TLS feature introspection:
 | ---                | ---                                                 | ---
 | `:disabled`        | no TLS                                              | no TLS
 | `:preferred`       | TLS if available, else quiet fallback to plaintext  | TLS if available, else quiet fallback to plaintext
-| `:required`        | TLS required, no certificate verification           | TLS required, no certificate verification -- a server without TLS is refused after login or after an auto-reconnect, not before
+| `:required`        | TLS required, no certificate verification           | TLS required before login, no certificate verification (raises on Connector/C 3.4.0-3.4.2)
 | `:verify_ca`       | TLS required, CA chain verified                     | TLS required, CA chain verified -- hostname is NOT checked, even for local peers
 | `:verify_identity` | TLS required, CA chain + hostname verified natively | TLS required, CA chain + hostname verified via mysql2's own verification callback (Connector/C 3.4+)
 
@@ -414,6 +414,14 @@ Notes:
   Connector/C 3.4+ verifies the server certificate by default, unless built
   with `DEFAULT_SSL_VERIFY_SERVER_CERT=OFF`. Use `:required` or `:preferred`
   for TLS without certificate verification.
+- With `:required` on MariaDB Connector/C, a server that offers no TLS is
+  refused before the password is sent. Connector/C only does that while it
+  checks the certificate or has a fingerprint set, so mysql2 sets one without
+  checking anything: on 3.4.3+ a verification callback that accepts any
+  certificate, before 3.4 an empty fingerprint. Connector/C 3.4.0-3.4.2 (or a
+  3.4 runtime under a mysql2 built against older headers) has neither and would
+  fall back to plaintext, so `:required` raises `Mysql2::Error::ConnectionError`
+  there; use `:verify_ca`, or `:preferred` to accept a plaintext fallback.
 - With `:tls_ca`/`:tls_capath` unset, the TLS backend resolves its
   default trust store natively, i.e. using OpenSSL's default verify paths,
   environment variables `SSL_CERT_FILE`/`SSL_CERT_DIR`, or the platform certificate store.

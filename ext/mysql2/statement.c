@@ -177,9 +177,10 @@ void decr_mysql2_stmt(mysql_stmt_wrapper *stmt_wrapper) {
      * drains it later from ordinary Ruby-level code, once the connection
      * is confirmed idle.
      *
-     * If the GC got to the Client first, client_wrapper is NULL and there
-     * is nothing left to notify -- the connection (and every prepared
-     * statement on it, server-side) is already gone.
+     * This statement owns a native client-wrapper reference until the
+     * decr_mysql2_client call below, even if the Ruby Client was swept
+     * first. An explicitly closed connection has already detached its
+     * handles; enqueue then frees this handle locally instead of queuing.
      */
     if (stmt_wrapper->client_wrapper && stmt_wrapper->stmt) {
       mysql2_enqueue_pending_stmt_close(stmt_wrapper->client_wrapper, stmt_wrapper->stmt,

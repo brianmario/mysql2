@@ -132,13 +132,9 @@ void mysql2_enqueue_pending_stmt_close(mysql_client_wrapper *wrapper, MYSQL_STMT
  * after a streaming result finishes or is abandoned. */
 void mysql2_reap_pending_stmt_closes(mysql_client_wrapper *wrapper);
 
-/* Also ordinary-Ruby-level-only, like the reap above, but never attempts
- * mysql_stmt_close(): for Client#close, where the connection is about to
- * go away regardless, so there is no point notifying the server for each
- * statement individually -- mysql_close() (or the server's own session
- * teardown) already releases all of them. Still clears the C list and
- * prunes prepared_statements, since this runs in ordinary Ruby context and
- * can safely touch both. */
+/* Call only after mysql_close has detached the native handles. Frees them
+ * without protocol I/O or Ruby VM calls, so this is also safe during GC.
+ * Ordinary callers clear prepared_statements separately. */
 void mysql2_drop_pending_stmt_closes(mysql_client_wrapper *wrapper);
 
 /* Safe to call from a dfree callback (GC sweep context): only touches C

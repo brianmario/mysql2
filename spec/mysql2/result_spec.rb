@@ -870,6 +870,36 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
         expect(e.sql_state).to eq("70100")
       }
     end
+
+    context "when an iteration callback takes over the connection" do
+      it "permits a buffered query inside an each block" do
+        result = @client.query('SELECT 1 AS n UNION ALL SELECT 2', stream: true, cache_rows: false)
+        values = []
+        result.each { values << @client.query('SELECT 3 AS n').first['n'] }
+        expect(values).to eq([3])
+        expect(@client.query('SELECT 4 AS n').first['n']).to eq(4)
+      end
+
+      it "stops cleanly when the block frees the result" do
+        result = @client.query('SELECT 1 AS n UNION ALL SELECT 2', stream: true, cache_rows: false)
+        result.each { result.free }
+        expect(@client.query('SELECT 4 AS n').first['n']).to eq(4)
+      end
+
+      [false, true].each do |explicit_free|
+        it "preserves a successor stream for the next query (explicit free: #{explicit_free})" do
+          first = @client.query('SELECT 1 AS n UNION ALL SELECT 2', stream: true, cache_rows: false)
+          first.field_types
+          successor = nil
+          first.each do
+            first.free if explicit_free
+            successor = @client.query('SELECT 3 AS n UNION ALL SELECT 4', stream: true, cache_rows: false)
+          end
+          expect(@client.query('SELECT 5 AS n').first['n']).to eq(5)
+          expect { successor.each { |_| } }.to raise_error(Mysql2::Error, /already been freed/)
+        end
+      end
+    end
   end
 
   context "row data type mapping" do # rubocop:disable Metrics/BlockLength

@@ -1,4 +1,5 @@
 require './spec/spec_helper'
+require 'weakref'
 require 'clocale'
 
 RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
@@ -1452,6 +1453,38 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
         stmt.close
         expect { result.to_a }.to raise_error(Mysql2::Error, /Statement handle already closed/)
         expect(@client.query('SELECT 3 AS n').first['n']).to eq(3)
+      end
+    end
+
+    context 'after the connection closes' do
+      it 'clears the closed connection registry and allows discarded statements to be collected' do
+        references = new_thread do
+          Array.new(5) { WeakRef.new(@client.prepare('SELECT 1')) }
+        end.value
+        @client.close
+        expect(@client.prepared_statements).to eq([])
+        # MRI marks conservatively, so one GC can leave a discarded statement
+        # reachable from a stale stack slot; collect a bounded number of times.
+        10.times do
+          GC.start
+          break if references.none?(&:weakref_alive?)
+        end
+        expect(references.none?(&:weakref_alive?)).to eq(true)
+      end
+
+      it 'allows an application-held statement to close after its connection' do
+        statement = @client.prepare('SELECT 1')
+        @client.close
+        expect { statement.close }.not_to raise_error
+        expect(statement.closed?).to eq(true)
+        expect { statement.close }.not_to raise_error
+      end
+
+      it 'clears the statement registry after discarding a connection' do
+        statement = @client.prepare('SELECT 1')
+        @client.discard!
+        expect(@client.prepared_statements).to eq([])
+        expect { statement.close }.not_to raise_error
       end
     end
   end

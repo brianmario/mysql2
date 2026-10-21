@@ -225,6 +225,17 @@ if have_sha2_fingerprint_verification
   have_const('MARIADB_OPT_TLS_PEER_FP_LIST', mysql_h)
 end
 
+# ssl_mode: :required on Connector/C before 3.4 sets an empty fingerprint,
+# which only needs the option to exist, not SHA-2 pins.
+have_tls_peer_fp_option =
+  checking_for('MARIADB_OPT_TLS_PEER_FP in mysql.h') do
+    try_compile(<<-SRC)
+#include <#{mysql_h}>
+int main(void) { return (int)MARIADB_OPT_TLS_PEER_FP; }
+    SRC
+  end
+$CFLAGS << ' -DMYSQL2_HAVE_TLS_PEER_FP_OPTION' if have_tls_peer_fp_option
+
 # Passphrase for an encrypted :sslkey file (:tls_passphrase). Present in
 # MariaDB Connector/C since at least 3.1 -- unlike fingerprint pinning
 # above, no version-dependent behavior change to gate on.

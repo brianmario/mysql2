@@ -821,7 +821,7 @@ RSpec.describe Mysql2::Result do # rubocop:disable Metrics/BlockLength
     end
 
     it "streaming ended due to a timeout over TLS may or may not raise an exception" do
-      client = new_client(ssl_mode: 'required')
+      client = new_client(ssl_mode: NON_VERIFYING_TLS_MODE)
       client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
 
       # Insert enough records to force the result set into multiple reads

@@ -91,8 +91,10 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
 #endif
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
   #define SSL_MODE_DISABLED 1
+  #define SSL_MODE_PREFERRED 2
   #define SSL_MODE_REQUIRED 3
   #define HAVE_CONST_SSL_MODE_DISABLED
+  #define HAVE_CONST_SSL_MODE_PREFERRED
   #define HAVE_CONST_SSL_MODE_REQUIRED
 #endif
 
@@ -318,7 +320,50 @@ static int mysql2_tls_verification_callback(void *vctls, unsigned int flags) {
   return 0;
 }
 
+/* ssl_mode: :required on Connector/C. The connector refuses a server that
+ * offers no TLS before sending the login packet only when verification is
+ * on (plugins/auth/my_auth.c); with it off, it falls back to plaintext and
+ * logs in there, on connect and on every auto-reconnect alike. So :required
+ * turns verification on and registers this callback in place of the
+ * connector's verifier: it accepts any certificate, clearing the status the
+ * handshake recorded exactly as the connector's own verifier does when told
+ * to skip verification (ma_pvio_tls_verify_server_cert). TLS is required,
+ * the certificate is not checked -- which is what :required means. */
+static int mysql2_tls_accept_any_callback(void *vctls, unsigned int flags) {
+  mysql2_mariadb_tls_head *ctls = (mysql2_mariadb_tls_head *)vctls;
+  MYSQL *mysql;
+
+  (void)flags;
+
+  if (ctls == NULL || ctls->pvio == NULL ||
+      (void *)ctls->pvio->ctls != vctls ||
+      (mysql = ctls->pvio->mysql) == NULL ||
+      mysql->net.pvio != ctls->pvio)
+    return 1; /* layout mismatch: refuse, as mysql2_tls_verification_callback does */
+
+  mysql->net.tls_verify_status = 0;
+  return 0;
+}
+
 #endif /* MYSQL2_VERIFY_IDENTITY_SHIM */
+
+#ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
+/* Whether a :tls_peer_fingerprint(_list) pin is set: the connector refuses
+ * a server without TLS before login for a pinned connection, and replacing
+ * its verifier would drop the pin. */
+static int mysql2_tls_pinned(MYSQL *client) {
+#if defined(HAVE_CONST_MARIADB_OPT_TLS_PEER_FP) && defined(HAVE_CONST_MARIADB_OPT_TLS_PEER_FP_LIST)
+  const char *fp = NULL, *fp_list = NULL;
+
+  mysql_get_optionv(client, MARIADB_OPT_TLS_PEER_FP, (void *)&fp);
+  mysql_get_optionv(client, MARIADB_OPT_TLS_PEER_FP_LIST, (void *)&fp_list);
+  return (fp != NULL && fp[0] != '\0') || (fp_list != NULL && fp_list[0] != '\0');
+#else
+  (void)client;
+  return 0;
+#endif
+}
+#endif
 
 static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
   unsigned long version = mysql_get_client_version();
@@ -337,8 +382,10 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
 
   /* For these versions, map from the options we're exposing to Ruby to the constant available:
    *   ssl_mode: :verify_identity to MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1
-   *   ssl_mode: :required to MYSQL_OPT_SSL_ENFORCE = 1
-   *   ssl_mode: :disabled to MYSQL_OPT_SSL_ENFORCE = 0
+   *   ssl_mode: :verify_ca to MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1
+   *   ssl_mode: :required to MYSQL_OPT_SSL_ENFORCE = 1, MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 with an accept-any-certificate callback (Connector/C 3.4.3+), or an empty MARIADB_OPT_TLS_PEER_FP (before 3.4)
+   *   ssl_mode: :preferred to MYSQL_OPT_SSL_ENFORCE = 1, MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 0 (Connector/C only)
+   *   ssl_mode: :disabled to MYSQL_OPT_SSL_ENFORCE = 0, MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 0
    */
 #if defined(HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT) || defined(HAVE_CONST_MYSQL_OPT_SSL_ENFORCE)
   GET_CLIENT(self);
@@ -415,9 +462,56 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
     }
 #endif
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE
-    if (val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED) {
-      my_bool b = (val == SSL_MODE_REQUIRED);
-      int result = mysql_options(wrapper->client, MYSQL_OPT_SSL_ENFORCE, &b);
+    /* On libmysqlclient, MYSQL_OPT_SSL_ENFORCE demands TLS, so :preferred
+     * exists only on Connector/C, where it enables TLS opportunistically. */
+    if (val == SSL_MODE_DISABLED || val == SSL_MODE_REQUIRED || (val == SSL_MODE_PREFERRED && mariadb_family)) {
+      my_bool enforce = (val != SSL_MODE_DISABLED);
+      int result = mysql_options(wrapper->client, MYSQL_OPT_SSL_ENFORCE, &enforce);
+#ifdef HAVE_CONST_MYSQL_OPT_SSL_VERIFY_SERVER_CERT
+      /* Connector/C 3.4 verifies the server certificate by default, and a
+       * verifying connection forces TLS on regardless of
+       * MYSQL_OPT_SSL_ENFORCE. None of these modes check the certificate,
+       * so clear it; :required turns it back on below, with a callback. */
+      if (result == 0) {
+        my_bool verify = 0;
+        result = mysql_options(wrapper->client, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify);
+      }
+#endif
+      /* Connector/C refuses a server that offers no TLS before login only
+       * when verifying the certificate or when a fingerprint option is set
+       * (plugins/auth/my_auth.c); with neither, it logs in over plaintext,
+       * on connect and on every auto-reconnect. :required therefore needs
+       * one of them without actually checking the certificate:
+       * - Connector/C 3.4+: verification on, through a callback that
+       *   accepts any certificate.
+       * - Connector/C before 3.4: an empty fingerprint. The login check
+       *   only tests that the option is set, and the fingerprint
+       *   comparison in ma_pvio_start_ssl skips an empty one.
+       * Anywhere else :required refuses to connect at all. */
+      if (result == 0 && val == SSL_MODE_REQUIRED && mariadb_family && !mysql2_tls_pinned(wrapper->client)) {
+#ifdef MYSQL2_VERIFY_IDENTITY_SHIM
+        my_bool verify = 1;
+        if (mysql_options(wrapper->client, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &verify) != 0 ||
+            mysql_options(wrapper->client, MARIADB_OPT_TLS_VERIFICATION_CALLBACK,
+                          (const void *)mysql2_tls_accept_any_callback) != 0)
+          rb_raise(cMysql2ConnectionError,
+                   "ssl_mode: :required cannot be enforced before login: the runtime client "
+                   "library (%s) rejected the TLS verification callback, which needs MariaDB "
+                   "Connector/C 3.4+ at runtime as well as at gem build time. Use ssl_mode: "
+                   ":verify_ca, or :preferred to accept a plaintext fallback.", version_str);
+#else
+#ifdef MYSQL2_HAVE_TLS_PEER_FP_OPTION
+        /* 3.4 runs an empty fingerprint through its fingerprint check */
+        if (version >= 30400 ||
+            mysql_options(wrapper->client, MARIADB_OPT_TLS_PEER_FP, "") != 0)
+#endif
+          rb_raise(cMysql2ConnectionError,
+                   "ssl_mode: :required cannot be enforced before login with this client library "
+                   "(%s): it falls back to plaintext when the server offers no TLS. Use ssl_mode: "
+                   ":verify_ca, or :preferred to accept a plaintext fallback, or rebuild mysql2 "
+                   "against MariaDB Connector/C 3.4.3+.", version_str);
+#endif
+      }
       return INT2NUM(result);
     }
 #endif
@@ -3040,6 +3134,7 @@ void init_mysql2_client(void) {
 #endif
 #ifdef HAVE_CONST_MYSQL_OPT_SSL_ENFORCE // MySQL 5.7.3 - 5.7.10 & MariaDB 10.x and later
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_DISABLED"), INT2NUM(SSL_MODE_DISABLED));
+  rb_const_set(cMysql2Client, rb_intern("SSL_MODE_PREFERRED"), INT2NUM(SSL_MODE_PREFERRED));
   rb_const_set(cMysql2Client, rb_intern("SSL_MODE_REQUIRED"), INT2NUM(SSL_MODE_REQUIRED));
 #endif
 #endif

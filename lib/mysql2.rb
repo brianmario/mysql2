@@ -1,5 +1,8 @@
 require 'date'
 require 'bigdecimal'
+# The C extension resolves WeakRef when it loads (it backs the statement
+# registry), so this has to be required before mysql2/mysql2.
+require 'weakref'
 
 # Load libmariadb.dll before requiring mysql2/mysql2.so
 # This gives a chance to be flexible about the load path

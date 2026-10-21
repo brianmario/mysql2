@@ -528,6 +528,36 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
         expect(stmt.execute(stream: { size: 5 }, cache_rows: false).to_a.length).to eq(20)
       end
     end
+
+    context "when an iteration callback takes over the connection" do
+      it "permits a buffered query inside an each block" do
+        result = @client.prepare('SELECT 1 AS n UNION ALL SELECT 2').execute(stream: true, cache_rows: false)
+        values = []
+        result.each { values << @client.query('SELECT 3 AS n').first['n'] }
+        expect(values).to eq([3])
+        expect(@client.query('SELECT 4 AS n').first['n']).to eq(4)
+      end
+
+      it "stops cleanly when the block frees the result" do
+        result = @client.prepare('SELECT 1 AS n UNION ALL SELECT 2').execute(stream: true, cache_rows: false)
+        result.each { result.free }
+        expect(@client.query('SELECT 4 AS n').first['n']).to eq(4)
+      end
+
+      [false, true].each do |explicit_free|
+        it "preserves a successor stream for the next query (explicit free: #{explicit_free})" do
+          first = @client.prepare('SELECT 1 AS n UNION ALL SELECT 2').execute(stream: true, cache_rows: false)
+          first.field_types
+          successor = nil
+          first.each do
+            first.free if explicit_free
+            successor = @client.query('SELECT 3 AS n UNION ALL SELECT 4', stream: true, cache_rows: false)
+          end
+          expect(@client.query('SELECT 5 AS n').first['n']).to eq(5)
+          expect { successor.each { |_| } }.to raise_error(Mysql2::Error, /already been freed/)
+        end
+      end
+    end
   end
 
   context "#each" do

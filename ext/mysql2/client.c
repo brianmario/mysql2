@@ -1257,10 +1257,12 @@ static VALUE rb_mysql_client_close(VALUE self) {
   GET_CLIENT(self);
   rb_mysql_client_set_active_fiber(self, true);
 
-  /* The connection is going away regardless of what mysql_close() below
-   * does or doesn't send -- don't bother closing each queued statement
-   * individually, just clear the bookkeeping so prepared_statements and
-   * pending_prepared_statement_closes don't report stale state afterward.
+  /* Queued statement handles are closed after mysql_close() below has
+   * detached them: mysql2_drop_pending_stmt_closes() calls mysql_stmt_close()
+   * on each, which frees its client-side memory without sending anything,
+   * and zeroes the pending count. The registry is then cleared, so neither
+   * prepared_statements nor pending_prepared_statement_closes reports stale
+   * state afterward.
    *
    * Not-yet-drained result sets are different: unlike a statement's server-
    * side handle, mysql_close() below has no side effect that reclaims a

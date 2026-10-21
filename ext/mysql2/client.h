@@ -2,14 +2,15 @@
 #define MYSQL2_CLIENT_H
 
 /* Whether the connection is in the middle of a protocol exchange that a
- * concurrent mysql_stmt_close() would corrupt. QUERYING covers the window
- * from sending a command through reading/storing its result; STREAMING
- * additionally covers the whole lifetime of an open server-side cursor,
- * since rows are pulled one at a time by later, separate Ruby calls. */
+ * concurrent mysql_stmt_close() would corrupt. QUERYING covers a text query;
+ * COMMAND covers another command such as Statement#execute; STREAMING covers
+ * the whole lifetime of an open server-side cursor, since rows are pulled one
+ * at a time by later, separate Ruby calls. */
 typedef enum {
   MYSQL2_CLIENT_IDLE = 0,
   MYSQL2_CLIENT_QUERYING,
-  MYSQL2_CLIENT_STREAMING
+  MYSQL2_CLIENT_STREAMING,
+  MYSQL2_CLIENT_COMMAND
 } mysql2_client_state_t;
 
 /* A MYSQL_STMT handle whose Ruby wrapper was freed while the connection
@@ -108,6 +109,17 @@ extern const rb_data_type_t rb_mysql_client_type;
 
 void init_mysql2_client(void);
 void decr_mysql2_client(mysql_client_wrapper *wrapper);
+
+/* Claim a connection for the current Fiber before issuing a command. */
+void mysql2_client_claim(VALUE self);
+
+/* Reject access to a client handle while a command or stream owns it. Callers
+ * make no Ruby calls before their final handle access, so a check suffices. */
+void mysql2_client_check_idle(VALUE self);
+
+/* Release a completed command's claim. If completion is uncertain, invalidate
+ * the connection so unread bytes cannot become a later command's response. */
+void mysql2_client_finish_claim(mysql_client_wrapper *wrapper, int reusable);
 
 /* Seconds on a clock suitable for measuring elapsed intervals: monotonic
  * (immune to wall-clock adjustment) where available, gettimeofday otherwise.

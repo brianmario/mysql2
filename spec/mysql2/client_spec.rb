@@ -1623,6 +1623,18 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         expect(ticks).to be > 5
       end
 
+      it "rejects #async_result while #next_result owns the connection" do
+        @multi_client.query("SELECT 1 AS a; SELECT SLEEP(0.3) AS waited")
+        thread = new_thread { @multi_client.next_result }
+        thread.join(0.1)
+
+        expect(thread).to be_alive
+        expect { @multi_client.async_result }.to \
+          raise_error(Mysql2::Error, /This connection is in use by/)
+        expect(thread.value).to be true
+        expect(@multi_client.store_result.first).to eq('waited' => 0)
+      end
+
       it "should be interruptible via Thread#raise while #next_result waits on a slow next statement" do
         @multi_client.query("SELECT 1 AS a; SELECT SLEEP(2) AS b")
 
@@ -2500,6 +2512,91 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
           e
         end
         expect(follow_up_error.to_s).not_to match(/This connection is in use by/)
+      ensure
+        begin
+          client.close
+        rescue StandardError
+          nil
+        end
+        proxy.shutdown
+      end
+    end
+  end
+
+  context "Thread#exit mid-Statement#execute" do
+    it "invalidates the connection instead of leaving a stale claim" do
+      creds = DatabaseCredentials['root']
+      proxy = FreezableProxy.new(creds['host'], creds['port'] || 3306)
+      proxy.run
+      sleep 0.1
+
+      client = new_client('host' => '127.0.0.1', 'port' => proxy.port)
+      statement = client.prepare('SELECT 1')
+
+      begin
+        proxy.freeze!
+        thread = Thread.new { statement.execute }
+        thread.report_on_exception = false
+        thread.join(0.3)
+
+        expect(thread).to be_alive
+        thread.exit
+        sleep 0.1
+        proxy.unfreeze!
+        thread.join(5)
+
+        follow_up_error = begin
+          client.query("SELECT 1")
+          nil
+        rescue Mysql2::Error => e
+          e
+        end
+
+        expect(follow_up_error).to be_a(Mysql2::Error)
+        expect(follow_up_error.to_s).not_to \
+          match(/This connection is in use by|still waiting for a result/)
+      ensure
+        begin
+          client.close
+        rescue StandardError
+          nil
+        end
+        proxy.shutdown
+      end
+    end
+  end
+
+  context "Thread#exit mid-Client#prepare" do
+    it "invalidates the connection instead of leaving a stale claim" do
+      creds = DatabaseCredentials['root']
+      proxy = FreezableProxy.new(creds['host'], creds['port'] || 3306)
+      proxy.run
+      sleep 0.1
+
+      client = new_client('host' => '127.0.0.1', 'port' => proxy.port)
+
+      begin
+        proxy.freeze!
+        thread = Thread.new { client.prepare("SELECT 1") }
+        thread.report_on_exception = false
+        thread.join(0.3)
+
+        expect(thread).to be_alive
+        thread.exit
+        sleep 0.1
+        proxy.unfreeze!
+        thread.join(5)
+
+        follow_up_error = begin
+          client.query("SELECT 1")
+          nil
+        rescue Mysql2::Error => e
+          e
+        end
+
+        expect(follow_up_error).to be_a(Mysql2::Error)
+        expect(follow_up_error.to_s).not_to \
+          match(/This connection is in use by|still waiting for a result/)
       ensure
         begin
           client.close

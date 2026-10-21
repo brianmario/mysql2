@@ -27,6 +27,11 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
     expect(statement).to be_an_instance_of(Mysql2::Statement)
   end
 
+  it "releases the client after a completed prepare error" do
+    expect { @client.prepare("NOT VALID SQL") }.to raise_error(Mysql2::Error)
+    expect(@client.query("SELECT 1 AS value").first).to eq("value" => 1)
+  end
+
   it "should raise an exception when server disconnects" do
     @client.close
     expect { @client.prepare 'SELECT 1' }.to raise_error(Mysql2::Error)
@@ -51,6 +56,151 @@ RSpec.describe Mysql2::Statement do # rubocop:disable Metrics/BlockLength
   it "should let us execute our statement" do
     statement = @client.prepare 'SELECT 1'
     expect(statement.execute).not_to eq(nil)
+  end
+
+  it "claims the client while #execute is in flight" do
+    statement = @client.prepare("SELECT SLEEP(0.3) AS waited")
+    thread = new_thread { statement.execute.first }
+    thread.join(0.1)
+
+    expect(thread).to be_alive
+    expect { @client.query("SELECT 1") }.to \
+      raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value).to eq("waited" => 0)
+    expect(@client.query("SELECT 1 AS value").first).to eq("value" => 1)
+  end
+
+  [
+    [:async_result, []],
+    [:discard!, []],
+    [:prepare, ["SELECT 3"]],
+    [:prepared_statements, []],
+  ].each do |method, arguments|
+    it "rejects Client##{method} while #execute is in flight" do
+      statement = @client.prepare("SELECT SLEEP(0.3) AS waited")
+      thread = new_thread { statement.execute.first }
+      thread.join(0.1)
+
+      expect(thread).to be_alive
+      expect { @client.public_send(method, *arguments) }.to \
+        raise_error(Mysql2::Error, /This connection is in use by/)
+      expect(thread.value).to eq("waited" => 0)
+      expect(@client.query("SELECT 1 AS value").first).to eq("value" => 1)
+    end
+  end
+
+  it "rejects Statement#close while #execute is in flight" do
+    statement = @client.prepare("SELECT SLEEP(0.3) AS waited")
+    other_statement = @client.prepare("SELECT 2 AS value")
+    thread = new_thread { statement.execute.first }
+    thread.join(0.1)
+
+    expect(thread).to be_alive
+    expect { statement.close }.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect { other_statement.close }.to raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value).to eq("waited" => 0)
+    expect(statement).not_to be_closed
+    expect(other_statement).not_to be_closed
+  end
+
+  it "rejects Statement handle getters while #execute is in flight" do
+    statement = @client.prepare("SELECT SLEEP(0.3) AS waited")
+    thread = new_thread { statement.execute.first }
+    thread.join(0.1)
+
+    getters = %i[affected_rows field_count fields last_id param_count]
+    expect(thread).to be_alive
+    getters.each do |getter|
+      expect { statement.public_send(getter) }.to \
+        raise_error(Mysql2::Error, /This connection is in use by/)
+    end
+    expect(thread.value).to eq("waited" => 0)
+  end
+
+  it "rejects same-Fiber teardown while constructing a streaming Result" do
+    client = @client
+    attempts = {}
+    statement = client.prepare("SELECT 1 AS value UNION SELECT 2")
+
+    trace = TracePoint.new(:c_call) do |event|
+      next unless event.method_id == :initialize && event.self.is_a?(Mysql2::Result)
+
+      trace.disable
+      %i[close discard!].each do |method|
+        begin
+          client.public_send(method)
+        rescue Mysql2::Error => e
+          attempts[method] = e.message
+        end
+      end
+    end
+
+    begin
+      trace.enable
+      result = statement.execute(stream: true, cache_rows: false)
+    ensure
+      trace.disable
+    end
+
+    expect(attempts.keys).to eq(%i[close discard!])
+    attempts.each_value do |message|
+      expect(message).to match(/still waiting for a result/)
+    end
+    expect(result.to_a).to eq([{ "value" => 1 }, { "value" => 2 }])
+    expect(client.query("SELECT 3 AS value").first).to eq("value" => 3)
+  end
+
+  it "does not inspect or reap prepared statements while a stream is open" do
+    statement = @client.prepare("SELECT 1 AS value UNION SELECT 2")
+    result = statement.execute(stream: true, cache_rows: false)
+
+    expect { @client.prepared_statements }.to \
+      raise_error(Mysql2::Error, /still waiting for a result/)
+    expect(result.to_a).to eq([{ "value" => 1 }, { "value" => 2 }])
+    expect(@client.prepared_statements).to include(statement)
+  end
+
+  it "rejects #execute while another Fiber owns the client" do
+    statement = @client.prepare("SELECT 2 AS value")
+    thread = new_thread { @client.query("SELECT SLEEP(0.3) AS waited").first }
+    thread.join(0.1)
+
+    expect(thread).to be_alive
+    expect { statement.execute }.to \
+      raise_error(Mysql2::Error, /This connection is in use by/)
+    expect(thread.value).to eq("waited" => 0)
+    expect(statement.execute.first).to eq("value" => 2)
+  end
+
+  it "releases the client after a completed execute error" do
+    @client.query("CREATE TEMPORARY TABLE mysql2_execute_error (id INT PRIMARY KEY)")
+    statement = @client.prepare("INSERT INTO mysql2_execute_error (id) VALUES (?)")
+    statement.execute(1)
+
+    expect { statement.execute(1) }.to raise_error(Mysql2::Error)
+    expect(@client.query("SELECT COUNT(*) AS count FROM mysql2_execute_error").first).to eq("count" => 1)
+  end
+
+  it "keeps string bind bytes stable while GC compacts during setup" do
+    skip "GC compaction is unavailable" unless GC.respond_to?(:auto_compact=)
+    skip "GC stress with auto compaction crashes Ruby 3.0 on Windows" if Gem.win_platform? && RUBY_VERSION.start_with?("3.0.")
+
+    statement = @client.prepare("SELECT ? AS bind_one, ? AS bind_two")
+    old_auto_compact = GC.auto_compact
+    old_stress = GC.stress
+    begin
+      GC.auto_compact = true
+      GC.stress = true
+      result = statement.execute(
+        "é".encode(Encoding::ISO_8859_1),
+        "ß".encode(Encoding::ISO_8859_1),
+      ).first
+    ensure
+      GC.stress = old_stress
+      GC.auto_compact = old_auto_compact
+    end
+
+    expect(result).to eq("bind_one" => "é", "bind_two" => "ß")
   end
 
   it "should raise an exception without a block" do

@@ -396,7 +396,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
               end
             end
 
-            if (50000...100000).cover?(Mysql2::Client.info[:id])
+            if Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION == :native
               # libmysqlclient refuses the plaintext reconnect itself, and
               # surfaces that as an SSL error, a lost connection, or a false
               # ping -- whichever it is, no command may succeed.

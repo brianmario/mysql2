@@ -365,7 +365,7 @@ in the project CI matrix.
 | `:tls_version`          |                  | Varies  | Set the allowed TLS versions, comma separated: TLSv1.1, TLSv1.2, TLSv1.3, etc. All versions of SSL were deprecated by [RFC 7568](https://www.rfc-editor.org/rfc/rfc7568) in 2015, and TLSv1.0/TLSv1.1 by [RFC 8996](https://www.rfc-editor.org/rfc/rfc8996) in 2021. Vendor removal of TLSv1.1 and support addition of TLSv1.3 varies. Within TLSv1.2 and TLSv1.3, newer ECDSA certificates enable faster more secure cipher suites.
 | `:tls_cipher`           |                  | Typically any TLS-compatible cipher suite | Set the allowed TLS ciphers in priority order, colon separated: 'DHE-RSA-AES256-SHA:DHE-RSA-AES256-CCM:!AES128-SHA', etc. Note some ciphers are only available in some TLS versions. Impossible combinations will result in connection failures. See [MySQL: TLS Protocols and Ciphers](https://dev.mysql.com/doc/refman/en/encrypted-connection-protocols-ciphers.html) and [OpenSSL: TLS 1.3 Ciphersuites](https://github.com/openssl/openssl/wiki/TLS1.3#ciphersuites)
 |                         | `:sslverify`     | `false`     | _Deprecated._ Boolean. `true` is equivalent to `:ssl_mode => :verify_identity`.
-| `:tls_mode`             | `:ssl_mode`      | `:preferred` | _Replacement for `:sslverify`._ One of `:disabled`, `:preferred`, `:required`, `:verify_ca`, `:verify_identity`. `:preferred` performs no enforcement and silently falls back to a plaintext connection.
+| `:tls_mode`             | `:ssl_mode`      | Client library default | _Replacement for `:sslverify`._ One of `:disabled`, `:preferred`, `:required`, `:verify_ca`, `:verify_identity`. `:preferred` performs no enforcement and silently falls back to a plaintext connection.
 | `:tls_sni_name`         |                  | None        | Hostname sent during TLS handshake, e.g. `'db.example.com'`. Supported by some proxies that route by hostname. Requires MySQL client library 8.1+; unsupported by MariaDB Connector/C.
 | `:tls_passphrase`       |                  | None        | Passphrase if the `:tls_key` file is password-protected. Only supported by MariaDB Connector/C.
 | `:tls_peer_fingerprint` |                  | None        | Server certificate fingerprint in lieu of CA validation. Only supported by MariaDB Connector/C 3.4+.
@@ -405,7 +405,7 @@ Runtime client library and TLS feature introspection:
 | ---                | ---                                                 | ---
 | `:disabled`        | no TLS                                              | no TLS
 | `:preferred`       | TLS if available, else quiet fallback to plaintext  | TLS if available, else quiet fallback to plaintext
-| `:required`        | TLS required, no certificate verification           | TLS required, no certificate verification -- a server without TLS is refused after login, not before
+| `:required`        | TLS required, no certificate verification           | TLS required, no certificate verification -- a server without TLS is refused after login or after an auto-reconnect, not before
 | `:verify_ca`       | TLS required, CA chain verified                     | TLS required, CA chain verified -- hostname is NOT checked, even for local peers
 | `:verify_identity` | TLS required, CA chain + hostname verified natively | TLS required, CA chain + hostname verified via mysql2's own verification callback (Connector/C 3.4+)
 

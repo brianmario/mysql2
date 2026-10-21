@@ -147,6 +147,24 @@ struct nogvl_select_db_args {
 
 static VALUE rb_mysql_client_close(VALUE self);
 
+/* ssl_mode: :required on the MYSQL_OPT_SSL_ENFORCE path. Connector/C
+ * refuses a server that offers no TLS only when verifying, and falls back
+ * to plaintext otherwise -- on the initial connect and on every
+ * auto-reconnect, which replays the same options. Called after connect and
+ * after each command that can reconnect underneath us (query, ping,
+ * prepare, execute): a live connection without a cipher is closed, and the
+ * client with it. Credentials, and the command itself, have already
+ * crossed the wire by then -- this stops the session, not the leak. */
+void mysql2_client_require_tls(VALUE self) {
+  GET_CLIENT(self);
+
+  if (wrapper->tls_required && CONNECTED(wrapper) && mysql_get_ssl_cipher(wrapper->client) == NULL) {
+    wrapper->state = MYSQL2_CLIENT_IDLE;
+    rb_mysql_client_close(self);
+    rb_raise(cMysql2ConnectionError, "ssl_mode: :required, but the server did not negotiate TLS");
+  }
+}
+
 /*
  * ssl_mode: :verify_identity enforcement for MariaDB Connector/C.
  *
@@ -1272,14 +1290,7 @@ static VALUE rb_mysql_connect(VALUE self, VALUE user, VALUE pass, VALUE host, VA
   }
 #endif
 
-  /* Connector/C refuses a server that offers no TLS only when verifying,
-   * so :required checks for itself. Credentials have already crossed the
-   * wire by now -- the check closes the connection, it cannot stop the
-   * login. */
-  if (wrapper->tls_required && mysql_get_ssl_cipher(wrapper->client) == NULL) {
-    rb_mysql_client_close(self);
-    rb_raise(cMysql2ConnectionError, "ssl_mode: :required, but the server did not negotiate TLS");
-  }
+  mysql2_client_require_tls(self);
 
   return self;
 }
@@ -1839,6 +1850,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 #ifndef _WIN32
   rb_ensure(do_send_query, (VALUE)&args, disconnect_query_if_incomplete, (VALUE)&args.completion);
   (void)RB_GC_GUARD(sql);
+  mysql2_client_require_tls(self);
 
   if (rb_hash_aref(current, sym_async) == Qtrue) {
     return Qnil;
@@ -1855,6 +1867,7 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
 #else
   do_send_query((VALUE)&args);
   (void)RB_GC_GUARD(sql);
+  mysql2_client_require_tls(self);
 
   /* this will just block until the result is ready */
   return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
@@ -2278,18 +2291,19 @@ static VALUE rb_mysql_client_ping(VALUE self) {
   mysql2_reap_pending_result_frees(wrapper);
   mysql2_reap_pending_stmt_closes(wrapper);
 
+  VALUE result;
 #ifndef _WIN32
-  return rb_rescue2(do_ping, (VALUE)wrapper, disconnect_and_raise, self, rb_eException, (VALUE)0);
+  result = rb_rescue2(do_ping, (VALUE)wrapper, disconnect_and_raise, self, rb_eException, (VALUE)0);
 #else
-  VALUE result = Qnil;
   if (!CONNECTED(wrapper)) {
     result = Qfalse;
   } else {
     result = (VALUE)rb_thread_call_without_gvl(nogvl_ping, wrapper->client, RUBY_UBF_IO, 0);
   }
   wrapper->active_fiber = Qnil;
-  return result;
 #endif
+  mysql2_client_require_tls(self);
+  return result;
 }
 
 /* call-seq:

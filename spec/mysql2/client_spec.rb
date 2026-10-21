@@ -250,11 +250,15 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       class TlsStrippingProxy
         CLIENT_SSL = 0x800
 
+        # Cleared, forwards the handshake untouched: a server offering TLS.
+        attr_accessor :strip
+
         def initialize(real_host, real_port)
           @server = TCPServer.new('127.0.0.1', 0)
           @real_host = real_host
           @real_port = real_port
           @threads = []
+          @strip = true
         end
 
         def port
@@ -273,10 +277,14 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         def handle(client_sock)
           upstream = TCPSocket.new(@real_host, @real_port)
           client_sock.write(strip_ssl(upstream))
+          # Either side hanging up ends the session for both, as a real
+          # server's would: the ensure below closes the other socket.
+          done = Queue.new
           [
-            Thread.new { pump(client_sock, upstream) },
-            Thread.new { pump(upstream, client_sock) },
-          ].each { |t| @threads << t }.each(&:join)
+            Thread.new { pump(client_sock, upstream, done) },
+            Thread.new { pump(upstream, client_sock, done) },
+          ].each { |t| @threads << t }
+          done.pop
         ensure
           [client_sock, upstream].compact.each do |sock|
             begin
@@ -293,15 +301,19 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         def strip_ssl(upstream)
           header = upstream.read(4)
           payload = upstream.read(header.unpack('V').first & 0xffffff)
+          return header + payload unless strip
+
           offset = payload.index("\0", 1) + 1 + 4 + 8 + 1
           payload[offset, 2] = [payload[offset, 2].unpack('v').first & ~CLIENT_SSL].pack('v')
           header + payload
         end
 
-        def pump(src, dst)
+        def pump(src, dst, done)
           loop { dst.write(src.readpartial(4096)) }
         rescue IOError, Errno::ECONNRESET, Errno::EPIPE
           nil
+        ensure
+          done << true
         end
 
         def shutdown
@@ -357,6 +369,38 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
         expect do
           new_client('host' => '127.0.0.1', 'port' => stripping_proxy_port, ssl_mode: :required)
         end.to raise_error(Mysql2::Error::ConnectionError, /TLS|SSL/)
+      end
+
+      [
+        [:query, 'SELECT 1'],
+        [:ping],
+        [:prepare, 'SELECT 1'],
+      ].each do |command, *args|
+        it "refuses with :required when #{command} auto-reconnects to a server that offers no TLS" do
+          port = stripping_proxy_port
+          @stripping_proxy.strip = false
+          client = new_client('host' => '127.0.0.1', 'port' => port, ssl_mode: :required, reconnect: true)
+          begin
+            expect(client.ssl_cipher).not_to be_empty
+
+            @stripping_proxy.strip = true
+            new_client { |killer| killer.query("KILL #{client.thread_id}") }
+
+            # The first command after the kill may fail on the dead socket
+            # before the connector reconnects; the reconnect must not stick.
+            expect do
+              2.times do
+                begin
+                  client.public_send(command, *args)
+                rescue Mysql2::Error => e
+                  raise if e.message =~ /TLS|SSL/
+                end
+              end
+            end.to raise_error(Mysql2::Error::ConnectionError, /TLS|SSL/)
+          ensure
+            client.close
+          end
+        end
       end
     end
 

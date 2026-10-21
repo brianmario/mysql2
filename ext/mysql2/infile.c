@@ -26,10 +26,11 @@ typedef struct
 static int
 mysql2_local_infile_init(void **ptr, const char *filename, void *userdata)
 {
-  mysql2_local_infile_data *data;
-  *ptr = NULL;
-  data = malloc(sizeof(mysql2_local_infile_data));
-  if (!data) return 1;
+  mysql2_local_infile_data *data = malloc(sizeof(mysql2_local_infile_data));
+  if (!data) {
+    *ptr = NULL;
+    return 1;
+  }
 
   *ptr = data;
   data->fd = -1;

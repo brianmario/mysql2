@@ -388,15 +388,21 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
 
             # The first command after the kill may fail on the dead socket
             # before the connector reconnects; the reconnect must not stick.
-            expect do
-              2.times do
-                begin
-                  client.public_send(command, *args)
-                rescue Mysql2::Error => e
-                  raise if e.message =~ /TLS|SSL/
-                end
+            outcomes = Array.new(2) do
+              begin
+                client.public_send(command, *args)
+              rescue Mysql2::Error => e
+                e
               end
-            end.to raise_error(Mysql2::Error::ConnectionError, /TLS|SSL/)
+            end
+
+            if command == :ping && (50000...100000).cover?(Mysql2::Client.info[:id])
+              # libmysqlclient refuses the plaintext reconnect itself, and
+              # ping reports a failed reconnect as false rather than raising.
+              expect(outcomes).to all(be false)
+            else
+              expect(outcomes).to include(a_kind_of(Mysql2::Error::ConnectionError).and(having_attributes(message: /TLS|SSL/)))
+            end
           ensure
             client.close
           end

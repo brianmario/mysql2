@@ -18,7 +18,8 @@
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error, cMysql2ConnectionError, cMysql2TimeoutError;
-static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
+static VALUE sym_id, sym_version, sym_header_version, sym_vendor, sym_mariadb, sym_mysql, sym_async,
+  sym_symbolize_keys, sym_as, sym_array, sym_stream;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args,
   intern_current_query_options, intern_read_timeout, intern_values;
 
@@ -59,6 +60,24 @@ static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args
   #define MYSQL_LINK_VERSION LIBMYSQL_VERSION
 #else
   #define MYSQL_LINK_VERSION MYSQL_SERVER_VERSION
+#endif
+
+/*
+ * Which client library this gem was built against. The version numbers alone
+ * cannot answer that question: Connector/C reports 3.x in both version fields,
+ * the client bundled with MariaDB servers reports 5.5.x and installs itself as
+ * libmysqlclient.so.18, and the meaning of the header version has changed
+ * between mysql2 releases (see MYSQL_LINK_VERSION above).
+ *
+ * The headers do identify themselves, each generation differently:
+ * MARIADB_PACKAGE_VERSION comes from Connector/C, MARIADB_CLIENT_VERSION_STR
+ * from the versions before it, and MARIADB_BASE_VERSION has been there all
+ * along, including in the server-bundled client.
+ */
+#if defined(MARIADB_PACKAGE_VERSION) || defined(MARIADB_CLIENT_VERSION_STR) || defined(MARIADB_BASE_VERSION)
+  #define MYSQL_LINK_MARIADB 1
+#else
+  #define MYSQL_LINK_MARIADB 0
 #endif
 
 /*
@@ -2007,9 +2026,11 @@ static VALUE _mysql_client_options(VALUE self, int opt, VALUE value) {
 }
 
 /* call-seq:
- *    client.info
+ *    Mysql2::Client.info
  *
- * Returns a string that represents the client library version.
+ * Returns a Hash describing the client library this gem was built against:
+ * its numeric :id and :version as reported at runtime, the :header_version it
+ * was compiled with, and the :vendor it comes from (:mariadb or :mysql).
  */
 static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE klass) {
   VALUE version_info, version, header_version;
@@ -2024,6 +2045,7 @@ static VALUE rb_mysql_client_info(RB_MYSQL_UNUSED VALUE klass) {
   rb_hash_aset(version_info, sym_id, LONG2NUM(mysql_get_client_version()));
   rb_hash_aset(version_info, sym_version, version);
   rb_hash_aset(version_info, sym_header_version, header_version);
+  rb_hash_aset(version_info, sym_vendor, MYSQL_LINK_MARIADB ? sym_mariadb : sym_mysql);
 
   return version_info;
 }
@@ -2868,6 +2890,9 @@ void init_mysql2_client(void) {
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));
   sym_header_version  = ID2SYM(rb_intern("header_version"));
+  sym_vendor          = ID2SYM(rb_intern("vendor"));
+  sym_mariadb         = ID2SYM(rb_intern("mariadb"));
+  sym_mysql           = ID2SYM(rb_intern("mysql"));
   sym_async           = ID2SYM(rb_intern("async"));
   sym_symbolize_keys  = ID2SYM(rb_intern("symbolize_keys"));
   sym_as              = ID2SYM(rb_intern("as"));

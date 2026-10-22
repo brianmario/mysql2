@@ -1891,6 +1891,26 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
     end
   end
 
+  context "the client library vendor" do
+    it ".info[:vendor] should name the vendor this gem was built against" do
+      expect(%i[mariadb mysql]).to include(Mysql2::Client.info[:vendor])
+    end
+
+    it ".mariadb? should agree with .info[:vendor]" do
+      expect(Mysql2::Client.mariadb?).to be(Mysql2::Client.info[:vendor] == :mariadb)
+    end
+
+    it "should match the client library installed by the CI matrix" do
+      # The matrix row names its client library, even where the server comes from the
+      # other vendor ('mariadb11.8-client_mysql84-server'). Rows that don't name one
+      # ('fedora:latest') leave nothing to compare against.
+      expected = ENV['DB'].to_s[/\A(mariadb|mysql)/, 1]
+      skip 'the DB environment variable does not name a client library' unless expected
+
+      expect(Mysql2::Client.info[:vendor]).to eql(expected.to_sym)
+    end
+  end
+
   it "should respond to #server_info" do
     expect(@client).to respond_to(:server_info)
   end

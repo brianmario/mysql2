@@ -2,6 +2,13 @@ module Mysql2
   class Client
     attr_reader :query_options, :read_timeout
 
+    # Whether this gem was built against a MariaDB client library, as opposed
+    # to a MySQL one. The two have diverged enough that callers routinely need
+    # to tell them apart; see Mysql2::Client.info[:vendor].
+    def self.mariadb?
+      info[:vendor] == :mariadb
+    end
+
     def self.default_query_options
       @default_query_options ||= {
         as: :hash,                   # the type of object you want each row back as; also supports :array (an array of values)

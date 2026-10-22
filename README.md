@@ -394,6 +394,8 @@ Runtime client library and TLS feature introspection:
 | Variable                                        | Contents
 | ---                                             | --- |
 |`Mysql2::Client.info[:version]`                  | linked client library version
+|`Mysql2::Client.info[:vendor]`                   | `:mariadb` or `:mysql`, the client library this gem was built against
+|`Mysql2::Client.mariadb?`                        | true/false shorthand for `info[:vendor] == :mariadb`
 |`Mysql2::Client.tls_info`                        | TLS connection information (MariaDB Connector/C 3.4.3+), or nil (MySQL, earlier MariaDB)
 |`Mysql2::Client::TLS_PEER_IDENTITY_VERIFICATION` | :native (MySQL), :callback (MariaDB Connector/C 3.4.3+), or nil (unenforceable)
 |`Mysql2::Client::TLS_VERSION_SUPPORTED`          | true/false

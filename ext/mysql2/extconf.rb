@@ -1,5 +1,6 @@
 require 'mkmf'
 require 'English'
+require 'shellwords'
 
 ### Some helper functions
 
@@ -26,6 +27,29 @@ def add_ssl_defines(header)
     has_enforce_support = have_const('MYSQL_OPT_SSL_ENFORCE', header)
     $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if !has_verify_support && !has_enforce_support
   end
+end
+
+# Absolute paths of the libssl/libcrypto dylibs the verify_identity
+# enforcement callback should link: the ones under an explicit
+# --with-openssl-dir, or failing that, the exact dylibs the mysql client
+# library's own recorded install names point at (macOS only -- see the
+# verify_identity section below for why the pairing matters).
+def verify_identity_openssl_dylibs(explicit_libdirs)
+  return [] unless RUBY_PLATFORM =~ /darwin/
+
+  dylibs =
+    if explicit_libdirs.empty?
+      lib_dirs = "#{$libs} #{$LDFLAGS}".scan(/-L\s*(\S+)/).flatten + $LIBPATH
+      lib_names = $libs.scan(/-l(mariadb|mysqlclient|perconaserverclient)\b/).flatten
+      connector = lib_dirs.product(lib_names).flat_map { |dir, name| Dir["#{dir}/lib#{name}*.dylib"] }.first
+      connector ? `otool -L #{connector.shellescape}`.scan(%r{^\s+(/\S+/lib(?:ssl|crypto)\.[^\s/]*\.dylib)}).flatten : []
+    else
+      explicit_libdirs.flat_map do |dir|
+        %w[ssl crypto].map { |name| Dir["#{dir}/lib#{name}.*.dylib"].first || Dir["#{dir}/lib#{name}.dylib"].first }
+      end.compact
+    end
+
+  dylibs.size == 2 && dylibs.all? { |dylib| File.exist?(dylib) } ? dylibs : []
 end
 
 ### Check for Ruby C extension interfaces
@@ -58,6 +82,7 @@ have_func('clock_gettime', 'time.h')
 ### Find OpenSSL library
 
 # User-specified OpenSSL if explicitly specified
+openssl_lib_dirs = []
 if with_config('openssl-dir')
   _, lib = dir_config('openssl')
   if lib
@@ -71,6 +96,7 @@ if with_config('openssl-dir')
     abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
     warn "-----\nUsing --with-openssl-dir=#{File.dirname lib}\n-----"
     $LDFLAGS << " -L#{lib}"
+    openssl_lib_dirs = lib.split(File::PATH_SEPARATOR)
   end
 # Homebrew OpenSSL on MacOS
 elsif RUBY_PLATFORM =~ /darwin/ && system('command -v brew')
@@ -242,14 +268,47 @@ have_const('MARIADB_OPT_TLS_PASSPHRASE', mysql_h)
 # - OpenSSL itself, for SSL_get_verify_result and X509_check_host;
 # - the installed ma_pvio.h MARIADB_PVIO layout, which is how the callback
 #   reaches the MYSQL handle and the TLS session from its argument.
-have_verify_identity_shim =
+have_verification_callback =
   have_tls_introspection &&
   have_const('MARIADB_OPT_TLS_VERIFICATION_CALLBACK', mysql_h) &&
-  have_const('MARIADB_TLS_LIBRARY', mysql_h) &&
+  have_const('MARIADB_TLS_LIBRARY', mysql_h)
+
+# The callback links OpenSSL only to operate on TLS sessions the client
+# library owns, so the correct OpenSSL is the very build the client library
+# links -- SSL and X509 are opaque types whose layout is private to each
+# build, and calling one build's accessors on another build's session
+# crashes (#1575). Resolving -lssl/-lcrypto off the search path can land on
+# a different installation: several commonly coexist (a package manager's,
+# a language runtime's vendored copy), Ruby's own libdir -- which mkmf
+# always searches first, ahead of every directory this script could add --
+# may hold static archives of one of them, and mariadb_config doesn't say
+# where the connector's OpenSSL lives (--libs_sys names -lssl with no -L).
+# On macOS, whose two-level namespace binding is what lets two loaded
+# OpenSSLs coexist without interposition forcing agreement, the client
+# library's recorded install names identify its exact dylibs: link those
+# very files, bypassing library search entirely, and compile against the
+# headers installed next to them. An explicit --with-openssl-dir names the
+# dylibs to link the same way; the runtime linkage check below guards
+# whatever was linked either way.
+verify_identity_dylibs = have_verification_callback ? verify_identity_openssl_dylibs(openssl_lib_dirs) : []
+verify_identity_dylibs.each do |dylib|
+  warn "-----\nLinking the verify_identity callback against #{dylib}\n-----"
+  $libs << " #{dylib}"
+  incdir = File.expand_path('../../include', dylib)
+  $INCFLAGS << " -I#{incdir}" if File.directory?(incdir) && !$INCFLAGS.include?(" -I#{incdir}")
+end
+
+have_verify_identity_shim =
+  have_verification_callback &&
   have_header('openssl/ssl.h') &&
   have_header('openssl/x509v3.h') &&
-  have_library('crypto', 'X509_check_host', 'openssl/x509v3.h') &&
-  have_library('ssl', 'SSL_get_verify_result', 'openssl/ssl.h') &&
+  (if verify_identity_dylibs.empty?
+     have_library('crypto', 'X509_check_host', 'openssl/x509v3.h') &&
+       have_library('ssl', 'SSL_get_verify_result', 'openssl/ssl.h')
+   else
+     have_func('X509_check_host', 'openssl/x509v3.h') &&
+       have_func('SSL_get_verify_result', 'openssl/ssl.h')
+   end) &&
   checking_for('MARIADB_PVIO layout for the verify_identity callback') do
     pvio_h = [prefix, 'ma_pvio.h'].compact.join('/')
     try_compile(<<-SRC)
@@ -266,6 +325,44 @@ int main(void) {
     SRC
   end
 $CFLAGS << ' -DMYSQL2_VERIFY_IDENTITY_SHIM' if have_verify_identity_shim
+
+# Runtime backstop for the same invariant (#1575): the loader, not the
+# build, has the last word on which OpenSSL each image resolved -- a gem
+# built before this guard existed, or a client library repackaged against a
+# different OpenSSL after the gem was built, still collides. client.c
+# compares, per OpenSSL library, the address this extension linked for a
+# symbol the callback calls against the address the client library's image
+# resolves through its own dependencies, and :verify_identity refuses the
+# connection on disagreement instead of crashing inside libcrypto. glibc
+# keeps RTLD_NOLOAD, dladdr, and Dl_info behind _GNU_SOURCE; platforms
+# without this dlfcn surface (Windows) skip the check and keep the shim's
+# existing behavior.
+if have_verify_identity_shim
+  dlfcn_src = <<-SRC
+#include <dlfcn.h>
+int main(void) {
+  Dl_info info;
+  void *handle = dlopen("libssl", RTLD_LAZY | RTLD_NOLOAD);
+  void *sym = handle != NULL ? dlsym(handle, "SSL_get_verify_result") : NULL;
+  return dladdr(sym, &info) != 0 && info.dli_fname != NULL;
+}
+  SRC
+  have_linkage_check =
+    checking_for('dlopen/dlsym/dladdr to verify OpenSSL linkage identity') do
+      if try_link(dlfcn_src)
+        true
+      elsif try_link(dlfcn_src, '-D_GNU_SOURCE')
+        $CFLAGS << ' -D_GNU_SOURCE'
+        true
+      elsif have_library('dl') && try_link(dlfcn_src, '-D_GNU_SOURCE')
+        $CFLAGS << ' -D_GNU_SOURCE'
+        true
+      else
+        false
+      end
+    end
+  $CFLAGS << ' -DMYSQL2_OPENSSL_LINKAGE_CHECK' if have_linkage_check
+end
 
 # detect mysql functions
 have_func('mysql_ssl_set', mysql_h)

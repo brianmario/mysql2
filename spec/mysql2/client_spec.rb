@@ -565,6 +565,25 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
       end.to raise_error(Mysql2::Error::ConnectionError, /cannot be enforced/)
     end
 
+    it "refuses verify_identity when mysql2 and the client library link different OpenSSL builds" do
+      skip "this build does not verify OpenSSL linkage identity" unless Mysql2::Client::TLS_OPENSSL_LINKAGE_CHECK
+
+      # A real mismatch takes two OpenSSL builds resolved into one process
+      # -- a mise/rbenv-built Ruby's vendored OpenSSL alongside the package
+      # manager's build the connector links (#1575) -- which CI images, with
+      # their single OpenSSL install, cannot produce. Force the loader's
+      # verdict instead: the seam can only refuse a connection that would
+      # otherwise proceed, never permit one.
+      begin
+        ENV['MYSQL2_TEST_FORCE_OPENSSL_LINKAGE_MISMATCH'] = '1'
+        expect do
+          new_client(ssl_mode: :verify_identity)
+        end.to raise_error(Mysql2::Error::ConnectionError, /different OpenSSL builds.+--with-openssl-dir/m)
+      ensure
+        ENV.delete('MYSQL2_TEST_FORCE_OPENSSL_LINKAGE_MISMATCH')
+      end
+    end
+
     it "refuses sslverify: false combined with a verifying ssl_mode" do
       skip "this build has no verifying ssl_mode" if Mysql2::Client::SSL_MODE_VERIFY_IDENTITY.zero?
 

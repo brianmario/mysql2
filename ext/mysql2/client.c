@@ -201,6 +201,92 @@ typedef struct {
   void *ssl;
 } mysql2_mariadb_tls_head;
 
+/* The client library's TLS backend identity string ("OpenSSL 3.4.1 ..."),
+ * or NULL when the backend is not OpenSSL/LibreSSL -- under Schannel or
+ * GnuTLS, ctls->ssl is a different animal entirely and no OpenSSL-based
+ * verification can apply to it. */
+static const char *mysql2_tls_openssl_library(MYSQL *mysql) {
+  const char *tls_library = NULL;
+
+  if (mariadb_get_infov(mysql, MARIADB_TLS_LIBRARY, (void *)&tls_library) != 0 ||
+      tls_library == NULL ||
+      (strncmp(tls_library, "OpenSSL", 7) != 0 && strncmp(tls_library, "LibreSSL", 8) != 0))
+    return NULL;
+  return tls_library;
+}
+
+#ifdef MYSQL2_OPENSSL_LINKAGE_CHECK
+#include <dlfcn.h>
+#include <openssl/crypto.h>
+
+#if defined(OPENSSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x10100000L
+#define MYSQL2_OPENSSL_VERSION_STRING OpenSSL_version(OPENSSL_VERSION)
+#else
+#define MYSQL2_OPENSSL_VERSION_STRING SSLeay_version(SSLEAY_VERSION)
+#endif
+
+/* Compare where this extension and the client library each resolve the
+ * OpenSSL symbols the verification callback calls. SSL and X509 are opaque
+ * types whose layout is private to each OpenSSL build, so handing the
+ * client library's TLS session to another build's accessors is undefined
+ * behavior -- in practice a segfault inside libcrypto (#1575). Two builds
+ * commonly coexist in one process (a language runtime's vendored OpenSSL
+ * plus the package manager's build the client library links), and macOS
+ * two-level namespace binding resolves each image's references separately,
+ * so nothing else forces agreement. The dynamic loader is the authority on
+ * what actually resolved: for one representative symbol per OpenSSL
+ * library, the address this extension linked must be the address the
+ * client library's image resolves through its own dependencies. Returns
+ * NULL when they agree, or a description naming both images.
+ * connector_openssl is the client library's backend identity string, NULL
+ * when unknown. */
+static const char *mysql2_tls_openssl_linkage_mismatch(const char *connector_openssl, char *detail, size_t detail_len) {
+  static const char *const symbol_names[] = { "SSL_get_verify_result", "X509_check_host" };
+  void *const local_symbols[] = { (void *)SSL_get_verify_result, (void *)X509_check_host };
+  Dl_info connector_image, local_image, resolved_image;
+  void *handle;
+  size_t i;
+  const char *mismatch = NULL;
+
+  /* Test seam: exercising the refusal below needs two OpenSSL builds
+   * resolved into one process, which CI images (a single OpenSSL install)
+   * cannot produce, so the spec suite forces the loader's verdict instead.
+   * Forcing can only refuse a connection that would otherwise proceed,
+   * never permit one. */
+  if (getenv("MYSQL2_TEST_FORCE_OPENSSL_LINKAGE_MISMATCH") != NULL)
+    return "forced by MYSQL2_TEST_FORCE_OPENSSL_LINKAGE_MISMATCH";
+
+  if (!dladdr((void *)mariadb_get_infov, &connector_image) || connector_image.dli_fname == NULL)
+    return "the client library's loaded image could not be located (dladdr)";
+
+  handle = dlopen(connector_image.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
+  if (handle == NULL)
+    return "the client library's loaded image could not be reopened (dlopen)";
+
+  for (i = 0; i < sizeof(local_symbols) / sizeof(local_symbols[0]); i++) {
+    void *resolved = dlsym(handle, symbol_names[i]);
+    if (resolved != local_symbols[i]) {
+      if (!dladdr(local_symbols[i], &local_image) || local_image.dli_fname == NULL)
+        local_image.dli_fname = "an unknown image";
+      if (resolved == NULL || !dladdr(resolved, &resolved_image) || resolved_image.dli_fname == NULL)
+        resolved_image.dli_fname = "no image in its linkage";
+      snprintf(detail, detail_len,
+               "mysql2 calls %s in %s (%s) but the client library %s resolves it in %s (%s)",
+               symbol_names[i],
+               local_image.dli_fname, MYSQL2_OPENSSL_VERSION_STRING,
+               connector_image.dli_fname,
+               resolved_image.dli_fname,
+               connector_openssl != NULL ? connector_openssl : "unknown");
+      mismatch = detail;
+      break;
+    }
+  }
+
+  dlclose(handle);
+  return mismatch;
+}
+#endif /* MYSQL2_OPENSSL_LINKAGE_CHECK */
+
 /* Report through the public NET error fields -- the same fields the
  * connector's my_set_error fills -- so mysql_error() surfaces the real
  * reason for the refused connection. */
@@ -219,7 +305,6 @@ static void mysql2_tls_set_error(MYSQL *mysql, const char *detail) {
  * since this refusal is what a misconfigured caller actually sees -- and
  * sets *status to the matching MARIADB_TLS_VERIFY_* bit. */
 static const char *mysql2_tls_check_peer_identity(MYSQL *mysql, mysql2_mariadb_tls_head *ctls, unsigned int *status, char *detail, size_t detail_len) {
-  const char *tls_library = NULL;
   const char *host;
   const char *ca;
   SSL *ssl;
@@ -230,12 +315,9 @@ static const char *mysql2_tls_check_peer_identity(MYSQL *mysql, mysql2_mariadb_t
   *status = MARIADB_TLS_VERIFY_UNKNOWN;
 
   /* ctls->ssl is only an OpenSSL SSL* when the connector was built against
-   * OpenSSL or LibreSSL; under Schannel or GnuTLS it is a different
-   * animal entirely and this shim cannot verify anything -- refuse rather
-   * than guess. */
-  if (mariadb_get_infov(mysql, MARIADB_TLS_LIBRARY, (void *)&tls_library) != 0 ||
-      tls_library == NULL ||
-      (strncmp(tls_library, "OpenSSL", 7) != 0 && strncmp(tls_library, "LibreSSL", 8) != 0))
+   * OpenSSL or LibreSSL -- this shim cannot verify any other backend's
+   * session, so refuse rather than guess. */
+  if (mysql2_tls_openssl_library(mysql) == NULL)
     return "hostname verification requires an OpenSSL-based MariaDB Connector/C build";
 
   ssl = (SSL *)ctls->ssl;
@@ -374,6 +456,33 @@ static VALUE rb_set_ssl_mode_option(VALUE self, VALUE setting) {
        * when it isn't available) is MariaDB-only. */
       if (val == SSL_MODE_VERIFY_IDENTITY && mariadb_family) {
 #ifdef MYSQL2_VERIFY_IDENTITY_SHIM
+#ifdef MYSQL2_OPENSSL_LINKAGE_CHECK
+        /* The verification callback may hand the client library's TLS
+         * session to the OpenSSL functions this extension linked only when
+         * both resolve to the same loaded library; a second co-resident
+         * build's accessors misread the session's opaque structs and crash
+         * inside libcrypto (#1575). Refuse up front, while the mismatch can
+         * still be reported as an error rather than a segfault. Skipped for
+         * Schannel/GnuTLS backends, whose refusal -- with an accurate
+         * message -- lives in the callback itself. */
+        {
+          const char *connector_openssl = mysql2_tls_openssl_library(wrapper->client);
+          if (connector_openssl != NULL || getenv("MYSQL2_TEST_FORCE_OPENSSL_LINKAGE_MISMATCH") != NULL) {
+            char linkage_detail[1024];
+            const char *mismatch = mysql2_tls_openssl_linkage_mismatch(connector_openssl, linkage_detail, sizeof(linkage_detail));
+            if (mismatch != NULL)
+              rb_raise(cMysql2ConnectionError,
+                       "ssl_mode: :verify_identity cannot be enforced: mysql2 and the client "
+                       "library link two different OpenSSL builds -- %s. Calling one build's "
+                       "functions on the other's TLS session crashes rather than verifies "
+                       "(#1575), so refusing to connect instead. Rebuild mysql2 so both link "
+                       "the same OpenSSL -- current mysql2 gems link the client library's own "
+                       "OpenSSL automatically, or name it explicitly: gem install mysql2 -- "
+                       "--with-openssl-dir=<prefix of the client library's OpenSSL>.",
+                       mismatch);
+          }
+        }
+#endif
         /* Both registrations are checked: a runtime client library that
          * rejects either option (say, an older libmariadb.so than the
          * headers this gem was built against) cannot enforce verification
@@ -3089,6 +3198,16 @@ void init_mysql2_client(void) {
   rb_const_set(cMysql2Client, rb_intern("TLS_PEER_IDENTITY_VERIFICATION"), ID2SYM(rb_intern("callback")));
 #else
   rb_const_set(cMysql2Client, rb_intern("TLS_PEER_IDENTITY_VERIFICATION"), Qnil);
+#endif
+
+  /* Whether :callback enforcement first verifies, via the dynamic loader,
+   * that mysql2 and the client library resolve OpenSSL to the same loaded
+   * library -- refusing the connection on a mismatch instead of crashing
+   * on a foreign build's TLS session (#1575). */
+#ifdef MYSQL2_OPENSSL_LINKAGE_CHECK
+  rb_const_set(cMysql2Client, rb_intern("TLS_OPENSSL_LINKAGE_CHECK"), Qtrue);
+#else
+  rb_const_set(cMysql2Client, rb_intern("TLS_OPENSSL_LINKAGE_CHECK"), Qfalse);
 #endif
 
 #ifdef HAVE_CONST_MARIADB_OPT_TLS_PEER_FP

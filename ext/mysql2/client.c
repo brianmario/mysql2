@@ -2266,6 +2266,95 @@ static VALUE rb_mysql_client_ping(VALUE self) {
 #endif
 }
 
+#ifdef HAVE_MYSQL_RESET_CONNECTION
+static void *nogvl_reset(void *ptr) {
+  MYSQL *client = ptr;
+
+  return (void *)(mysql_reset_connection(client) == 0 ? Qtrue : Qfalse);
+}
+
+static VALUE do_reset(VALUE completionval) {
+  struct query_completion *completion = (void *)completionval;
+
+  if (rb_thread_call_without_gvl(nogvl_reset, completion->wrapper->client, RUBY_UBF_IO, 0) == Qfalse) {
+    /* A complete round trip -- the server replied with an error, e.g. a
+     * pre-5.7.3 server or a proxy frontend rejecting COM_RESET_CONNECTION
+     * as an unknown command -- so the connection itself is still usable and
+     * the rb_ensure companion only releases the claim. */
+    completion->completed = 1;
+    rb_raise_mysql2_error(completion->wrapper);
+  }
+
+  completion->completed = 1;
+  return Qnil;
+}
+
+/* COM_RESET_CONNECTION deallocated every prepared statement server-side;
+ * bring the Ruby-visible bookkeeping into line. Snapshotting the values and
+ * clearing the hash before the walk keeps the iteration independent of the
+ * hash, since each invalidation releases the GVL to free its MYSQL_STMT. */
+static void invalidate_prepared_statements(mysql_client_wrapper *wrapper) {
+  VALUE stmts = rb_funcall(wrapper->prepared_statements, intern_values, 0);
+  long i;
+
+  rb_hash_clear(wrapper->prepared_statements);
+
+  for (i = 0; i < RARRAY_LEN(stmts); i++) {
+    rb_mysql_stmt_invalidate(rb_ary_entry(stmts, i));
+  }
+
+  (void)RB_GC_GUARD(stmts);
+}
+#endif
+
+/* call-seq:
+ *    client.reset
+ *
+ * Resets the connection's session state on the server in a single round
+ * trip, without reauthenticating: rolls back any open transaction, resets
+ * autocommit, releases locks, drops temporary tables, clears user variables
+ * and session-tracked state, and deallocates prepared statements
+ * (every Mysql2::Statement prepared on this connection is marked closed).
+ * Requires server support for COM_RESET_CONNECTION (MySQL 5.7.3+,
+ * MariaDB 10.2+); older servers and some proxy frontends reject it, which
+ * raises Mysql2::Error and leaves the session untouched.
+ */
+static VALUE rb_mysql_client_reset(VALUE self) {
+#ifdef HAVE_MYSQL_RESET_CONNECTION
+  struct query_completion completion;
+  GET_CLIENT(self);
+  REQUIRE_CONNECTED(wrapper);
+
+  if (mysql2_forked_without_reconnect(wrapper) && wrapper->automatic_close) {
+    mysql2_warn_forked_without_reconnect(wrapper, "reset");
+  }
+
+  rb_mysql_client_set_active_fiber(self, false);
+
+  /* Same preamble as every other command entry point: close out statements
+   * that were GC'd while the connection was busy and free any abandoned
+   * result sets -- mysql_reset_connection() sends a command, so a still-live
+   * abandoned stream needs the same active drain as rb_mysql_query, not just
+   * the reap. Reaping the pending statement closes here also matters for
+   * correctness, not just housekeeping: their COM_STMT_CLOSEs must go out
+   * before the reset deallocates (and potentially renumbers) server-side
+   * statement ids. */
+  mysql2_abandon_active_stream(wrapper);
+  mysql2_reap_pending_result_frees(wrapper);
+  mysql2_reap_pending_stmt_closes(wrapper);
+
+  completion.wrapper = wrapper;
+  completion.completed = 0;
+  rb_ensure(do_reset, (VALUE)&completion, release_claim_or_disconnect, (VALUE)&completion);
+
+  invalidate_prepared_statements(wrapper);
+
+  return Qtrue;
+#else
+  rb_raise(cMysql2Error, "reset is not available, you may need a newer MySQL or MariaDB client library");
+#endif
+}
+
 /* call-seq:
  *    client.set_server_option(value)
  *
@@ -2827,6 +2916,7 @@ void init_mysql2_client(void) {
   rb_define_method(cMysql2Client, "pending_result_frees", rb_mysql_client_pending_result_frees, 0);
   rb_define_method(cMysql2Client, "thread_id", rb_mysql_client_thread_id, 0);
   rb_define_method(cMysql2Client, "ping", rb_mysql_client_ping, 0);
+  rb_define_method(cMysql2Client, "reset", rb_mysql_client_reset, 0);
   rb_define_method(cMysql2Client, "select_db", rb_mysql_client_select_db, 1);
   rb_define_method(cMysql2Client, "set_server_option", rb_mysql_client_set_server_option, 1);
   rb_define_method(cMysql2Client, "more_results?", rb_mysql_client_more_results, 0);

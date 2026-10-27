@@ -244,6 +244,43 @@ statement = @client.prepare("SELECT * FROM users WHERE last_login >= ? AND locat
 result = statement.execute(1, "CA", :as => :array)
 ```
 
+### Batch execution
+
+`Statement#execute_batch` executes a DML statement (INSERT/UPDATE/DELETE — no
+result sets) once per row of an array of parameter rows and returns the summed
+affected-rows count:
+
+``` ruby
+statement = client.prepare("INSERT INTO users (name, login_count) VALUES (?, ?)")
+statement.execute_batch([["fred", 1], ["wilma", 2], ["barney", nil]]) # => 3
+```
+
+On MariaDB Connector/C builds talking to a MariaDB 10.2+ server, the whole
+batch travels as a single `COM_STMT_BULK_EXECUTE` round trip: parameter types
+are sent once per column, values are packed in the binary protocol with a
+per-value NULL indicator, and the server answers with one OK packet.
+Everywhere else — libmysqlclient builds, MySQL servers — the same call falls
+back to executing the statement row by row.
+
+Both paths enforce the same contract, checked client-side before the first row
+executes: every row's arity must match the statement's parameter count, every
+non-nil value in a column must bind as one type (mixed types raise `TypeError`
+naming the row and parameter), and `nil` is SQL NULL anywhere. A batch that
+fails validation executes nothing on either path.
+
+One behavior necessarily differs on a server error partway through the batch
+(a duplicate key, say). The bulk command is a single statement server-side, so
+the error rolls back the whole batch on a transactional engine; the fallback
+loop leaves the rows before the failing one applied. Both raise the server's
+error either way — wrap `execute_batch` in a transaction if you need identical
+all-or-nothing behavior on every build and server.
+
+Batch execution returns only the summed affected-rows count — per-row insert
+ids are not available (`Statement#last_id` reflects the underlying protocol's
+answer and differs between the two paths; don't rely on it after a batch).
+MariaDB 11.5's bulk unit results, which report per-row ids, are a natural
+follow-on gated on newer client and server versions.
+
 Session Tracking information can be accessed with
 
 ``` ruby

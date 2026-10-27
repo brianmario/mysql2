@@ -188,6 +188,21 @@ have_const('MYSQL_OPT_GET_SERVER_PUBLIC_KEY', mysql_h)
 have_const('MYSQL_OPT_TLS_SNI_SERVERNAME', mysql_h) # Added in MySQL 8.1; no MariaDB equivalent (MDEV-10658)
 have_const('MYSQL_OPT_TLS_VERSION', mysql_h) # Added in MySQL 5.7.10; MariaDB Connector/C 3.4.3+ defines the same enum member
 
+# MariaDB Connector/C's bulk execution API (COM_STMT_BULK_EXECUTE): the
+# array-size statement attribute, per-value indicator variables, and the
+# MYSQL_BIND member carrying them. MySQL's libmysqlclient has none of these.
+# Statement#execute_batch sends one round trip per batch when the whole set
+# is present (and the server agrees at runtime); otherwise it falls back to
+# a per-row execute loop.
+if have_const('STMT_ATTR_ARRAY_SIZE', mysql_h) &&
+   have_const('STMT_INDICATOR_NULL', mysql_h) &&
+   have_const('MARIADB_CLIENT_STMT_BULK_OPERATIONS', mysql_h) &&
+   have_const('MARIADB_CONNECTION_EXTENDED_SERVER_CAPABILITIES', mysql_h) &&
+   have_func('mariadb_get_infov', mysql_h) &&
+   have_struct_member('MYSQL_BIND', 'u.indicator', mysql_h)
+  $CFLAGS << ' -DBULK_EXECUTE_SUPPORT'
+end
+
 # my_bool is replaced by C99 bool in MySQL 8.0, but we want
 # to retain compatibility with the typedef in earlier MySQLs.
 have_type('my_bool', mysql_h)

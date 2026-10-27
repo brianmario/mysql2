@@ -18,7 +18,7 @@
 
 VALUE cMysql2Client;
 extern VALUE mMysql2, cMysql2Error, cMysql2ConnectionError, cMysql2TimeoutError;
-static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream;
+static VALUE sym_id, sym_version, sym_header_version, sym_async, sym_symbolize_keys, sym_as, sym_array, sym_stream, sym_kill_on_timeout;
 static ID intern_brackets, intern_merge, intern_merge_bang, intern_new_with_args,
   intern_current_query_options, intern_read_timeout, intern_values;
 
@@ -1634,6 +1634,30 @@ static VALUE do_query(VALUE args) {
   async_args->completion.completed = 1;
   return Qnil;
 }
+
+/* rb_rescue2 companion (do_query, kill_on_timeout queries only): the command
+ * was fully sent and none of its response has been read, so the protocol
+ * stream is intact -- the one window where an interrupted connection can
+ * survive. Leave the fd alone, mark the connection CANCEL_PENDING for
+ * Client#query (lib/mysql2/client.rb) to settle via the KILL QUERY
+ * escalation, and flag the wait handled so the enclosing rb_ensure skips
+ * its teardown. A non-exception unwind (Thread#exit) bypasses rb_rescue2
+ * entirely: completed stays unset and the rb_ensure companion tears down
+ * exactly as without kill_on_timeout, since no rescue upstream would ever
+ * run the escalation. */
+static VALUE defer_teardown_for_cancel(VALUE completionval, VALUE error) {
+  struct query_completion *completion = (void *)completionval;
+
+  completion->completed = 1;
+  completion->wrapper->state = MYSQL2_CLIENT_CANCEL_PENDING;
+  rb_exc_raise(error);
+}
+
+static VALUE do_query_deferring_teardown(VALUE args) {
+  struct async_query_args *async_args = (void *)args;
+
+  return rb_rescue2(do_query, args, defer_teardown_for_cancel, (VALUE)&async_args->completion, rb_eException, (VALUE)0);
+}
 #endif
 
 static VALUE disconnect_and_mark_inactive(VALUE self) {
@@ -1692,6 +1716,81 @@ static VALUE release_claim_or_disconnect(VALUE completionval) {
 
   return Qnil;
 }
+
+
+/* Whether a kill_on_timeout query's interrupted wait left the connection
+ * CANCEL_PENDING (see defer_teardown_for_cancel), awaiting the KILL QUERY
+ * escalation in Client#query. Only that caller, in the same fiber that ran
+ * the query, sees Qtrue: everyone else is fenced off by active_fiber. */
+static VALUE rb_mysql_client_cancel_pending(VALUE self) {
+  GET_CLIENT(self);
+  return wrapper->state == MYSQL2_CLIENT_CANCEL_PENDING ? Qtrue : Qfalse;
+}
+
+#ifndef _WIN32
+/* Rung 2 of the escalation: with KILL QUERY issued, wait up to grace
+ * seconds for the server's response to the interrupted query -- normally
+ * ER_QUERY_INTERRUPTED raised as an ordinary Mysql2::Error (the connection
+ * survives, in sync), or the query's own result if it finished before the
+ * KILL landed. Returns Qfalse if the grace period expires (or the poll
+ * fails): rung 3, the connection is invalidated just as an interrupted
+ * query without kill_on_timeout would be. */
+static VALUE rb_mysql_client_resume_cancelled_query(VALUE self, VALUE grace) {
+  struct timeval tv;
+  double sec;
+  int retval;
+  GET_CLIENT(self);
+
+  if (wrapper->state != MYSQL2_CLIENT_CANCEL_PENDING) {
+    rb_raise(cMysql2Error, "no cancelled query is pending on this connection");
+  }
+
+  sec = NUM2DBL(grace);
+  /* A negative timeval would make rb_wait_for_single_fd block forever;
+   * clamp to an immediate poll, making a negative grace behave like 0. */
+  if (sec < 0) {
+    sec = 0;
+  }
+  tv.tv_sec = (long)sec;
+  tv.tv_usec = (suseconds_t)((sec - (double)tv.tv_sec) * 1000000);
+
+  retval = rb_wait_for_single_fd(wrapper->client->net.fd, RB_WAITFD_IN, &tv);
+  if (retval <= 0) {
+    invalidate_after_interrupted_query(wrapper);
+    return Qfalse;
+  }
+
+  wrapper->state = MYSQL2_CLIENT_QUERYING;
+  return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
+}
+
+/* Rung 3 as a callable: invalidate the connection if it is still
+ * CANCEL_PENDING, no-op otherwise. Client#query calls this from an ensure
+ * so that whatever cut the escalation short -- helper connection refused,
+ * KILL QUERY erroring, an interrupt during the resumed wait -- lands on
+ * the same teardown an interrupted query without kill_on_timeout gets. */
+static VALUE rb_mysql_client_abort_cancelled_query(VALUE self) {
+  GET_CLIENT(self);
+
+  if (wrapper->state == MYSQL2_CLIENT_CANCEL_PENDING) {
+    invalidate_after_interrupted_query(wrapper);
+  }
+
+  return Qnil;
+}
+#else
+/* The wait-phase deferral that produces CANCEL_PENDING is compiled out on
+ * Windows (no async wait phase exists there), so cancel_pending? is always
+ * false and these are never reached; they exist so Client#query's shared
+ * rescue path binds on every platform. */
+static VALUE rb_mysql_client_resume_cancelled_query(RB_MYSQL_UNUSED VALUE self, RB_MYSQL_UNUSED VALUE grace) {
+  return Qfalse;
+}
+
+static VALUE rb_mysql_client_abort_cancelled_query(RB_MYSQL_UNUSED VALUE self) {
+  return Qnil;
+}
+#endif
 
 /* call-seq:
  *    client.abandon_results!
@@ -1822,7 +1921,11 @@ static VALUE rb_mysql_query(VALUE self, VALUE sql, VALUE current) {
     async_args.completion.wrapper = wrapper;
     async_args.completion.completed = 0;
 
-    rb_ensure(do_query, (VALUE)&async_args, disconnect_query_if_incomplete, (VALUE)&async_args.completion);
+    if (RTEST(rb_hash_aref(current, sym_kill_on_timeout))) {
+      rb_ensure(do_query_deferring_teardown, (VALUE)&async_args, disconnect_query_if_incomplete, (VALUE)&async_args.completion);
+    } else {
+      rb_ensure(do_query, (VALUE)&async_args, disconnect_query_if_incomplete, (VALUE)&async_args.completion);
+    }
 
     return rb_ensure(rb_mysql_client_async_result, self, disconnect_and_mark_inactive, self);
   }
@@ -2864,6 +2967,9 @@ void init_mysql2_client(void) {
   rb_define_private_method(cMysql2Client, "initialize_ext", initialize_ext, 0);
   rb_define_private_method(cMysql2Client, "connect", rb_mysql_connect, 9);
   rb_define_private_method(cMysql2Client, "_query", rb_mysql_query, 2);
+  rb_define_private_method(cMysql2Client, "cancel_pending?", rb_mysql_client_cancel_pending, 0);
+  rb_define_private_method(cMysql2Client, "resume_cancelled_query", rb_mysql_client_resume_cancelled_query, 1);
+  rb_define_private_method(cMysql2Client, "abort_cancelled_query", rb_mysql_client_abort_cancelled_query, 0);
 
   sym_id              = ID2SYM(rb_intern("id"));
   sym_version         = ID2SYM(rb_intern("version"));
@@ -2873,6 +2979,7 @@ void init_mysql2_client(void) {
   sym_as              = ID2SYM(rb_intern("as"));
   sym_array           = ID2SYM(rb_intern("array"));
   sym_stream          = ID2SYM(rb_intern("stream"));
+  sym_kill_on_timeout = ID2SYM(rb_intern("kill_on_timeout"));
 
   intern_brackets = rb_intern("[]");
   intern_merge = rb_intern("merge");

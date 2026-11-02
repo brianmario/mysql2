@@ -52,6 +52,13 @@ have_func('rb_hash_new_capa', 'ruby.h')
 # 2.3+ (guarded so the funcall path remains available on anything older)
 have_func('rb_time_timespec_new', 'ruby.h')
 
+# The :local DATETIME fast path additionally needs localtime_r and the BSD
+# tm_gmtoff member; platforms without either keep every :local DATETIME on
+# the funcall path. Windows builds are among them: MinGW provides
+# localtime_r, but the CRT's struct tm has no tm_gmtoff.
+have_func('localtime_r', 'time.h')
+have_struct_member('struct tm', 'tm_gmtoff', 'time.h')
+
 # Monotonic clock for Result#query_time (gettimeofday fallback otherwise)
 have_func('clock_gettime', 'time.h')
 

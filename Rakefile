@@ -15,3 +15,10 @@ rescue LoadError
   warn 'RuboCop is not available'
   task default: :spec
 end
+
+begin
+  require 'duel/rake_task'
+  Duel::RakeTask.new
+rescue LoadError
+  # Duel requires Ruby 3.4 or later
+end

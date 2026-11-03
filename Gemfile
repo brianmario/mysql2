@@ -51,6 +51,13 @@ end
 group :development do
   gem 'pry'
   gem 'rake-compiler-dock', '~> 1.12'
+
+  # Duel requires Ruby 3.4 or later
+  if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('3.4')
+    gem 'duel', '~> 0.3.0'
+    gem 'duel-mysql', '~> 0.3.0'
+    gem 'stackprof', platforms: :mri
+  end
 end
 
 # On MRI Ruby >= 3.0, rubysl-rake causes the conflict on GitHub Actions.

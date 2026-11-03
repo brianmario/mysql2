@@ -10,6 +10,12 @@ AllCops:
     - 'pkg/**/*'
     - 'tmp/**/*'
     - 'vendor/**/*'
+  Include:
+    - '.duel.rb'
+
+inherit_mode:
+  merge:
+    - Include
 
 Layout/CaseIndentation:
   EnforcedStyle: end

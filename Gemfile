@@ -54,8 +54,8 @@ group :development do
 
   # Duel requires Ruby 3.4 or later
   if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new('3.4')
-    gem 'duel', '~> 0.3.0'
-    gem 'duel-mysql', '~> 0.3.0'
+    gem 'duel', '~> 0.3.1'
+    gem 'duel-mysql', '~> 0.3.1'
     gem 'stackprof', platforms: :mri
   end
 end
